@@ -1,5 +1,5 @@
 import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from 'ai-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
@@ -102,6 +102,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
+  autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;
   agentName?: string;
