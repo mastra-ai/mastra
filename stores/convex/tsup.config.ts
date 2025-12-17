@@ -2,7 +2,6 @@ import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-
   entry: ['src/index.ts', 'src/server/index.ts', 'src/schema.ts'],
   format: ['esm', 'cjs'],
   clean: true,

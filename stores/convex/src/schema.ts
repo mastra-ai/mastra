@@ -1,7 +1,6 @@
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
-
 export const mastraThreadsTable = defineTable({
   id: v.string(),
   resourceId: v.optional(v.string()),
@@ -37,7 +36,6 @@ export const mastraResourcesTable = defineTable({
   .index('by_record_id', ['id'])
   .index('by_updated', ['updatedAt']);
 
-
 export const mastraWorkflowSnapshotsTable = defineTable({
   id: v.string(),
   workflow_name: v.string(),
@@ -51,7 +49,6 @@ export const mastraWorkflowSnapshotsTable = defineTable({
   .index('by_workflow', ['workflow_name'])
   .index('by_resource', ['resourceId'])
   .index('by_created', ['createdAt']);
-
 
 export const mastraScoresTable = defineTable({
   id: v.string(),
@@ -79,7 +76,6 @@ export const mastraVectorIndexesTable = defineTable({
   .index('by_record_id', ['id'])
   .index('by_name', ['indexName']);
 
-
 export const mastraVectorsTable = defineTable({
   id: v.string(), // Mastra record ID
   indexName: v.string(),
@@ -89,7 +85,6 @@ export const mastraVectorsTable = defineTable({
   .index('by_index_id', ['indexName', 'id'])
   .index('by_index', ['indexName']);
 
-
 export const mastraDocumentsTable = defineTable({
   table: v.string(),
   primaryKey: v.string(),
@@ -97,7 +92,6 @@ export const mastraDocumentsTable = defineTable({
 })
   .index('by_table', ['table'])
   .index('by_table_primary', ['table', 'primaryKey']);
-
 
 export const TABLE_WORKFLOW_SNAPSHOT = 'mastra_workflow_snapshots';
 export const TABLE_MESSAGES = 'mastra_messages';
