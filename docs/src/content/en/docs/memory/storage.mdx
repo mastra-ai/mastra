@@ -1,0 +1,188 @@
+---
+title: "Storage | Memory"
+description: Configure storage for Mastra's memory system to persist conversations, workflows, and traces.
+---
+
+# Storage
+
+For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider—simply choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
+
+On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+
+If you do not specify any `storage` configuration, Mastra will not persist data across application restarts or deployments. For any deployment beyond local testing, provide your own storage configuration.
+
+## Supported Providers
+
+Each provider page includes installation instructions, configuration parameters, and usage examples:
+
+- [LibSQL Storage](/reference/v1/storage/libsql)
+- [PostgreSQL Storage](/reference/v1/storage/postgresql)
+- [MongoDB Storage](/reference/v1/storage/mongodb)
+- [Upstash Storage](/reference/v1/storage/upstash)
+- [Cloudflare D1](/reference/v1/storage/cloudflare-d1)
+- [Cloudflare Durable Objects](/reference/v1/storage/cloudflare)
+- [Convex](/reference/v1/storage/convex)
+- [DynamoDB](/reference/v1/storage/dynamodb)
+- [LanceDB](/reference/v1/storage/lance)
+- [Microsoft SQL Server](/reference/v1/storage/mssql)
+
+:::note
+LibSQL is file-based and works well for local development without requiring a separate database server. We use it throughout our examples for this reason.
+:::
+
+## Configuration Scope
+
+You can configure storage at two different scopes:
+
+### Instance-level storage
+
+Add storage to your Mastra instance so all agents share the same memory provider:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { PostgresStore } from "@mastra/pg";
+
+const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
+});
+
+// All agents automatically use this storage
+const agent1 = new Agent({ memory: new Memory() });
+const agent2 = new Agent({ memory: new Memory() });
+```
+
+### Agent-level storage
+
+Add storage to a specific agent when you need data boundaries or compliance requirements:
+
+```typescript copy
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/pg";
+
+const agent = new Agent({
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'agent-storage',
+      connectionString: process.env.AGENT_DATABASE_URL,
+    }),
+  }),
+});
+```
+
+This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
+
+## Threads and Resources
+
+Mastra organizes memory into threads using two identifiers:
+
+- **Thread**: A conversation session containing a sequence of messages (e.g., `convo_123`)
+- **Resource**: An identifier for the entity the thread belongs to, typically a user (e.g., `user_123`)
+
+Both identifiers are required for agents to store and recall information:
+
+```typescript copy
+const stream = await agent.stream("message for agent", {
+  memory: {
+    thread: "convo_123",
+    resource: "user_123",
+  },
+});
+```
+
+:::note
+Mastra Studio automatically generates a thread and resource for you.
+:::
+
+### Thread title generation
+
+Mastra can automatically generate descriptive thread titles based on the user's first message. This feature is disabled by default but can be enabled by setting `generateTitle` to `true`:
+
+```typescript showLineNumbers copy
+export const testAgent = new Agent({
+  memory: new Memory({
+    options: {
+      generateTitle: true,
+    },
+  }),
+});
+```
+
+Title generation runs asynchronously after the agent responds and does not affect response time.
+
+To optimize cost or behavior, provide a smaller `model` and custom `instructions`:
+
+```typescript showLineNumbers copy
+export const testAgent = new Agent({
+  memory: new Memory({
+    options: {
+      threads: {
+        generateTitle: {
+          model: "openai/gpt-4o-mini",
+          instructions: "Generate a concise title based on the user's first message",
+        },
+      },
+    },
+  }),
+});
+```
+
+## Semantic recall
+
+Semantic recall uses vector embeddings to retrieve relevant past messages based on meaning rather than recency. This requires a vector database instance, which can be configured at the instance or agent level.
+
+The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
+
+```typescript copy
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/pg";
+import { PineconeVector } from "@mastra/pinecone";
+
+// Instance-level vector configuration
+const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
+});
+
+// Agent-level vector configuration
+const agent = new Agent({
+  memory: new Memory({
+    vector: new PineconeVector({
+      id: 'agent-vector',
+      apiKey: process.env.PINECONE_API_KEY,
+      environment: process.env.PINECONE_ENVIRONMENT,
+      indexName: 'agent-embeddings',
+    }),
+    options: {
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
+
+We support all popular vector providers including [Pinecone](/reference/v1/vectors/pinecone), [Chroma](/reference/v1/vectors/chroma), [Qdrant](/reference/v1/vectors/qdrant), and many more.
+
+For more information on configuring semantic recall, see the [Semantic Recall](./semantic-recall) documentation.
+

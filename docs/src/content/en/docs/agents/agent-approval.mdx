@@ -218,7 +218,7 @@ When `autoResumeSuspendedTools` is enabled:
 1. A tool suspends execution by calling `suspend()` with a payload (e.g., requesting more information)
 2. The suspension is persisted to memory along with the conversation
 3. When the user sends their next message on the same thread, the agent:
-   - Detects the suspended tool from conversation history
+   - Detects the suspended tool from message history
    - Extracts `resumeData` from the user's message based on the tool's `resumeSchema`
    - Automatically resumes the tool with the extracted data
 
@@ -312,7 +312,7 @@ For automatic tool resumption to work:
 | Manual (`resumeStream()`) | Programmatic control, webhooks, button clicks, external triggers |
 | Automatic (`autoResumeSuspendedTools`) | Conversational flows where users provide resume data in natural language |
 
-Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the conversation history and the user sends a new message on the same thread.
+Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
 ## Related
 

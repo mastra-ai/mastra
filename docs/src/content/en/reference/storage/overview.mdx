@@ -1,52 +1,17 @@
 ---
-title: "MastraStorage | Storage"
-description: Overview of Mastra's storage system and data persistence capabilities.
+title: "Reference: Storage Overview | Storage"
+description: Core data schema and table structure for Mastra's storage system.
 ---
 
-import PropertiesTable from "@site/src/components/PropertiesTable";
 import { SchemaTable } from "@site/src/components/SchemaTable";
-import { StorageOverviewImage } from "@site/src/components/StorageOverviewImage";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 # Storage Overview
 
-`MastraStorage` provides a unified interface for managing:
+Mastra requires the following tables to be present in the database.
 
-- **Suspended Workflows**: the serialized state of suspended workflows (so they can be resumed later)
-- **Memory**: threads and messages per `resourceId` in your application
-- **Traces**: OpenTelemetry traces from all components of Mastra
-- **Eval Datasets**: scores and scoring reasons from eval runs
-
-<br />
-
-<br />
-
-<StorageOverviewImage />
-
-Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
-
-## Configuration
-
-Mastra can be configured with a default storage option:
-
-```typescript copy
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
-
-const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: "file:./mastra.db",
-  }),
-});
-```
-
-If you do not specify any `storage` configuration, Mastra will not persist data across application restarts or deployments. For any
-deployment beyond local testing you should provide your own storage
-configuration either on `Mastra` or directly within `new Memory()`.
-
-## Data Schema
+## Core Schema
 
 <Tabs>
   <TabItem value="messages" label="Messages">
@@ -470,60 +435,3 @@ Captures OpenTelemetry traces for monitoring and debugging.
 />
   </TabItem>
 </Tabs>
-
-### Querying Messages
-
-Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
-
-```typescript copy
-// Get messages for a thread with pagination
-const result = await mastra
-  .getStorage()
-  .listMessages({
-    threadId: "your-thread-id",
-    page: 0,
-    perPage: 50
-  });
-
-console.log(result.messages); // MastraDBMessage[]
-console.log(result.total); // Total count
-console.log(result.hasMore); // Whether more pages exist
-
-// Get messages from multiple threads at once
-const multiThreadResult = await mastra
-  .getStorage()
-  .listMessages({
-    threadId: ["thread-1", "thread-2", "thread-3"],
-    page: 0,
-    perPage: 100
-  });
-
-// Get messages by their IDs
-const messages = await mastra
-  .getStorage()
-  .listMessagesById({ messageIds: messageIdArr });
-```
-
-The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
-
-All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
-
-```typescript copy
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-
-const result = await mastra
-  .getStorage()
-  .listMessages({ threadId: "your-thread-id" });
-
-// Convert to AI SDK v5 UIMessage format for UI rendering
-const uiMessages = toAISdkV5Messages(result.messages);
-```
-
-## Storage Providers
-
-Mastra supports the following providers:
-
-- For local development, check out [LibSQL Storage](/reference/v1/storage/libsql)
-- For production, check out [PostgreSQL Storage](/reference/v1/storage/postgresql)
-- For serverless deployments, check out [Upstash Storage](/reference/v1/storage/upstash)
-- For document-based storage, check out [MongoDB Storage](/reference/v1/storage/mongodb)

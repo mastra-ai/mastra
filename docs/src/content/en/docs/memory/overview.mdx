@@ -1,15 +1,21 @@
 ---
 title: "Memory overview | Memory"
-description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
+description: "Learn how Mastra's memory system works with working memory, message history, and semantic recall."
 ---
 
 # Memory Overview
 
-Memory in Mastra helps agents manage context across conversations by condensing relevant information into the language model's context window.
+Memory is the most essential type of context engineering for AI agents. It gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.
 
-Mastra supports three types of memory: working memory, conversation history, and semantic recall. It uses a two-tier scoping system where memory can be isolated per conversation thread (thread-scoped) or shared across all conversations for the same user (resource-scoped).
+Mastra requires a [storage provider](./storage) to persist memory and supports three types:
 
-Mastra's memory system uses [storage providers](#memory-storage-adapters) to persist conversation threads, messages, and working memory across application restarts.
+- [**Message history**](./message-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
+
+- [**Working memory**](./working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data. This is implemented as a block of Markdown text that the agent can update over time (or as a Zod schema).
+
+- [**Semantic recall**](./semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+
+Mastra combines all memory types into a single context window. If the total exceeds the model's token limit, use [memory processors](./memory-processors) to trim or filter messages before sending them to the model.
 
 ## Getting started
 
@@ -19,14 +25,13 @@ First install the required dependencies:
 npm install @mastra/core@beta @mastra/memory@beta @mastra/libsql@beta
 ```
 
-Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
+Add a storage adapter to the main Mastra instance:
 
-```typescript {6-8} title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: ":memory:",
@@ -34,83 +39,44 @@ export const mastra = new Mastra({
 });
 ```
 
-Now, enable memory by passing a `Memory` instance to the agent's `memory` parameter:
+Enable memory by passing a `Memory` instance to the agent's `memory` parameter:
 
-```typescript {3-5} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   id: "test-agent",
-  // ...
   memory: new Memory(),
 });
 ```
 
-That memory instance has options you can configure for working memory, conversation history, and semantic recall.
+:::note
+Message history is enabled by default with the last 10 messages. This is the simplest complete example—your agent will now remember conversations.
+:::
 
-## Different types of memory
+The memory instance has options you can configure for working memory, message history, and semantic recall.
 
-Mastra supports three types of memory: working memory, conversation history, and semantic recall.
 
-[**Working memory**](./working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data. (Compare this to ChatGPT where you can ask it to tell you about yourself). This is implemented as a block of Markdown text that the agent is able to update over time (or alternately, as a Zod schema)
+## Storage
 
-[**Conversation history**](./conversation-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
+For memory to persist across application restarts, you need to configure a storage adapter. Mastra supports multiple database providers including PostgreSQL, MongoDB, LibSQL, and more.
 
-[**Semantic recall**](./semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+Storage can be configured at the instance level (shared across all agents) or at the agent level (dedicated per agent). You can also use different databases for storage and vector operations.
 
-Mastra combines all memory types into a single context window. If the total exceeds the model’s token limit, use [memory processors](./memory-processors) to trim or filter messages before sending them to the model.
+See the [Storage](./storage) documentation for configuration options, supported providers, and examples.
 
-## Scoping memory with threads and resources
+## Debugging memory
 
-All memory types are [resource-scoped](./working-memory#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory#thread-scoped-memory) configuration isolates memory to a single conversation thread.
+When tracing is enabled, you can inspect exactly which messages the agent uses for context in each request. The trace output shows all memory included in the agent's context window—both recent message history and messages recalled via semantic recall.
 
-## Memory Storage Adapters
-
-To persist and recall information between conversations, memory requires a storage adapter.
-
-Supported options include [LibSQL](/docs/v1/memory/storage/memory-with-libsql), [MongoDB](/docs/v1/memory/storage/memory-with-mongodb), [Postgres](/docs/v1/memory/storage/memory-with-pg), and [Upstash](/docs/v1/memory/storage/memory-with-upstash)
-
-We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
-
-## Dedicated storage
-
-Agents can be configured with their own dedicated storage, keeping tasks, conversations, and recalled information separate across agents.
-
-### Adding storage to agents
-
-To assign dedicated storage to an agent, install and import the required dependency and pass a `storage` instance to the `Memory` constructor:
-
-```typescript {3, 9-11} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const testAgent = new Agent({
-  id: "test-agent",
-  // ...
-  memory: new Memory({
-    // ...
-    storage: new LibSQLStore({
-      id: 'test-agent-storage',
-      url: "file:agent-memory.db",
-    }),
-    // ...
-  }),
-});
-```
-
-## Viewing retrieved messages
-
-If tracing is enabled in your Mastra deployment and memory is configured either with `lastMessages` and/or `semanticRecall`, the agent’s trace output will show all messages retrieved for context—including both recent conversation history and messages recalled via semantic recall.
-
-This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
+This visibility helps you understand why an agent made specific decisions and verify that memory retrieval is working as expected.
 
 For more details on enabling and configuring tracing, see [Tracing](../observability/tracing/overview).
 
-## Local development with LibSQL
+### Inspecting stored data
 
-For local development with `LibSQLStore`, you can inspect stored memory using the [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) extension in VS Code.
+When using `LibSQLStore` for local development, you can inspect stored memory directly using the [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) extension in your editor (VS Code, Cursor, etc.).
 
 ![SQLite Viewer](/img/memory/memory-sqlite-viewer.jpg)
 
