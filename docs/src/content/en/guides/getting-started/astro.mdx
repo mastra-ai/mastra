@@ -10,7 +10,13 @@ import TabItem from "@theme/TabItem";
 
 In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Astro by importing and calling the agent directly from your routes.
 
-You'll use Astro without any third-party integrations to display a simple chat interface. After successfully completing this guide, you can explore [next steps](#next-steps) to enhance your app further.
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
+
+:::note
+
+While this guide shows you how to use Astro with React and full server-side rendering (SSR), there are many ways to use Astro with Mastra. You can [opt-in to SSR](https://docs.astro.build/en/guides/on-demand-rendering/#enabling-on-demand-rendering) on a per-file basis and use other frameworks like Svelte, Vue, Solid, or Preact. You can use Astro to build out a chat interface and call endpoints [natively in Astro](https://docs.astro.build/en/recipes/call-endpoints/).
+
+:::
 
 ## Before you begin
 
@@ -19,24 +25,417 @@ You'll use Astro without any third-party integrations to display a simple chat i
 
 ## Create a new Astro app (optional)
 
-TODO
+If you already have an Astro app, skip to the next step. Your Astro app should be setup like this:
+
+- Use SSR (`output: "server"` in `astro.config.mjs`)
+- Use the [React integration](https://docs.astro.build/en/guides/integrations-guide/react/)
+- Tailwind installed
+
+To support [on-demand rendering](https://docs.astro.build/en/guides/on-demand-rendering/) this guide will use the [Node.js adapter](https://docs.astro.build/en/guides/integrations-guide/node/) but any of the supported server adapters will work.
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+```bash
+npm create astro@latest mastra-astro -- --add node --add react --add tailwind --install --skip-houston --template minimal --git
+```
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+```bash
+pnpm create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
+```
+</TabItem>
+<TabItem value="yarn" label="yarn">
+```bash
+yarn create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
+```
+</TabItem>
+<TabItem value="bun" label="bun">
+```bash
+bun create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
+```
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-astro`, but you can replace it with any name you want.
+
+`cd` into your project and edit the `astro.config.mjs` file to set the [`output` setting](https://docs.astro.build/en/reference/configuration-reference/#output) to `"server"`:
+
+```js title="astro.config.mjs {10}
+// @ts-check
+import { defineConfig } from 'astro/config';
+
+import node from '@astrojs/node';
+import react from '@astrojs/react';
+import tailwindcss from '@tailwindcss/vite';
+
+// https://astro.build/config
+export default defineConfig({
+  output: 'server',
+  adapter: node({
+    mode: 'standalone'
+  }),
+
+  integrations: [react()],
+
+  vite: {
+    plugins: [tailwindcss()]
+  }
+});
+```
+
+Lastly, edit the `tsconfig.json` to resolve paths:
+
+```ts title="tsconfig.json"
+{
+  "compilerOptions": {
+    // ...
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+    // ...
+  }
+}
+```
 
 ## Initialize Mastra
 
-TODO
+Run [`mastra init`](/reference/v1/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your Astro routes in the next steps.
+
+## Install AI SDK UI & AI Elements
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+</Tabs>
+
+Next, initialize AI Elements. When prompted, choose the default options:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bunx ai-elements@latest
+```
+
+</TabItem>
+</Tabs>
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
 ## Create a chat route
 
-TODO
+Create `src/pages/api/chat.ts`:
 
-## Create a chat page
+```ts title="src/pages/api/chat.ts"
+import type { APIRoute } from "astro";
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/mastra';
 
-TODO
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
+
+export const POST: APIRoute = async ({ request }) => {
+  const params = await request.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weather-agent',
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      }
+    }
+  })
+
+  return createUIMessageStreamResponse({ stream })
+}
+
+export const GET: APIRoute = async () => {
+  const memory = await mastra.getAgentById('weather-agent').getMemory()
+  let response = null
+
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    })
+  } catch {
+    console.log('No previous messages found.')
+  }
+
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return Response.json(uiMessages)
+}
+```
+
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Create a chat component
+
+Create `src/components/chat.tsx`:
+
+```tsx title="src/components/chat.tsx"
+import '@/styles/global.css';
+import { useEffect, useState } from 'react';
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+import { useChat } from '@ai-sdk/react';
+
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
+
+
+function Chat() {
+  const [input, setInput] = useState<string>('');
+
+  const { messages, setMessages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      const res = await fetch('/api/chat');
+      const data = await res.json();
+      setMessages([...data]);
+    };
+    fetchMessages();
+  }, [setMessages]);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+
+    sendMessage({ text: input });
+    setInput('');
+  };
+
+  return (
+    <div className="w-full p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message) => (
+              <div key={message.id}>
+                {message.parts?.map((part, i) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message
+                        key={`${message.id}-${i}`}
+                        from={message.role}>
+                          <MessageContent>
+                            <MessageResponse>{part.text}</MessageResponse>
+                          </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
+                          <ToolOutput
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e) => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Type your message..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
+  );
+}
+
+export default Chat;
+```
+
+This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
+
+## Render the chat component
+
+The last step is to render the chat component on your index page. Edit `src/pages/index.astro`:
+
+```html title="src/pages/index.astro" {2,14}
+---
+import Chat from '@/components/chat';
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Astro</title>
+	</head>
+	<body>
+		<Chat client:load />
+	</body>
+</html>
+```
+
+Import the `Chat` component and add it to the body with the `client:load` [directive](https://docs.astro.build/en/reference/directives-reference/#client-directives) so it runs on the client side.
 
 ## Test your agent
 
-TODO
+1. Run your Astro app with `npm run dev`
+2. Open the chat at http://localhost:4321
+3. Try asking about the weather. If your API key is set up correctly, you'll get a responseDO
 
 ## Next steps
 
-TODO
+Congratulations on building your Mastra agent with Astro! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
