@@ -11,12 +11,9 @@ import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
-interface MapResultsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface MapResultsStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
@@ -27,10 +24,7 @@ interface MapResultsStepOptions<
   methodType: AgentMethodType;
 }
 
-export function createMapResultsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   options,
   resourceId,
@@ -41,7 +35,7 @@ export function createMapResultsStep<
   agentSpan,
   agentId,
   methodType,
-}: MapResultsStepOptions<OUTPUT, FORMAT>) {
+}: MapResultsStepOptions<OUTPUT>) {
   return async ({
     inputData,
     bail,
