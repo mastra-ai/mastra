@@ -196,7 +196,7 @@ import { mastra } from "./mastra";
 const threadId = "123";
 const resourceId = "user-456";
 
-const agent = mastra.getAgent("pgAgent");
+const agent = mastra.getAgent("pg-agent");
 
 const message = await agent.stream("My name is Mastra", {
   memory: {
