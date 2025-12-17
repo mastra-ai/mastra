@@ -3,8 +3,8 @@ import { z } from 'zod/v4';
 import { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
 import type { ModelInformation } from './types';
 
-// Mock the regular 'zod' import to use zod v4
-vi.mock('zod', () => ({
+// Mock 'zod/v3' to use zod v4 (since code now imports from zod/v3)
+vi.mock('zod/v3', () => ({
   z,
 }));
 

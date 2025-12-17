@@ -1,6 +1,6 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import {
   AnthropicSchemaCompatLayer,
   OpenAISchemaCompatLayer,

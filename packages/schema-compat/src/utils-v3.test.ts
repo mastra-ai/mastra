@@ -1,9 +1,4 @@
-import { vi } from 'vitest';
-import { z as zV3 } from 'zod/v3';
 import { runTestSuite } from './utils-test-suite';
 
-vi.mock('zod', () => ({
-  z: zV3,
-}));
-
+// No mock needed - code now imports from 'zod/v3' directly, which is v3
 runTestSuite();

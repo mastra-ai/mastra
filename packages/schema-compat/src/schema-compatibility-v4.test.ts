@@ -4,8 +4,8 @@ import { z } from 'zod/v4';
 import { SchemaCompatLayer } from './schema-compatibility';
 import type { ModelInformation } from './types';
 
-// Mock zod to use zod/v4 - Vitest 4 requires the mock to be at the top level
-vi.mock('zod', async () => {
+// Mock zod/v3 to use zod/v4 - since code now imports from zod/v3
+vi.mock('zod/v3', async () => {
   const zodV4 = await import('zod/v4');
   return {
     z: zodV4.z,

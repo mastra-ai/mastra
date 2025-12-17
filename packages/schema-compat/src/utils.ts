@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { ZodSchema as ZodSchemaV3, ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodSchemaV4, ZodType as ZodTypeV4 } from 'zod/v4';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
@@ -24,7 +24,7 @@ type ZodType = ZodTypeV3 | ZodTypeV4;
  *
  * @example
  * ```typescript
- * import { z } from 'zod';
+ * import { z } from 'zod/v3';
  * import { convertZodSchemaToAISDKSchema } from '@mastra/schema-compat';
  *
  * const userSchema = z.object({
@@ -158,7 +158,7 @@ export function applyCompatLayer(options: {
  *
  * @example
  * ```typescript
- * import { z } from 'zod';
+ * import { z } from 'zod/v3';
  * import { applyCompatLayer, OpenAISchemaCompatLayer, AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
  *
  * const schema = z.object({

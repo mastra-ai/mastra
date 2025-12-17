@@ -3,8 +3,8 @@ import { z as zV4 } from 'zod/v4';
 import { zodToJsonSchema } from './zod-to-json';
 import { runZodToJsonTestSuite } from './zod-to-json-test-suite';
 
-// Mock 'zod' to use v4
-vi.mock('zod', async () => {
+// Mock 'zod/v3' to use v4 (since code now imports from zod/v3)
+vi.mock('zod/v3', async () => {
   const { z } = await import('zod/v4');
   return { z };
 });
@@ -23,6 +23,7 @@ describe('zodToJsonSchema - Zod v4 specific', () => {
       const result = zodToJsonSchema(schema as any);
 
       // Should produce valid JSON Schema
+      console.log({"result===>": JSON.stringify(result, null, 2)});
       expect(result).toBeDefined();
       expect(result.type).toBe('object');
       expect(result.properties).toHaveProperty('variables');

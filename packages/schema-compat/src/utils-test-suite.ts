@@ -1,6 +1,6 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Schema } from './json-schema';

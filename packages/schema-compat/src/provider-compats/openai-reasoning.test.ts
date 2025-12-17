@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { ModelInformation } from '../types';
 import { OpenAIReasoningSchemaCompatLayer } from './openai-reasoning';
 
