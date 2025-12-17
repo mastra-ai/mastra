@@ -36,7 +36,7 @@
     "@mastra/mcp": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "jsdom": "^26.1.0",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.6",
