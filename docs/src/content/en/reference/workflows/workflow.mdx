@@ -85,6 +85,20 @@ export const workflow = createWorkflow({
       isOptional: true,
       defaultValue: "() => true",
     },
+    {
+      name: "onFinish",
+      type: "(result: WorkflowFinishCallbackResult) => void | Promise<void>",
+      description:
+        "Callback invoked when workflow completes with any status (success, failed, suspended, tripwire). Receives the workflow result including status, output, error, and step results. Errors thrown in this callback are caught and logged, not propagated.",
+      isOptional: true,
+    },
+    {
+      name: "onError",
+      type: "(errorInfo: WorkflowErrorCallbackInfo) => void | Promise<void>",
+      description:
+        "Callback invoked only when workflow fails (failed or tripwire status). Receives error details and step results. Errors thrown in this callback are caught and logged, not propagated.",
+      isOptional: true,
+    },
   ]}
 />
 
