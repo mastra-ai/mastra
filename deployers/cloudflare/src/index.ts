@@ -2,6 +2,7 @@ import { writeFile } from 'fs/promises';
 import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
+import type { BundlerOptions } from '@mastra/deployer/bundler';
 import virtual from '@rollup/plugin-virtual';
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
@@ -162,15 +163,15 @@ export class CloudflareDeployer extends Deployer {
     await this.writeFiles(outputDirectory);
   }
 
-  async getBundlerOptions(
+  protected async getBundlerOptions(
     serverFile: string,
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    { enableSourcemap = false }: { enableSourcemap?: boolean } = {},
+    bundlerOptions: BundlerOptions,
   ) {
     const inputOptions = await super.getBundlerOptions(serverFile, mastraEntryFile, analyzedBundleInfo, toolsPaths, {
-      enableSourcemap,
+      ...bundlerOptions,
       enableEsmShim: false,
     });
 

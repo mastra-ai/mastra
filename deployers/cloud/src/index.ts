@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'path';
+import { join, dirname } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import { copy, readJSON } from 'fs-extra/esm';
+import type { Config } from '@mastra/core/mastra';
+import { IS_DEFAULT } from '@mastra/deployer/bundler';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
@@ -12,6 +14,22 @@ import { successEntrypoint } from './utils/report.js';
 export class CloudDeployer extends Deployer {
   constructor() {
     super({ name: 'cloud' });
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    if (!bundlerOptions?.[IS_DEFAULT]) {
+      return bundlerOptions;
+    }
+
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   async deploy(_outputDirectory: string): Promise<void> {}
