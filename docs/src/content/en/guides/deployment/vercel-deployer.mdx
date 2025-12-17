@@ -7,15 +7,19 @@ description: "Learn how to deploy a Mastra application to Vercel using the Mastr
 
 The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
 
+:::warning
+Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/deployer-vercel@beta
 ```
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
@@ -37,7 +41,7 @@ The Vercel deployer can write a few high‑value settings into the Vercel Output
 
 Example:
 
-```ts title="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts"
 deployer: new VercelDeployer({
   maxDuration: 600,
   memory: 1536,
@@ -63,7 +67,7 @@ Your project is now configured with automatic deployments which occur whenever y
 
 Manual deployments are also possible using the [Vercel CLI](https://vercel.com/docs/cli). With the Vercel CLI installed run the following from your project root to deploy your application.
 
-```bash copy
+```bash
 npm run build && vercel --prod --prebuilt --archive=tgz
 ```
 

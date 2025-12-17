@@ -71,7 +71,7 @@ describe('MastraAuthAuth0', () => {
       (jwtVerify as any).mockRejectedValue(new Error('Invalid token'));
 
       const auth0 = new MastraAuthAuth0();
-      await expect(auth0.authenticateToken('invalid-token')).rejects.toThrow('Invalid token');
+      await expect(auth0.authenticateToken('invalid-token')).resolves.toBeNull();
     });
   });
 

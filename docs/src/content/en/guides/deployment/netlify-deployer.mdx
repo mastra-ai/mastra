@@ -7,15 +7,19 @@ description: "Learn how to deploy a Mastra application to Netlify using the Mast
 
 The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Netlify specific functionality.
 
+:::warning
+Netlify Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/deployer-netlify@beta
 ```
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
@@ -44,7 +48,7 @@ Your project is now configured with automatic deployments which occur whenever y
 
 Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
 
-```bash copy
+```bash
 netlify deploy --prod
 ```
 

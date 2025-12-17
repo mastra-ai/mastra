@@ -657,7 +657,7 @@ export async function createNetworkLoop({
                     primitiveType: inputData.primitiveType,
                     primitiveId: inputData.primitiveId,
                     input: inputData.prompt,
-                    finalResult: { text: await result.text, toolCalls: await result.toolCalls, messages },
+                    finalResult: { text: await result.text, messages },
                   }),
                 },
               ],

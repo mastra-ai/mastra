@@ -9,7 +9,7 @@ The `Workflow` class enables you to create state machines for complex sequences 
 
 ## Usage example
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -85,6 +85,20 @@ export const workflow = createWorkflow({
       isOptional: true,
       defaultValue: "() => true",
     },
+    {
+      name: "onFinish",
+      type: "(result: WorkflowFinishCallbackResult) => void | Promise<void>",
+      description:
+        "Callback invoked when workflow completes with any status (success, failed, suspended, tripwire). Receives the workflow result including status, output, error, and step results. Errors thrown in this callback are caught and logged, not propagated.",
+      isOptional: true,
+    },
+    {
+      name: "onError",
+      type: "(errorInfo: WorkflowErrorCallbackInfo) => void | Promise<void>",
+      description:
+        "Callback invoked only when workflow fails (failed or tripwire status). Receives error details and step results. Errors thrown in this callback are caught and logged, not propagated.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -92,7 +106,7 @@ export const workflow = createWorkflow({
 
 When starting a workflow run, you can pass `initialState` to set the starting values for the workflow's state:
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({
@@ -143,7 +157,7 @@ A workflow's `status` indicates its current execution state. The possible values
 
 When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 const result = await run.start({ inputData: { message: "Hello" } });
 

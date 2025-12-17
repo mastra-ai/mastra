@@ -7,15 +7,19 @@ description: "Learn how to deploy a Mastra application to Cloudflare using the M
 
 The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
 
+:::warning
+Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/deployer-cloudflare@beta
 ```
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
@@ -38,13 +42,13 @@ Manual deployments are also possible using the [Cloudflare Wrangler CLI](https:/
 
 With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
 
-```bash copy
+```bash
 npx wrangler login
 ```
 
 Run the following to build and deploy your application to Cloudflare
 
-```bash copy
+```bash
 npm run build && wrangler deploy --config .mastra/output/wrangler.json
 ```
 

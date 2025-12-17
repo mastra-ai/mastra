@@ -80,7 +80,6 @@ export async function writeAgentSample(
   const content = `
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
@@ -117,12 +116,7 @@ export const weatherAgent = new Agent({
   },`
       : ''
   }
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: "memory-storage",
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory
-    })
-  })
+  memory: new Memory()
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -516,7 +510,7 @@ export const mastra = new Mastra({
   observability: new Observability({
     // Enables DefaultExporter and CloudExporter for tracing
     default: { enabled: true },
-    }),
+  }),
 });
 `,
     );
@@ -660,6 +654,7 @@ interface InteractivePromptArgs {
   skip?: {
     llmProvider?: boolean;
     llmApiKey?: boolean;
+    gitInit?: boolean;
   };
 }
 
@@ -769,6 +764,8 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return editor;
       },
       initGit: async () => {
+        if (skip?.gitInit) return false;
+
         return p.confirm({
           message: 'Initialize a new git repository?',
           initialValue: true,

@@ -24,7 +24,7 @@ Clone this [boilerplate repository](https://github.com/mastra-ai/express-ts-boil
 <Tabs>
 <TabItem value="https" label="HTTPS">
 
-```bash copy
+```bash
 git clone https://github.com/mastra-ai/express-ts-boilerplate.git
 cd express-ts-boilerplate
 npm install
@@ -33,7 +33,7 @@ npm install
 </TabItem>
 <TabItem value="ssh" label="SSH">
 
-```bash copy
+```bash
 git clone git@github.com:mastra-ai/express-ts-boilerplate.git
 cd express-ts-boilerplate
 npm install
@@ -48,7 +48,7 @@ Inside your Express project directory, run [`mastra init`](/reference/v1/cli/mas
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-```bash copy
+```bash
 npx mastra@beta init
 ```
 
@@ -64,13 +64,13 @@ You'll pass the `src/mastra/index.ts` file to the Express server adapter later.
 
 Install the Express server adapter package:
 
-```bash copy
+```bash
 npm install @mastra/express@beta
 ```
 
 Open the Express entry file at `src/index.ts` and add the required import and initialization code:
 
-```typescript copy {2-3,11-12} title="src/index.ts"
+```typescript {2-3,11-12} title="src/index.ts"
 import express, { type Request, type Response } from "express";
 import { MastraServer } from "@mastra/express";
 import { mastra } from "./mastra";
@@ -103,13 +103,13 @@ By default, Mastra's endpoints are added under the `/api` subpath and use your a
 
 Start your Express server:
 
-```bash copy
+```bash
 npm run start
 ```
 
 In a separate terminal window, use `curl` to ask the weather agent:
 
-```bash copy
+```bash
 curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 

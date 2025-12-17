@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import type { Tool } from '@mastra/core/tools';
 import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
@@ -28,7 +28,7 @@ import { WORKFLOWS_ROUTES } from './workflows';
 export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools?: Record<string, Tool>;
+  tools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
 };
