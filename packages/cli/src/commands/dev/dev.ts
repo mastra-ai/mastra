@@ -10,7 +10,8 @@ import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { createLogger } from '../../utils/logger.js';
-import { getMastraPackages, type MastraPackageInfo } from '../../utils/mastra-packages.js';
+import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
+import { getMastraPackages } from '../../utils/mastra-packages.js';
 
 import { DevBundler } from './DevBundler';
 
