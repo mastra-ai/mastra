@@ -22,7 +22,7 @@ export const contentAgent = new Agent({
     
     Always provide constructive, actionable feedback.
   `,
-  model: "openai/gpt-4.1-mini"
+  model: "openai/gpt-4.1-mini",
 });
 ```
 
