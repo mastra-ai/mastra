@@ -7,7 +7,8 @@ import type {
   UpdateSpanOptions,
   CreateSpanOptions,
 } from '@mastra/core/observability';
-import { BaseSpan, deepClean } from './base';
+import { BaseSpan } from './base';
+import { deepClean } from './serialization';
 
 export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   public id: string;
