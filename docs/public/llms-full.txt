@@ -2891,12 +2891,35 @@ If you have specific questions about how the Apache License 2.0 applies to your 
 
 
 ---
-title: "Building Mastra | Deployment"
+title: "Deploy to Cloud Providers | Deployment"
+description: Deploy your Mastra applications to cloud providers
+---
+
+# Deploy to Cloud Providers
+[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers
+
+Mastra applications can be deployed to cloud providers and serverless platforms. Mastra includes optional built-in deployers for Vercel, Netlify, and Cloudflare to automate the deployment process.
+
+## Supported Cloud Providers
+
+The following guides show how to deploy Mastra to specific cloud providers:
+
+- [Amazon EC2](/guides/v1/deployment/amazon-ec2)
+- [AWS Lambda](/guides/v1/deployment/aws-lambda)
+- [Azure App Services](/guides/v1/deployment/azure-app-services)
+- [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/v1/deployment/digital-ocean)
+- [Netlify](/guides/v1/deployment/netlify-deployer)
+- [Vercel](/guides/v1/deployment/vercel-deployer)
+
+
+---
+title: "Deploy a Mastra Server | Deployment"
 description: "Learn how to build a Mastra server with build settings and deployment options."
 ---
 
-# Building Mastra
-[EN] Source: https://mastra.ai/en/docs/deployment/building-mastra
+# Deploy a Mastra Server
+[EN] Source: https://mastra.ai/en/docs/deployment/mastra-server
 
 Mastra runs as a standard Node.js server and can be deployed across a wide range of environments.
 
@@ -2967,1562 +2990,28 @@ node .mastra/output/index.mjs
 
 
 ---
-title: "Amazon EC2 | Deployment"
-description: "Deploy your Mastra applications to Amazon EC2."
----
-
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Amazon EC2
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/amazon-ec2
-
-Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
-
-:::note
-This guide assumes your Mastra application has been created using the default
-`npx create-mastra@beta` command.
-For more information on how to create a new Mastra application,
-refer to our [getting started guide](/guides/v1/getting-started/quickstart)
-:::
-
-## Prerequisites
-
-- An AWS account with [EC2](https://aws.amazon.com/ec2/) access
-- An EC2 instance running Ubuntu 24+ or Amazon Linux
-- A domain name with an A record pointing to your instance
-- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
-- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
-- Node.js 22.13.0 or later installed on your instance
-
-## Deployment Steps
-
-<Steps>
-
-<StepItem>
-
-Connect to your EC2 instance and clone your repository:
-
-<Tabs>
-  <TabItem value="public" label="Public Repository">
-
-```bash copy
-git clone https://github.com/<your-username>/<your-repository>.git
-```
-
-  </TabItem>
-
-  <TabItem value="private" label="Private Repository">
-
-```bash copy
-git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
-```
-
-  </TabItem>
-</Tabs>
-
-Navigate to the repository directory:
-
-```bash copy
-cd "<your-repository>"
-```
-
-</StepItem>
-
-<StepItem>
-
-Install dependencies:
-
-```bash copy
-npm install
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a `.env` file and add your environment variables:
-
-```bash copy
-touch .env
-```
-
-Edit the `.env` file and add your environment variables:
-
-```bash copy
-OPENAI_API_KEY=<your-openai-api-key>
-# Add other required environment variables
-```
-
-</StepItem>
-
-<StepItem>
-
-Build the application:
-
-```bash copy
-npm run build
-```
-
-</StepItem>
-
-<StepItem>
-
-Run the application:
-
-```bash copy
-node --env-file=".env" .mastra/output/index.mjs
-```
-
-:::note
-Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
-:::
-
-</StepItem>
-
-</Steps>
-
-## Connect to your Mastra server
-
-You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
-
-Refer to the [`MastraClient` documentation](/reference/v1/client-js/mastra-client) for more information.
-
-```typescript copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
-
-const mastraClient = new MastraClient({
-  baseUrl: "https://<your-domain-name>",
-});
-```
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-
-
----
-title: "AWS Lambda | Deployment"
-description: "Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter."
----
-
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# AWS Lambda
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/aws-lambda
-
-Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
-This approach allows you to run your Mastra server as a containerized Lambda function with automatic scaling.
-
-:::note
-This guide assumes your Mastra application has been created using the default
-`npx create-mastra@beta` command.
-For more information on how to create a new Mastra application,
-refer to our [getting started guide](/guides/v1/getting-started/quickstart)
-:::
-
-## Prerequisites
-
-Before deploying to AWS Lambda, ensure you have:
-
-- [AWS CLI](https://aws.amazon.com/cli/) installed and configured
-- [Docker](https://www.docker.com/) installed and running
-- An AWS account with appropriate permissions for Lambda, ECR, and IAM
-- Your Mastra application configured with appropriate memory storage
-
-## Memory Configuration
-
-:::note
-AWS Lambda uses an ephemeral file system,
-meaning that any files written to the file system are short-lived and may be lost.
-Avoid using a Mastra storage provider that uses the file system,
-such as `LibSQLStore` with a file URL.
-:::
-
-Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:
-
-### Option 1: In-Memory (Simplest)
-
-```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { LibSQLStore } from "@mastra/libsql";
-
-const storage = new LibSQLStore({
-  id: 'mastra-storage',
-  url: ":memory:", // in-memory storage
-});
-```
-
-### Option 2: External Storage Providers
-
-For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
-
-```typescript title="src/mastra/index.ts" copy showLineNumbers
-import { LibSQLStore } from "@mastra/libsql";
-
-const storage = new LibSQLStore({
-  id: 'mastra-storage',
-  url: "libsql://your-database.turso.io", // External Turso database
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
-```
-
-For more memory configuration options, see the [Memory documentation](/docs/v1/memory/overview).
-
-## Creating a Dockerfile
-
-Create a `Dockerfile` in your Mastra project root directory:
-
-```dockerfile title="Dockerfile" copy showLineNumbers
-FROM node:22-alpine
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY src ./src
-RUN npx mastra build
-RUN apk add --no-cache gcompat
-
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
-RUN addgroup -g 1001 -S nodejs && \
-  adduser -S mastra -u 1001 && \
-  chown -R mastra:nodejs /app
-
-USER mastra
-
-ENV PORT=8080
-ENV NODE_ENV=production
-ENV READINESS_CHECK_PATH="/api"
-
-EXPOSE 8080
-
-CMD ["node", ".mastra/output/index.mjs"]
-```
-
-## Building and Deploying
-
-<Steps>
-
-<StepItem>
-
-Set up your environment variables for the deployment process:
-
-```bash copy
-export PROJECT_NAME="your-mastra-app"
-export AWS_REGION="us-east-1"
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-```
-
-</StepItem>
-
-<StepItem>
-
-Build your Docker image locally:
-
-```bash copy
-docker build -t "$PROJECT_NAME" .
-```
-
-</StepItem>
-
-<StepItem>
-
-Create an Amazon ECR repository to store your Docker image:
-
-```bash copy
-aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
-```
-
-</StepItem>
-
-<StepItem>
-
-Log in to Amazon ECR:
-
-```bash copy
-aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-```
-
-</StepItem>
-
-<StepItem>
-
-Tag your image with the ECR repository URI and push it:
-
-```bash copy
-docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
-docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a Lambda function using the AWS Console:
-
-1. Navigate to the [AWS Lambda Console](https://console.aws.amazon.com/lambda/)
-2. Click **Create function**
-3. Select **Container image**
-4. Configure the function:
-   - **Function name**: Your function name (e.g., `mastra-app`)
-   - **Container image URI**: Click **Browse images** and select your ECR repository, then choose the `latest` tag
-   - **Architecture**: Select the architecture that matches your Docker build (typically `x86_64`)
-
-</StepItem>
-
-<StepItem>
-
-Enable Function URL for external access:
-
-1. In the Lambda function configuration, go to **Configuration** > **Function URL**
-2. Click **Create function URL**
-3. Set **Auth type** to **NONE** (for public access)
-4. Configure **CORS** settings:
-   - **Allow-Origin**: `*` (restrict to your domain in production)
-   - **Allow-Headers**: `content-type` (`x-amzn-request-context` is also required when used with services like Cloudfront/API Gateway)
-   - **Allow-Methods**: `*` (audit and restrict in production)
-5. Click **Save**
-
-</StepItem>
-
-<StepItem>
-
-Add your environment variables in the Lambda function configuration:
-
-1. Go to **Configuration** > **Environment variables**
-2. Add the required variables for your Mastra application:
-   - `OPENAI_API_KEY`: Your OpenAI API key (if using OpenAI)
-   - `ANTHROPIC_API_KEY`: Your Anthropic API key (if using Anthropic)
-   - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using LibSQL with Turso)
-   - Other provider-specific API keys as needed
-
-</StepItem>
-
-<StepItem>
-
-Configure the function's memory and timeout settings:
-
-1. Go to **Configuration** > **General configuration**
-2. Set the following recommended values:
-   - **Memory**: 512 MB (adjust based on your application needs)
-   - **Timeout**: 30 seconds (adjust based on your application needs)
-   - **Ephemeral storage**: 512 MB (optional, for temporary files)
-
-</StepItem>
-
-</Steps>
-
-## Testing your deployment
-
-Once deployed, test your Lambda function:
-
-1. Copy the **Function URL** from the Lambda console
-2. Visit the URL in your browser to see your Mastra's server home screen
-3. Test your agents and workflows using the generated API endpoints
-
-For more information about available API endpoints, see the [Server documentation](/docs/v1/deployment/building-mastra).
-
-## Connecting your client
-
-Update your client application to use the Lambda function URL:
-
-```typescript title="src/client.ts" copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
-
-const mastraClient = new MastraClient({
-  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
-});
-```
-
-## Troubleshooting
-
-### Function timeout errors
-
-If your Lambda function times out:
-
-- Increase the timeout value in **Configuration** > **General configuration**
-- Optimize your Mastra application for faster cold starts
-- Consider using provisioned concurrency for consistent performance
-
-### Memory issues
-
-If you encounter memory-related errors:
-
-- Increase the memory allocation in **Configuration** > **General configuration**
-- Monitor memory usage in CloudWatch Logs
-- Optimize your application's memory usage
-
-### CORS issues
-
-If you encounter CORS errors when accessing endpoints but not the home page:
-
-- Verify CORS headers are properly set in your Mastra server configuration
-- Check the Lambda Function URL CORS configuration
-- Ensure your client is making requests to the correct URL
-
-### Container image issues
-
-If the Lambda function fails to start:
-
-- Verify the Docker image builds successfully locally
-- Check that the `CMD` instruction in your Dockerfile is correct
-- Review CloudWatch Logs for container startup errors
-- Ensure the Lambda Web Adapter is properly installed in the container
-
-## Production considerations
-
-For production deployments:
-
-### Security
-
-- Restrict CORS origins to your trusted domains
-- Use AWS IAM roles for secure access to other AWS services
-- Store sensitive environment variables in AWS Secrets Manager or Parameter Store
-
-### Monitoring
-
-- Enable CloudWatch monitoring for your Lambda function
-- Set up CloudWatch alarms for errors and performance metrics
-- Use AWS X-Ray for distributed tracing
-
-### Scaling
-
-- Configure provisioned concurrency for predictable performance
-- Monitor concurrent executions and adjust limits as needed
-- Consider using Application Load Balancer for more complex routing needs
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-- [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/)
-- [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)
-
-
----
-title: "Azure App Services | Deployment"
-description: "Deploy your Mastra applications to Azure App Services."
----
-
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# Azure App Services
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/azure-app-services
-
-Deploy your Mastra applications to Azure App Services.
-
-:::note
-This guide assumes your Mastra application has been created using the default
-`npx create-mastra@beta` command.
-For more information on how to create a new Mastra application,
-refer to our [getting started guide](/guides/v1/getting-started/quickstart)
-:::
-
-## Prerequisites
-
-- An [Azure account](https://azure.microsoft.com/) with an active subscription
-- A [GitHub repository](https://github.com/) containing your Mastra application
-- Your Mastra application should be created using `npx create-mastra@beta`
-
-## Deployment Steps
-
-<Steps>
-
-<StepItem>
-
-Create a new App service:
-
-- Log in to the [Azure Portal](https://portal.azure.com)
-- Navigate to **[App Services](https://docs.microsoft.com/en-us/azure/app-service/)** or search for it in the top search bar
-- Click **Create** to create a new App Service
-- In the drop-down, select **Web App**
-
-</StepItem>
-
-<StepItem>
-
-Configure app service settings:
-
-- **Subscription**: Select your Azure subscription
-- **Resource Group**: Create a new resource group or select an existing one
-- **Instance name**: Enter a unique name for your app (this will be part of your URL)
-- **Publish**: Select **Code**
-- **Runtime stack**: Select **Node 22 LTS**
-- **Operating System**: Select **Linux**
-- **Region**: Choose a region close to your users
-- **Linux Plan**: You may have the option of choosing a plan depending on the region you chose, pick an appropriate one for your needs.
-- Click **Review + Create**
-- Wait for validation to complete, then click **Create**
-
-</StepItem>
-
-<StepItem>
-
-Wait for deployment:
-
-- Wait for the deployment to complete
-- Once finished, click **Go to resource** under the next steps section
-
-</StepItem>
-
-<StepItem>
-
-Before setting up deployment, configure your environment variables:
-
-- Navigate to **Settings** > **Environment variables** in the left sidebar
-- Add your required environment variables such as:
-  - Model provider API keys (e.g., `OPENAI_API_KEY`)
-  - Database connection strings
-  - Any other configuration values your Mastra application requires
-- Click **Apply** to save the changes
-
-</StepItem>
-
-<StepItem>
-
-Setup GitHub deployment:
-
-- Navigate to **Deployment Center** in the left sidebar
-- Select **GitHub** as your source
-- Sign in to GitHub if you're not already authenticated with Azure
-- In this example, we will keep [GitHub Actions](https://docs.github.com/en/actions) as our provider
-- Select your organization, repository, and branch
-- Azure will generate a GitHub workflow file and you can preview it before proceeding
-- Click **Save** (the save button is located at the top of the page)
-
-</StepItem>
-
-<StepItem>
-
-After Azure creates the workflow, it will trigger a GitHub Actions run and merge the workflow file into your branch. **Cancel this initial run** as it will fail without the necessary modifications.
-
-:::warning
-The default workflow generated by Azure will fail for Mastra applications and needs to be modified.
-:::
-
-Pull the latest changes to your local repository and modify the generated workflow file (`.github/workflows/main_<your-app-name>.yml`):
-
-1. **Update the build step**: Find the step named "npm install, build, and test" and:
-   - Change the step name to "npm install and build"
-   - If you haven't set up proper tests in your Mastra application, remove the `npm test` command from the run section as the default test script will fail and disrupt deployment. If you have working tests, you can keep the test command.
-
-2. **Update the zip artifact step**: Find the "Zip artifact for deployment" step and replace the zip command with:
-
-   ```yaml
-   run: (cd .mastra/output && zip ../../release.zip -r .)
-   ```
-
-   This ensures only the build outputs from `.mastra/output` are included in the deployment package.
-
-</StepItem>
-
-<StepItem>
-
-Deploy your changes:
-
-- Commit and push your workflow modifications
-- The build will be automatically triggered in the **Deployment Center** in your Azure dashboard
-- Monitor the deployment progress until it completes successfully
-
-</StepItem>
-
-<StepItem>
-
-Access your deployed application:
-
-- Once the build is successful, wait a few moments for the application to start
-- Access your deployed application using the default URL provided in the **Overview** tab in the Azure portal
-- Your application will be available at `https://<your-app-name>.azurewebsites.net`
-
-</StepItem>
-
-</Steps>
-
-## Connect to your Mastra server
-
-You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
-
-Refer to the [`MastraClient` documentation](/reference/v1/client-js/mastra-client) for more information.
-
-```typescript copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
-
-const mastraClient = new MastraClient({
-  baseUrl: "https://<your-app-name>.azurewebsites.net",
-});
-```
-
-:::note
-Azure App Services uses an ephemeral file system for some pricing tiers.
-For production applications, avoid using Mastra storage providers that rely on the local file system,
-such as `LibSQLStore` with a file URL. Consider using cloud-based storage solutions instead.
-:::
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-- [Configure custom domains](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
-- [Enable HTTPS](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
-- [Azure App Service documentation](https://docs.microsoft.com/en-us/azure/app-service/)
-
-
----
-title: "CloudflareDeployer | Deployment"
-description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
----
-
-# CloudflareDeployer
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/cloudflare-deployer
-
-The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
-
-## Installation
-
-```bash copy
-npm install @mastra/deployer-cloudflare@beta
-```
-
-## Usage example
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
-
-export const mastra = new Mastra({
-  // ...
-  deployer: new CloudflareDeployer({
-    projectName: "hello-mastra",
-    env: {
-      NODE_ENV: "production",
-    },
-  }),
-});
-```
-
-> See the [CloudflareDeployer](/reference/v1/deployer/cloudflare) API reference for all available configuration options.
-
-## Manual deployment
-
-Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
-
-With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
-
-```bash copy
-npx wrangler login
-```
-
-Run the following to build and deploy your application to Cloudflare
-
-```bash copy
-npm run build && wrangler deploy --config .mastra/output/wrangler.json
-```
-
-> You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.
-
-## Build output
-
-The build output for Mastra applications using the `CloudflareDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Cloudflare.
-
-```
-.mastra/
-└── output/
-    ├── index.mjs
-    └── wrangler.json
-package.json
-```
-
-The `CloudflareDeployer` automatically generates a `wrangler.json` configuration file in `.mastra/output` with the following settings:
-
-```json
-{
-  "name": "hello-mastra",
-  "main": "./index.mjs",
-  "compatibility_date": "2025-04-01",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "nodejs_compat_populate_process_env"
-  ],
-  "observability": { "logs": { "enabled": true } },
-  "vars": {
-    "OPENAI_API_KEY": "...",
-    "CLOUDFLARE_API_TOKEN": "..."
-  }
-}
-```
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-
-
----
-title: "Digital Ocean | Deployment"
-description: "Deploy your Mastra applications to Digital Ocean."
----
-
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Digital Ocean
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/digital-ocean
-
-Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
-
-:::note
-This guide assumes your Mastra application has been created using the default
-`npx create-mastra@beta` command.
-For more information on how to create a new Mastra application,
-refer to our [getting started guide](/guides/v1/getting-started/quickstart)
-:::
-
-<Tabs>
-
-  <TabItem value="app-platform" label="App Platform">
-
-## App Platform
-
-### Prerequisites
-
-- A Git repository containing your Mastra application. This can be a [GitHub](https://github.com/) repository, [GitLab](https://gitlab.com/) repository, or any other compatible source provider.
-- A [Digital Ocean account](https://www.digitalocean.com/)
-
-### Deployment Steps
-
-<Steps>
-
-<StepItem>
-
-Create a new App
-
-- Log in to your [Digital Ocean dashboard](https://cloud.digitalocean.com/).
-- Navigate to the [App Platform](https://docs.digitalocean.com/products/app-platform/) service.
-- Select your source provider and create a new app.
-
-</StepItem>
-
-<StepItem>
-
-Configure Deployment Source
-
-- Connect and select your repository. You may also choose a container image or a sample app.
-- Select the branch you want to deploy from.
-- Configure the source directory if necessary. If your Mastra application uses the default directory structure, no action is required here.
-- Head to the next step.
-
-</StepItem>
-
-<StepItem>
-
-Configure Resource Settings and Environment Variables
-
-- A Node.js build should be detected automatically.
-- **Configure Build Command**: You need to add a custom build command for the app platform to build your Mastra project successfully. Set the build command based on your package manager:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ``` npm run build ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ``` pnpm build ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ``` yarn build ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ``` bun run build ```
-  </TabItem>
-</Tabs>
-
-- Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
-- You may choose to configure the size of your resource here.
-- Other things you may optionally configure include, the region of your resource, the unique app name, and what project the resource belongs to.
-- Once you're done, you may create the app after reviewing your configuration and pricing estimates.
-
-</StepItem>
-
-<StepItem>
-
-Deployment
-
-- Your app will be built and deployed automatically.
-- Digital Ocean will provide you with a URL to access your deployed application.
-
-</StepItem>
-
-</Steps>
-
-You can now access your deployed application at the URL provided by Digital Ocean.
-
-:::note
-The Digital Ocean App Platform uses an ephemeral file system,
-meaning that any files written to the file system are short-lived and may be lost.
-Avoid using a Mastra storage provider that uses the file system,
-such as `LibSQLStore` with a file URL.
-:::
-
-  </TabItem>
-
-  <TabItem value="droplets" label="Droplets">
-
-## Droplets
-
-Deploy your Mastra application to Digital Ocean's Droplets.
-
-### Prerequisites
-
-- A [Digital Ocean account](https://www.digitalocean.com/)
-- A [Droplet](https://docs.digitalocean.com/products/droplets/) running Ubuntu 24+
-- A domain name with an A record pointing to your droplet
-- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
-- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
-- Node.js 22.13.0 or later installed on your droplet
-
-### Deployment Steps
-
-<Steps>
-
-<StepItem>
-
-Clone your Mastra application
-
-Connect to your Droplet and clone your repository:
-
-<Tabs>
-  <TabItem value="public" label="Public Repository">
-
-```bash copy
-git clone https://github.com/<your-username>/<your-repository>.git
-```
-
-  </TabItem>
-
-  <TabItem value="private" label="Private Repository">
-
-```bash copy
-git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
-```
-
-  </TabItem>
-</Tabs>
-
-Navigate to the repository directory:
-
-```bash copy
-cd "<your-repository>"
-```
-
-</StepItem>
-
-<StepItem>
-
-Install dependencies
-
-```bash copy
-npm install
-```
-
-</StepItem>
-
-<StepItem>
-
-Set up environment variables
-
-Create a `.env` file and add your environment variables:
-
-```bash copy
-touch .env
-```
-
-Edit the `.env` file and add your environment variables:
-
-```bash copy
-OPENAI_API_KEY=<your-openai-api-key>
-# Add other required environment variables
-```
-
-</StepItem>
-
-<StepItem>
-
-Build the application
-
-```bash copy
-npm run build
-```
-
-</StepItem>
-
-<StepItem>
-
-Run the application
-
-```bash copy
-node --env-file=".env" .mastra/output/index.mjs
-```
-
-:::note
-Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
-:::
-
-</StepItem>
-
-</Steps>
-
-</TabItem>
-
-</Tabs>
-
-## Connect to your Mastra server
-
-You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
-
-Refer to the [`MastraClient` documentation](/docs/v1/server/mastra-client) for more information.
-
-```typescript copy showLineNumbers
-import { MastraClient } from "@mastra/client-js";
-
-const mastraClient = new MastraClient({
-  baseUrl: "https://<your-domain-name>",
-});
-```
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-- [Digital Ocean App Platform documentation](https://docs.digitalocean.com/products/app-platform/)
-- [Digital Ocean Droplets documentation](https://docs.digitalocean.com/products/droplets/)
-
-
----
-title: "Cloud Providers | Deployment"
-description: "Deploy your Mastra applications to popular cloud providers."
----
-
-# Cloud Providers
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers
-
-Standalone Mastra applications can be deployed to popular cloud providers, see one of the following guides for more information:
-
-- [Amazon EC2](/docs/v1/deployment/cloud-providers/amazon-ec2)
-- [AWS Lambda](/docs/v1/deployment/cloud-providers/aws-lambda)
-- [Azure App Services](/docs/v1/deployment/cloud-providers/azure-app-services)
-- [Cloudflare](/docs/v1/deployment/cloud-providers/cloudflare-deployer)
-- [Digital Ocean](/docs/v1/deployment/cloud-providers/digital-ocean)
-- [Netlify](/docs/v1/deployment/cloud-providers/netlify-deployer)
-- [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
-
-For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/building-mastra) guide.
-
-## Prerequisites
-
-Before deploying to a cloud provider, ensure you have:
-
-- A [Mastra application](/guides/v1/getting-started/quickstart)
-- Node.js `v22.13.0` or later
-- A GitHub repository for your application (required for most CI/CD setups)
-- Domain name management access (for SSL and HTTPS)
-- Basic familiarity with server setup (e.g. Nginx, environment variables)
-
-## LibSQLStore
-
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of `LibSQLStore`.
-
-Specifically, ensure you've removed it from all Mastra files, including configuration on the main Mastra instance and any agents using it, e.g. for memory storage.
-
-```diff title="src/mastra/index.ts"
- export const mastra = new Mastra({
--  storage: new LibSQLStore({
--    id: 'mastra-storage',
--    url: ":memory:",
--  }),
- });
-```
-
-```diff
- export const weatherAgent = new Agent({
-   id: "weather-agent",
-   memory: new Memory({
--    storage: new LibSQLStore({
--      id: 'mastra-storage',
--      url: "file:../mastra.db",
--    }),
-   }),
- });
-```
-
-
----
-title: "NetlifyDeployer | Deployment"
-description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
----
-
-# NetlifyDeployer
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/netlify-deployer
-
-The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Netlify specific functionality.
-
-## Installation
-
-```bash copy
-npm install @mastra/deployer-netlify@beta
-```
-
-## Usage example
-
-```typescript title="src/mastra/index.ts" copy
-import { Mastra } from "@mastra/core";
-import { NetlifyDeployer } from "@mastra/deployer-netlify";
-
-export const mastra = new Mastra({
-  deployer: new NetlifyDeployer(),
-});
-```
-
-> See the [NetlifyDeployer](/reference/v1/deployer/netlify) API reference for all available configuration options.
-
-## Continuous integration
-
-After connecting your Mastra project’s Git repository to Netlify, update the project settings. In the Netlify dashboard, go to **Project configuration** > **Build & deploy** > **Continuous deployment**, and under **Build settings**, set the following:
-
-- **Build command**: `npm run build` (optional)
-
-### Environment variables
-
-Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Netlify project settings.
-
-> See [Environment variables overview](https://docs.netlify.com/environment-variables/overview/) for more details.
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Manual deployment
-
-Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
-
-```bash copy
-netlify deploy --prod
-```
-
-:::warning
-
-When using `netlify deploy` instead of continuous deployment, you need to create a `netlify.toml` file with these contents:
-
-```toml
-[build]
-  command = "npm run build"
-  publish = ".netlify/v1/functions"
-
-[functions]
-  directory = ".netlify/v1/functions"
-  node_bundler = "none"
-  included_files = [".netlify/v1/functions/**"]
-
-[[redirects]]
-  from = "/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-
-[build.environment]
-  NODE_VERSION = "22.13.0"
-```
-
-Adjust the `build.command` to your project.
-
-:::
-
-## Build output
-
-The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra-specific files required to run your application on Netlify.
-
-```bash
-your-project/
-└── .netlify/
-    └── v1/
-        ├── config.json
-        └── functions/
-            └── api/
-                ├── index.js
-                ├── package.json
-                └── node_modules/
-```
-
-The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
-
-```json
-{
-  "functions": {
-    "directory": ".netlify/v1/functions",
-    "node_bundler": "none",
-    "included_files": [".netlify/v1/functions/**"]
-  },
-  "redirects": [
-    {
-      "force": true,
-      "from": "/*",
-      "to": "/.netlify/functions/api/:splat",
-      "status": 200
-    }
-  ]
-}
-```
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-
-
----
-title: "VercelDeployer | Deployment"
-description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
----
-
-# VercelDeployer
-[EN] Source: https://mastra.ai/en/docs/deployment/cloud-providers/vercel-deployer
-
-The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
-
-## Installation
-
-```bash copy
-npm install @mastra/deployer-vercel@beta
-```
-
-## Usage example
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { VercelDeployer } from "@mastra/deployer-vercel";
-
-export const mastra = new Mastra({
-  // ...
-  deployer: new VercelDeployer(),
-});
-```
-
-> See the [VercelDeployer](/reference/v1/deployer/vercel) API reference for all available configuration options.
-
-### Optional overrides
-
-The Vercel deployer can write a few high‑value settings into the Vercel Output API function config (`.vc-config.json`):
-
-- `maxDuration?: number` — Function execution timeout (seconds)
-- `memory?: number` — Function memory allocation (MB)
-- `regions?: string[]` — Regions (e.g. `['sfo1','iad1']`)
-
-Example:
-
-```ts title="src/mastra/index.ts" showLineNumbers copy
-deployer: new VercelDeployer({
-  maxDuration: 600,
-  memory: 1536,
-  regions: ["sfo1", "iad1"],
-});
-```
-
-## Continuous integration
-
-After connecting your Mastra project’s Git repository to Vercel, update the project settings. In the Vercel dashboard, go to **Settings** > **Build and Deployment**, and under **Framework settings**, set the following:
-
-- **Build command**: `npm run build` (optional)
-
-### Environment variables
-
-Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Vercel project settings.
-
-> See [Environment variables](https://vercel.com/docs/environment-variables) for more details.
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Manual deployment
-
-Manual deployments are also possible using the [Vercel CLI](https://vercel.com/docs/cli). With the Vercel CLI installed run the following from your project root to deploy your application.
-
-```bash copy
-npm run build && vercel --prod --prebuilt --archive=tgz
-```
-
-> You can also run `vercel dev` from your project root to test your Mastra application locally.
-
-## Build output
-
-The build output for Mastra applications using the `VercelDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Vercel.
-
-```
-.vercel/
-├── output/
-│   ├── functions/
-│   │   └── index.func/
-│   │       └── index.mjs
-│   └── config.json
-└── package.json
-```
-
-The `VercelDeployer` automatically generates a `config.json` configuration file in `.vercel/output` with the following settings:
-
-```json
-{
-  "version": 3,
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/"
-    }
-  ]
-}
-```
-
-## Next steps
-
-- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
-
-
----
-title: "Navigating the Dashboard | Mastra Cloud"
-description: Details of each feature available in Mastra Cloud
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-
-# Navigating the Dashboard
-[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/dashboard
-
-This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/v1/deployment/mastra-cloud/dashboard#studio).
-
-<MastraCloudCallout />
-
-## Overview
-
-The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
-
-![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
-
-Key features:
-
-Each project shows its current deployment status, active domains, and environment variables, so you can quickly understand how your application is running.
-
-## Deployments
-
-The **Deployments** page shows recent builds and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
-
-![Dashboard deployment](/img/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
-
-Key features:
-
-Each deployment includes its current status, the Git branch it was deployed from, and a title generated from the commit hash.
-
-## Logs
-
-The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
-
-![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
-
-Each log includes a severity level and detailed messages showing agent, workflow, and storage activity.
-
-## Settings
-
-On the **Settings** page you can modify the configuration of your application.
-
-![Dashboard settings](/img/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
-
-Key features:
-
-You can manage environment variables, edit key project settings like the name and branch, configure storage with LibSQLStore, and set a stable URL for your endpoints.
-
-> Changes to configuration require a new deployment before taking effect.
-
-## Studio
-
-### Agents
-
-On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
-
-![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
-
-Key features:
-
-Test your agents in real time using the chat interface, review traces of each interaction, and see evaluation scores for every response.
-
-### Workflows
-
-On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
-
-![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
-
-Key features:
-
-Visualize your workflow with a step-by-step graph, view execution traces, and run workflows directly using the built-in runner.
-
-### Tools
-
-On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
-
-![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
-
-Key features:
-
-Test your tools by providing an input that matches the schema and viewing the structured output.
-
-## MCP Servers
-
-The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
-
-![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
-
-Key features:
-
-Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configuration snippets for tools like Cursor and Windsurf.
-
-## Next steps
-
-- [Understanding Tracing and Logs](/docs/v1/deployment/mastra-cloud/observability)
-
-
----
-title: "Understanding Tracing and Logs | Mastra Cloud"
-description: Monitoring and debugging tools for Mastra Cloud deployments
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-
-# Understanding Tracing and Logs
-[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/observability
-
-Mastra Cloud provides full observability for production applications, giving you insight into how your agents and workflows behave. Observability can be enabled whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
-
-For details on configuring observability, see the [Cloud Exporter](/docs/v1/observability/tracing/exporters/cloud) docs.
-
-<MastraCloudCallout />
-
-## Traces
-
-More detailed traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of our [supported providers](/docs/v1/observability/tracing/overview#exporters).
-
-### Agents
-
-With observability enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
-
-![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
-
-Key features:
-
-Agent traces break a run into clear steps, model calls, tool calls, and intermediate chunks, each with timing, inputs, outputs, and errors. You can drill into any span to inspect prompts, token usage, and results, making it easy to diagnose issues and understand how the agent produced its output.
-
-### Workflows
-
-With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
-
-![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
-
-Key features:
-
-Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls inside the workflow. You can inspect inputs, outputs, and errors for every step, making it easy to debug long-running or multi-step processes and understand how data flows through the workflow.
-
-## Logs
-
-You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/v1/deployment/mastra-cloud/dashboard#logs) page of the Dashboard.
-
-![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
-
-Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
-
-## Next steps
-
-- [Logging](/docs/v1/observability/logging)
-- [Tracing](/docs/v1/observability/tracing/overview)
-
-
----
-title: "Mastra Cloud | Mastra Cloud"
-description: Deployment and monitoring service for Mastra applications
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-
-# Mastra Cloud
-[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/overview
-
-[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/v1/deployment/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
-
-<MastraCloudCallout />
-
-## Platform features
-
-Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
-
-![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
-
-Key features:
-
-Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
-
-## Project Dashboard
-
-Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
-
-![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
-
-Key features:
-
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
-
-## Project structure
-
-Use a standard Mastra project structure for proper detection and deployment.
-
-```shell
-src
-└── mastra
-    ├── agents
-    │   └── agent-name.ts
-    ├── tools
-    │   └── tool-name.ts
-    ├── workflows
-    │   └── workflow-name.ts
-    └── index.ts
-package.json
-```
-
-Mastra Cloud scans your repository for:
-
-- **Agents**: Defined using: `new Agent({...})`
-- **Tools**: Defined using: `createTool({...})`
-- **Workflows**: Defined using: `createWorkflow({...})`
-- **Steps**: Defined using: `createStep({...})`
-- **Environment Variables**: API keys and configuration variables
-
-## Technical implementation
-
-Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
-
-## Next steps
-
-- [Setting Up and Deploying](/docs/v1/deployment/mastra-cloud/setting-up)
-
-
----
-title: "Setting Up and Deploying | Mastra Cloud"
-description: Configuration steps for Mastra Cloud projects
----
-
-import { MastraCloudCallout } from "@site/src/components/MastraCloudCallout";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
-
-# Setting Up and Deploying
-[EN] Source: https://mastra.ai/en/docs/deployment/mastra-cloud/setting-up
-
-This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
-
-<MastraCloudCallout />
-
-## Prerequisites
-
-- A [Mastra Cloud](https://mastra.ai/cloud) account
-- A GitHub account / repository containing a Mastra application
-
-> See our [Getting started](/guides/v1/getting-started/quickstart) guide to scaffold out a new Mastra project with sensible defaults.
-
-## Setup and Deploy process
-
-<Steps>
-
-<StepItem>
-
-Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
-
-- **GitHub**
-- **Google**
-
-</StepItem>
-
-<StepItem>
-
-When prompted, install the Mastra GitHub app.
-
-![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Click the **Create new project** button to create a new project.
-
-![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Search for a repository, then click **Import**.
-
-![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
-
-![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
-
-- **Importing from GitHub**: The GitHub repository name
-- **Project name**: Customize the project name
-- **Branch**: The branch to deploy from
-- **Project root**: The root directory of your project
-- **Mastra directory**: Where Mastra files are located
-- **Environment variables**: Add environment variables used by the application
-- **Build and Store settings**:
-  - **Install command**: Runs pre-build to install project dependencies
-  - **Project setup command**: Runs pre-build to prepare any external dependencies
-  - **Port**: The network port the server will use
-  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/v1/memory/storage/overview) storage
-- **Deploy Project**: Starts the deployment process
-
-</StepItem>
-
-<StepItem>
-
-Click **Deploy Project** to create and deploy your application using the configuration you've set.
-
-</StepItem>
-
-</Steps>
-
-## Successful deployment
-
-After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
-
-![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
-
-## Continuous integration
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Testing your application
-
-After a successful deployment you can test your agents and workflows [Studio](/docs/v1/deployment/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/v1/server/mastra-client).
-
-## Next steps
-
-- [Navigating the Dashboard](/docs/v1/deployment/mastra-cloud/dashboard)
-
-
----
-title: "Monorepo Deployment | Deployment"
+title: "Deploy in a Monorepo | Deployment"
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
 ---
 
-# Monorepo Deployment
+# Deploy in a Monorepo
 [EN] Source: https://mastra.ai/en/docs/deployment/monorepo
 
-Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](./cloud-providers/) or [Serverless Platform](./cloud-providers/) providers may introduce extra requirements, the core setup is the same.
+Deploying Mastra in a monorepo follows the same approach as deploying a standalone application. While some [Cloud](/guides/v1/deployment) or [Serverless Platform](/guides/v1/deployment) providers may introduce extra requirements, the core setup is the same.
+
+## Supported monorepos
+
+Mastra works with:
+
+- npm workspaces
+- pnpm workspaces
+- Yarn workspaces
+- Turborepo
+
+Known limitations:
+
+- Bun workspaces - partial support; known issues
+- Nx - You can use Nx's [supported dependency strategies](https://nx.dev/concepts/decisions/dependency-management) but you need to have `package.json` files inside your workspace packages
 
 ## Example monorepo
 
@@ -4561,9 +3050,14 @@ api/
 
 ## Deployment configuration
 
-The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](./mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
+The image below shows how to select `apps/api` as the project root when deploying to [Mastra Cloud](/docs/v1/mastra-cloud/overview). While the interface may differ between providers, the configuration remains the same.
 
 ![Deployment configuration](/img/monorepo/monorepo-mastra-cloud.jpg)
+
+
+:::info
+Make sure the correct package (e.g. `apps/api`) is selected as the deploy target. Selecting the wrong project root is a common deployment issue in monorepos.
+:::
 
 ## Dependency management
 
@@ -4572,46 +3066,6 @@ In a monorepo, keep dependencies consistent to avoid version conflicts and build
 - Use a **single lockfile** at the project root so all packages resolve the same versions.
 - Align versions of **shared libraries** (like Mastra or frameworks) to prevent duplicates.
 
-## Deployment pitfalls
-
-Common issues to watch for when deploying Mastra in a monorepo:
-
-- **Wrong project root**: make sure the correct package (e.g. `apps/api`) is selected as the deploy target.
-
-## Bundler options
-
-Use `transpilePackages` to compile TypeScript workspace packages or libraries. List package names exactly as they appear in each `package.json`. Use `externals` to exclude dependencies resolved at runtime, and `sourcemap` to emit readable stack traces.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-
-export const mastra = new Mastra({
-  // ...
-  bundler: {
-    transpilePackages: ["utils"],
-    externals: ["ui"],
-    sourcemap: true,
-  },
-});
-```
-
-> See [Mastra Class](/reference/v1/core/mastra-class) for more configuration options.
-
-## Supported monorepos
-
-Mastra works with:
-
-- npm workspaces
-- pnpm workspaces
-- Yarn workspaces
-- Turborepo
-
-Known limitations:
-
-- Bun workspaces — partial support; known issues
-- Nx — You can use Nx's [supported dependency strategies](https://nx.dev/concepts/decisions/dependency-management) but you need to have `package.json` files inside your workspace packages
-
-> If you are experiencing issues with monorepos see our: [Monorepos Support mega issue](https://github.com/mastra-ai/mastra/issues/6852).
 
 
 ---
@@ -4622,103 +3076,80 @@ description: Learn about different deployment options for your Mastra applicatio
 # Deployment Overview
 [EN] Source: https://mastra.ai/en/docs/deployment/overview
 
-Mastra offers multiple deployment options to suit your application's needs, from fully-managed solutions to self-hosted options, and web framework integrations. This guide will help you understand the available deployment paths and choose the right one for your project.
+Mastra applications can be deployed to any Node.js-compatible environment. You can deploy a Mastra server, integrate with an existing web framework, deploy to cloud providers, or use Mastra Cloud for managed hosting.
 
-## Choosing a Deployment Option
+## Runtime support
 
-| Option                   | Best For                                                      | Key Benefits                                                         |
-| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Mastra Cloud**         | Teams wanting to ship quickly without infrastructure concerns | Fully-managed, automatic scaling, built-in observability             |
-| **Framework Deployment** | Teams already using Next.js, Astro etc                        | Simplify deployment with a unified codebase for frontend and backend |
-| **Server Deployment**    | Teams needing maximum control and customization               | Full control, custom middleware, integrate with existing apps        |
-| **Serverless Platforms** | Teams already using Vercel, Netlify, or Cloudflare            | Platform integration, simplified deployment, automatic scaling       |
-
-## Deployment Options
-
-### Runtime support
+Mastra can run against any of these runtime environments:
 
 - Node.js `v22.13.0` or later
 - Bun
 - Deno
-- [Cloudflare](../deployment/cloud-providers/cloudflare-deployer)
+- Cloudflare
+
+## Deployment Options
+
+### Mastra Server
+
+Mastra provides a [server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently. Use the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
+
+See the [Mastra server deployment guide](/docs/v1/deployment/mastra-server).
+
+### Monorepo
+
+Deploy a Mastra server as part of a monorepo setup, following the same approach as standalone deployment.
+
+Read about [monorepo deployment](/docs/v1/deployment/monorepo).
+
+### Cloud Providers
+
+Mastra applications can be deployed to cloud providers and serverless platforms. Mastra includes optional built-in deployers for Vercel, Netlify, and Cloudflare to automate the build and deployment process.
+
+- [Amazon EC2](/guides/v1/deployment/amazon-ec2)
+- [AWS Lambda](/guides/v1/deployment/aws-lambda)
+- [Azure App Services](/guides/v1/deployment/azure-app-services)
+- [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/v1/deployment/digital-ocean)
+- [Netlify](/guides/v1/deployment/netlify-deployer)
+- [Vercel](/guides/v1/deployment/vercel-deployer)
+
+### Web Framework
+
+When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. The guides below cover framework-specific configuration requirements for deployment:
+
+- [With Next.js on Vercel](/docs/v1/deployment/web-framework#with-nextjs-on-vercel)
+- [With Astro on Vercel](/docs/v1/deployment/web-framework#with-astro-on-vercel)
+- [With Astro on Netlify](/docs/v1/deployment/web-framework#with-astro-on-netlify)
 
 ### Mastra Cloud
 
-Mastra Cloud is a deployment platform that connects to your GitHub repository, automatically deploys on code changes, and provides monitoring tools. It includes:
+We're building Mastra Cloud to be the easiest place to deploy and observe your Mastra agents. It's currently in beta.
 
-- GitHub repository integration
-- Deployment on git push
-- Agent testing interface
-- Comprehensive logs and traces
-- Custom domains for each project
-
-[View Mastra Cloud documentation →](./mastra-cloud/overview)
-
-### With a Web Framework
-
-Mastra can be integrated with a variety of web frameworks. For example, see one of the following for a detailed guide.
-
-- [With Next.js](/guides/v1/getting-started/next-js)
-- [With Astro](/guides/v1/getting-started/astro)
-
-When integrated with a framework, Mastra typically requires no additional configuration for deployment.
-
-[View Web Framework Integration →](./web-framework)
-
-### With a Server
-
-You can deploy Mastra as a standard Node.js HTTP server, which gives you full control over your infrastructure and deployment environment.
-
-- Custom API routes and middleware
-- Configurable CORS and authentication
-- Deploy to VMs, containers, or PaaS platforms
-- Ideal for integrating with existing Node.js applications
-
-[Building Mastra →](./building-mastra)
-
-### Serverless Platforms
-
-Mastra provides platform-specific deployers for popular serverless platforms, enabling you to deploy your application with minimal configuration.
-
-- Deploy to Cloudflare Workers, Vercel, or Netlify
-- Platform-specific optimizations
-- Simplified deployment process
-- Automatic scaling through the platform
-
-[Building Mastra →](./building-mastra)
-
-## Client Configuration
-
-Once your Mastra application is deployed, you'll need to configure your client to communicate with it. The Mastra Client SDK provides a simple and type-safe interface for interacting with your Mastra server.
-
-- Type-safe API interactions
-- Authentication and request handling
-- Retries and error handling
-- Support for streaming responses
-
-[Client configuration guide →](/docs/v1/server/mastra-client)
+Learn more in the [Mastra Cloud docs](/docs/v1/mastra-cloud/overview).
 
 
 ---
-title: "Web Framework Integration | Deployment"
+title: "Deploy with a Web Framework | Deployment"
 description: "Learn how Mastra can be deployed when integrated with a Web Framework"
 ---
 
-# Web Framework Integration
+# Deploy with a Web Framework
 [EN] Source: https://mastra.ai/en/docs/deployment/web-framework
 
-This guide covers deploying integrated Mastra applications. Mastra can be integrated with a variety of web frameworks, see one of the following for a detailed guide.
+When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. Follow the instructions below to ensure your Mastra integration deploys correctly.
+
+:::warning
+If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
+:::
+
+Integration guides:
 
 - [With Next.js](/guides/v1/getting-started/next-js)
 - [With Astro](/guides/v1/getting-started/astro)
 
-When integrated with a framework, Mastra typically requires no additional configuration for deployment.
-
 ## With Next.js on Vercel
 
-If you've integrated Mastra with Next.js [by following our guide](/guides/v1/getting-started/next-js) and plan to deploy to Vercel, no additional setup is required.
-
-The only thing to verify is that you've added the following to your `next.config.ts` and removed any usage of [LibSQLStore](/docs/v1/deployment/overview), which is not supported in serverless environments:
+If you've integrated Mastra with Next.js [by following our guide](/guides/v1/getting-started/next-js) and plan to deploy to Vercel, add `serverExternalPackages: ["@mastra/*"]` to your `next.config.ts`:
 
 ```typescript {4} title="next.config.ts" showLineNumbers copy
 import type { NextConfig } from "next";
@@ -4732,9 +3163,7 @@ export default nextConfig;
 
 ## With Astro on Vercel
 
-If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, no additional setup is required.
-
-The only thing to verify is that you've added the following to your `astro.config.mjs` and removed any usage of [LibSQLStore](/docs/v1/deployment/overview), which is not supported in serverless environments:
+If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
 ```javascript {2,6,7} title="astro.config.mjs" showLineNumbers copy
 import { defineConfig } from "astro/config";
@@ -4749,9 +3178,7 @@ export default defineConfig({
 
 ## With Astro on Netlify
 
-If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, no additional setup is required.
-
-The only thing to verify is that you've added the following to your `astro.config.mjs` and removed any usage of [LibSQLStore](/docs/v1/deployment/overview), which is not supported in serverless environments:
+If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
 ```javascript {2,6,7} title="astro.config.mjs" showLineNumbers copy
 import { defineConfig } from "astro/config";
@@ -6467,6 +4894,326 @@ Choose a [getting started guide](/docs/v1/getting-started/start) to get started,
 If you're new to AI agents, check out our [templates](https://mastra.ai/templates), [course](https://mastra.ai/course), and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
 
 We can't wait to see what you build ✌️
+
+
+---
+title: "Navigating the Dashboard | Mastra Cloud"
+description: Details of each feature available in Mastra Cloud
+---
+
+# Navigating the Dashboard
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/dashboard
+
+This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/v1/mastra-cloud/dashboard#studio).
+
+## Overview
+
+The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
+
+![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+Key features:
+
+Each project shows its current deployment status, active domains, and environment variables, so you can quickly understand how your application is running.
+
+## Deployments
+
+The **Deployments** page shows recent builds and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
+
+![Dashboard deployment](/img/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
+
+Key features:
+
+Each deployment includes its current status, the Git branch it was deployed from, and a title generated from the commit hash.
+
+## Logs
+
+The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
+
+![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Key features:
+
+Each log includes a severity level and detailed messages showing agent, workflow, and storage activity.
+
+## Settings
+
+On the **Settings** page you can modify the configuration of your application.
+
+![Dashboard settings](/img/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
+
+Key features:
+
+You can manage environment variables, edit key project settings like the name and branch, configure storage with LibSQLStore, and set a stable URL for your endpoints.
+
+> Changes to configuration require a new deployment before taking effect.
+
+## Studio
+
+### Agents
+
+On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
+
+![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
+
+Key features:
+
+Test your agents in real time using the chat interface, review traces of each interaction, and see evaluation scores for every response.
+
+### Workflows
+
+On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
+
+![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
+
+Key features:
+
+Visualize your workflow with a step-by-step graph, view execution traces, and run workflows directly using the built-in runner.
+
+### Tools
+
+On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
+
+![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
+
+Key features:
+
+Test your tools by providing an input that matches the schema and viewing the structured output.
+
+## MCP Servers
+
+The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
+
+![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
+
+Key features:
+
+Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configuration snippets for tools like Cursor and Windsurf.
+
+## Next steps
+
+- [Understanding Tracing and Logs](/docs/v1/mastra-cloud/observability)
+
+
+---
+title: "Understanding Tracing and Logs | Mastra Cloud"
+description: Monitoring and debugging tools for Mastra Cloud deployments
+---
+
+# Understanding Tracing and Logs
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/observability
+
+Mastra Cloud provides full observability for production applications, giving you insight into how your agents and workflows behave. Observability can be enabled whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
+
+For details on configuring observability, see the [Cloud Exporter](/docs/v1/observability/tracing/exporters/cloud) docs.
+
+## Traces
+
+More detailed traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of our [supported providers](/docs/v1/observability/tracing/overview#exporters).
+
+### Agents
+
+With observability enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
+
+![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
+
+Key features:
+
+Agent traces break a run into clear steps, model calls, tool calls, and intermediate chunks, each with timing, inputs, outputs, and errors. You can drill into any span to inspect prompts, token usage, and results, making it easy to diagnose issues and understand how the agent produced its output.
+
+### Workflows
+
+With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
+
+![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
+
+Key features:
+
+Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls inside the workflow. You can inspect inputs, outputs, and errors for every step, making it easy to debug long-running or multi-step processes and understand how data flows through the workflow.
+
+## Logs
+
+You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page of the Dashboard.
+
+![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
+
+Key features:
+
+Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
+
+## Next steps
+
+- [Logging](/docs/v1/observability/logging)
+- [Tracing](/docs/v1/observability/tracing/overview)
+
+
+---
+title: "Mastra Cloud | Mastra Cloud"
+description: Deployment and monitoring service for Mastra applications
+---
+
+# Mastra Cloud
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/overview
+
+[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/v1/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
+
+## Platform features
+
+Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
+
+![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
+
+Key features:
+
+Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
+
+## Project Dashboard
+
+Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
+
+![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+
+Key features:
+
+The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
+
+## Project structure
+
+Use a standard Mastra project structure for proper detection and deployment.
+
+```shell
+src
+└── mastra
+    ├── agents
+    │   └── agent-name.ts
+    ├── tools
+    │   └── tool-name.ts
+    ├── workflows
+    │   └── workflow-name.ts
+    └── index.ts
+package.json
+```
+
+Mastra Cloud scans your repository for:
+
+- **Agents**: Defined using: `new Agent({...})`
+- **Tools**: Defined using: `createTool({...})`
+- **Workflows**: Defined using: `createWorkflow({...})`
+- **Steps**: Defined using: `createStep({...})`
+- **Environment Variables**: API keys and configuration variables
+
+## Technical implementation
+
+Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
+
+## Next steps
+
+- [Setting Up and Deploying](/docs/v1/mastra-cloud/setting-up)
+
+
+---
+title: "Setting Up and Deploying | Mastra Cloud"
+description: Configuration steps for Mastra Cloud projects
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Setting Up and Deploying
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/setting-up
+
+This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
+
+## Prerequisites
+
+- A [Mastra Cloud](https://mastra.ai/cloud) account
+- A GitHub account / repository containing a Mastra application
+
+> See our [Getting started](/guides/v1/getting-started/quickstart) guide to scaffold out a new Mastra project with sensible defaults.
+
+## Setup and Deploy process
+
+<Steps>
+
+<StepItem>
+
+Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
+
+- **GitHub**
+- **Google**
+
+</StepItem>
+
+<StepItem>
+
+When prompted, install the Mastra GitHub app.
+
+![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
+
+</StepItem>
+
+<StepItem>
+
+Click the **Create new project** button to create a new project.
+
+![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
+
+</StepItem>
+
+<StepItem>
+
+Search for a repository, then click **Import**.
+
+![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
+
+</StepItem>
+
+<StepItem>
+
+Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
+
+![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
+
+- **Importing from GitHub**: The GitHub repository name
+- **Project name**: Customize the project name
+- **Branch**: The branch to deploy from
+- **Project root**: The root directory of your project
+- **Mastra directory**: Where Mastra files are located
+- **Environment variables**: Add environment variables used by the application
+- **Build and Store settings**:
+  - **Install command**: Runs pre-build to install project dependencies
+  - **Project setup command**: Runs pre-build to prepare any external dependencies
+  - **Port**: The network port the server will use
+  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/v1/memory/storage/overview) storage
+- **Deploy Project**: Starts the deployment process
+
+</StepItem>
+
+<StepItem>
+
+Click **Deploy Project** to create and deploy your application using the configuration you've set.
+
+</StepItem>
+
+</Steps>
+
+## Successful deployment
+
+After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
+
+![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
+
+## Continuous integration
+
+Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+
+## Testing your application
+
+After a successful deployment you can test your agents and workflows [Studio](/docs/v1/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/v1/server/mastra-client).
+
+## Next steps
+
+- [Navigating the Dashboard](/docs/v1/mastra-cloud/dashboard)
 
 
 ---
@@ -9302,7 +8049,7 @@ description: Learn how to use logging in Mastra to monitor execution, capture ap
 
 Mastra's logging system captures function execution, input data, and output responses in a structured format.
 
-When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/v1/deployment/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/v1/mastra-cloud/observability) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Configuring logs with PinoLogger
 
@@ -10104,7 +8851,7 @@ CloudExporter uses intelligent batching to optimize network usage. Traces are bu
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [DefaultExporter](/docs/v1/observability/tracing/exporters/default)
-- [Mastra Cloud Documentation](/docs/v1/deployment/mastra-cloud/overview)
+- [Mastra Cloud Documentation](/docs/v1/mastra-cloud/overview)
 
 
 ---
@@ -26184,6 +24931,1200 @@ Congratulations! You have successfully integrated Mastra with CopilotKit using a
 
 
 ---
+title: "Amazon EC2 | Deployment"
+description: "Deploy your Mastra applications to Amazon EC2."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Amazon EC2
+[EN] Source: https://mastra.ai/en/guides/deployment/amazon-ec2
+
+Deploy your Mastra applications to Amazon EC2 (Elastic Cloud Compute).
+
+:::note
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@beta` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/guides/v1/getting-started/quickstart)
+:::
+
+## Prerequisites
+
+- An AWS account with [EC2](https://aws.amazon.com/ec2/) access
+- An EC2 instance running Ubuntu 24+ or Amazon Linux
+- A domain name with an A record pointing to your instance
+- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
+- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
+- Node.js 22.13.0 or later installed on your instance
+
+## Deployment Steps
+
+<Steps>
+
+<StepItem>
+
+Connect to your EC2 instance and clone your repository:
+
+<Tabs>
+  <TabItem value="public" label="Public Repository">
+
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+
+  <TabItem value="private" label="Private Repository">
+
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+</Tabs>
+
+Navigate to the repository directory:
+
+```bash copy
+cd "<your-repository>"
+```
+
+</StepItem>
+
+<StepItem>
+
+Install dependencies:
+
+```bash copy
+npm install
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a `.env` file and add your environment variables:
+
+```bash copy
+touch .env
+```
+
+Edit the `.env` file and add your environment variables:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+# Add other required environment variables
+```
+
+</StepItem>
+
+<StepItem>
+
+Build the application:
+
+```bash copy
+npm run build
+```
+
+</StepItem>
+
+<StepItem>
+
+Run the application:
+
+```bash copy
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+:::note
+Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
+:::
+
+</StepItem>
+
+</Steps>
+
+## Connect to your Mastra server
+
+You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
+
+Refer to the [`MastraClient` documentation](/reference/v1/client-js/mastra-client) for more information.
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+
+
+---
+title: "AWS Lambda | Deployment"
+description: "Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# AWS Lambda
+[EN] Source: https://mastra.ai/en/guides/deployment/aws-lambda
+
+Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
+This approach allows you to run your Mastra server as a containerized Lambda function with automatic scaling.
+
+:::note
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@beta` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/guides/v1/getting-started/quickstart)
+:::
+
+## Prerequisites
+
+Before deploying to AWS Lambda, ensure you have:
+
+- [AWS CLI](https://aws.amazon.com/cli/) installed and configured
+- [Docker](https://www.docker.com/) installed and running
+- An AWS account with appropriate permissions for Lambda, ECR, and IAM
+- Your Mastra application configured with appropriate memory storage
+
+## Memory Configuration
+
+:::warning
+AWS Lambda uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:
+
+### Option 1: In-Memory (Simplest)
+
+```typescript title="src/mastra/index.ts" copy showLineNumbers
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: ":memory:", // in-memory storage
+});
+```
+
+### Option 2: External Storage Providers
+
+For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
+
+```typescript title="src/mastra/index.ts" copy showLineNumbers
+import { LibSQLStore } from "@mastra/libsql";
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: "libsql://your-database.turso.io", // External Turso database
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+```
+
+For more memory configuration options, see the [Memory documentation](/docs/v1/memory/overview).
+
+## Creating a Dockerfile
+
+Create a `Dockerfile` in your Mastra project root directory:
+
+```dockerfile title="Dockerfile" copy showLineNumbers
+FROM node:22-alpine
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY src ./src
+RUN npx mastra build
+RUN apk add --no-cache gcompat
+
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.0 /lambda-adapter /opt/extensions/lambda-adapter
+RUN addgroup -g 1001 -S nodejs && \
+  adduser -S mastra -u 1001 && \
+  chown -R mastra:nodejs /app
+
+USER mastra
+
+ENV PORT=8080
+ENV NODE_ENV=production
+ENV READINESS_CHECK_PATH="/api"
+
+EXPOSE 8080
+
+CMD ["node", ".mastra/output/index.mjs"]
+```
+
+## Building and Deploying
+
+<Steps>
+
+<StepItem>
+
+Set up your environment variables for the deployment process:
+
+```bash copy
+export PROJECT_NAME="your-mastra-app"
+export AWS_REGION="us-east-1"
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+
+</StepItem>
+
+<StepItem>
+
+Build your Docker image locally:
+
+```bash copy
+docker build -t "$PROJECT_NAME" .
+```
+
+</StepItem>
+
+<StepItem>
+
+Create an Amazon ECR repository to store your Docker image:
+
+```bash copy
+aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
+```
+
+</StepItem>
+
+<StepItem>
+
+Log in to Amazon ECR:
+
+```bash copy
+aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+```
+
+</StepItem>
+
+<StepItem>
+
+Tag your image with the ECR repository URI and push it:
+
+```bash copy
+docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
+```
+
+</StepItem>
+
+<StepItem>
+
+Create a Lambda function using the AWS Console:
+
+1. Navigate to the [AWS Lambda Console](https://console.aws.amazon.com/lambda/)
+2. Click **Create function**
+3. Select **Container image**
+4. Configure the function:
+   - **Function name**: Your function name (e.g., `mastra-app`)
+   - **Container image URI**: Click **Browse images** and select your ECR repository, then choose the `latest` tag
+   - **Architecture**: Select the architecture that matches your Docker build (typically `x86_64`)
+
+</StepItem>
+
+<StepItem>
+
+Enable Function URL for external access:
+
+1. In the Lambda function configuration, go to **Configuration** > **Function URL**
+2. Click **Create function URL**
+3. Set **Auth type** to **NONE** (for public access)
+4. Configure **CORS** settings:
+   - **Allow-Origin**: `*` (restrict to your domain in production)
+   - **Allow-Headers**: `content-type` (`x-amzn-request-context` is also required when used with services like Cloudfront/API Gateway)
+   - **Allow-Methods**: `*` (audit and restrict in production)
+5. Click **Save**
+
+</StepItem>
+
+<StepItem>
+
+Add your environment variables in the Lambda function configuration:
+
+1. Go to **Configuration** > **Environment variables**
+2. Add the required variables for your Mastra application:
+   - `OPENAI_API_KEY`: Your OpenAI API key (if using OpenAI)
+   - `ANTHROPIC_API_KEY`: Your Anthropic API key (if using Anthropic)
+   - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using LibSQL with Turso)
+   - Other provider-specific API keys as needed
+
+</StepItem>
+
+<StepItem>
+
+Configure the function's memory and timeout settings:
+
+1. Go to **Configuration** > **General configuration**
+2. Set the following recommended values:
+   - **Memory**: 512 MB (adjust based on your application needs)
+   - **Timeout**: 30 seconds (adjust based on your application needs)
+   - **Ephemeral storage**: 512 MB (optional, for temporary files)
+
+</StepItem>
+
+</Steps>
+
+## Testing your deployment
+
+Once deployed, test your Lambda function:
+
+1. Copy the **Function URL** from the Lambda console
+2. Visit the URL in your browser to see your Mastra's server home screen
+3. Test your agents and workflows using the generated API endpoints
+
+For more information about available API endpoints, see the [Server documentation](/docs/v1/deployment/mastra-server).
+
+## Connecting your client
+
+Update your client application to use the Lambda function URL:
+
+```typescript title="src/client.ts" copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://your-function-url.lambda-url.us-east-1.on.aws",
+});
+```
+
+## Troubleshooting
+
+### Function timeout errors
+
+If your Lambda function times out:
+
+- Increase the timeout value in **Configuration** > **General configuration**
+- Optimize your Mastra application for faster cold starts
+- Consider using provisioned concurrency for consistent performance
+
+### Memory issues
+
+If you encounter memory-related errors:
+
+- Increase the memory allocation in **Configuration** > **General configuration**
+- Monitor memory usage in CloudWatch Logs
+- Optimize your application's memory usage
+
+### CORS issues
+
+If you encounter CORS errors when accessing endpoints but not the home page:
+
+- Verify CORS headers are properly set in your Mastra server configuration
+- Check the Lambda Function URL CORS configuration
+- Ensure your client is making requests to the correct URL
+
+### Container image issues
+
+If the Lambda function fails to start:
+
+- Verify the Docker image builds successfully locally
+- Check that the `CMD` instruction in your Dockerfile is correct
+- Review CloudWatch Logs for container startup errors
+- Ensure the Lambda Web Adapter is properly installed in the container
+
+## Production considerations
+
+For production deployments:
+
+### Security
+
+- Restrict CORS origins to your trusted domains
+- Use AWS IAM roles for secure access to other AWS services
+- Store sensitive environment variables in AWS Secrets Manager or Parameter Store
+
+### Monitoring
+
+- Enable CloudWatch monitoring for your Lambda function
+- Set up CloudWatch alarms for errors and performance metrics
+- Use AWS X-Ray for distributed tracing
+
+### Scaling
+
+- Configure provisioned concurrency for predictable performance
+- Monitor concurrent executions and adjust limits as needed
+- Consider using Application Load Balancer for more complex routing needs
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+- [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/)
+- [AWS Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter)
+
+
+---
+title: "Azure App Services | Deployment"
+description: "Deploy your Mastra applications to Azure App Services."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Azure App Services
+[EN] Source: https://mastra.ai/en/guides/deployment/azure-app-services
+
+Deploy your Mastra applications to Azure App Services.
+
+:::note
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@beta` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/guides/v1/getting-started/quickstart)
+:::
+
+:::warning
+Azure App Services uses an ephemeral filesystem for some pricing tiers. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+## Prerequisites
+
+- An [Azure account](https://azure.microsoft.com/) with an active subscription
+- A [GitHub repository](https://github.com/) containing your Mastra application
+- Your Mastra application should be created using `npx create-mastra@beta`
+
+## Deployment Steps
+
+<Steps>
+
+<StepItem>
+
+Create a new App service:
+
+- Log in to the [Azure Portal](https://portal.azure.com)
+- Navigate to **[App Services](https://docs.microsoft.com/en-us/azure/app-service/)** or search for it in the top search bar
+- Click **Create** to create a new App Service
+- In the drop-down, select **Web App**
+
+</StepItem>
+
+<StepItem>
+
+Configure app service settings:
+
+- **Subscription**: Select your Azure subscription
+- **Resource Group**: Create a new resource group or select an existing one
+- **Instance name**: Enter a unique name for your app (this will be part of your URL)
+- **Publish**: Select **Code**
+- **Runtime stack**: Select **Node 22 LTS**
+- **Operating System**: Select **Linux**
+- **Region**: Choose a region close to your users
+- **Linux Plan**: You may have the option of choosing a plan depending on the region you chose, pick an appropriate one for your needs.
+- Click **Review + Create**
+- Wait for validation to complete, then click **Create**
+
+</StepItem>
+
+<StepItem>
+
+Wait for deployment:
+
+- Wait for the deployment to complete
+- Once finished, click **Go to resource** under the next steps section
+
+</StepItem>
+
+<StepItem>
+
+Before setting up deployment, configure your environment variables:
+
+- Navigate to **Settings** > **Environment variables** in the left sidebar
+- Add your required environment variables such as:
+  - Model provider API keys (e.g., `OPENAI_API_KEY`)
+  - Database connection strings
+  - Any other configuration values your Mastra application requires
+- Click **Apply** to save the changes
+
+</StepItem>
+
+<StepItem>
+
+Setup GitHub deployment:
+
+- Navigate to **Deployment Center** in the left sidebar
+- Select **GitHub** as your source
+- Sign in to GitHub if you're not already authenticated with Azure
+- In this example, we will keep [GitHub Actions](https://docs.github.com/en/actions) as our provider
+- Select your organization, repository, and branch
+- Azure will generate a GitHub workflow file and you can preview it before proceeding
+- Click **Save** (the save button is located at the top of the page)
+
+</StepItem>
+
+<StepItem>
+
+After Azure creates the workflow, it will trigger a GitHub Actions run and merge the workflow file into your branch. **Cancel this initial run** as it will fail without the necessary modifications.
+
+:::warning
+The default workflow generated by Azure will fail for Mastra applications and needs to be modified.
+:::
+
+Pull the latest changes to your local repository and modify the generated workflow file (`.github/workflows/main_<your-app-name>.yml`):
+
+1. **Update the build step**: Find the step named "npm install, build, and test" and:
+   - Change the step name to "npm install and build"
+   - If you haven't set up proper tests in your Mastra application, remove the `npm test` command from the run section as the default test script will fail and disrupt deployment. If you have working tests, you can keep the test command.
+
+2. **Update the zip artifact step**: Find the "Zip artifact for deployment" step and replace the zip command with:
+
+   ```yaml
+   run: (cd .mastra/output && zip ../../release.zip -r .)
+   ```
+
+   This ensures only the build outputs from `.mastra/output` are included in the deployment package.
+
+</StepItem>
+
+<StepItem>
+
+Deploy your changes:
+
+- Commit and push your workflow modifications
+- The build will be automatically triggered in the **Deployment Center** in your Azure dashboard
+- Monitor the deployment progress until it completes successfully
+
+</StepItem>
+
+<StepItem>
+
+Access your deployed application:
+
+- Once the build is successful, wait a few moments for the application to start
+- Access your deployed application using the default URL provided in the **Overview** tab in the Azure portal
+- Your application will be available at `https://<your-app-name>.azurewebsites.net`
+
+</StepItem>
+
+</Steps>
+
+## Connect to your Mastra server
+
+You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
+
+Refer to the [`MastraClient` documentation](/reference/v1/client-js/mastra-client) for more information.
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-app-name>.azurewebsites.net",
+});
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+- [Configure custom domains](https://docs.microsoft.com/en-us/azure/app-service/app-service-web-tutorial-custom-domain)
+- [Enable HTTPS](https://docs.microsoft.com/en-us/azure/app-service/configure-ssl-bindings)
+- [Azure App Service documentation](https://docs.microsoft.com/en-us/azure/app-service/)
+
+
+---
+title: "CloudflareDeployer | Deployment"
+description: "Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer"
+---
+
+# CloudflareDeployer
+[EN] Source: https://mastra.ai/en/guides/deployment/cloudflare-deployer
+
+The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
+
+:::warning
+Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-cloudflare@beta
+```
+
+## Usage example
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new CloudflareDeployer({
+    projectName: "hello-mastra",
+    env: {
+      NODE_ENV: "production",
+    },
+  }),
+});
+```
+
+> See the [CloudflareDeployer](/reference/v1/deployer/cloudflare) API reference for all available configuration options.
+
+## Manual deployment
+
+Manual deployments are also possible using the [Cloudflare Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/). With the Wrangler CLI installed run the following from your project root to deploy your application.
+
+With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
+
+```bash copy
+npx wrangler login
+```
+
+Run the following to build and deploy your application to Cloudflare
+
+```bash copy
+npm run build && wrangler deploy --config .mastra/output/wrangler.json
+```
+
+> You can also run `wrangler dev --config .mastra/output/wrangler.json` from your project root to test your Mastra application locally.
+
+## Build output
+
+The build output for Mastra applications using the `CloudflareDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Cloudflare.
+
+```
+.mastra/
+└── output/
+    ├── index.mjs
+    └── wrangler.json
+package.json
+```
+
+The `CloudflareDeployer` automatically generates a `wrangler.json` configuration file in `.mastra/output` with the following settings:
+
+```json
+{
+  "name": "hello-mastra",
+  "main": "./index.mjs",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
+  "observability": { "logs": { "enabled": true } },
+  "vars": {
+    "OPENAI_API_KEY": "...",
+    "CLOUDFLARE_API_TOKEN": "..."
+  }
+}
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+
+
+---
+title: "Digital Ocean | Deployment"
+description: "Deploy your Mastra applications to Digital Ocean."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Digital Ocean
+[EN] Source: https://mastra.ai/en/guides/deployment/digital-ocean
+
+Deploy your Mastra applications to Digital Ocean's App Platform and Droplets.
+
+:::note
+This guide assumes your Mastra application has been created using the default
+`npx create-mastra@beta` command.
+For more information on how to create a new Mastra application,
+refer to our [getting started guide](/guides/v1/getting-started/quickstart)
+:::
+
+<Tabs>
+
+  <TabItem value="app-platform" label="App Platform">
+
+## App Platform
+
+### Prerequisites
+
+- A Git repository containing your Mastra application. This can be a [GitHub](https://github.com/) repository, [GitLab](https://gitlab.com/) repository, or any other compatible source provider.
+- A [Digital Ocean account](https://www.digitalocean.com/)
+
+### Deployment Steps
+
+<Steps>
+
+<StepItem>
+
+Create a new App
+
+- Log in to your [Digital Ocean dashboard](https://cloud.digitalocean.com/).
+- Navigate to the [App Platform](https://docs.digitalocean.com/products/app-platform/) service.
+- Select your source provider and create a new app.
+
+</StepItem>
+
+<StepItem>
+
+Configure Deployment Source
+
+- Connect and select your repository. You may also choose a container image or a sample app.
+- Select the branch you want to deploy from.
+- Configure the source directory if necessary. If your Mastra application uses the default directory structure, no action is required here.
+- Head to the next step.
+
+</StepItem>
+
+<StepItem>
+
+Configure Resource Settings and Environment Variables
+
+- A Node.js build should be detected automatically.
+- **Configure Build Command**: You need to add a custom build command for the app platform to build your Mastra project successfully. Set the build command based on your package manager:
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ``` npm run build ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ``` pnpm build ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ``` yarn build ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ``` bun run build ```
+  </TabItem>
+</Tabs>
+
+- Add any required environment variables for your Mastra application. This includes API keys, database URLs, and other configuration values.
+- You may choose to configure the size of your resource here.
+- Other things you may optionally configure include, the region of your resource, the unique app name, and what project the resource belongs to.
+- Once you're done, you may create the app after reviewing your configuration and pricing estimates.
+
+</StepItem>
+
+<StepItem>
+
+Deployment
+
+- Your app will be built and deployed automatically.
+- Digital Ocean will provide you with a URL to access your deployed application.
+
+</StepItem>
+
+</Steps>
+
+You can now access your deployed application at the URL provided by Digital Ocean.
+
+:::warning
+The Digital Ocean App Platform uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+  </TabItem>
+
+  <TabItem value="droplets" label="Droplets">
+
+## Droplets
+
+Deploy your Mastra application to Digital Ocean's Droplets.
+
+### Prerequisites
+
+- A [Digital Ocean account](https://www.digitalocean.com/)
+- A [Droplet](https://docs.digitalocean.com/products/droplets/) running Ubuntu 24+
+- A domain name with an A record pointing to your droplet
+- A reverse proxy configured (e.g., using [nginx](https://nginx.org/))
+- SSL certificate configured (e.g., using [Let's Encrypt](https://letsencrypt.org/))
+- Node.js 22.13.0 or later installed on your droplet
+
+### Deployment Steps
+
+<Steps>
+
+<StepItem>
+
+Clone your Mastra application
+
+Connect to your Droplet and clone your repository:
+
+<Tabs>
+  <TabItem value="public" label="Public Repository">
+
+```bash copy
+git clone https://github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+
+  <TabItem value="private" label="Private Repository">
+
+```bash copy
+git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
+```
+
+  </TabItem>
+</Tabs>
+
+Navigate to the repository directory:
+
+```bash copy
+cd "<your-repository>"
+```
+
+</StepItem>
+
+<StepItem>
+
+Install dependencies
+
+```bash copy
+npm install
+```
+
+</StepItem>
+
+<StepItem>
+
+Set up environment variables
+
+Create a `.env` file and add your environment variables:
+
+```bash copy
+touch .env
+```
+
+Edit the `.env` file and add your environment variables:
+
+```bash copy
+OPENAI_API_KEY=<your-openai-api-key>
+# Add other required environment variables
+```
+
+</StepItem>
+
+<StepItem>
+
+Build the application
+
+```bash copy
+npm run build
+```
+
+</StepItem>
+
+<StepItem>
+
+Run the application
+
+```bash copy
+node --env-file=".env" .mastra/output/index.mjs
+```
+
+:::note
+Your Mastra application will run on port 4111 by default. Ensure your reverse proxy is configured to forward requests to this port.
+:::
+
+</StepItem>
+
+</Steps>
+
+</TabItem>
+
+</Tabs>
+
+## Connect to your Mastra server
+
+You can now connect to your Mastra server from your client application using a `MastraClient` from the `@mastra/client-js` package.
+
+Refer to the [`MastraClient` documentation](/docs/v1/server/mastra-client) for more information.
+
+```typescript copy showLineNumbers
+import { MastraClient } from "@mastra/client-js";
+
+const mastraClient = new MastraClient({
+  baseUrl: "https://<your-domain-name>",
+});
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+- [Digital Ocean App Platform documentation](https://docs.digitalocean.com/products/app-platform/)
+- [Digital Ocean Droplets documentation](https://docs.digitalocean.com/products/droplets/)
+
+
+---
+title: "Cloud Providers | Deployment"
+description: "Deploy your Mastra applications to popular cloud providers."
+---
+
+# Cloud Providers
+[EN] Source: https://mastra.ai/en/guides/deployment
+
+Standalone Mastra applications can be deployed to popular cloud providers, see one of the following guides for more information:
+
+- [Amazon EC2](/guides/v1/deployment/amazon-ec2)
+- [AWS Lambda](/guides/v1/deployment/aws-lambda)
+- [Azure App Services](/guides/v1/deployment/azure-app-services)
+- [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/v1/deployment/digital-ocean)
+- [Netlify](/guides/v1/deployment/netlify-deployer)
+- [Vercel](/guides/v1/deployment/vercel-deployer)
+
+For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/mastra-server) guide.
+
+## Prerequisites
+
+Before deploying to a cloud provider, ensure you have:
+
+- A [Mastra application](/guides/v1/getting-started/quickstart)
+- Node.js `v22.13.0` or later
+- A GitHub repository for your application (required for most CI/CD setups)
+- Domain name management access (for SSL and HTTPS)
+- Basic familiarity with server setup (e.g. Nginx, environment variables)
+
+:::warning
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+
+---
+title: "NetlifyDeployer | Deployment"
+description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
+---
+
+# NetlifyDeployer
+[EN] Source: https://mastra.ai/en/guides/deployment/netlify-deployer
+
+The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Netlify specific functionality.
+
+:::warning
+Netlify Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-netlify@beta
+```
+
+## Usage example
+
+```typescript title="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
+
+export const mastra = new Mastra({
+  deployer: new NetlifyDeployer(),
+});
+```
+
+> See the [NetlifyDeployer](/reference/v1/deployer/netlify) API reference for all available configuration options.
+
+## Continuous integration
+
+After connecting your Mastra project’s Git repository to Netlify, update the project settings. In the Netlify dashboard, go to **Project configuration** > **Build & deploy** > **Continuous deployment**, and under **Build settings**, set the following:
+
+- **Build command**: `npm run build` (optional)
+
+### Environment variables
+
+Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Netlify project settings.
+
+> See [Environment variables overview](https://docs.netlify.com/environment-variables/overview/) for more details.
+
+Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+
+## Manual deployment
+
+Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
+
+```bash copy
+netlify deploy --prod
+```
+
+:::warning
+
+When using `netlify deploy` instead of continuous deployment, you need to create a `netlify.toml` file with these contents:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = ".netlify/v1/functions"
+
+[functions]
+  directory = ".netlify/v1/functions"
+  node_bundler = "none"
+  included_files = [".netlify/v1/functions/**"]
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "22.13.0"
+```
+
+Adjust the `build.command` to your project.
+
+:::
+
+## Build output
+
+The build output for Mastra applications using the `NetlifyDeployer` includes all agents, tools, and workflows in your project, along with Mastra-specific files required to run your application on Netlify.
+
+```bash
+your-project/
+└── .netlify/
+    └── v1/
+        ├── config.json
+        └── functions/
+            └── api/
+                ├── index.js
+                ├── package.json
+                └── node_modules/
+```
+
+The `NetlifyDeployer` automatically generates a `config.json` configuration file in `.netlify/v1` with the following settings:
+
+```json
+{
+  "functions": {
+    "directory": ".netlify/v1/functions",
+    "node_bundler": "none",
+    "included_files": [".netlify/v1/functions/**"]
+  },
+  "redirects": [
+    {
+      "force": true,
+      "from": "/*",
+      "to": "/.netlify/functions/api/:splat",
+      "status": 200
+    }
+  ]
+}
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+
+
+---
+title: "VercelDeployer | Deployment"
+description: "Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer"
+---
+
+# VercelDeployer
+[EN] Source: https://mastra.ai/en/guides/deployment/vercel-deployer
+
+The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
+
+:::warning
+Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-vercel@beta
+```
+
+## Usage example
+
+```typescript title="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
+
+export const mastra = new Mastra({
+  // ...
+  deployer: new VercelDeployer(),
+});
+```
+
+> See the [VercelDeployer](/reference/v1/deployer/vercel) API reference for all available configuration options.
+
+### Optional overrides
+
+The Vercel deployer can write a few high‑value settings into the Vercel Output API function config (`.vc-config.json`):
+
+- `maxDuration?: number` — Function execution timeout (seconds)
+- `memory?: number` — Function memory allocation (MB)
+- `regions?: string[]` — Regions (e.g. `['sfo1','iad1']`)
+
+Example:
+
+```ts title="src/mastra/index.ts" showLineNumbers copy
+deployer: new VercelDeployer({
+  maxDuration: 600,
+  memory: 1536,
+  regions: ["sfo1", "iad1"],
+});
+```
+
+## Continuous integration
+
+After connecting your Mastra project’s Git repository to Vercel, update the project settings. In the Vercel dashboard, go to **Settings** > **Build and Deployment**, and under **Framework settings**, set the following:
+
+- **Build command**: `npm run build` (optional)
+
+### Environment variables
+
+Before your first deployment, make sure to add any environment variables used by your application. For example, if you're using OpenAI as the LLM, you'll need to set `OPENAI_API_KEY` in your Vercel project settings.
+
+> See [Environment variables](https://vercel.com/docs/environment-variables) for more details.
+
+Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
+
+## Manual deployment
+
+Manual deployments are also possible using the [Vercel CLI](https://vercel.com/docs/cli). With the Vercel CLI installed run the following from your project root to deploy your application.
+
+```bash copy
+npm run build && vercel --prod --prebuilt --archive=tgz
+```
+
+> You can also run `vercel dev` from your project root to test your Mastra application locally.
+
+## Build output
+
+The build output for Mastra applications using the `VercelDeployer` includes all agents, tools, and workflows in your project, along with Mastra specific files required to run your application on Vercel.
+
+```
+.vercel/
+├── output/
+│   ├── functions/
+│   │   └── index.func/
+│   │       └── index.mjs
+│   └── config.json
+└── package.json
+```
+
+The `VercelDeployer` automatically generates a `config.json` configuration file in `.vercel/output` with the following settings:
+
+```json
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ]
+}
+```
+
+## Next steps
+
+- [Mastra Client SDK](/reference/v1/client-js/mastra-client)
+
+
+---
 title: "Integrate Mastra in your Astro project | Frameworks"
 description: A step-by-step guide to integrating Mastra with Astro.
 ---
@@ -27531,7 +27472,7 @@ From here, you can extend the project with your own tools and logic:
 When you're ready, read more about how Mastra integrates with AI SDK UI and Next.js, and how to deploy your agent anywhere, including Vercel:
 
 - Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
-- Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
+- Deploy your agent to [Vercel](/guides/v1/deployment/vercel-deployer)
 - Deploy your agent [anywhere](/docs/v1/deployment/overview)
 
 
@@ -60849,7 +60790,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/v1/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/guides/v1/deployment) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -61508,7 +61449,7 @@ description: Learn how to interact with Mastra using the client-js SDK.
 # Mastra Client SDK
 [EN] Source: https://mastra.ai/en/reference/client-js/mastra-client
 
-The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/deployment/building-mastra) from your client environment.
+The Mastra Client SDK provides a simple and type-safe interface for interacting with your [Mastra Server](/docs/v1/deployment/mastra-server) from your client environment.
 
 ## Usage example
 
@@ -63095,7 +63036,7 @@ This method does not accept any parameters.
 
 ## Related
 
-- [Server deployment](/docs/v1/deployment/building-mastra)
+- [Server deployment](/docs/v1/deployment/mastra-server)
 - [Server configuration](/docs/v1/server/custom-api-routes)
 
 
@@ -71096,7 +71037,7 @@ description: Documentation for PinoLogger, which provides methods to record even
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/deployment/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Usage example
 

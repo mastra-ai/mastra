@@ -25,22 +25,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Contributing Templates | Community](https://mastra.ai/en/docs/community/contributing-templates): How to contribute your own templates to the Mastra ecosystem
 - [Discord Community | Community](https://mastra.ai/en/docs/community/discord): Information about the Mastra Discord community and MCP bot.
 - [License | Community](https://mastra.ai/en/docs/community/licensing): Mastra License
-- [Building Mastra | Deployment](https://mastra.ai/en/docs/deployment/building-mastra): Learn how to build a Mastra server with build settings and deployment options.
-- [Amazon EC2 | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/amazon-ec2): Deploy your Mastra applications to Amazon EC2.
-- [AWS Lambda | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/aws-lambda): Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
-- [Azure App Services | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/azure-app-services): Deploy your Mastra applications to Azure App Services.
-- [CloudflareDeployer | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/cloudflare-deployer): Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer
-- [Digital Ocean | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/digital-ocean): Deploy your Mastra applications to Digital Ocean.
-- [Cloud Providers | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers): Deploy your Mastra applications to popular cloud providers.
-- [NetlifyDeployer | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/netlify-deployer): Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer
-- [VercelDeployer | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/vercel-deployer): Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer
-- [Navigating the Dashboard | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/dashboard): Details of each feature available in Mastra Cloud
-- [Understanding Tracing and Logs | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/observability): Monitoring and debugging tools for Mastra Cloud deployments
-- [Mastra Cloud | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/overview): Deployment and monitoring service for Mastra applications
-- [Setting Up and Deploying | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/setting-up): Configuration steps for Mastra Cloud projects
-- [Monorepo Deployment | Deployment](https://mastra.ai/en/docs/deployment/monorepo): Learn how to deploy Mastra applications that are part of a monorepo setup
+- [Deploy to Cloud Providers | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers): Deploy your Mastra applications to cloud providers
+- [Deploy a Mastra Server | Deployment](https://mastra.ai/en/docs/deployment/mastra-server): Learn how to build a Mastra server with build settings and deployment options.
+- [Deploy in a Monorepo | Deployment](https://mastra.ai/en/docs/deployment/monorepo): Learn how to deploy Mastra applications that are part of a monorepo setup
 - [Deployment Overview | Deployment](https://mastra.ai/en/docs/deployment/overview): Learn about different deployment options for your Mastra applications
-- [Web Framework Integration | Deployment](https://mastra.ai/en/docs/deployment/web-framework): Learn how Mastra can be deployed when integrated with a Web Framework
+- [Deploy with a Web Framework | Deployment](https://mastra.ai/en/docs/deployment/web-framework): Learn how Mastra can be deployed when integrated with a Web Framework
 - [Built-in Scorers | Evals](https://mastra.ai/en/docs/evals/built-in-scorers): Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions.
 - [Custom Scorers | Evals](https://mastra.ai/en/docs/evals/custom-scorers)
 - [Scorers overview | Evals](https://mastra.ai/en/docs/evals/overview): Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
@@ -51,6 +40,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Start with Mastra | Getting Started](https://mastra.ai/en/docs/getting-started/start): Choose how to get started with Mastra - quickstart, framework integration, or agentic UI.
 - [Studio | Getting Started](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [About Mastra](https://mastra.ai/en/docs): Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack.
+- [Navigating the Dashboard | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/dashboard): Details of each feature available in Mastra Cloud
+- [Understanding Tracing and Logs | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/observability): Monitoring and debugging tools for Mastra Cloud deployments
+- [Mastra Cloud | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/overview): Deployment and monitoring service for Mastra applications
+- [Setting Up and Deploying | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/setting-up): Configuration steps for Mastra Cloud projects
 - [MCP Overview | MCP](https://mastra.ai/en/docs/mcp/overview): Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 - [Publishing an MCP Server | MCP](https://mastra.ai/en/docs/mcp/publishing-mcp-server): Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
 - [Conversation History | Memory](https://mastra.ai/en/docs/memory/conversation-history): Learn how to configure conversation history in Mastra to store recent messages from the current conversation.
@@ -132,6 +125,14 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Using AI SDK UI | Frameworks](https://mastra.ai/en/guides/build-your-ui/ai-sdk-ui): Learn how Mastra leverages the AI SDK UI library and how you can leverage it further with Mastra
 - [Using Assistant UI | Frameworks](https://mastra.ai/en/guides/build-your-ui/assistant-ui): Learn how to integrate Assistant UI with Mastra
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
+- [Amazon EC2 | Deployment](https://mastra.ai/en/guides/deployment/amazon-ec2): Deploy your Mastra applications to Amazon EC2.
+- [AWS Lambda | Deployment](https://mastra.ai/en/guides/deployment/aws-lambda): Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
+- [Azure App Services | Deployment](https://mastra.ai/en/guides/deployment/azure-app-services): Deploy your Mastra applications to Azure App Services.
+- [CloudflareDeployer | Deployment](https://mastra.ai/en/guides/deployment/cloudflare-deployer): Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer
+- [Digital Ocean | Deployment](https://mastra.ai/en/guides/deployment/digital-ocean): Deploy your Mastra applications to Digital Ocean.
+- [Cloud Providers | Deployment](https://mastra.ai/en/guides/deployment): Deploy your Mastra applications to popular cloud providers.
+- [NetlifyDeployer | Deployment](https://mastra.ai/en/guides/deployment/netlify-deployer): Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer
+- [VercelDeployer | Deployment](https://mastra.ai/en/guides/deployment/vercel-deployer): Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer
 - [Integrate Mastra in your Astro project | Frameworks](https://mastra.ai/en/guides/getting-started/astro): A step-by-step guide to integrating Mastra with Astro.
 - [Express | Frameworks](https://mastra.ai/en/guides/getting-started/express): Get started with Mastra and Express
 - [Hono | Frameworks](https://mastra.ai/en/guides/getting-started/hono): Get started with Mastra and Hono
