@@ -307,26 +307,25 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
       // Prioritize requestContext from middleware/route options over body
       const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
 
-      if (contextRequestContext && params.requestContext) {
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
         mastra
           .getLogger()
-          ?.warn(
-            `"requestContext" from the request body will be ignored because "requestContext" is already set by middleware or route options.`,
-          );
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
       }
 
       if (!agentToUse) {
         throw new Error('Agent ID is required');
       }
 
-      // Remove requestContext from params to avoid confusion, then explicitly pass the effective one
-      const { requestContext: _unusedRequestContext, ...paramsWithoutContext } = params;
-
       const uiMessageStream = await handleChatStream<UIMessage, OUTPUT>({
         mastra,
         agentId: agentToUse,
         params: {
-          ...paramsWithoutContext,
+          ...params,
           requestContext: effectiveRequestContext,
         },
         defaultOptions,
