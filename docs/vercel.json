@@ -439,6 +439,16 @@
       "source": "/docs/v1/deployment/building-mastra",
       "destination": "/docs/v1/deployment/mastra-server",
       "permanent": true
+    },
+    {
+      "source": "/docs/v1/workflows/inngest-workflow",
+      "destination": "/guides/v1/deployment/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/workflows/inngest-workflow",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/inngest",
+      "permanent": true
     }
   ]
 }
