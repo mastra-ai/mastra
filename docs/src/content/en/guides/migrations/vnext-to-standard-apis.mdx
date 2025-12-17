@@ -106,7 +106,7 @@ See the following API references for more information:
 
 No `format` option: Always return AI SDK v4 types
 
-```typescript copy
+```typescript
 // Mastra native format (default)
 const result = await agent.stream(messages);
 ```
@@ -118,7 +118,7 @@ Use `format` option to choose output:
 - `'mastra'` (default)
 - `'aisdk'` (AI SDK v5 compatible)
 
-```typescript copy
+```typescript
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
   format: "aisdk",

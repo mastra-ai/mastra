@@ -18,7 +18,7 @@ The DynamoDB storage implementation provides a scalable and performant NoSQL dat
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/dynamodb@beta
 # or
 pnpm add @mastra/dynamodb@beta
@@ -36,7 +36,7 @@ Detailed instructions for setting up the table using AWS CloudFormation or AWS C
 
 ### Basic Usage
 
-```typescript copy
+```typescript
 import { Memory } from "@mastra/memory";
 import { DynamoDBStore } from "@mastra/dynamodb";
 
@@ -134,7 +134,7 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 The IAM role or user executing the code needs appropriate permissions to interact with the specified DynamoDB table and its indexes. Below is a sample policy. Replace `${YOUR_TABLE_NAME}` with your actual table name and `${YOUR_AWS_REGION}` and `${YOUR_AWS_ACCOUNT_ID}` with appropriate values.
 
-```json copy
+```json
 {
   "Version": "2012-10-17",
   "Statement": [

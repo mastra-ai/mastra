@@ -108,7 +108,7 @@ Modify the `tsconfig.json` file in your project root:
 The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
 [Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
 
-```bash title=".env" copy
+```bash title=".env"
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -118,7 +118,7 @@ VITE_OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash title=".gitignore" copy
+```bash title=".gitignore"
 .mastra
 ```
 
@@ -172,7 +172,7 @@ With the Mastra Dev Server running, you can start your SvelteKit site in the usu
 
 <StepItem>
 
-```bash copy
+```bash
 mkdir src/routes/test
 ```
 
@@ -182,11 +182,11 @@ mkdir src/routes/test
 
 Create a new Action, and add the example code:
 
-```bash copy
+```bash
 touch src/routes/test/+page.server.ts
 ```
 
-```typescript title="src/routes/test/+page.server.ts" copy
+```typescript title="src/routes/test/+page.server.ts"
 import type { Actions } from "./$types";
 import { mastra } from "../../mastra";
 
@@ -207,11 +207,11 @@ export const actions = {
 
 Create a new Page file, and add the example code:
 
-```bash copy
+```bash
 touch src/routes/test/+page.svelte
 ```
 
-```typescript title="src/routes/test/+page.svelte" copy
+```typescript title="src/routes/test/+page.svelte"
 <script lang="ts">
 	import type { PageProps} from './$types';
 	let { form }: PageProps = $props();
@@ -338,7 +338,7 @@ Modify the `tsconfig.json` file in your project root:
 The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
 [Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
 
-```bash title=".env" copy
+```bash title=".env"
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -348,7 +348,7 @@ VITE_OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash title=".gitignore" copy
+```bash title=".gitignore"
 .mastra
 ```
 
@@ -402,7 +402,7 @@ With the Mastra Dev Server running, you can start your SvelteKit site in the usu
 
 <StepItem>
 
-```bash copy
+```bash
 mkdir src/routes/weather-api
 ```
 
@@ -412,11 +412,11 @@ mkdir src/routes/weather-api
 
 Create a new Endpoint, and add the example code:
 
-```bash copy
+```bash
 touch src/routes/weather-api/+server.ts
 ```
 
-```typescript title="src/routes/weather-api/+server.ts" copy
+```typescript title="src/routes/weather-api/+server.ts"
 import { json } from "@sveltejs/kit";
 import { mastra } from "../../mastra";
 
@@ -437,11 +437,11 @@ export async function POST({ request }) {
 
 Create a new Page, and add the example code:
 
-```bash copy
+```bash
 touch src/routes/weather-api-test/+page.svelte
 ```
 
-```typescript title="src/routes/weather-api-test/+page.svelte" copy
+```typescript title="src/routes/weather-api-test/+page.svelte"
 <script lang="ts">
 	let result = $state<string | null>(null);
 	async function handleFormSubmit(event: Event) {

@@ -74,7 +74,7 @@ await weatherTool.execute({
 
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
@@ -141,7 +141,7 @@ You can also use `requestContext` with other options like `agents`, `workflows`,
 
 You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" copy
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

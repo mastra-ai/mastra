@@ -11,7 +11,7 @@ This example demonstrates how to use Mastra's memory system with Upstash as the 
 
 This example uses the `openai` model and requires both Upstash Redis and Upstash Vector services. Make sure to add the following to your `.env` file:
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 UPSTASH_REDIS_REST_URL=<your-redis-url>
 UPSTASH_REDIS_REST_TOKEN=<your-redis-token>
@@ -23,7 +23,7 @@ You can get your Upstash credentials by signing up at [upstash.com](https://upst
 
 And install the following package:
 
-```bash copy
+```bash
 npm install @mastra/upstash@beta
 ```
 
@@ -31,7 +31,7 @@ npm install @mastra/upstash@beta
 
 To add Upstash memory to an agent use the `Memory` class and create a new `storage` key using `UpstashStore` and a new `vector` key using `UpstashVector`. The configuration can point to either a remote service or a local setup.
 
-```typescript title="src/mastra/agents/example-upstash-agent.ts" copy
+```typescript title="src/mastra/agents/example-upstash-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { UpstashStore } from "@mastra/upstash";
@@ -61,13 +61,13 @@ Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve r
 
 Install `fastembed` to get started:
 
-```bash copy
+```bash
 npm install @mastra/fastembed@beta
 ```
 
 Add the following to your agent:
 
-```typescript title="src/mastra/agents/example-upstash-agent.ts" copy
+```typescript title="src/mastra/agents/example-upstash-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { UpstashStore, UpstashVector } from "@mastra/upstash";
@@ -106,7 +106,7 @@ export const upstashAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript title="src/test-upstash-agent.ts" copy
+```typescript title="src/test-upstash-agent.ts"
 import "dotenv/config";
 
 import { mastra } from "./mastra";

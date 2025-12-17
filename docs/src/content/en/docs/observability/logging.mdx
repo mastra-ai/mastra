@@ -13,7 +13,7 @@ When deploying to Mastra Cloud, logs are shown on the [Logs](/docs/v1/mastra-clo
 
 When [initializing a new Mastra project](/guides/v1/getting-started/quickstart) using the CLI, `PinoLogger` is included by default.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 
@@ -36,7 +36,7 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 
 Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step’s execution.
 
-```typescript {8-9} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {8-9} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -62,7 +62,7 @@ export const testWorkflow = createWorkflow({...})
 
 Similarly, tools have access to the logger instance via the `mastra` parameter. Use this to log tool specific activity during execution.
 
-```typescript {8-9} title="src/mastra/tools/test-tool.ts" copy
+```typescript {8-9} title="src/mastra/tools/test-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -85,7 +85,7 @@ Logger methods accept an optional second argument for additional data. This can 
 
 In this example, the log message includes an object with a key of `agent` and a value of the `testAgent` instance.
 
-```typescript {11} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {11} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 

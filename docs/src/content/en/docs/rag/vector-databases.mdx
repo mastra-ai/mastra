@@ -15,7 +15,7 @@ After generating embeddings, you need to store them in a database that supports 
 <Tabs>
   <TabItem value="mongodb" label="MongoDB">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
@@ -41,7 +41,7 @@ For detailed setup instructions and best practices, see the [official MongoDB At
 
   <TabItem value="pg-vector" label="PgVector">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { PgVector } from "@mastra/pg";
 
 const store = new PgVector({
@@ -70,7 +70,7 @@ For detailed setup instructions and best practices, see the [official pgvector r
 
   <TabItem value="pinecone" label="Pinecone">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { PineconeVector } from "@mastra/pinecone";
 
 const store = new PineconeVector({
@@ -92,7 +92,7 @@ await store.upsert({
 
   <TabItem value="qdrant" label="Qdrant">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { QdrantVector } from "@mastra/qdrant";
 
 const store = new QdrantVector({
@@ -117,7 +117,7 @@ await store.upsert({
 
   <TabItem value="chroma" label="Chroma">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { ChromaVector } from "@mastra/chroma";
 
 // Running Chroma locally
@@ -147,7 +147,7 @@ await store.upsert({
 
   <TabItem value="astra" label="Astra">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { AstraVector } from "@mastra/astra";
 
 const store = new AstraVector({
@@ -172,7 +172,7 @@ await store.upsert({
 
   <TabItem value="libsql" label="LibSQL">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { LibSQLVector } from "@mastra/core/vector/libsql";
 
 const store = new LibSQLVector({
@@ -197,7 +197,7 @@ await store.upsert({
 
   <TabItem value="upstash" label="Upstash">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { UpstashVector } from "@mastra/upstash";
 
 // In upstash they refer to the store as an index
@@ -220,7 +220,7 @@ await store.upsert({
 
   <TabItem value="cloudflare" label="Cloudflare">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { CloudflareVector } from "@mastra/vectorize";
 
 const store = new CloudflareVector({
@@ -242,7 +242,7 @@ await store.upsert({
 
   <TabItem value="opensearch" label="OpenSearch">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { OpenSearchVector } from "@mastra/opensearch";
 
 const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL });
@@ -263,7 +263,7 @@ await store.upsert({
 
   <TabItem value="elasticsearch" label="ElasticSearch">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
 const store = new ElasticSearchVector({ url: process.env.ELASTICSEARCH_URL });
@@ -283,7 +283,7 @@ await store.upsert({
   </TabItem>
   <TabItem value="couchbase" label="Couchbase">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { CouchbaseVector } from "@mastra/couchbase";
 
 const store = new CouchbaseVector({
@@ -308,7 +308,7 @@ await store.upsert({
   </TabItem>
   <TabItem value="lancedb" label="Lance">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { LanceVectorStore } from "@mastra/lance";
 
 const store = await LanceVectorStore.create("/path/to/db");
@@ -334,7 +334,7 @@ For detailed setup instructions and best practices, see the [official LanceDB do
   </TabItem>
   <TabItem value="s3vectors" label="S3 Vectors">
 
-```ts title="vector-store.ts" copy
+```ts title="vector-store.ts"
 import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
@@ -368,7 +368,7 @@ Once initialized, all vector stores share the same interface for creating indexe
 
 Before storing embeddings, you need to create an index with the appropriate dimension size for your embedding model:
 
-```ts title="store-embeddings.ts" copy
+```ts title="store-embeddings.ts"
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
   indexName: "myCollection",
@@ -514,7 +514,7 @@ Each vector database enforces specific naming conventions for indexes and collec
 
 After creating an index, you can store embeddings along with their basic metadata:
 
-```ts title="store-embeddings.ts" copy
+```ts title="store-embeddings.ts"
 // Store embeddings with their corresponding metadata
 await store.upsert({
   indexName: "myCollection", // index name
@@ -541,7 +541,7 @@ Vector stores support rich metadata (any JSON-serializable fields) for filtering
 Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
 :::
 
-```ts copy
+```ts
 // Store embeddings with rich metadata for better organization and filtering
 await store.upsert({
   indexName: "myCollection",
@@ -581,7 +581,7 @@ When building RAG applications, you often need to clean up stale vectors when do
 
 The most common use case is deleting all vectors for a specific document when a user deletes it:
 
-```ts title="delete-vectors.ts" copy
+```ts title="delete-vectors.ts"
 // Delete all vectors for a specific document
 await store.deleteVectors({
   indexName: "myCollection",
@@ -598,7 +598,7 @@ This is particularly useful when:
 
 You can also use complex filters to delete vectors matching multiple conditions:
 
-```ts title="delete-vectors-advanced.ts" copy
+```ts title="delete-vectors-advanced.ts"
 // Delete all vectors for multiple documents
 await store.deleteVectors({
   indexName: "myCollection",
@@ -623,7 +623,7 @@ await store.deleteVectors({
 
 If you have specific vector IDs to delete, you can pass them directly:
 
-```ts title="delete-by-ids.ts" copy
+```ts title="delete-by-ids.ts"
 // Delete specific vectors by their IDs
 await store.deleteVectors({
   indexName: "myCollection",

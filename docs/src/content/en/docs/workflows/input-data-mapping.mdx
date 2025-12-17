@@ -18,7 +18,7 @@ In this example the `output` from `step1` is transformed to match the `inputSche
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-```typescript {9} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {9} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -38,7 +38,7 @@ export const testWorkflow = createWorkflow({...})
 
 Use `inputData` to access the full output of the previous step:
 
-```typescript {3} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {3} title="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(({ inputData }) => {
     console.log(inputData);
@@ -49,7 +49,7 @@ Use `inputData` to access the full output of the previous step:
 
 Use `getStepResult` to access the full output of a specific step by referencing the step's instance:
 
-```typescript {3} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {3} title="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(async ({ getStepResult }) => {
     console.log(getStepResult(step1));
@@ -60,7 +60,7 @@ Use `getStepResult` to access the full output of a specific step by referencing 
 
 Use `getInitData` to access the initial input data provided to the workflow:
 
-```typescript {3} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {3} title="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(async ({ getInitData }) => {
       console.log(getInitData());
@@ -71,7 +71,7 @@ Use `getInitData` to access the initial input data provided to the workflow:
 
 To use `mapVariable` import the necessary function from the workflows module:
 
-```typescript title="src/mastra/workflows/test-workflow.ts" copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { mapVariable } from "@mastra/core/workflows";
 ```
 
@@ -79,7 +79,7 @@ import { mapVariable } from "@mastra/core/workflows";
 
 You can rename step outputs using the object syntax in `.map()`. In the example below, the `value` output from `step1` is renamed to `details`:
 
-```typescript {3-6} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {3-6} title="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map({
     details: mapVariable({
@@ -93,7 +93,7 @@ You can rename step outputs using the object syntax in `.map()`. In the example 
 
 You can rename workflow outputs by using **referential composition**. This involves passing the workflow instance as the `initData`.
 
-```typescript {6-9} title="src/mastra/workflows/test-workflow.ts" copy
+```typescript {6-9} title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...});
 
 testWorkflow

@@ -10,13 +10,13 @@ It's part of the `@mastra/libsql` package and offers efficient vector similarity
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/libsql@beta
 ```
 
 ## Usage
 
-```typescript copy
+```typescript
 import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
@@ -209,7 +209,7 @@ Gets information about an index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -343,7 +343,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -356,7 +356,7 @@ interface QueryResult {
 
 The store throws specific errors for different failure cases:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my-collection",

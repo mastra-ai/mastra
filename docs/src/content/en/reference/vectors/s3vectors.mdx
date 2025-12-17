@@ -14,13 +14,13 @@ The `S3Vectors` class provides vector search using [Amazon S3 Vectors (Preview)]
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/s3vectors@beta
 ```
 
 ## Usage Example
 
-```typescript copy
+```typescript
 import { S3Vectors } from "@mastra/s3vectors";
 
 const store = new S3Vectors({
@@ -214,7 +214,7 @@ Returns information about the index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number; // computed via ListVectors pagination (O(n))
@@ -305,7 +305,7 @@ Closes the underlying AWS SDK HTTP handler to free sockets.
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number; // 1/(1 + distance)
@@ -337,7 +337,7 @@ S3 Vectors supports a strict subset of operators and value types. The Mastra fil
 
 **Examples:**
 
-```typescript copy
+```typescript
 // Implicit AND
 { genre: { $in: ["documentary", "comedy"] }, year: { $gte: 2020 } }
 
@@ -359,7 +359,7 @@ S3 Vectors supports a strict subset of operators and value types. The Mastra fil
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index-name",

@@ -9,7 +9,7 @@ The Convex storage implementation provides a serverless storage solution using [
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/convex@beta
 ```
 
@@ -21,7 +21,7 @@ Before using `ConvexStore`, you need to set up the Convex schema and storage han
 
 In `convex/schema.ts`:
 
-```typescript copy
+```typescript
 import { defineSchema } from 'convex/server';
 import {
   mastraThreadsTable,
@@ -50,7 +50,7 @@ export default defineSchema({
 
 In `convex/mastra/storage.ts`:
 
-```typescript copy
+```typescript
 import { mastraStorage } from '@mastra/convex/server';
 
 export const handle = mastraStorage;
@@ -58,7 +58,7 @@ export const handle = mastraStorage;
 
 ### 3. Deploy to Convex
 
-```bash copy
+```bash
 npx convex dev
 # or for production
 npx convex deploy
@@ -66,7 +66,7 @@ npx convex deploy
 
 ## Usage
 
-```typescript copy
+```typescript
 import { ConvexStore } from "@mastra/convex";
 
 const storage = new ConvexStore({

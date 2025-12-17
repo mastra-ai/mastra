@@ -9,13 +9,13 @@ The `MongoDBVector` class provides vector search using [MongoDB Atlas Vector Sea
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/mongodb@beta
 ```
 
 ## Usage Example
 
-```typescript copy
+```typescript
 import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
@@ -180,7 +180,7 @@ Returns information about the index (collection).
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -304,7 +304,7 @@ Closes the MongoDB client connection. Should be called when done using the store
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -317,7 +317,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my_collection",

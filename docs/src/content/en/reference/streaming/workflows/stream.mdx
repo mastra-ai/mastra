@@ -9,7 +9,7 @@ The `.stream()` method enables real-time streaming of responses from a workflow.
 
 ## Usage example
 
-```typescript copy
+```typescript
 const run = await workflow.createRun();
 
 const stream = await run.stream({
@@ -163,7 +163,7 @@ Returns a `WorkflowRunOutput` object that implements the async iterable interfac
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 const run = await workflow.createRun();
 
 const stream = run.stream({

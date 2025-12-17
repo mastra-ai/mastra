@@ -325,7 +325,7 @@ While agents typically update working memory through the `updateWorkingMemory` t
 
 When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
 
-```typescript title="src/app/medical-consultation.ts" copy
+```typescript title="src/app/medical-consultation.ts"
 // Create a thread with initial working memory
 const thread = await memory.createThread({
   threadId: "thread-123",
@@ -354,7 +354,7 @@ await agent.generate("What's my blood type?", {
 
 You can also update an existing thread's working memory:
 
-```typescript title="src/app/medical-consultation.ts" copy
+```typescript title="src/app/medical-consultation.ts"
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
   id: "thread-123",
@@ -376,7 +376,7 @@ await memory.updateThread({
 
 Alternatively, use the `updateWorkingMemory` method directly:
 
-```typescript title="src/app/medical-consultation.ts" copy
+```typescript title="src/app/medical-consultation.ts"
 await memory.updateWorkingMemory({
   threadId: "thread-123",
   resourceId: "user-456", // Required for resource-scoped memory

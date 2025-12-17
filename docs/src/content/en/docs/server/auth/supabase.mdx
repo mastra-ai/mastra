@@ -14,7 +14,7 @@ The `MastraAuthSupabase` class provides authentication for Mastra using Supabase
 
 This example uses Supabase Auth. Make sure to add your Supabase credentials to your `.env` file and ensure your Supabase project is properly configured.
 
-```env title=".env" copy
+```env title=".env"
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```
@@ -25,13 +25,13 @@ SUPABASE_ANON_KEY=your-anon-key
 
 Before you can use the `MastraAuthSupabase` class you have to install the `@mastra/auth-supabase` package.
 
-```bash copy
+```bash
 npm install @mastra/auth-supabase@beta
 ```
 
 ## Usage example
 
-```typescript {2,7-9} title="src/mastra/index.ts" copy
+```typescript {2,7-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
@@ -58,7 +58,7 @@ When using Supabase auth, you'll need to retrieve the access token from Supabase
 
 Use the Supabase client to authenticate users and retrieve their access token:
 
-```typescript title="lib/auth.ts" copy
+```typescript title="lib/auth.ts"
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient("<supabase-url>", "<supabase-key>");
@@ -77,7 +77,7 @@ const accessToken = authTokenResponse.data?.session?.access_token;
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid Supabase access token in the `Authorization` header:
 
-```typescript {6} title="lib/mastra/mastra-client.ts" copy
+```typescript {6} title="lib/mastra/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({

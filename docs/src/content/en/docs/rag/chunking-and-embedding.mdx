@@ -7,7 +7,7 @@ description: Guide on chunking and embedding documents in Mastra for efficient p
 
 Before processing, create a MDocument instance from your content. You can initialize it from various formats:
 
-```ts copy
+```ts
 const docFromText = MDocument.fromText("Your plain text content...");
 const docFromHTML = MDocument.fromHTML("<html>Your HTML content...</html>");
 const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
@@ -34,7 +34,7 @@ Each strategy accepts different parameters optimized for its chunking approach.
 
 Here's an example of how to use the `recursive` strategy:
 
-```ts copy
+```ts
 const chunks = await doc.chunk({
   strategy: "recursive",
   maxSize: 512,
@@ -48,7 +48,7 @@ const chunks = await doc.chunk({
 
 For text where preserving sentence structure is important, here's an example of how to use the `sentence` strategy:
 
-```ts copy
+```ts
 const chunks = await doc.chunk({
   strategy: "sentence",
   maxSize: 450,
@@ -61,7 +61,7 @@ const chunks = await doc.chunk({
 
 For markdown documents where preserving the semantic relationships between sections is important, here's an example of how to use the `semantic-markdown` strategy:
 
-```ts copy
+```ts
 const chunks = await doc.chunk({
   strategy: "semantic-markdown",
   joinThreshold: 500,
@@ -83,7 +83,7 @@ Transform chunks into embeddings using your preferred provider. Mastra supports 
 
 The simplest way is to use Mastra's model router with `provider/model` strings:
 
-```ts copy
+```ts
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
 
@@ -142,7 +142,7 @@ When storing embeddings, the vector database index must be configured to match t
 
 Here's an example showing document processing and embedding generation with both providers:
 
-```ts copy
+```ts
 import { embedMany } from "ai";
 
 import { MDocument } from "@mastra/rag";

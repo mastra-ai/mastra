@@ -9,7 +9,7 @@ The `ModerationProcessor` is a **hybrid processor** that can be used for both in
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { ModerationProcessor } from "@mastra/core/processors";
 
 const processor = new ModerationProcessor({
@@ -130,7 +130,7 @@ const processor = new ModerationProcessor({
 
 ### Input processing
 
-```typescript title="src/mastra/agents/moderated-agent.ts" copy
+```typescript title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
@@ -155,7 +155,7 @@ export const agent = new Agent({
 
 When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
 
-```typescript title="src/mastra/agents/output-moderated-agent.ts" copy
+```typescript title="src/mastra/agents/output-moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor, ModerationProcessor } from "@mastra/core/processors";
 

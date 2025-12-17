@@ -9,7 +9,7 @@ The `WorkingMemory` is an **input processor** that injects working memory data a
 
 ## Usage example
 
-```typescript copy
+```typescript
 import { WorkingMemory } from "@mastra/core/processors";
 
 const processor = new WorkingMemory({
@@ -135,7 +135,7 @@ const processor = new WorkingMemory({
 
 ## Extended usage example
 
-```typescript title="src/mastra/agents/personalized-agent.ts" copy
+```typescript title="src/mastra/agents/personalized-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { WorkingMemory, MessageHistory } from "@mastra/core/processors";
 import { PostgresStorage } from "@mastra/pg";
@@ -173,7 +173,7 @@ export const agent = new Agent({
 
 ## JSON format example
 
-```typescript copy
+```typescript
 import { WorkingMemory } from "@mastra/core/processors";
 
 const processor = new WorkingMemory({

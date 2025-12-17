@@ -15,7 +15,7 @@ You can use any testing framework that supports ESM modules, such as [Vitest](ht
 
 Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
 
-```typescript copy title="src/mastra/agents/weather-agent.test.ts"
+```typescript title="src/mastra/agents/weather-agent.test.ts"
 import { describe, it, expect } from 'vitest';
 import { createScorer, runEvals } from "@mastra/core/evals";
 import { weatherAgent } from "./weather-agent";
@@ -72,7 +72,7 @@ The `runEvals` function returns an object with:
 
 Create separate test cases for different evaluation scenarios:
 
-```typescript copy title="src/mastra/agents/weather-agent.test.ts"
+```typescript title="src/mastra/agents/weather-agent.test.ts"
 describe('Weather Agent Tests', () => {
   const locationScorer = createScorer({ /* ... */ });
 

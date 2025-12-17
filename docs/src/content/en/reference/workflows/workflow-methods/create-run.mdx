@@ -9,7 +9,7 @@ The `.createRun()` method creates a new workflow run instance, allowing you to e
 
 ## Usage example
 
-```typescript copy
+```typescript
 await workflow.createRun();
 ```
 
@@ -53,7 +53,7 @@ await workflow.createRun();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 const workflow = mastra.getWorkflow("workflow");
 
 const run = await workflow.createRun();
@@ -69,7 +69,7 @@ const result = await run.start({
 
 The `resourceId` parameter associates a workflow run with a specific resource, such as a user or tenant. This is useful for multi-tenant applications or when you need to track which user initiated a workflow.
 
-```typescript copy
+```typescript
 const workflow = mastra.getWorkflow("workflow");
 
 // Create a run associated with a specific user

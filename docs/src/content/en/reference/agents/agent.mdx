@@ -11,7 +11,7 @@ The `Agent` class is the foundation for creating AI agents in Mastra. It provide
 
 ### Basic string instructions
 
-```typescript title="src/mastra/agents/string-agent.ts" copy
+```typescript title="src/mastra/agents/string-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 // String instructions
@@ -49,7 +49,7 @@ export const agent3 = new Agent({
 
 Use CoreSystemMessage format to access additional properties like `providerOptions` for provider-specific configurations:
 
-```typescript title="src/mastra/agents/core-message-agent.ts" copy
+```typescript title="src/mastra/agents/core-message-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const agent = new Agent({
@@ -71,7 +71,7 @@ export const agent = new Agent({
 
 ### Multiple CoreSystemMessages
 
-```typescript title="src/mastra/agents/multi-message-agent.ts" copy
+```typescript title="src/mastra/agents/multi-message-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 // This could be customizable based on the user

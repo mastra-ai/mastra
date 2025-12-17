@@ -9,7 +9,7 @@ The `.resume()` method resumes a suspended workflow run with new data, allowing 
 
 ## Usage example
 
-```typescript copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
@@ -177,7 +177,7 @@ if (result.status === "suspended") {
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 if (result.status === "suspended") {
   const resumedResults = await run.resume({
     step: result.suspended[0],

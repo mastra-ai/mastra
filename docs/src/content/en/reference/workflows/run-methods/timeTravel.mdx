@@ -9,7 +9,7 @@ The `.timeTravel()` method re-executes a workflow starting from any specific ste
 
 ## Usage example
 
-```typescript copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.timeTravel({
@@ -213,7 +213,7 @@ const result = await run.timeTravel({
 
 ### Time travel with custom context
 
-```typescript copy
+```typescript
 const result = await run.timeTravel({
   step: "step2",
   context: {
@@ -230,7 +230,7 @@ const result = await run.timeTravel({
 
 ### Time travel to nested workflow step
 
-```typescript copy
+```typescript
 // Using dot notation
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
@@ -246,7 +246,7 @@ const result = await run.timeTravel({
 
 ### Time travel with initial state
 
-```typescript copy
+```typescript
 const result = await run.timeTravel({
   step: "step2",
   inputData: { value: 10 },
@@ -259,7 +259,7 @@ const result = await run.timeTravel({
 
 ### Time travel with nested workflows context
 
-```typescript copy
+```typescript
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
   context: {

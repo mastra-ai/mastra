@@ -11,14 +11,14 @@ This example demonstrates how to use Mastra's memory system with PostgreSQL as t
 
 This example uses the `openai` model and requires a PostgreSQL database with the `pgvector` extension. Make sure to add the following to your `.env` file:
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 DATABASE_URL=<your-connection-string>
 ```
 
 And install the following package:
 
-```bash copy
+```bash
 npm install @mastra/pg@beta
 ```
 
@@ -26,7 +26,7 @@ npm install @mastra/pg@beta
 
 To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
 
-```typescript title="src/mastra/agents/example-pg-agent.ts" copy
+```typescript title="src/mastra/agents/example-pg-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { PostgresStore } from "@mastra/pg";
@@ -55,13 +55,13 @@ Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve r
 
 Install `fastembed` to get started:
 
-```bash copy
+```bash
 npm install @mastra/fastembed@beta
 ```
 
 Add the following to your agent:
 
-```typescript title="src/mastra/agents/example-pg-agent.ts" copy
+```typescript title="src/mastra/agents/example-pg-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { PostgresStore, PgVector } from "@mastra/pg";
@@ -98,7 +98,7 @@ export const pgAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript title="src/test-pg-agent.ts" copy
+```typescript title="src/test-pg-agent.ts"
 import "dotenv/config";
 
 import { mastra } from "./mastra";

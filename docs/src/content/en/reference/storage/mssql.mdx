@@ -9,13 +9,13 @@ The MSSQL storage implementation provides a production-ready storage solution us
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/mssql@beta
 ```
 
 ## Usage
 
-```typescript copy
+```typescript
 import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
@@ -105,7 +105,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { MSSQLStore } from "@mastra/mssql";
 
@@ -120,7 +120,7 @@ const mastra = new Mastra({
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
-```typescript copy
+```typescript
 import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
