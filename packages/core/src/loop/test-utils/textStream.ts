@@ -1,45 +1,31 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { convertArrayToReadableStream as convertArrayToReadableStreamV2 } from '@internal/ai-sdk-v5/test';
-import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { createMessageListWithUserMessage } from './utils';
-import { testUsage as testUsageV2 } from '../../stream/aisdk/v5/test-utils';
-import { testUsageV3 } from './utils-v3';
+import { testUsage } from '../../stream/aisdk/v5/test-utils';
 import type { loop } from '../loop';
-import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
-import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
-export function textStreamTests({
-  loopFn,
-  runId,
-  modelVersion = 'v2',
-}: {
-  loopFn: typeof loop;
-  runId: string;
-  modelVersion?: 'v2' | 'v3';
-}) {
-  const MockModel = modelVersion === 'v2' ? MastraLanguageModelV2Mock : MastraLanguageModelV3Mock;
-  const convertArrayToReadableStream =
-    modelVersion === 'v2' ? convertArrayToReadableStreamV2 : convertArrayToReadableStreamV3;
-  const testUsage = modelVersion === 'v2' ? testUsageV2 : testUsageV3;
-
+export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.textStream', () => {
     it('should send text deltas', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = loopFn({
+      const result = await loopFn({
         methodType: 'stream',
         runId,
         models: [
           {
             id: 'test-model',
             maxRetries: 0,
-            model: new MockModel({
-              doStream: async ({ prompt }: { prompt: unknown }) => {
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                console.dir({ prompt }, { depth: null });
                 expect(prompt).toStrictEqual([
                   {
                     role: 'user',
                     content: [{ type: 'text', text: 'test-input' }],
+                    // providerOptions: undefined,
                   },
                 ]);
 
@@ -55,10 +41,10 @@ export function textStreamTests({
                       finishReason: 'stop',
                       usage: testUsage,
                     },
-                  ] as any),
+                  ]),
                 };
               },
-            } as any),
+            }),
           },
         ],
         messageList,

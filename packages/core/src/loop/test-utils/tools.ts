@@ -1,44 +1,19 @@
-import { convertAsyncIterableToArray as convertAsyncIterableToArrayV2 } from '@ai-sdk/provider-utils-v5/test';
-import { convertAsyncIterableToArray as convertAsyncIterableToArrayV3 } from '@ai-sdk/provider-utils-v6/test';
+import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
 import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV2,
-  convertReadableStreamToArray as convertReadableStreamToArrayV2,
+  convertArrayToReadableStream,
+  convertReadableStreamToArray,
   mockValues,
   mockId,
 } from '@internal/ai-sdk-v5/test';
-import {
-  convertArrayToReadableStream as convertArrayToReadableStreamV3,
-  convertReadableStreamToArray as convertReadableStreamToArrayV3,
-} from '@internal/ai-v6/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import z from 'zod';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
-import { createTestModelsV3, testUsageV3 } from './utils-v3';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
-import { MastraLanguageModelV3Mock as MockLanguageModelV3 } from './MastraLanguageModelV3Mock';
 
-export function toolsTests({
-  loopFn,
-  runId,
-  modelVersion = 'v2',
-}: {
-  loopFn: typeof loop;
-  runId: string;
-  modelVersion?: 'v2' | 'v3';
-}) {
-  // Version-aware utilities
-  const convertArrayToReadableStream =
-    modelVersion === 'v2' ? convertArrayToReadableStreamV2 : convertArrayToReadableStreamV3;
-  const convertReadableStreamToArray =
-    modelVersion === 'v2' ? convertReadableStreamToArrayV2 : convertReadableStreamToArrayV3;
-  const convertAsyncIterableToArray =
-    modelVersion === 'v2' ? convertAsyncIterableToArrayV2 : convertAsyncIterableToArrayV3;
-  const createTestModelsForVersion = modelVersion === 'v2' ? createTestModels : createTestModelsV3;
-  const testUsageForVersion = modelVersion === 'v2' ? testUsage : testUsageV3;
-  const MockModel = modelVersion === 'v2' ? MockLanguageModelV2 : MockLanguageModelV3;
+export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
     describe('single provider-executed tool call and result', () => {
       let result: MastraModelOutput;
@@ -48,7 +23,7 @@ export function toolsTests({
           methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
-          models: createTestModelsForVersion({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -97,9 +72,9 @@ export function toolsTests({
               {
                 type: 'finish',
                 finishReason: 'stop',
-                usage: testUsageForVersion,
+                usage: testUsage,
               },
-            ] as any) as any,
+            ]),
           }),
           tools: {
             web_search: {
@@ -341,7 +316,7 @@ export function toolsTests({
           methodType: 'stream',
           runId,
           messageList: createMessageListWithUserMessage(),
-          models: createTestModelsForVersion({
+          models: createTestModels({
             stream: convertArrayToReadableStream([
               {
                 type: 'tool-input-start',
@@ -366,9 +341,9 @@ export function toolsTests({
               {
                 type: 'finish',
                 finishReason: 'tool-calls',
-                usage: testUsageForVersion,
+                usage: testUsage,
               },
-            ] as any) as any,
+            ]),
           }),
           tools: {
             dynamicTool: dynamicTool({
@@ -564,7 +539,7 @@ export function toolsTests({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
-        models: createTestModelsForVersion({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -625,9 +600,9 @@ export function toolsTests({
             {
               type: 'finish',
               finishReason: 'tool-calls',
-              usage: testUsageForVersion,
+              usage: testUsage,
             },
-          ] as any) as any,
+          ]),
         }),
         tools: {
           'test-tool': {
@@ -847,8 +822,8 @@ export function toolsTests({
           {
             maxRetries: 0,
             id: 'test-model',
-            model: new MockModel({
-              doStream: async ({ prompt, tools, toolChoice }: any) => {
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt, tools, toolChoice }) => {
                 expect(tools).toStrictEqual([
                   {
                     type: 'function',
@@ -891,12 +866,12 @@ export function toolsTests({
                     {
                       type: 'finish',
                       finishReason: 'stop',
-                      usage: testUsageForVersion,
+                      usage: testUsage,
                     },
-                  ] as any),
+                  ]),
                 };
               },
-            } as any),
+            }),
           },
         ],
         tools: {
@@ -929,7 +904,7 @@ export function toolsTests({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModelsForVersion({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -946,9 +921,9 @@ export function toolsTests({
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsageForVersion,
+              usage: testUsage,
             },
-          ] as any) as any,
+          ]),
         }),
         tools: {
           tool1: {
@@ -965,48 +940,70 @@ export function toolsTests({
     it('should include tool error part in the full stream', async () => {
       const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
 
-      expect(fullStream).toMatchObject([
-        { type: 'start' },
-        { request: {}, type: 'start-step', warnings: [] },
-        {
-          input: { value: 'value' },
-          providerExecuted: undefined,
-          providerMetadata: undefined,
-          toolCallId: 'call-1',
-          toolName: 'tool1',
-          type: 'tool-call',
-        },
-        {
-          error: expect.any(Error),
-          input: { value: 'value' },
-          providerExecuted: undefined,
-          toolCallId: 'call-1',
-          toolName: 'tool1',
-          type: 'tool-error',
-        },
-        {
-          finishReason: 'stop',
-          providerMetadata: undefined,
-          response: {
-            headers: undefined,
-            id: 'id-0',
-            modelId: 'mock-model-id',
-            modelMetadata: {
-              modelId: 'mock-model-id',
-              modelProvider: 'mock-provider',
-              modelVersion,
-            },
-            timestamp: new Date(0),
+      console.log(fullStream);
+
+      expect(fullStream).toMatchInlineSnapshot(`
+        [
+          {
+            "type": "start",
           },
-          type: 'finish-step',
-          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-        },
-        {
-          finishReason: 'stop',
-          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
-          type: 'finish',
-        },
-      ]);
+          {
+            "request": {},
+            "type": "start-step",
+            "warnings": [],
+          },
+          {
+            "input": {
+              "value": "value",
+            },
+            "providerExecuted": undefined,
+            "providerMetadata": undefined,
+            "toolCallId": "call-1",
+            "toolName": "tool1",
+            "type": "tool-call",
+          },
+          {
+            "error": [Error: test error],
+            "input": {
+              "value": "value",
+            },
+            "providerExecuted": undefined,
+            "toolCallId": "call-1",
+            "toolName": "tool1",
+            "type": "tool-error",
+          },
+          {
+            "finishReason": "stop",
+            "providerMetadata": undefined,
+            "response": {
+              "headers": undefined,
+              "id": "id-0",
+              "modelId": "mock-model-id",
+              "modelMetadata": {
+                "modelId": "mock-model-id",
+                "modelProvider": "mock-provider",
+                "modelVersion": "v2",
+              },
+              "timestamp": 1970-01-01T00:00:00.000Z,
+            },
+            "type": "finish-step",
+            "usage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+          },
+          {
+            "finishReason": "stop",
+            "totalUsage": {
+              "inputTokens": 3,
+              "outputTokens": 10,
+              "totalTokens": 13,
+            },
+            "type": "finish",
+          },
+        ]
+      `);
     });
 
     it.skip('should include the error part in the step stream', async () => {
@@ -1174,7 +1171,7 @@ export function toolsTests({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModelsForVersion({
+        models: createTestModels({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -1212,9 +1209,9 @@ export function toolsTests({
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsageForVersion,
+              usage: testUsage,
             },
-          ] as any) as any,
+          ]),
         }),
         tools: {},
         ...defaultSettings(),
