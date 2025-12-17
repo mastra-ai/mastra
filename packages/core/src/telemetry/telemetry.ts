@@ -1,6 +1,7 @@
 import { context as otlpContext, SpanStatusCode, trace, propagation, context } from '@opentelemetry/api';
 import type { Tracer, SpanOptions, Context, Span, BaggageEntry } from '@opentelemetry/api';
 
+import { boundedStringify } from '../ai-tracing/serialization';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { OtelConfig } from './types';
 import { getBaggageValues, hasActiveTelemetry } from './utility';
@@ -235,13 +236,9 @@ export class Telemetry {
           }
         }
 
-        // Record input arguments as span attributes
+        // Record input arguments as span attributes (with bounded serialization)
         args.forEach((arg, index) => {
-          try {
-            span.setAttribute(`${context.spanName}.argument.${index}`, JSON.stringify(arg));
-          } catch {
-            span.setAttribute(`${context.spanName}.argument.${index}`, '[Not Serializable]');
-          }
+          span.setAttribute(`${context.spanName}.argument.${index}`, boundedStringify(arg));
         });
 
         let result: any;
@@ -250,14 +247,8 @@ export class Telemetry {
         });
 
         function recordResult(res: any) {
-          try {
-            span.setAttribute(`${context.spanName}.result`, JSON.stringify(res));
-          } catch {
-            span.setAttribute(`${context.spanName}.result`, '[Not Serializable]');
-          }
-
+          span.setAttribute(`${context.spanName}.result`, boundedStringify(res));
           span.end();
-
           return res;
         }
 

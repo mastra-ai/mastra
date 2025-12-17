@@ -1,4 +1,5 @@
 import { MastraError } from '../../error';
+import { deepClean } from '../serialization';
 import type {
   AISpanType,
   AITracing,
@@ -7,7 +8,7 @@ import type {
   UpdateSpanOptions,
   CreateSpanOptions,
 } from '../types';
-import { BaseAISpan, deepClean } from './base';
+import { BaseAISpan } from './base';
 
 export class DefaultAISpan<TType extends AISpanType> extends BaseAISpan<TType> {
   public id: string;
