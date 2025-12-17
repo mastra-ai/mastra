@@ -59,33 +59,53 @@ function isStreamingMethod(methodName: string): boolean {
 function enhanceStreamingArgumentsWithTelemetry(args: unknown[], span: EnhancedSpan, spanName: string): unknown[] {
   const enhancedArgs = [...args];
 
-  // Typical AI SDK signature: (model, options?) OR (prompt, options?)
-  const streamOptions = (enhancedArgs.length > 1 && (enhancedArgs[1] as StreamOptions)) || ({} as StreamOptions);
-  const enhancedStreamOptions: StreamOptions = { ...streamOptions };
+  // Helper to check if value is a plain object
+  const isPlainObject = (val: unknown): val is Record<string, unknown> =>
+    val !== null && typeof val === 'object' && !Array.isArray(val);
 
-  const originalOnFinish = enhancedStreamOptions.onFinish;
+  // Create the enhanced onFinish callback
+  const createEnhancedOnFinish = (originalOnFinish?: (data: StreamFinishData) => Promise<void> | void) => {
+    const enhancedOnFinish = async (finishData: StreamFinishData) => {
+      const telemetryData = {
+        text: finishData.text,
+        usage: finishData.usage,
+        finishReason: finishData.finishReason,
+        toolCalls: finishData.toolCalls,
+        toolResults: finishData.toolResults,
+        warnings: finishData.warnings,
+        ...(finishData.object !== undefined && { object: finishData.object }),
+      };
 
-  enhancedStreamOptions.onFinish = async (finishData: StreamFinishData) => {
-    const telemetryData = {
-      text: finishData.text,
-      usage: finishData.usage,
-      finishReason: finishData.finishReason,
-      toolCalls: finishData.toolCalls,
-      toolResults: finishData.toolResults,
-      warnings: finishData.warnings,
-      ...(finishData.object !== undefined && { object: finishData.object }),
+      span.setAttribute(`${spanName}.result`, boundedStringify(telemetryData));
+      span.setStatus({ code: SpanStatusCode.OK });
+      endSpanOnce(span);
+
+      if (originalOnFinish) return await originalOnFinish(finishData);
     };
-
-    span.setAttribute(`${spanName}.result`, boundedStringify(telemetryData));
-    span.setStatus({ code: SpanStatusCode.OK });
-    endSpanOnce(span);
-
-    if (originalOnFinish) return await originalOnFinish(finishData);
+    (enhancedOnFinish as any).__hasOriginalOnFinish = !!originalOnFinish;
+    return enhancedOnFinish;
   };
 
-  (enhancedStreamOptions.onFinish as any).__hasOriginalOnFinish = !!originalOnFinish;
+  // Case 1: Single object argument (e.g., TTS.stream({ text }))
+  if (enhancedArgs.length === 1 && isPlainObject(enhancedArgs[0])) {
+    const singleArg = enhancedArgs[0] as StreamOptions;
+    const originalOnFinish = singleArg.onFinish;
+    enhancedArgs[0] = {
+      ...singleArg,
+      onFinish: createEnhancedOnFinish(originalOnFinish),
+    };
+  }
+  // Case 2: Two-argument signature (model/prompt, options?)
+  else {
+    const streamOptions =
+      enhancedArgs.length > 1 && isPlainObject(enhancedArgs[1]) ? (enhancedArgs[1] as StreamOptions) : {};
+    const originalOnFinish = streamOptions.onFinish;
+    enhancedArgs[1] = {
+      ...streamOptions,
+      onFinish: createEnhancedOnFinish(originalOnFinish),
+    };
+  }
 
-  enhancedArgs[1] = enhancedStreamOptions;
   span.__mastraStreamingSpan = true;
   return enhancedArgs;
 }
