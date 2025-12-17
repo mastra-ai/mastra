@@ -78,6 +78,10 @@ await workflow.getWorkflowRunExecutionResult(runId, {
 });
 ```
 
+## Inngest Compatibility
+
+The `@mastra/inngest` package has been updated to use the new options object API. This is a non-breaking internal change - no action required from inngest workflow users.
+
 ## Performance Impact
 
 For workflows with large step outputs:
