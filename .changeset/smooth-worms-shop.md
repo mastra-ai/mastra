@@ -11,6 +11,5 @@ This fix ensures that requestContext set by middleware is correctly prioritized 
 2. Context from defaultOptions
 3. Context from request body (lowest priority)
 
-The fix explicitly removes any requestContext from the request params before spreading to avoid ambiguity and ensures the effective context is passed through to agent execution.
 
 Resolves #11192
