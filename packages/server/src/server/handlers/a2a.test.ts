@@ -200,7 +200,6 @@ describe('A2A Handler', () => {
           contextId: expect.any(String),
           metadata: {
             execution: {
-              steps: undefined,
               toolCalls: undefined,
               toolResults: undefined,
               usage: undefined,
@@ -691,7 +690,6 @@ describe('A2A Handler', () => {
           ],
           metadata: {
             execution: {
-              steps: undefined,
               toolCalls: undefined,
               toolResults: undefined,
               usage: undefined,
@@ -718,7 +716,7 @@ describe('A2A Handler', () => {
       });
     });
 
-    it('should store execution details (steps, toolCalls, toolResults, usage) in task metadata', async () => {
+    it('should store execution details (toolCalls, toolResults, usage) in task metadata', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
       const agentId = 'test-agent';
@@ -727,25 +725,6 @@ describe('A2A Handler', () => {
 
       const mockExecutionData = {
         text: agentResponseText,
-        steps: [
-          {
-            stepType: 'initial',
-            toolCalls: [
-              {
-                toolCallId: 'call_123',
-                toolName: 'createChart',
-                args: { data: 'sales data' },
-              },
-            ],
-            toolResults: [
-              {
-                toolCallId: 'call_123',
-                toolName: 'createChart',
-                result: { chartUrl: 'https://example.com/chart.png' },
-              },
-            ],
-          },
-        ],
         toolCalls: [
           {
             toolCallId: 'call_123',
@@ -790,7 +769,6 @@ describe('A2A Handler', () => {
       // Verify the execution metadata is stored
       expect(result.result?.metadata).toEqual({
         execution: {
-          steps: mockExecutionData.steps,
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
           usage: mockExecutionData.usage,
@@ -806,7 +784,6 @@ describe('A2A Handler', () => {
       const savedTask = await mockTaskStore.load({ agentId, taskId });
       expect(savedTask?.metadata).toEqual({
         execution: {
-          steps: mockExecutionData.steps,
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
           usage: mockExecutionData.usage,
@@ -829,7 +806,6 @@ describe('A2A Handler', () => {
 
       const mockExecutionData = {
         text: agentResponseText,
-        steps: [],
         toolCalls: [],
         toolResults: [],
         usage: {
@@ -864,7 +840,6 @@ describe('A2A Handler', () => {
       expect(result.result?.metadata).toEqual({
         ...existingMetadata,
         execution: {
-          steps: mockExecutionData.steps,
           toolCalls: mockExecutionData.toolCalls,
           toolResults: mockExecutionData.toolResults,
           usage: mockExecutionData.usage,
@@ -945,7 +920,6 @@ describe('A2A Handler', () => {
           contextId: expect.any(String),
           metadata: {
             execution: {
-              steps: undefined,
               toolCalls: undefined,
               toolResults: undefined,
               usage: undefined,
