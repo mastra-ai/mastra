@@ -33,6 +33,7 @@ export type ProcessorArgs = {
     input: any;
   };
   retryCount?: number;
+  stepThrough?: boolean;
 };
 
 export type ParentWorkflow = {
@@ -125,6 +126,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     executionPath,
     stepResults,
     requestContext,
+    stepThrough,
   }: ProcessorArgs) {
     // Preserve resourceId from existing snapshot if present
     const existingRun = await this.mastra.getStorage()?.getWorkflowRunById({ runId, workflowName: workflow.id });
@@ -168,17 +170,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         resumeData,
         activeSteps: {},
+        stepThrough,
       },
     });
   }
 
-  protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' = 'success') {
-    const { workflowId, runId, prevResult } = args;
+  protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
+    const { workflowId, runId, prevResult, stepThrough } = args;
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
       opts: {
-        status,
+        status: stepThrough ? 'paused' : status,
         result: prevResult,
       },
     });
@@ -344,6 +347,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow,
     requestContext,
     retryCount = 0,
+    stepThrough,
   }: ProcessorArgs) {
     let stepGraph: StepFlowEntry[] = workflow.stepGraph;
 
@@ -412,6 +416,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          stepThrough,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -433,6 +438,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          stepThrough,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -455,6 +461,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          stepThrough,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -477,6 +484,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          stepThrough,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -499,6 +507,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           resumeData,
           parentWorkflow,
           requestContext,
+          stepThrough,
         },
         {
           pubsub: this.mastra.pubsub,
@@ -592,6 +601,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData,
             activeSteps,
             requestContext,
+            stepThrough,
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
@@ -637,6 +647,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             timeTravel: timeTravelParams,
             activeSteps,
             requestContext,
+            stepThrough,
           },
         });
       } else {
@@ -662,6 +673,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumeData,
             activeSteps,
             requestContext,
+            stepThrough,
           },
         });
       }
@@ -752,6 +764,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult: stepResult,
         activeSteps,
         requestContext,
+        stepThrough,
       });
       return;
     }
@@ -834,6 +847,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           prevResult: stepResult,
           activeSteps,
           requestContext,
+          stepThrough,
         },
       });
     }
@@ -852,6 +866,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     activeSteps,
     parentContext,
     requestContext,
+    stepThrough,
   }: ProcessorArgs) {
     let step = workflow.stepGraph[executionPath[0]!];
 
@@ -1037,7 +1052,21 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     step = workflow.stepGraph[executionPath[0]!];
-    if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
+    if (stepThrough) {
+      await this.endWorkflow({
+        workflow,
+        parentWorkflow,
+        workflowId,
+        runId,
+        executionPath,
+        resumeSteps,
+        stepResults,
+        prevResult,
+        activeSteps,
+        requestContext,
+        stepThrough,
+      });
+    } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
