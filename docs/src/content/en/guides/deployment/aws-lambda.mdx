@@ -30,7 +30,7 @@ Before deploying to AWS Lambda, ensure you have:
 ## Memory Configuration
 
 :::warning
-AWS Lambda uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/reference/v1/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+AWS Lambda uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:

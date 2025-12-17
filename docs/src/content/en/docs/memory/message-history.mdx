@@ -25,7 +25,7 @@ export const agent = new Agent({
 
 Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
-```typescript copy
+```typescript 
 // Get messages for a thread with pagination
 const result = await mastra
   .getStorage()
@@ -58,7 +58,7 @@ The `threadId` parameter accepts either a single thread ID string or an array of
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
-```typescript copy
+```typescript 
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 const result = await mastra

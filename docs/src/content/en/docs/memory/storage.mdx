@@ -8,7 +8,7 @@ description: Configure storage for Mastra's memory system to persist conversatio
 For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
 
 
-```typescript copy
+```typescript 
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
@@ -48,7 +48,7 @@ You can configure storage at two different scopes:
 
 Add storage to your Mastra instance so all agents share the same memory provider:
 
-```typescript copy
+```typescript 
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
@@ -68,7 +68,7 @@ const agent2 = new Agent({ memory: new Memory() });
 
 Add storage to a specific agent when you need data boundaries or compliance requirements:
 
-```typescript copy
+```typescript 
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { PostgresStore } from "@mastra/pg";
@@ -94,7 +94,7 @@ Mastra organizes memory into threads using two identifiers:
 
 Both identifiers are required for agents to store and recall information:
 
-```typescript copy
+```typescript 
 const stream = await agent.stream("message for agent", {
   memory: {
     thread: "convo_123",
@@ -113,7 +113,7 @@ Mastra can automatically generate descriptive thread titles based on the user's 
 
 Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
 
-```typescript showLineNumbers copy
+```typescript 
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
@@ -127,7 +127,7 @@ Title generation runs asynchronously after the agent responds and does not affec
 
 To optimize cost or behavior, provide a smaller `model` and custom `instructions`:
 
-```typescript showLineNumbers copy
+```typescript
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
@@ -148,7 +148,7 @@ Semantic recall uses vector embeddings to retrieve relevant past messages based 
 
 The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
 
-```typescript copy
+```typescript 
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";

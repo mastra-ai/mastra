@@ -189,7 +189,7 @@ const results = await vectorStore.query({
 
 To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
 
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { MongoDBStore } from "@mastra/mongodb";
@@ -218,7 +218,7 @@ export const mongodbAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/test-mongodb-agent.ts"
 import "dotenv/config";
 
 import { mastra } from "./mastra";

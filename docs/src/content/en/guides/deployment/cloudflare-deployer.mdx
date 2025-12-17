@@ -8,7 +8,7 @@ description: "Learn how to deploy a Mastra application to Cloudflare using the M
 The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
 
 :::warning
-Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQLStore](/reference/v1/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Installation

@@ -161,7 +161,7 @@ This approach is intended for advanced scenarios where low-level access is requi
 
 To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
 
-```typescript title="src/mastra/agents/example-pg-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-pg-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { PostgresStore } from "@mastra/pg";
@@ -188,7 +188,7 @@ export const pgAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript title="src/test-pg-agent.ts" showLineNumbers copy
+```typescript title="src/test-pg-agent.ts" 
 import "dotenv/config";
 
 import { mastra } from "./mastra";
