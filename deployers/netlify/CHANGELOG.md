@@ -1,5 +1,13 @@
 # @mastra/deployer-netlify
 
+## 0.13.26-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`c56f64b`](https://github.com/mastra-ai/mastra/commit/c56f64b0d7365d744cfe99f54369795917c057b7)]:
+  - @mastra/core@0.24.9-alpha.0
+  - @mastra/deployer@0.24.9-alpha.0
+
 ## 0.13.25
 
 ### Patch Changes
