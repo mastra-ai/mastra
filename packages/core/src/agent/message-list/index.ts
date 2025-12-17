@@ -13,6 +13,7 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { IdGeneratorContext } from '../../types';
 import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -143,7 +144,7 @@ export class MessageList {
   private newResponseMessagesPersisted = new Set<MastraDBMessage>();
   private userContextMessagesPersisted = new Set<MastraDBMessage>();
 
-  private generateMessageId?: IdGenerator;
+  private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
 
   // Event recording for observability
@@ -164,7 +165,11 @@ export class MessageList {
     generateMessageId,
     // @ts-ignore Flag for agent network messages
     _agentNetworkAppend,
-  }: { threadId?: string; resourceId?: string; generateMessageId?: AIV4Type.IdGenerator } = {}) {
+  }: {
+    threadId?: string;
+    resourceId?: string;
+    generateMessageId?: ((context?: IdGeneratorContext) => string) | AIV4Type.IdGenerator;
+  } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
@@ -1615,9 +1620,15 @@ export class MessageList {
     return now;
   }
 
-  private newMessageId(): string {
+  private newMessageId(role?: string): string {
     if (this.generateMessageId) {
-      return this.generateMessageId();
+      return this.generateMessageId({
+        idType: 'message',
+        source: 'memory',
+        threadId: this.memoryInfo?.threadId,
+        resourceId: this.memoryInfo?.resourceId,
+        role,
+      });
     }
     return randomUUID();
   }
@@ -1644,7 +1655,7 @@ export class MessageList {
   private hydrateMastraDBMessageFields(message: MastraDBMessage): MastraDBMessage {
     // Generate ID if missing
     if (!message.id) {
-      message.id = this.newMessageId();
+      message.id = this.newMessageId(message.role);
     }
 
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
@@ -1702,9 +1713,10 @@ export class MessageList {
       content.metadata = message.metadata as Record<string, unknown>;
     }
 
+    const role = MessageList.getRole(message);
     return {
-      id: message.id || this.newMessageId(),
-      role: MessageList.getRole(message),
+      id: message.id || this.newMessageId(role),
+      role,
       createdAt: this.generateCreatedAt(messageSource, message.createdAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
@@ -1712,7 +1724,7 @@ export class MessageList {
     } satisfies MastraDBMessage;
   }
   private aiV4CoreMessageToMastraDBMessage(coreMessage: CoreMessageV4, messageSource: MessageSource): MastraDBMessage {
-    const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
+    const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId(coreMessage.role);
     const parts: UIMessageV4['parts'] = [];
     const experimentalAttachments: UIMessageV4['experimental_attachments'] = [];
     const toolInvocations: ToolInvocationV4[] = [];
