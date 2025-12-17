@@ -163,8 +163,8 @@ export const POST: RequestHandler = async ({ request }) => {
       ...params,
       memory: {
         ...params.memory,
-        threadId: THREAD_ID,
-        resourceId: RESOURCE_ID,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
       },
     },
   });
@@ -221,17 +221,15 @@ Replace `src/routes/+page.svelte` with the following.
 
   let input = $state('');
   const { data } = $props();
-  // let messages = $derived(data.initialMessages)
+  let messages = $derived(data.initialMessages)
 
   const chat = new Chat({
     transport: new DefaultChatTransport({
       api: '/api/chat'
     }),
-    /* TODO: Enable once new beta is out
     get messages() {
       return messages;
     }
-    */
   });
 
   function handleSubmit(event: SubmitEvent) {
