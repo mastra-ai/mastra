@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/components/ui/skeleton';
+import { supportedLanguageModelSpecifications } from '@mastra/core/agent';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -77,11 +78,11 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const hasMemory = Boolean(memory?.result);
   const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent.modelVersion;
-  const isVNext = modelVersion === 'v2' || modelVersion === 'v3';
+  const isSupportedModel = !!modelVersion && supportedLanguageModelSpecifications.includes(modelVersion);
 
   let radioValue;
 
-  if (isVNext) {
+  if (isSupportedModel) {
     if (settings?.modelSettings?.chatWithNetwork) {
       radioValue = 'network';
     } else {
@@ -111,7 +112,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
             }
             className="flex flex-row gap-4"
           >
-            {!isVNext && (
+            {!isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
@@ -119,7 +120,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {isVNext && (
+            {isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generate" id="generate" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generate">
@@ -127,7 +128,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {!isVNext && (
+            {!isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
@@ -135,7 +136,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {isVNext && (
+            {isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="stream" id="stream" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="stream">
@@ -143,7 +144,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {isVNext && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
+            {isSupportedModel && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
           </RadioGroup>
         </Entry>
         <Entry label="Require Tool Approval">

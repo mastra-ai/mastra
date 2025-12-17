@@ -8,6 +8,7 @@ import {
 } from '@assistant-ui/react';
 import { useState, ReactNode, useRef } from 'react';
 import { RequestContext } from '@mastra/core/di';
+import { supportedLanguageModelSpecifications } from '@mastra/core/agent';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
@@ -240,7 +241,7 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
-  const isVNext = modelVersion === 'v2' || modelVersion === 'v3';
+  const isSupportedModel = !!modelVersion && supportedLanguageModelSpecifications.includes(modelVersion);
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
@@ -248,7 +249,7 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    if (!isVNext) {
+    if (!isSupportedModel) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
 
@@ -265,7 +266,7 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      if (isVNext) {
+      if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
             message: input,
@@ -691,7 +692,7 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      if (isVNext) {
+      if (isSupportedModel) {
         setMessages(currentConversation => [
           ...currentConversation,
           { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
@@ -723,7 +724,7 @@ export function MastraRuntimeProvider({
 
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,
-    messages: isVNext ? vnextmessages : legacyMessages,
+    messages: isSupportedModel ? vnextmessages : legacyMessages,
     convertMessage: x => x,
     onNew,
     onCancel,
