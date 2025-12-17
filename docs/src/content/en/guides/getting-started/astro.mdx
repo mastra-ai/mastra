@@ -236,8 +236,8 @@ export const POST: APIRoute = async ({ request }) => {
       ...params,
       memory: {
         ...params.memory,
-        threadId: THREAD_ID,
-        resourceId: RESOURCE_ID,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
       }
     }
   })
