@@ -173,12 +173,36 @@ export const sendWorkflowRunEventBodySchema = z.object({
 });
 
 /**
+ * Schema for workflow execution result query parameters
+ * Allows filtering which fields to return to reduce payload size
+ */
+export const workflowExecutionResultQuerySchema = z.object({
+  fields: z
+    .string()
+    .optional()
+    .describe(
+      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
+    ),
+  withNestedWorkflows: z
+    .enum(['true', 'false'])
+    .optional()
+    .describe(
+      'Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.',
+    ),
+});
+
+/**
  * Schema for workflow execution result
+ * All fields are optional since field filtering allows requesting specific fields only
  */
 export const workflowExecutionResultSchema = z.object({
-  status: workflowRunStatusSchema,
+  status: workflowRunStatusSchema.optional(),
   result: z.unknown().optional(),
   error: z.unknown().optional(),
+  payload: z.unknown().optional(),
+  steps: z.record(z.string(), z.any()).optional(),
+  activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
+  serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
 });
 
 /**

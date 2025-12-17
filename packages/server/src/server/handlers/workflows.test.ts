@@ -504,6 +504,49 @@ describe('vNext Workflow Handlers', () => {
         serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
     });
+
+    it('should get workflow run execution result with field filtering (status only)', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-fields',
+      });
+      await run.start({ inputData: {} });
+      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-fields',
+        fields: 'status',
+      } as any);
+
+      // Should only return status field
+      expect(result).toEqual({
+        status: 'success',
+      });
+      expect(result.steps).toBeUndefined();
+      expect(result.result).toBeUndefined();
+    });
+
+    it('should get workflow run execution result with multiple fields', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-multi-fields',
+      });
+      await run.start({ inputData: {} });
+      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-multi-fields',
+        fields: 'status,result,error',
+      } as any);
+
+      // Should only return requested fields
+      expect(result).toEqual({
+        status: 'success',
+        result: { result: 'success' },
+        error: undefined,
+      });
+      expect(result.steps).toBeUndefined();
+      expect(result.payload).toBeUndefined();
+      expect(result.activeStepsPath).toBeUndefined();
+    });
   });
 
   describe('CREATE_WORKFLOW_RUN_ROUTE', () => {
