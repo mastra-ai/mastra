@@ -243,7 +243,7 @@ export interface StepStartPayload {
 export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   id?: string;
   providerMetadata?: ProviderMetadata;
-  totalUsage?: LanguageModelV2Usage;
+  totalUsage?: LanguageModelUsage;
   response?: LanguageModelV2ResponseMetadata;
   messageId?: string;
   stepResult: {
@@ -255,7 +255,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
   output: {
     text?: string;
     toolCalls?: TypedToolCall<Tools>[];
-    usage: LanguageModelV2Usage;
+    usage: LanguageModelUsage;
     /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
     steps?: MastraStepResult<Tools>[];
     object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
@@ -368,7 +368,7 @@ interface RoutingAgentEndPayload {
   selectionReason: string;
   iteration: number;
   runId: string;
-  usage: LanguageModelV2Usage;
+  usage: LanguageModelUsage;
 }
 
 interface RoutingAgentTextDeltaPayload {
@@ -400,7 +400,7 @@ interface AgentExecutionEndPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
-  usage: LanguageModelV2Usage;
+  usage: LanguageModelUsage;
   runId: string;
 }
 
@@ -429,7 +429,7 @@ interface WorkflowExecutionEndPayload {
   result: string;
   isComplete: boolean;
   iteration: number;
-  usage: LanguageModelV2Usage;
+  usage: LanguageModelUsage;
   runId: string;
 }
 
@@ -477,7 +477,7 @@ interface NetworkFinishPayload {
   threadId?: string;
   threadResourceId?: string;
   isOneOff: boolean;
-  usage: LanguageModelV2Usage;
+  usage: LanguageModelUsage;
 }
 
 interface ToolCallApprovalPayload {
@@ -677,10 +677,11 @@ export type ModelManagerModelConfig = {
   id: string;
 };
 
-export interface LanguageModelUsage {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
+/**
+ * Extended usage type that includes raw provider data.
+ * Extends LanguageModelV2Usage with additional fields for V3 compatibility.
+ */
+export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   /**
@@ -689,7 +690,7 @@ export interface LanguageModelUsage {
    * { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
    */
   raw?: unknown;
-}
+};
 
 export type partialModel = {
   modelId?: string;
