@@ -12,6 +12,7 @@ import type {
   StepFlowEntry,
   StepResult,
   TimeTravelExecutionParams,
+  WorkflowRunStatus,
 } from '../types';
 
 export interface PersistStepUpdateParams {
@@ -21,7 +22,7 @@ export interface PersistStepUpdateParams {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
   executionContext: ExecutionContext;
-  workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
+  workflowStatus: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: SerializedError;
   requestContext: RequestContext;
@@ -106,6 +107,7 @@ export interface ExecuteEntryParams {
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
+  stepThrough?: boolean;
 }
 
 export async function executeEntry(
@@ -130,6 +132,7 @@ export async function executeEntry(
     requestContext,
     outputWriter,
     disableScorers,
+    stepThrough,
   } = params;
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
@@ -156,6 +159,7 @@ export async function executeEntry(
       outputWriter,
       disableScorers,
       serializedStepGraph,
+      stepThrough,
     });
 
     // Extract result and apply context changes
@@ -190,6 +194,7 @@ export async function executeEntry(
       requestContext,
       outputWriter,
       disableScorers,
+      stepThrough,
     });
 
     // After resuming one parallel step, check if ALL parallel steps are complete
@@ -273,6 +278,7 @@ export async function executeEntry(
       requestContext,
       outputWriter,
       disableScorers,
+      stepThrough,
     });
   } else if (entry.type === 'conditional') {
     execResults = await engine.executeConditional({
@@ -292,6 +298,7 @@ export async function executeEntry(
       requestContext,
       outputWriter,
       disableScorers,
+      stepThrough,
     });
   } else if (entry.type === 'loop') {
     execResults = await engine.executeLoop({
@@ -312,6 +319,7 @@ export async function executeEntry(
       outputWriter,
       disableScorers,
       serializedStepGraph,
+      stepThrough,
     });
   } else if (entry.type === 'foreach') {
     execResults = await engine.executeForeach({
@@ -332,6 +340,7 @@ export async function executeEntry(
       outputWriter,
       disableScorers,
       serializedStepGraph,
+      stepThrough,
     });
   } else if (entry.type === 'sleep') {
     const startedAt = Date.now();

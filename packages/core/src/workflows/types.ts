@@ -235,7 +235,8 @@ export type WorkflowRunStatus =
   | 'waiting'
   | 'pending'
   | 'canceled'
-  | 'bailed';
+  | 'bailed'
+  | 'paused';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
@@ -564,6 +565,22 @@ export type WorkflowResult<
       };
       suspendPayload: any;
       suspended: [string[], ...string[][]];
+    } & TracingProperties)
+  | ({
+      status: 'paused';
+      state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      input: z.infer<TInput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
     } & TracingProperties);
 
 export type WorkflowStreamResult<

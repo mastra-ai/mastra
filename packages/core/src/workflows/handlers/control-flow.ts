@@ -54,6 +54,7 @@ export interface ExecuteParallelParams {
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
+  stepThrough?: boolean;
 }
 
 export async function executeParallel(
@@ -78,6 +79,7 @@ export async function executeParallel(
     requestContext,
     outputWriter,
     disableScorers,
+    stepThrough,
   } = params;
 
   const parallelSpan = tracingContext.currentSpan?.createChildSpan({
@@ -92,6 +94,7 @@ export async function executeParallel(
   });
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
+  let isStepThroughStepMadeRunning = false;
   for (const [stepIndex, step] of entry.steps.entries()) {
     let makeStepRunning = true;
     if (restart) {
@@ -101,6 +104,9 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === step.step.id;
     }
     if (!makeStepRunning) {
+      continue;
+    }
+    if (stepThrough && isStepThroughStepMadeRunning) {
       continue;
     }
     const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
@@ -113,6 +119,9 @@ export async function executeParallel(
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     } as StepResult<any, any, any, any>;
     executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
+    if (stepThrough) {
+      isStepThroughStepMadeRunning = true;
+    }
   }
 
   if (timeTravel && timeTravel.executionPath.length > 0) {
@@ -125,6 +134,9 @@ export async function executeParallel(
       const currStepResult = stepResults[step.step.id];
       if (currStepResult && currStepResult.status !== 'running') {
         return currStepResult;
+      }
+      if (!currStepResult && (stepThrough || timeTravel)) {
+        return {} as StepResult<any, any, any, any>;
       }
       const stepExecResult = await engine.executeStep({
         workflowId,
@@ -155,6 +167,7 @@ export async function executeParallel(
         requestContext,
         outputWriter,
         disableScorers,
+        stepThrough,
       });
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
@@ -232,6 +245,7 @@ export interface ExecuteConditionalParams {
   requestContext: RequestContext;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
+  stepThrough?: boolean;
 }
 
 export async function executeConditional(
@@ -256,6 +270,7 @@ export async function executeConditional(
     requestContext,
     outputWriter,
     disableScorers,
+    stepThrough,
   } = params;
 
   const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
@@ -360,7 +375,18 @@ export async function executeConditional(
     )
   ).filter((index): index is number => index !== null);
 
-  const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
+  let stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
+  if (stepThrough || (timeTravel && timeTravel.executionPath.length > 0)) {
+    const possibleStepsToRun = stepsToRun.filter(s => {
+      const currStepResult = stepResults[s.step.id];
+      if (timeTravel && timeTravel.executionPath.length > 0) {
+        return timeTravel.steps[0] === s.step.id;
+      }
+      return !currStepResult;
+    });
+    const possibleStepToRun = possibleStepsToRun?.[0];
+    stepsToRun = possibleStepToRun ? [possibleStepToRun] : stepsToRun;
+  }
 
   // Update conditional span with evaluation results
   conditionalSpan?.update({
@@ -414,6 +440,7 @@ export async function executeConditional(
         requestContext,
         outputWriter,
         disableScorers,
+        stepThrough,
       });
 
       // Apply context changes from conditional step execution
@@ -496,6 +523,7 @@ export interface ExecuteLoopParams {
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
+  stepThrough?: boolean;
 }
 
 export async function executeLoop(
@@ -520,6 +548,7 @@ export async function executeLoop(
     outputWriter,
     disableScorers,
     serializedStepGraph,
+    stepThrough,
   } = params;
 
   const { step, condition } = entry;
@@ -565,6 +594,7 @@ export async function executeLoop(
       disableScorers,
       serializedStepGraph,
       iterationCount: iteration + 1,
+      stepThrough,
     });
 
     // Apply context changes from loop step execution
@@ -689,6 +719,7 @@ export interface ExecuteForeachParams {
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
+  stepThrough?: boolean;
 }
 
 export async function executeForeach(
@@ -713,6 +744,7 @@ export async function executeForeach(
     outputWriter,
     disableScorers,
     serializedStepGraph,
+    stepThrough,
   } = params;
 
   const { step, opts } = entry;
@@ -807,6 +839,7 @@ export async function executeForeach(
           outputWriter,
           disableScorers,
           serializedStepGraph,
+          stepThrough,
         });
 
         // Apply context changes from foreach step execution

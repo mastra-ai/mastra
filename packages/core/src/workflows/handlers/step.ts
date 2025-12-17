@@ -55,6 +55,7 @@ export interface ExecuteStepParams {
   serializedStepGraph: SerializedStepFlowEntry[];
   tracingContext: TracingContext;
   iterationCount?: number;
+  stepThrough?: boolean;
 }
 
 export async function executeStep(
@@ -81,6 +82,7 @@ export async function executeStep(
     serializedStepGraph,
     tracingContext,
     iterationCount,
+    stepThrough,
   } = params;
 
   const stepCallId = randomUUID();
@@ -169,8 +171,10 @@ export async function executeStep(
     requestContext,
   });
 
+  const isNestedWorkflowStep = engine.isNestedWorkflowStep(step);
+
   // Check if this is a nested workflow that requires special handling
-  if (engine.isNestedWorkflowStep(step)) {
+  if (isNestedWorkflowStep) {
     const workflowResult = await engine.executeWorkflowStep({
       step,
       stepResults,
@@ -186,6 +190,7 @@ export async function executeStep(
       tracingContext,
       outputWriter,
       stepSpan,
+      stepThrough,
     });
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
@@ -247,7 +252,7 @@ export async function executeStep(
         requestContextUpdate: null,
       };
 
-      const output = await runStep({
+      const runResult = await runStep({
         runId,
         resourceId,
         workflowId,
@@ -353,6 +358,7 @@ export async function executeStep(
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
+        stepThrough,
       });
 
       // Capture requestContext state after step execution (only for engines that need it)
@@ -360,7 +366,15 @@ export async function executeStep(
         contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
       }
 
-      return { output, suspended, bailed, contextMutations };
+      const output = isNestedWorkflowStep
+        ? runResult?.status === 'success'
+          ? runResult?.result
+          : undefined
+        : runResult;
+
+      const nestedWflowStepStatus = isNestedWorkflowStep ? runResult?.status : undefined;
+
+      return { output, suspended, bailed, contextMutations, nestedWflowStepStatus };
     },
     { retries, delay, stepSpan, workflowId, runId },
   );
@@ -409,6 +423,8 @@ export async function executeStep(
       };
     } else if (durableResult.bailed) {
       execResults = { status: 'bailed', output: durableResult.bailed.payload, endedAt: Date.now() };
+    } else if (durableResult.nestedWflowStepStatus === 'paused') {
+      execResults = { status: 'paused' };
     } else {
       execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };
     }

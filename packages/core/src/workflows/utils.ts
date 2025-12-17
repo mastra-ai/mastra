@@ -315,7 +315,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      const defaultStepStatus = steps?.includes(stepId) ? 'running' : 'success';
+      const isTimeTraveledStep = steps?.includes(stepId);
+      const defaultStepStatus = isTimeTraveledStep ? 'running' : 'success';
       const status = ['failed', 'canceled'].includes(stepContext?.status)
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
@@ -334,15 +335,23 @@ export const createTimeTravelExecutionParams = (params: {
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
       };
+      const isPairedWithTimeTravlledStep = stepIds.some(id => steps?.includes(id)); //steps in parallel or branch with the time travelled step
       if (
-        currentExecPathLength > 0 &&
-        (!snapshotContext[stepId] || (snapshotContext[stepId] && snapshotContext[stepId].status !== 'suspended'))
+        executionPath.length > 0 &&
+        !isTimeTraveledStep &&
+        ((!context?.[stepId] && !snapshotContext[stepId]) ||
+          (snapshotContext[stepId] && snapshotContext[stepId].status !== 'suspended'))
       ) {
         // if the step is after the timeTravelled step in the graph
         // and it doesn't exist in the snapshot,
         // OR it exists in snapshot and is not suspended,
         // we don't need to set stepResult for it
-        result = undefined;
+
+        if (snapshotContext[stepId] && isPairedWithTimeTravlledStep) {
+          //if the step is paired with the time travelled step, we need to set the stepResult from snapshot for it
+        } else {
+          result = undefined;
+        }
       }
       if (result) {
         const formattedResult = removeUndefinedValues(result);

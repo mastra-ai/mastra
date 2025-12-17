@@ -64,6 +64,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     abortController: AbortController;
     format?: 'legacy' | 'vnext' | undefined;
+    stepThrough?: boolean;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
@@ -87,6 +88,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeData: params.resume.resumePayload,
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          stepThrough: params.stepThrough,
         },
       });
     } else if (params.timeTravel) {
@@ -104,6 +106,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: prevResult?.payload },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          stepThrough: params.stepThrough,
         },
       });
     } else {
@@ -116,6 +119,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: params.input },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          stepThrough: params.stepThrough,
         },
       });
     }

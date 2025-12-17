@@ -1654,6 +1654,7 @@ export class Workflow<
     tracingContext,
     outputWriter,
     validateInputs,
+    stepThrough,
   }: {
     runId?: string;
     inputData: z.infer<TInput>;
@@ -1689,6 +1690,7 @@ export class Workflow<
     tracingContext?: TracingContext;
     outputWriter?: OutputWriter;
     validateInputs?: boolean;
+    stepThrough?: boolean;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1753,6 +1755,7 @@ export class Workflow<
         tracingContext,
         outputWriter,
         outputOptions: { includeState: true, includeResumeLabels: true },
+        stepThrough,
       });
     } else if (restart) {
       res = await run.restart({ requestContext, tracingContext, outputWriter });
@@ -1765,6 +1768,7 @@ export class Workflow<
         outputWriter,
         outputOptions: { includeState: true, includeResumeLabels: true },
         label: resume.label,
+        stepThrough,
       });
     } else {
       res = await run.start({
@@ -1774,6 +1778,7 @@ export class Workflow<
         outputWriter,
         initialState: state,
         outputOptions: { includeState: true, includeResumeLabels: true },
+        stepThrough,
       });
     }
 
@@ -1807,7 +1812,7 @@ export class Workflow<
       throw res.error;
     }
 
-    return res.status === 'success' ? res.result : undefined;
+    return res;
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {
@@ -2251,6 +2256,7 @@ export class Run<
     tracingOptions,
     format,
     outputOptions,
+    stepThrough,
   }: {
     inputData?: z.input<TInput>;
     initialState?: z.input<TState>;
@@ -2263,6 +2269,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
@@ -2308,6 +2315,7 @@ export class Run<
       workflowSpan,
       format,
       outputOptions,
+      stepThrough,
     });
 
     if (result.status !== 'suspended') {
@@ -2334,6 +2342,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._start(args);
   }
@@ -2354,6 +2363,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }): Promise<{ runId: string }> {
     // Fire execution in background, don't await completion
     this._start(args).catch(err => {
@@ -2468,6 +2478,7 @@ export class Run<
         includeState?: boolean;
         includeResumeLabels?: boolean;
       };
+      stepThrough?: boolean;
     } = {},
   ): ReturnType<typeof this.streamVNext> {
     return this.streamVNext(args);
@@ -2540,8 +2551,11 @@ export class Run<
   async streamAsync({
     inputData,
     requestContext,
-  }: { inputData?: z.input<TInput>; requestContext?: RequestContext } = {}): Promise<ReturnType<typeof this.stream>> {
-    return this.stream({ inputData, requestContext });
+    stepThrough,
+  }: { inputData?: z.input<TInput>; requestContext?: RequestContext; stepThrough?: boolean } = {}): Promise<
+    ReturnType<typeof this.stream>
+  > {
+    return this.stream({ inputData, requestContext, stepThrough });
   }
 
   /**
@@ -2557,6 +2571,7 @@ export class Run<
     closeOnSuspend = true,
     initialState,
     outputOptions,
+    stepThrough,
   }: {
     inputData?: z.input<TInput>;
     requestContext?: RequestContext;
@@ -2568,6 +2583,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -2632,6 +2648,7 @@ export class Run<
               data: chunk,
             });
           },
+          stepThrough,
         });
         let executionResults;
         try {
@@ -2677,6 +2694,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     outputOptions,
+    stepThrough,
   }: {
     resumeData?: z.input<TResumeSchema>;
     step?:
@@ -2694,6 +2712,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   } = {}) {
     return this.resumeStreamVNext({
       resumeData,
@@ -2702,6 +2721,7 @@ export class Run<
       tracingContext,
       tracingOptions,
       outputOptions,
+      stepThrough,
     });
   }
 
@@ -2718,6 +2738,7 @@ export class Run<
     tracingOptions,
     forEachIndex,
     outputOptions,
+    stepThrough,
   }: {
     resumeData?: z.input<TResumeSchema>;
     step?:
@@ -2736,6 +2757,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   } = {}) {
     this.closeStreamAction = async () => {};
 
@@ -2793,6 +2815,7 @@ export class Run<
           isVNext: true,
           forEachIndex,
           outputOptions,
+          stepThrough,
         });
 
         self.executionResults = executionResultsPromise;
@@ -2887,6 +2910,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
+    stepThrough?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
   }
@@ -2929,6 +2953,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     forEachIndex?: number;
+    stepThrough?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -3072,6 +3097,7 @@ export class Run<
         workflowSpan,
         outputOptions: params.outputOptions,
         outputWriter: params.outputWriter,
+        stepThrough: params.stepThrough,
       })
       .then(result => {
         if (!params.isVNext && result.status !== 'suspended') {
@@ -3218,6 +3244,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     outputOptions,
+    stepThrough,
   }: {
     inputData?: z.input<TInputSchema>;
     resumeData?: any;
@@ -3240,6 +3267,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
@@ -3330,6 +3358,7 @@ export class Run<
       outputWriter,
       workflowSpan,
       outputOptions,
+      stepThrough,
     });
 
     if (result.status !== 'suspended') {
@@ -3362,6 +3391,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._timeTravel(args);
   }
@@ -3377,6 +3407,7 @@ export class Run<
     tracingContext,
     tracingOptions,
     outputOptions,
+    stepThrough,
   }: {
     inputData?: z.input<TInputSchema>;
     initialState?: z.input<TState>;
@@ -3398,6 +3429,7 @@ export class Run<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }) {
     this.closeStreamAction = async () => {};
 
@@ -3444,6 +3476,7 @@ export class Run<
             void controller.enqueue(chunk);
           },
           outputOptions,
+          stepThrough,
         });
 
         self.executionResults = executionResultsPromise;

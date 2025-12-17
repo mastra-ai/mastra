@@ -42,6 +42,7 @@ import type {
   StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
+import { Workflow } from './workflow';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
@@ -94,7 +95,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns true if the step is a nested workflow, false otherwise
    */
   isNestedWorkflowStep(_step: Step<any, any, any>): boolean {
-    return false;
+    return _step instanceof Workflow;
   }
 
   /**
@@ -230,6 +231,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     outputWriter?: OutputWriter;
     stepSpan?: Span<SpanType.WORKFLOW_STEP>;
+    stepThrough?: boolean;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Default: return null to use standard execution
     // Subclasses (like Inngest) override to use platform-specific invocation
@@ -491,6 +493,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    stepThrough?: boolean;
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -505,6 +508,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       disableScorers,
       restart,
       timeTravel,
+      stepThrough,
     } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
@@ -579,6 +583,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         requestContext: currentRequestContext,
         outputWriter: params.outputWriter,
         disableScorers,
+        stepThrough,
       });
 
       // Apply mutable context changes from entry execution
@@ -626,8 +631,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         }
 
-        // Invoke lifecycle callbacks before returning
-        await this.invokeLifecycleCallbacks(result);
+        if (lastOutput.result.status !== 'paused') {
+          // Invoke lifecycle callbacks before returning
+          await this.invokeLifecycleCallbacks(result);
+        }
 
         return {
           ...result,
@@ -636,6 +643,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             : {}),
           ...(params.outputOptions?.includeState ? { state: lastState } : {}),
         };
+      }
+
+      if (stepThrough) {
+        const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
+        await this.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          stepResults: lastOutput.stepResults,
+          serializedStepGraph: params.serializedStepGraph,
+          executionContext: lastExecutionContext!,
+          workflowStatus: 'paused',
+          requestContext: currentRequestContext,
+        });
+
+        workflowSpan?.end({
+          attributes: {
+            status: 'paused',
+          },
+        });
+
+        delete result.result;
+
+        return { ...result, status: 'paused', ...(params.outputOptions?.includeState ? { state: lastState } : {}) };
       }
     }
 
@@ -661,7 +692,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    // Invoke lifecycle callbacks before returning
     await this.invokeLifecycleCallbacks(result);
 
     if (params.outputOptions?.includeState) {
