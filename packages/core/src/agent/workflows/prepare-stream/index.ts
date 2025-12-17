@@ -35,6 +35,7 @@ interface CreatePrepareStreamWorkflowOptions<
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -62,6 +63,7 @@ export function createPrepareStreamWorkflow<
   returnScorerData,
   saveQueueManager,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
   agentName,
@@ -98,6 +100,7 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     requireToolApproval,
+    toolCallConcurrency,
     resumeContext,
     agentId,
     agentName,
@@ -107,6 +110,7 @@ export function createPrepareStreamWorkflow<
     memoryConfig,
     memory,
     resourceId,
+    autoResumeSuspendedTools: options.autoResumeSuspendedTools,
   });
 
   const mapResultsStep = createMapResultsStep({

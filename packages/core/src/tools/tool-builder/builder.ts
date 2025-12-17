@@ -16,6 +16,7 @@ import { SpanType, wrapMastra, executeWithContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
@@ -43,11 +44,34 @@ export class CoreToolBuilder extends MastraBase {
   private options: ToolOptions;
   private logType?: LogType;
 
-  constructor(input: { originalTool: ToolToConvert; options: ToolOptions; logType?: LogType }) {
+  constructor(input: {
+    originalTool: ToolToConvert;
+    options: ToolOptions;
+    logType?: LogType;
+    autoResumeSuspendedTools?: boolean;
+  }) {
     super({ name: 'CoreToolBuilder' });
     this.originalTool = input.originalTool;
     this.options = input.options;
     this.logType = input.logType;
+    if (!isVercelTool(this.originalTool) && input.autoResumeSuspendedTools) {
+      let schema = this.originalTool.inputSchema;
+      if (typeof schema === 'function') {
+        schema = schema();
+      }
+      if (!schema) {
+        schema = z.object({});
+      }
+      if (schema instanceof z.ZodObject) {
+        this.originalTool.inputSchema = schema.extend({
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
+          resumeData: z
+            .any()
+            .describe('The resumeData object created from the resumeSchema of suspended tool')
+            .optional(),
+        });
+      }
+    }
   }
 
   // Helper to get parameters based on tool type
@@ -279,6 +303,7 @@ export class CoreToolBuilder extends MastraBase {
           // Wrap mastra with tracing context - wrapMastra will handle whether it's a full instance or primitives
           const wrappedMastra = options.mastra ? wrapMastra(options.mastra, { currentSpan: toolSpan }) : options.mastra;
 
+          const resumeSchema = this.getResumeSchema();
           // Pass raw args as first parameter, context as second
           // Properly structure context based on execution source
           const baseContext = {
@@ -299,9 +324,13 @@ export class CoreToolBuilder extends MastraBase {
             ),
             tracingContext: { currentSpan: toolSpan },
             abortSignal: execOptions.abortSignal,
-            suspend: (args: any) => {
+            suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
-              return execOptions.suspend?.(args);
+              const newSuspendOptions = {
+                ...(suspendOptions ?? {}),
+                resumeSchema: suspendOptions?.resumeSchema ?? resumeSchema,
+              };
+              return execOptions.suspend?.(args, newSuspendOptions);
             },
             resumeData: execOptions.resumeData,
           };
@@ -364,7 +393,6 @@ export class CoreToolBuilder extends MastraBase {
           const resumeData = execOptions.resumeData;
 
           if (resumeData) {
-            const resumeSchema = this.getResumeSchema();
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
               logger?.warn(resumeValidation.error.message);
@@ -575,6 +603,7 @@ export class CoreToolBuilder extends MastraBase {
       type: 'function' as const,
       description: this.originalTool.description,
       requireApproval: this.options.requireApproval,
+      hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,

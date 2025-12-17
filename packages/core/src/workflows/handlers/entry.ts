@@ -1,4 +1,5 @@
 import type { RequestContext } from '../../di';
+import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import type { TracingContext } from '../../observability';
 import type { DefaultExecutionEngine } from '../default';
@@ -22,7 +23,7 @@ export interface PersistStepUpdateParams {
   executionContext: ExecutionContext;
   workflowStatus: 'success' | 'failed' | 'suspended' | 'running' | 'waiting';
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
   requestContext: RequestContext;
 }
 

@@ -43,7 +43,7 @@ import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { OutputWriter, Workflow, WorkflowResult } from '../workflows';
+import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -372,11 +372,15 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     // Create a single workflow with all processors chained
     // Mark it as a processor workflow type
+    // validateInputs is disabled because ProcessorStepSchema contains z.custom() fields
+    // that may hold user-provided Zod schemas. When users use Zod 4 schemas while Mastra
+    // uses Zod 3 internally, validation fails due to incompatible internal structures.
     let workflow = createWorkflow({
       id: workflowId,
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
+      options: { validateInputs: false },
     });
 
     for (const processorOrWorkflow of validProcessors) {
@@ -1392,6 +1396,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     memoryConfig,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1400,6 +1405,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
@@ -1436,10 +1442,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
+
     return convertedMemoryTools;
   }
 
@@ -1606,6 +1613,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     outputWriter,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1614,6 +1622,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1649,7 +1658,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        return [k, makeCoreTool(tool, options)];
+        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
       }),
     );
 
@@ -1676,6 +1685,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1684,6 +1694,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1712,7 +1723,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -1733,6 +1744,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     clientTools,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1741,6 +1753,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
     const memory = await this.getMemory({ requestContext });
@@ -1767,7 +1780,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -1786,6 +1799,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     methodType,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1793,6 +1807,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
+    autoResumeSuspendedTools?: boolean;
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
@@ -1972,7 +1987,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         };
 
         // TODO; fix recursion type
-        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj as any, options);
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
+          toolObj as any,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 
@@ -1990,6 +2010,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     methodType,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1997,6 +2018,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
+    autoResumeSuspendedTools?: boolean;
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.listWorkflows({ requestContext });
@@ -2026,18 +2048,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             try {
+              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
+              const runIdToUse = suspendedToolRunId ?? runId;
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
                 args: inputData,
-                runId,
+                runId: runIdToUse,
                 threadId,
                 resourceId,
               });
 
-              const run = await workflow.createRun({ runId });
-
-              const { initialState, inputData: workflowInputData } = inputData;
+              const run = await workflow.createRun({ runId: runIdToUse });
               const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
@@ -2106,11 +2128,24 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else if (result?.status === 'suspended') {
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
-
+                const suspendedStepIds = result?.suspended?.map(stepPath => stepPath.join('.'));
+                const firstSuspendedStepPath = [...(result?.suspended?.[0] ?? [])];
+                let wflowStep = workflow;
+                while (firstSuspendedStepPath.length > 0) {
+                  const key = firstSuspendedStepPath.shift();
+                  if (key) {
+                    if (!workflow.steps[key]) {
+                      this.logger.warn(`Suspended step '${key}' not found in workflow '${workflowName}'`);
+                      break;
+                    }
+                    wflowStep = workflow.steps[key] as any;
+                  }
+                }
+                const resumeSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload);
+                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds, resumeSchema });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -2126,7 +2161,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: runId || '',
+                    runId: (inputData as any).suspendedToolRunId || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },
@@ -2156,7 +2191,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(toolObj, options);
+        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 
@@ -2178,6 +2218,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputWriter,
     methodType,
     memoryConfig,
+    autoResumeSuspendedTools,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2189,6 +2230,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2205,6 +2247,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       outputWriter,
+      autoResumeSuspendedTools,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -2215,6 +2258,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       memoryConfig,
+      autoResumeSuspendedTools,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -2225,6 +2269,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       toolsets: toolsets!,
+      autoResumeSuspendedTools,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -2235,6 +2280,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       clientTools: clientTools!,
+      autoResumeSuspendedTools,
     });
 
     const agentTools = await this.listAgentTools({
@@ -2244,6 +2290,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       methodType,
       tracingContext,
+      autoResumeSuspendedTools,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -2253,6 +2300,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       methodType,
       tracingContext,
+      autoResumeSuspendedTools,
     });
 
     return this.formatTools({
@@ -2692,6 +2740,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       saveQueueManager,
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
+      toolCallConcurrency: options.toolCallConcurrency,
       resumeContext,
       agentId: this.id,
       agentName: this.name,
@@ -2906,6 +2955,17 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const runId = options?.runId || this.#mastra?.generateId() || randomUUID();
     const requestContextToUse = options?.requestContext || new RequestContext();
 
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadId =
+      threadIdFromContext ||
+      (typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id);
+    const resourceId = resourceIdFromContext || options?.memory?.resource;
+
     return await networkLoop({
       networkName: this.name,
       requestContext: requestContextToUse,
@@ -2918,8 +2978,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       generateId: () => this.#mastra?.generateId() || randomUUID(),
       maxIterations: options?.maxSteps || 1,
       messages,
-      threadId: typeof options?.memory?.thread === 'string' ? options?.memory?.thread : options?.memory?.thread?.id,
-      resourceId: options?.memory?.resource,
+      threadId,
+      resourceId,
     });
   }
 

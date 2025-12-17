@@ -163,7 +163,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     expect(wrappedError.category).toBe(ErrorCategory.USER);
     expect(wrappedError.details).toEqual({ workflowId, runId });
 
-    // Verify that the original stack trace is preserved
-    expect(wrappedError.stack).toContain(regularError.stack?.split('\n')[1] || '');
+    // Verify that the original error is preserved as the cause
+    expect(wrappedError.cause).toBe(regularError);
   });
 });

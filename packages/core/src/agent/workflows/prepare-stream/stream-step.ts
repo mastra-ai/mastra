@@ -16,6 +16,7 @@ interface StreamStepOptions {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -28,6 +29,7 @@ interface StreamStepOptions {
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
   resourceId?: string;
+  autoResumeSuspendedTools?: boolean;
 }
 
 export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
@@ -35,6 +37,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   runId,
   returnScorerData,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
   agentName,
@@ -44,6 +47,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   memoryConfig,
   memory,
   resourceId,
+  autoResumeSuspendedTools,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -78,6 +82,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         returnScorerData,
         tracingContext,
         requireToolApproval,
+        toolCallConcurrency,
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
@@ -91,6 +96,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         agentName,
         toolCallId,
         methodType: modelMethodType,
+        autoResumeSuspendedTools,
       });
 
       return streamResult;

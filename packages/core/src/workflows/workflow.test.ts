@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { z as zv4 } from 'zod-v4';
@@ -13,7 +14,7 @@ import { Mastra } from '../mastra';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
@@ -36,8 +37,8 @@ describe('Workflow', () => {
 
   describe('Streaming', () => {
     it('should generate a stream', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -1034,8 +1035,8 @@ describe('Workflow', () => {
     }, 10000);
 
     it('should handle sleep waiting flow', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -1198,8 +1199,8 @@ describe('Workflow', () => {
     });
 
     it('should handle sleep waiting flow with fn parameter', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
-      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+      const step1Action = vi.fn().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn().mockResolvedValue({ value: 2000 });
 
       const step1 = createStep({
         id: 'step1',
@@ -1431,8 +1432,8 @@ describe('Workflow', () => {
 
   describe('Streaming (vNext)', () => {
     it('should generate a stream', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -2759,8 +2760,8 @@ describe('Workflow', () => {
     }, 10000);
 
     it('should handle sleep waiting flow', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -2926,8 +2927,8 @@ describe('Workflow', () => {
     });
 
     it('should handle sleep waiting flow with fn parameter', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ value: 1000 });
-      const step2Action = vi.fn<any>().mockResolvedValue({ value: 2000 });
+      const step1Action = vi.fn().mockResolvedValue({ value: 1000 });
+      const step2Action = vi.fn().mockResolvedValue({ value: 2000 });
 
       const step1 = createStep({
         id: 'step1',
@@ -3229,7 +3230,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error when execution flow not defined', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -3252,7 +3253,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error when execution graph is not committed', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -3279,7 +3280,7 @@ describe('Workflow', () => {
     });
 
     it('should automatically commit uncommitted workflow when registering in mastra instance', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -3322,7 +3323,7 @@ describe('Workflow', () => {
     });
 
     it('should execute a single step workflow successfully', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -3406,6 +3407,121 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
       expect(result.state).toEqual({ value: 'test-state!!!', otherValue: 'test-other-state' });
+    });
+
+    it('should execute multiple runs of a workflow', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ state, setState, requestContext }) => {
+          const newState = state.value + '!!!';
+          const testValue = requestContext.get('testKey');
+          requestContext.set('randomKey', newState + testValue);
+          await setState({ value: newState });
+          return { result: 'success', value: newState };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string(), value: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({ result: z.string(), value: z.string() }),
+        outputSchema: z.object({ result: z.string(), value: z.string(), randomValue: z.string() }),
+        stateSchema: z.object({
+          value: z.string(),
+        }),
+        execute: async ({ inputData, requestContext }) => {
+          const randomValue = requestContext.get('randomKey') as string;
+          return { ...inputData, randomValue };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          value: z.string(),
+          randomValue: z.string(),
+        }),
+        stateSchema: z.object({
+          value: z.string(),
+          otherValue: z.string(),
+        }),
+        steps: [step1, step2],
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const [result1, result2] = await Promise.all([
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-one');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-one', otherValue: 'test-other-state-one' },
+            outputOptions: {
+              includeState: true,
+            },
+            requestContext,
+          });
+          const reqContext1 = Array.from(requestContext.values());
+          expect(reqContext1).toEqual(['test-value-one', 'test-state-one!!!test-value-one']);
+          return result;
+        })(),
+        (async () => {
+          const requestContext = new RequestContext();
+          requestContext.set('testKey', 'test-value-two');
+          requestContext.set('anotherKey', 'another-value-two');
+          const run = await workflow.createRun();
+          const result = await run.start({
+            inputData: {},
+            initialState: { value: 'test-state-two', otherValue: 'test-other-state-two' },
+            outputOptions: {
+              includeState: true,
+            },
+            requestContext,
+          });
+          const reqContext2 = Array.from(requestContext.values());
+          expect(reqContext2).toEqual(['test-value-two', 'another-value-two', 'test-state-two!!!test-value-two']);
+          return result;
+        })(),
+      ]);
+
+      expect(result1.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-one!!!', randomValue: 'test-state-one!!!test-value-one' },
+        payload: { result: 'success', value: 'test-state-one!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result1.state).toEqual({ value: 'test-state-one!!!', otherValue: 'test-other-state-one' });
+      expect(result2.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', value: 'test-state-two!!!', randomValue: 'test-state-two!!!test-value-two' },
+        payload: { result: 'success', value: 'test-state-two!!!' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result2.state).toEqual({ value: 'test-state-two!!!', otherValue: 'test-other-state-two' });
     });
 
     it('should execute a single step nested workflow successfully with state', async () => {
@@ -3547,7 +3663,7 @@ describe('Workflow', () => {
     });
 
     it('should have access to typed workflow results', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -4181,7 +4297,7 @@ describe('Workflow', () => {
 
     describe('Variable Resolution', () => {
       it('should resolve trigger data', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
 
         const step1 = createStep({
           id: 'step1',
@@ -4304,7 +4420,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve trigger data from context', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           inputData: z.string(),
         });
@@ -4335,7 +4451,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve trigger data from getInitData', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -4388,7 +4504,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve trigger data from getInitData with workflow schema', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -4438,7 +4554,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve trigger data and DI requestContext values via .map()', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -4503,7 +4619,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve dynamic mappings via .map()', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -4587,7 +4703,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve dynamic mappings via .map() with custom step id', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -4686,10 +4802,10 @@ describe('Workflow', () => {
       });
 
       it('should resolve variables from previous steps', async () => {
-        const step1Action = vi.fn<any>().mockResolvedValue({
+        const step1Action = vi.fn().mockResolvedValue({
           nested: { value: 'step1-data' },
         });
-        const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const step2Action = vi.fn().mockResolvedValue({ result: 'success' });
 
         const step1 = createStep({
           id: 'step1',
@@ -4893,7 +5009,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve constant values via .map()', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -4955,7 +5071,7 @@ describe('Workflow', () => {
       });
 
       it('should resolve fully dynamic input via .map()', async () => {
-        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const execute = vi.fn().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
         });
@@ -5189,11 +5305,11 @@ describe('Workflow', () => {
 
       it('should handle failing dependencies', async () => {
         let err: Error | undefined;
-        const step1Action = vi.fn<any>().mockImplementation(() => {
+        const step1Action = vi.fn().mockImplementation(() => {
           err = new Error('Failed');
           throw err;
         });
-        const step2Action = vi.fn<any>();
+        const step2Action = vi.fn();
 
         const step1 = createStep({
           id: 'step1',
@@ -5237,13 +5353,14 @@ describe('Workflow', () => {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
-        expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
+        expect((step1Result as any)?.error).toBeInstanceOf(Error);
+        expect(((step1Result as any)?.error as Error).message).toBe('Failed');
       });
 
       it('should support simple string conditions', async () => {
-        const step1Action = vi.fn<any>().mockResolvedValue({ status: 'success' });
-        const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
-        const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
+        const step1Action = vi.fn().mockResolvedValue({ status: 'success' });
+        const step2Action = vi.fn().mockResolvedValue({ result: 'step2' });
+        const step3Action = vi.fn().mockResolvedValue({ result: 'step3' });
         const step1 = createStep({
           id: 'step1',
           execute: step1Action,
@@ -5326,8 +5443,8 @@ describe('Workflow', () => {
       });
 
       it('should support custom condition functions', async () => {
-        const step1Action = vi.fn<any>().mockResolvedValue({ count: 5 });
-        const step2Action = vi.fn<any>();
+        const step1Action = vi.fn().mockResolvedValue({ count: 5 });
+        const step2Action = vi.fn();
 
         const step1 = createStep({
           id: 'step1',
@@ -5390,7 +5507,7 @@ describe('Workflow', () => {
     });
 
     it('should execute a a sleep step', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5444,7 +5561,7 @@ describe('Workflow', () => {
     });
 
     it('should execute a sleep step with fn parameter', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const execute = vi.fn().mockResolvedValue({ value: 1000 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5503,7 +5620,7 @@ describe('Workflow', () => {
     });
 
     it('should execute a a sleep until step', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5560,7 +5677,7 @@ describe('Workflow', () => {
     });
 
     it('should execute a sleep until step with fn parameter', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ value: 1000 });
+      const execute = vi.fn().mockResolvedValue({ value: 1000 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5619,7 +5736,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if waitForEvent is used', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -5993,12 +6110,63 @@ describe('Workflow', () => {
       //   endedAt: expect.any(Number),
       // });
     });
+
+    it('should be able to cancel a suspended workflow', async () => {
+      const suspendStep = createStep({
+        id: 'suspendStep',
+        execute: async ({ suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({ reason: 'waiting for approval' });
+          }
+          return { done: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+        suspendSchema: z.object({ reason: z.string() }),
+      });
+
+      const testWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ done: z.boolean() }),
+      });
+
+      testWorkflow.then(suspendStep).commit();
+
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': testWorkflow },
+        storage,
+      });
+
+      const workflow = mastra.getWorkflow('test-workflow');
+
+      const run = await workflow.createRun();
+      const runId = run.runId;
+
+      // Start the workflow and wait for it to suspend
+      const result = await run.start({ inputData: {} });
+      expect(result.status).toBe('suspended');
+
+      // Verify status is suspended in storage
+      const beforeCancel = await workflow.getWorkflowRunById(runId);
+      expect(beforeCancel).not.toBeNull();
+      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
+
+      // Cancel the suspended workflow
+      await run.cancel();
+
+      // Check status IMMEDIATELY after cancel() returns
+      const afterCancel = await workflow.getWorkflowRunById(runId);
+      expect(afterCancel).not.toBeNull();
+      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
+    });
   });
 
   describe('Error Handling', () => {
     it('should handle step execution errors', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockImplementation(() => {
+      const failingAction = vi.fn().mockImplementation(() => {
         throw error;
       });
 
@@ -6025,8 +6193,10 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toMatch(/^Error: Step execution failed/); // Now safe to access
+        // result.error should be a SerializedError (plain object, not Error instance)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toMatch(/Step execution failed/);
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -6042,19 +6212,21 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
+      // Step error should also be an Error instance
+      expect((step1Result as any)?.error).toBeInstanceOf(Error);
+      expect(((step1Result as any)?.error as Error).message).toMatch(/Step execution failed/);
     });
 
     it('should handle variable resolution errors', async () => {
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ data: 'success' }),
+        execute: vi.fn().mockResolvedValue({ data: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({ data: z.string() }),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>(),
+        execute: vi.fn(),
         inputSchema: z.object({ data: z.string() }),
         outputSchema: z.object({}),
       });
@@ -6107,8 +6279,9 @@ describe('Workflow', () => {
       });
 
       const errorMessage = 'Test error: step execution failed.';
-      const failingAction = vi.fn<any>().mockImplementation(() => {
-        throw new Error(errorMessage);
+      const thrownError = new Error(errorMessage);
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw thrownError;
       });
 
       const step1 = createStep({
@@ -6145,10 +6318,16 @@ describe('Workflow', () => {
 
       const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
       expect(failedStepResult.error).toBeDefined();
-      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
-      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
-      expect(String(failedStepResult.error)).not.toContain('at ');
-      expect(String(failedStepResult.error)).not.toContain('\n');
+      expect(failedStepResult.error).toBeInstanceOf(Error);
+      // Verify exact same error instance is preserved
+      expect(failedStepResult.error).toBe(thrownError);
+      expect((failedStepResult.error as Error).message).toBe(errorMessage);
+      // Stack is preserved on instance for debugging, but excluded from JSON serialization
+      // (per getErrorFromUnknown with serializeStack: false)
+      expect((failedStepResult.error as Error).stack).toBeDefined();
+      // Verify stack is not in JSON output
+      const serialized = JSON.stringify(failedStepResult.error);
+      expect(serialized).not.toContain('stack');
     });
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
@@ -6160,14 +6339,15 @@ describe('Workflow', () => {
       });
 
       const errorMessage = 'Step execution failed.';
-      const failingAction = vi.fn<any>().mockImplementation(() => {
-        throw new MastraError({
-          id: 'VALIDATION_ERROR',
-          domain: 'MASTRA_WORKFLOW',
-          category: 'USER',
-          text: errorMessage,
-          details: { field: 'test' },
-        });
+      const thrownError = new MastraError({
+        id: 'VALIDATION_ERROR',
+        domain: 'MASTRA_WORKFLOW',
+        category: 'USER',
+        text: errorMessage,
+        details: { field: 'test' },
+      });
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw thrownError;
       });
 
       const step1 = createStep({
@@ -6204,17 +6384,23 @@ describe('Workflow', () => {
 
       const failedStepResult = step1Result as Extract<typeof step1Result, { status: 'failed' }>;
       expect(failedStepResult.error).toBeDefined();
-      expect(failedStepResult.error).toBe('Error: ' + errorMessage);
-      expect(String(failedStepResult.error)).not.toContain('at Object.execute');
-      expect(String(failedStepResult.error)).not.toContain('at ');
-      expect(String(failedStepResult.error)).not.toContain('\n');
+      expect(failedStepResult.error).toBeInstanceOf(Error);
+      // Verify exact same error instance is preserved
+      expect(failedStepResult.error).toBe(thrownError);
+      expect((failedStepResult.error as Error).message).toBe(errorMessage);
+      // Stack is preserved on instance for debugging, but excluded from JSON serialization
+      // (per getErrorFromUnknown with serializeStack: false)
+      expect((failedStepResult.error as Error).stack).toBeDefined();
+      // Verify stack is not in JSON output
+      const serialized = JSON.stringify(failedStepResult.error);
+      expect(serialized).not.toContain('stack');
     });
 
     it('should handle step execution errors within branches', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockRejectedValue(error);
+      const failingAction = vi.fn().mockRejectedValue(error);
 
-      const successAction = vi.fn<any>().mockResolvedValue({});
+      const successAction = vi.fn().mockResolvedValue({});
 
       const step1 = createStep({
         id: 'step1',
@@ -6266,16 +6452,17 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
+      expect((result.steps?.step2 as any)?.error).toBeInstanceOf(Error);
+      expect(((result.steps?.step2 as any)?.error as Error).message).toMatch(/Step execution failed/);
     });
 
     it('should handle step execution errors within nested workflows', async () => {
       const error = new Error('Step execution failed');
-      const failingAction = vi.fn<any>().mockImplementation(() => {
+      const failingAction = vi.fn().mockImplementation(() => {
         throw error;
       });
 
-      const successAction = vi.fn<any>().mockResolvedValue({});
+      const successAction = vi.fn().mockResolvedValue({});
 
       const step1 = createStep({
         id: 'step1',
@@ -6329,19 +6516,373 @@ describe('Workflow', () => {
           endedAt: expect.any(Number),
         },
       });
-      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
+      expect((result.steps?.['test-workflow'] as any)?.error).toBeInstanceOf(Error);
+      expect(((result.steps?.['test-workflow'] as any)?.error as Error).message).toMatch(/Step execution failed/);
+    });
+
+    it('should preserve custom error properties when step throws error with extra fields', async () => {
+      // Create an error with custom properties (like AIAPICallError from AI SDK)
+      const customError = new Error('API rate limit exceeded');
+      (customError as any).statusCode = 429;
+      (customError as any).responseHeaders = { 'retry-after': '60' };
+      (customError as any).isRetryable = true;
+
+      const failingAction = vi.fn().mockImplementation(() => {
+        throw customError;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: failingAction,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error should be a SerializedError (plain object, not Error instance)
+        // This is intentional - errors are serialized for storage compatibility
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        // Custom properties should be preserved on the serialized error
+        expect((result.error as any).message).toBe('API rate limit exceeded');
+        expect((result.error as any).name).toBe('Error');
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).isRetryable).toBe(true);
+      }
+
+      // Also check step-level error (step errors remain as Error instances)
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result?.status).toBe('failed');
+
+      if (step1Result?.status === 'failed') {
+        // Step error is still the original Error instance
+        expect(step1Result.error).toBeInstanceOf(Error);
+        expect(step1Result.error).toBe(customError);
+        expect((step1Result.error as any).statusCode).toBe(429);
+        expect((step1Result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((step1Result.error as any).isRetryable).toBe(true);
+      }
+    });
+
+    it('should propagate step error to workflow-level error', async () => {
+      // Test that when a step fails, the error is accessible both at step level and workflow level
+      const testError = new Error('Step failed with details');
+      (testError as any).code = 'STEP_FAILURE';
+      (testError as any).details = { reason: 'test failure' };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw testError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'error-propagation-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Workflow-level error - should be a SerializedError (plain object)
+      // This is intentional - errors are serialized for storage compatibility
+      if (result.status === 'failed') {
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        // Properties should be preserved on the serialized error
+        expect((result.error as any).message).toBe('Step failed with details');
+        expect((result.error as any).name).toBe('Error');
+        expect((result.error as any).code).toBe('STEP_FAILURE');
+        expect((result.error as any).details).toEqual({ reason: 'test failure' });
+      }
+
+      // Step-level error remains as Error instance
+      const stepResult = result.steps?.['failing-step'];
+      expect(stepResult?.status).toBe('failed');
+      if (stepResult?.status === 'failed') {
+        expect(stepResult.error).toBe(testError);
+        expect(stepResult.error).toBeInstanceOf(Error);
+      }
+    });
+
+    it('should preserve error.cause chain in result.error', async () => {
+      // Create a nested error chain (common with API errors that wrap underlying causes)
+      const rootCauseMessage = 'Network connection refused';
+      const rootCause = new Error(rootCauseMessage);
+
+      const intermediateMessage = 'HTTP request failed';
+      const intermediateCause = new Error(intermediateMessage, { cause: rootCause });
+
+      const topLevelMessage = 'API call failed';
+      const topLevelError = new Error(topLevelMessage, { cause: intermediateCause });
+      // Add custom properties typical of API errors
+      (topLevelError as any).statusCode = 500;
+      (topLevelError as any).isRetryable = true;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw topLevelError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'cause-chain-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Workflow-level error should be SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        // Verify the top-level error properties are preserved
+        expect((result.error as any).message).toBe(topLevelMessage);
+        expect((result.error as any).name).toBe('Error');
+        expect((result.error as any).statusCode).toBe(500);
+        expect((result.error as any).isRetryable).toBe(true);
+
+        // Verify the full error.cause chain is preserved as serialized objects
+        expect((result.error as any).cause).toBeDefined();
+        expect((result.error as any).cause.message).toBe(intermediateMessage);
+
+        // Verify nested cause (intermediate error's cause)
+        expect((result.error as any).cause.cause).toBeDefined();
+        expect((result.error as any).cause.cause.message).toBe(rootCauseMessage);
+      }
+    });
+
+    it('should handle errors from agent.stream() with full error details', async () => {
+      // Simulate an APICallError-like error from AI SDK
+      const apiError = new Error('Service Unavailable');
+      (apiError as any).statusCode = 503;
+      (apiError as any).responseHeaders = { 'retry-after': '60' };
+      (apiError as any).requestId = 'req_abc123';
+      (apiError as any).isRetryable = true;
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => {
+          throw apiError;
+        },
+      });
+
+      const agent = new Agent({
+        name: 'test-agent',
+        model: mockModel,
+        instructions: 'Test agent',
+      });
+
+      const agentStep = createStep({
+        id: 'agent-step',
+        execute: async () => {
+          const result = await agent.stream('test input', {
+            maxRetries: 0,
+          });
+
+          await result.consumeStream();
+
+          // Throw the error from agent.stream if it exists
+          if (result.error) {
+            throw result.error;
+          }
+
+          return { success: true };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'agent-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+        steps: [agentStep],
+      });
+
+      workflow.then(agentStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Workflow-level error should be SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        expect((result.error as any).message).toBe('Service Unavailable');
+        expect((result.error as any).name).toBe('Error');
+        // Verify API error properties are preserved
+        expect((result.error as any).statusCode).toBe(503);
+        expect((result.error as any).responseHeaders).toEqual({ 'retry-after': '60' });
+        expect((result.error as any).requestId).toBe('req_abc123');
+        expect((result.error as any).isRetryable).toBe(true);
+      }
+    });
+
+    it('should preserve error details in streaming workflow', async () => {
+      const customErrorProps = {
+        statusCode: 429,
+        responseHeaders: {
+          'x-ratelimit-reset': '1234567890',
+          'retry-after': '30',
+        },
+      };
+      const testError = new Error('Rate limit exceeded');
+      (testError as any).statusCode = customErrorProps.statusCode;
+      (testError as any).responseHeaders = customErrorProps.responseHeaders;
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw testError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'streaming-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const streamOutput = run.stream({ inputData: {} });
+      const result = await streamOutput.result;
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // Workflow-level error should be SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+
+        expect((result.error as any).message).toBe('Rate limit exceeded');
+        expect((result.error as any).name).toBe('Error');
+        expect((result.error as any).statusCode).toBe(429);
+        expect((result.error as any).responseHeaders).toEqual(customErrorProps.responseHeaders);
+      }
+    });
+
+    it('should load serialized error from storage via getWorkflowRunById', async () => {
+      // This test verifies the full round-trip: error is serialized to storage,
+      // and when loaded via getWorkflowRunById, it's a plain object (not Error instance)
+      const mockStorage = new MockStore();
+
+      const mastra = new Mastra({
+        storage: mockStorage,
+      });
+
+      const errorMessage = 'Test error for storage round-trip';
+      const thrownError = new Error(errorMessage);
+      (thrownError as any).statusCode = 500;
+      (thrownError as any).errorCode = 'INTERNAL_ERROR';
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockImplementation(() => {
+          throw thrownError;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'storage-roundtrip-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        mastra,
+      });
+
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+
+      // Now load the workflow run from storage
+      const workflowRun = await mockStorage.getWorkflowRunById({
+        runId: run.runId,
+        workflowName: 'storage-roundtrip-workflow',
+      });
+
+      expect(workflowRun).toBeDefined();
+      expect(workflowRun?.snapshot).toBeDefined();
+
+      const snapshot = workflowRun?.snapshot as any;
+      expect(snapshot.status).toBe('failed');
+
+      // The error in storage should be serialized (plain object, not Error instance)
+      // because storage serializes via JSON
+      const storedStepResult = snapshot.context?.['failing-step'];
+      expect(storedStepResult).toBeDefined();
+      expect(storedStepResult.status).toBe('failed');
+
+      // Verify the stored error contains the serialized properties
+      const storedError = storedStepResult.error;
+      expect(storedError).toBeDefined();
+
+      // The stored error should be a plain object with message and custom properties
+      // (Error instances don't survive JSON serialization without toJSON)
+      expect(storedError.message).toBe(errorMessage);
+      expect(storedError.name).toBe('Error');
+      expect(storedError.statusCode).toBe(500);
+      expect(storedError.errorCode).toBe('INTERNAL_ERROR');
+
+      // Stack should NOT be in the serialized output (per serializeStack: false)
+      expect(storedError.stack).toBeUndefined();
     });
   });
 
   describe('Complex Conditions', () => {
     it('should handle nested AND/OR conditions', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({
+      const step1Action = vi.fn().mockResolvedValue({
         status: 'partial',
         score: 75,
         flags: { isValid: true },
       });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'step2' });
-      const step3Action = vi.fn<any>().mockResolvedValue({ result: 'step3' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'step2' });
+      const step3Action = vi.fn().mockResolvedValue({ result: 'step3' });
 
       const step1 = createStep({
         id: 'step1',
@@ -7626,7 +8167,7 @@ describe('Workflow', () => {
 
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({
           required: z.string(),
           nested: z.object({
@@ -7640,7 +8181,7 @@ describe('Workflow', () => {
 
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'step2 success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'step2 success' }),
         inputSchema: z.object({
           required: z.string(),
           nested: z.object({
@@ -7654,7 +8195,7 @@ describe('Workflow', () => {
 
       const step3 = createStep({
         id: 'step3',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'step3 success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'step3 success' }),
         inputSchema: z.object({
           required: z.string(),
           nested: z.object({
@@ -7780,7 +8321,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if inputData is invalid', async () => {
-      const successAction = vi.fn<any>().mockImplementation(() => {
+      const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
       });
 
@@ -7831,8 +8372,11 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain('Error: Step input validation failed: \n- start: Required'); // Now safe to access
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain('Step input validation failed');
+        expect((result.error as any).message).toContain('start: Required');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -7856,13 +8400,65 @@ describe('Workflow', () => {
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain('Error: Step input validation failed: \n- start: Required');
+      expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
+      expect(((step2Result as any)?.error as Error).message).toContain('start: Required');
+    });
+
+    it('should preserve ZodError as cause when input validation fails', async () => {
+      const successAction = vi.fn().mockImplementation(() => {
+        return { result: 'success' };
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: successAction,
+        inputSchema: z.object({
+          requiredField: z.string(),
+          numberField: z.number(),
+        }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'zod-cause-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: true },
+      });
+
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+
+      // Pass invalid input that will fail Zod validation
+      const result = await run.start({
+        inputData: {},
+      });
+
+      expect(result.status).toBe('failed');
+
+      if (result.status === 'failed') {
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain('Step input validation failed');
+
+        // The cause should be the serialized ZodError
+        expect((result.error as any).cause).toBeDefined();
+        // ZodError has an 'issues' array - should be preserved in serialization
+        expect((result.error as any).cause.issues).toBeDefined();
+        expect(Array.isArray((result.error as any).cause.issues)).toBe(true);
+        // Should have issues for both missing fields
+        expect((result.error as any).cause.issues.length).toBeGreaterThanOrEqual(2);
+      }
     });
 
     it('should use default value from inputSchema for step input', async () => {
-      const successAction = vi.fn<any>().mockImplementation(() => {
+      const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
       });
 
@@ -7944,7 +8540,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if inputData is invalid in workflow with .map()', async () => {
-      const successAction = vi.fn<any>().mockImplementation(() => {
+      const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
       });
 
@@ -8005,10 +8601,11 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain(
-          'Error: Step input validation failed: \n- start: Expected string, received number',
-        ); // Now safe to access
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain('Step input validation failed');
+        expect((result.error as any).message).toContain('start: Expected string, received number');
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -8032,11 +8629,10 @@ describe('Workflow', () => {
         payload: { start: 2 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain(
-        'Error: Step input validation failed: \n- start: Expected string, received number',
-      );
+      expect(((step2Result as any)?.error as Error).message).toContain('Step input validation failed');
+      expect(((step2Result as any)?.error as Error).message).toContain('start: Expected string, received number');
     });
 
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
@@ -8307,8 +8903,10 @@ describe('Workflow', () => {
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a'].error).toContain(
-        'Error: Step input validation failed: \n- newValue: Required',
+      expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error.message).toContain(
+        'Step input validation failed: \n- newValue: Required',
       );
 
       // @ts-ignore
@@ -8546,9 +9144,10 @@ describe('Workflow', () => {
       });
       expect(errorResult.status).toBe('failed');
       expect(errorResult.steps['extra-required-key-step'].status).toBe('failed');
-      expect((errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error).toBe(
-        'Error: Step input validation failed: \n- c: Required',
-      );
+      // error is now an Error instance
+      const stepError = (errorResult.steps['extra-required-key-step'] as StepFailure<any, any, any, any>).error;
+      expect(stepError).toBeInstanceOf(Error);
+      expect((stepError as Error).message).toBe('Step input validation failed: \n- c: Required');
 
       const distinctTypeStep = createStep({
         id: 'distinct-type-step',
@@ -8573,8 +9172,11 @@ describe('Workflow', () => {
       });
       expect(errorResult2.status).toBe('failed');
       expect(errorResult2.steps['distinct-type-step'].status).toBe('failed');
-      expect((errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error).toBe(
-        'Error: Step input validation failed: \n- : Expected string, received object',
+      // error is now an Error instance
+      const stepError2 = (errorResult2.steps['distinct-type-step'] as StepFailure<any, any, any, any>).error;
+      expect(stepError2).toBeInstanceOf(Error);
+      expect((stepError2 as Error).message).toBe(
+        'Step input validation failed: \n- : Expected string, received object',
       );
     });
   });
@@ -8591,7 +9193,7 @@ describe('Workflow', () => {
       const step1 = createStep({
         id: 'step1',
         // @ts-ignore
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
           nested: zv4.object({
@@ -8606,7 +9208,7 @@ describe('Workflow', () => {
       // @ts-ignore
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'step2 success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'step2 success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
           nested: zv4.object({
@@ -8621,7 +9223,7 @@ describe('Workflow', () => {
       const step3 = createStep({
         id: 'step3',
         // @ts-ignore
-        execute: vi.fn<any>().mockResolvedValue({ result: 'step3 success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'step3 success' }),
         inputSchema: zv4.object({
           required: zv4.string(),
           nested: zv4.object({
@@ -8753,7 +9355,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if inputData is invalid', async () => {
-      const successAction = vi.fn<any>().mockImplementation(() => {
+      const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
       });
 
@@ -8808,10 +9410,12 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain(
-          'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
-        ); // Now safe to access
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain(
+          'Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+        );
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -8835,15 +9439,16 @@ describe('Workflow', () => {
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain(
-        'Error: Step input validation failed: \n- start: Invalid input: expected string, received undefined',
+      expect((step2Result as any)?.error).toBeInstanceOf(Error);
+      expect((step2Result as any)?.error.message).toContain(
+        'Step input validation failed: \n- start: Invalid input: expected string, received undefined',
       );
     });
 
     it('should use default value from inputSchema for step input', async () => {
-      const successAction = vi.fn<any>().mockImplementation(() => {
+      const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
       });
 
@@ -8930,7 +9535,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if inputData is invalid in workflow with .map()', async () => {
-      const successAction = vi.fn<any>().mockImplementation(() => {
+      const successAction = vi.fn().mockImplementation(() => {
         return { result: 'success' };
       });
 
@@ -8995,10 +9600,12 @@ describe('Workflow', () => {
 
       // Type guard for result.error
       if (result.status === 'failed') {
-        // This check helps TypeScript narrow down the type of 'result'
-        expect(result.error).toContain(
-          'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
-        ); // Now safe to access
+        // result.error is now a SerializedError (plain object)
+        expect(result.error).toBeDefined();
+        expect(result.error).not.toBeInstanceOf(Error);
+        expect((result.error as any).message).toContain(
+          'Step input validation failed: \n- start: Invalid input: expected string, received number',
+        );
       } else {
         // This case should not be reached in this specific test.
         // If it is, the test should fail clearly.
@@ -9022,10 +9629,11 @@ describe('Workflow', () => {
         payload: { start: 2 },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
-        error: expect.any(String),
+        error: expect.any(Error),
       });
-      expect((step2Result as any)?.error).toContain(
-        'Error: Step input validation failed: \n- start: Invalid input: expected string, received number',
+      expect((step2Result as any)?.error).toBeInstanceOf(Error);
+      expect((step2Result as any)?.error.message).toContain(
+        'Step input validation failed: \n- start: Invalid input: expected string, received number',
       );
     });
 
@@ -9333,8 +9941,10 @@ describe('Workflow', () => {
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(0);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a'].error).toContain(
-        'Error: Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
+      expect(result.steps['nested-workflow-a'].error).toBeInstanceOf(Error);
+      // @ts-ignore
+      expect(result.steps['nested-workflow-a'].error.message).toContain(
+        'Step input validation failed: \n- newValue: Invalid input: expected number, received undefined',
       );
 
       // @ts-ignore
@@ -9350,31 +9960,31 @@ describe('Workflow', () => {
     it('should run multiple chains in parallel', async () => {
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success1' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success1' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success2' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success2' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step3 = createStep({
         id: 'step3',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success3' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success3' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step4 = createStep({
         id: 'step4',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success4' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success4' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step5 = createStep({
         id: 'step5',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success5' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success5' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -9434,13 +10044,13 @@ describe('Workflow', () => {
       let err: Error | undefined;
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockImplementation(() => {
+        execute: vi.fn().mockImplementation(() => {
           err = new Error('Step failed');
           throw err;
         }),
@@ -9484,8 +10094,9 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // ADD THIS SEPARATE ASSERTION
-      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
+      // ADD THIS SEPARATE ASSERTION - error is now an Error instance
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
       expect(step1Spy).toHaveBeenCalledTimes(1);
       expect(step2Spy).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -9494,13 +10105,13 @@ describe('Workflow', () => {
       let err: Error | undefined;
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn<any>().mockResolvedValue({ result: 'success' }),
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn<any>().mockImplementation(() => {
+        execute: vi.fn().mockImplementation(() => {
           err = new Error('Step failed');
           throw err;
         }),
@@ -9545,8 +10156,9 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      // ADD THIS SEPARATE ASSERTION
-      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
+      // ADD THIS SEPARATE ASSERTION - error is now an Error instance
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
       expect(step1Spy).toHaveBeenCalledTimes(1);
       expect(step2Spy).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });
@@ -9554,7 +10166,7 @@ describe('Workflow', () => {
 
   describe('Interoperability (Actions)', () => {
     it('should be able to use all action types in a workflow', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
+      const step1Action = vi.fn().mockResolvedValue({ name: 'step1' });
 
       const step1 = createStep({
         id: 'step1',
@@ -9564,7 +10176,7 @@ describe('Workflow', () => {
       });
 
       // @ts-ignore
-      const toolAction = vi.fn<any>().mockImplementation(async (input, _context) => {
+      const toolAction = vi.fn().mockImplementation(async (input, _context) => {
         return { name: input.name };
       });
 
@@ -9624,7 +10236,7 @@ describe('Workflow', () => {
       }
     });
     it('should return the correct runId', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -11102,7 +11714,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if trying to restart a workflow execution that was not previously active', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -11164,7 +11776,7 @@ describe('Workflow', () => {
     });
 
     it('should restart a workflow execution that was previously active', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -11303,8 +11915,8 @@ describe('Workflow', () => {
     });
 
     it('should restart a workflow execution that was previously active and has nested workflows', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
-      const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
+      const executeStep2 = vi.fn().mockResolvedValue({ step2Result: 3 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12248,7 +12860,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12337,7 +12949,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if validateInputs is true and trying to timetravel a workflow execution with invalid inputData', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12395,7 +13007,7 @@ describe('Workflow', () => {
     });
 
     it('should throw error if trying to timetravel to a non-existent step', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12449,7 +13061,7 @@ describe('Workflow', () => {
     });
 
     it('should timeTravel a workflow execution', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12614,7 +13226,7 @@ describe('Workflow', () => {
     });
 
     it('should timeTravel a workflow execution that was previously ran', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -12667,13 +13279,15 @@ describe('Workflow', () => {
       const run = await workflow.createRun();
       const failedRun = await run.start({ inputData: { value: 0 } });
       expect(failedRun.status).toBe('failed');
-      expect(failedRun.steps.step2).toEqual({
+      expect(failedRun.steps.step2).toMatchObject({
         status: 'failed',
         payload: { step1Result: 2 },
-        error: 'Error: Simulated error',
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      // error is now an Error instance
+      expect((failedRun.steps.step2 as any).error).toBeInstanceOf(Error);
+      expect((failedRun.steps.step2 as any).error.message).toBe('Simulated error');
 
       const result = await run.timeTravel({
         step: step2,
@@ -12791,8 +13405,8 @@ describe('Workflow', () => {
     });
 
     it('should timeTravel a workflow execution that has nested workflows', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ step1Result: 2 });
-      const executeStep2 = vi.fn<any>().mockResolvedValue({ step2Result: 3 });
+      const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
+      const executeStep2 = vi.fn().mockResolvedValue({ step2Result: 3 });
       const step1 = createStep({
         id: 'step1',
         execute,
@@ -14175,8 +14789,8 @@ describe('Workflow', () => {
     });
 
     it('should get workflow runs from storage', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -14230,8 +14844,8 @@ describe('Workflow', () => {
     });
 
     it('should use shouldPersistSnapshot option', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -14294,8 +14908,8 @@ describe('Workflow', () => {
     });
 
     it('should get and delete workflow run by id from storage', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
-      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
       const step1 = createStep({
         id: 'step1',
@@ -14347,7 +14961,7 @@ describe('Workflow', () => {
     });
 
     it('should persist resourceId when creating workflow runs', async () => {
-      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
 
       const step1 = createStep({
         id: 'step1',
@@ -14599,7 +15213,7 @@ describe('Workflow', () => {
     });
 
     it('should be able to use an agent in parallel', async () => {
-      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const execute = vi.fn().mockResolvedValue({ result: 'success' });
       const finalStep = createStep({
         id: 'finalStep',
         inputSchema: z.object({
@@ -17166,7 +17780,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result1: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn().mockImplementation(async ({ inputData }) => ({
           result1: `processed-${inputData.input}`,
         })),
       });
@@ -17179,7 +17793,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result2: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn().mockImplementation(async ({ inputData }) => ({
           result2: `transformed-${inputData.input}`,
         })),
       });
@@ -17198,7 +17812,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result3: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn().mockImplementation(async ({ inputData }) => ({
           result3: `combined-${inputData.step1.result1}-${inputData.step2.result2}`,
         })),
       });
@@ -17216,7 +17830,7 @@ describe('Workflow', () => {
         outputSchema: z.object({
           result4: z.string(),
         }),
-        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+        execute: vi.fn().mockImplementation(async ({ inputData }) => ({
           result4: `final-${inputData.step1.result1}-${inputData.step2.result2}`,
         })),
       });
@@ -18104,6 +18718,52 @@ describe('Workflow', () => {
           tagCount: 2,
         });
       }
+    });
+  });
+
+  describe('startAsync', () => {
+    it('should start workflow and complete successfully', async () => {
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      new Mastra({
+        storage: testStorage,
+        workflows: { 'test-startAsync-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const { runId } = await run.startAsync({ inputData: {} });
+
+      expect(runId).toBe(run.runId);
+
+      // Poll for completion
+      let result;
+      for (let i = 0; i < 10; i++) {
+        result = await workflow.getWorkflowRunExecutionResult(runId);
+        if (result?.status === 'success') break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      expect(result?.status).toBe('success');
+      expect(result?.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 });

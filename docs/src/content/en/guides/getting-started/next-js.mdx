@@ -3,6 +3,9 @@ title: "Next.js | Frameworks"
 description: "Get started with Mastra and Next.js"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Integrate Mastra in your Next.js project
 
 In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Next.js by importing and calling the agent directly from your routes.
@@ -16,7 +19,8 @@ You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Eleme
 
 ## Before you begin
 
-* You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
 ## Create a new Next.js app (optional)
 
@@ -24,31 +28,80 @@ If you already have a Next.js app, skip to the next step.
 
 Run the following command to [create a new Next.js app](https://nextjs.org/docs/app/getting-started/installation):
 
-```bash
-npx create-next-app \
-    my-nextjs-agent \
-    --yes \
-    --ts \
-    --eslint \
-    --tailwind \
-    --src-dir \
-    --app \
-    --turbopack \
-    --no-react-compiler \
-    --no-import-alias
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
+npx create-next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
+```
+
+</TabItem>
+</Tabs>
 
 This creates a project called `my-nextjs-agent`, but you can replace it with any name you want.
 
 ## Initialize Mastra
-`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/create-mastra).
+
+`cd` into your Next.js project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-```bash
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
 cd my-nextjs-agent
 npx --force mastra@beta init
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+cd my-nextjs-agent
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+cd my-nextjs-agent
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+cd my-nextjs-agent
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
 -	`index.ts` - Mastra config, including memory
@@ -57,65 +110,123 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 
 You'll call `weather-agent.ts` from your Next.js routes in the next steps.
 
+## Install AI SDK UI & AI Elements
 
-## Install AI SDK and AI Elements
+Install AI SDK UI along with the Mastra adapter:
 
-Install AI SDK along with the Mastra adapter:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
-```bash
-npm install \
-    @mastra/ai-sdk \
-    @ai-sdk/react \
-    ai
+```bash copy
+npm install @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash copy
+pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bun add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+</Tabs>
 
 Next, initialize AI Elements. When prompted, choose the default options:
 
-```bash
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash copy
 npx ai-elements@latest
 ```
 
-This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
+```bash copy
+pnpm dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash copy
+yarn dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash copy
+bunx ai-elements@latest
+```
+
+</TabItem>
+</Tabs>
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
 
 ## Create a chat route
 
 Create `src/app/api/chat/route.ts`:
 
 ```ts title="src/app/api/chat/route.ts"
-import { mastra } from "@/mastra";
-import { NextResponse } from "next/server";
-import { toAISdkStream } from "@mastra/ai-sdk";
-import { convertMessages } from "@mastra/core/agent";
-import { createUIMessageStreamResponse } from "ai";
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/mastra';
+import { NextResponse } from 'next/server';
 
-const weatherAgent = mastra.getAgent("weatherAgent");
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
-
-  const stream = await weatherAgent.stream(messages, {
-    memory: {
-      thread: "example-user-id",
-      resource: "weather-chat",
+  const params = await req.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
+      }
     },
   });
-
-  return createUIMessageStreamResponse({
-    stream: toAISdkStream(stream, { from: "agent" }),
-  })
+  return createUIMessageStreamResponse({ stream });
 }
 
 export async function GET() {
-  const memory = await weatherAgent.getMemory();
-  const response = await memory?.query({
-    threadId: "example-user-id",
-    resourceId: "weather-chat",
-  });
+  const memory = await mastra.getAgent('weatherAgent').getMemory()
+  let response = null
+  
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    })
+  } catch {
+    console.log('No previous messages found.')
+  }
 
-  const uiMessages =
-    convertMessages(response?.uiMessages ?? []).to("AIV5.UI");
-  return NextResponse.json(uiMessages);
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return NextResponse.json(uiMessages)
 }
 ```
 
@@ -130,7 +241,7 @@ Create `src/app/chat/page.tsx`:
 
 import '@/app/globals.css';
 import { useEffect, useState } from 'react';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, ToolUIPart } from 'ai';
 import { useChat } from '@ai-sdk/react';
 
 import {
@@ -186,9 +297,9 @@ function Chat() {
       <div className="flex flex-col h-full">
         <Conversation className="h-full">
           <ConversationContent>
-            {messages.map((message: any) => (
+            {messages.map((message) => (
               <div key={message.id}>
-                {message.parts?.map((part: any, i: number) => {
+                {message.parts?.map((part, i) => {
                   if (part.type === 'text') {
                     return (
                       <Message
@@ -205,15 +316,15 @@ function Chat() {
                     return (
                       <Tool key={`${message.id}-${i}`}>
                         <ToolHeader
-                          type={part.type}
-                          state={part.state || 'output-available'}
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
                           className="cursor-pointer"
                         />
                         <ToolContent>
-                          <ToolInput input={part.input || part.args || {}} />
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
                           <ToolOutput
-                            output={part.output || part.result}
-                            errorText={part.errorText || part.error}
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
                           />
                         </ToolContent>
                       </Tool>
@@ -231,7 +342,7 @@ function Chat() {
         <PromptInput onSubmit={handleSubmit} className="mt-20">
           <PromptInputBody>
             <PromptInputTextarea
-              onChange={(e: any) => setInput(e.target.value)}
+              onChange={(e) => setInput(e.target.value)}
               className="md:leading-10"
               value={input}
               placeholder="Type your message..."
@@ -253,10 +364,9 @@ It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/
 
 
 ## Test your agent
+
 1. Run your Next.js app with `npm run dev`
-
 2. Open the chat at http://localhost:3000/chat
-
 3. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
@@ -269,8 +379,8 @@ From here, you can extend the project with your own tools and logic:
 - Give your agent its own [tools](/docs/v1/agents/using-tools)
 - Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
 
-When you're ready, read more about how Mastra integrates with AI SDK and Next.js, and how to deploy your agent anywhere, including Vercel:
+When you're ready, read more about how Mastra integrates with AI SDK UI and Next.js, and how to deploy your agent anywhere, including Vercel:
 
-- Integrate Mastra with [AI SDK](/guides/v1/build-your-ui/ai-sdk-ui)
-- Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent to [Vercel](/guides/v1/deployment/vercel-deployer)
 - Deploy your agent [anywhere](/docs/v1/deployment/overview)

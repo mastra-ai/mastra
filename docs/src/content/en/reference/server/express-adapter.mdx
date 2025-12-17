@@ -13,7 +13,7 @@ The `@mastra/express` package provides a server adapter for running Mastra with 
 
 :::info
 
-For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server-db/server-adapters).
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
 
 :::
 
@@ -26,7 +26,7 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 Install the Express adapter and Express framework:
 
 ```bash copy
-npm install @mastra/express express
+npm install @mastra/express@beta express
 ```
 
 </StepItem>
@@ -246,7 +246,7 @@ app.use((req, res, next) => {
 
 ## Manual initialization
 
-For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server-db/server-adapters#manual-initialization) for details.
+For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
 
 ## Examples
 
@@ -254,7 +254,7 @@ For custom middleware ordering, call each method separately instead of `init()`.
 
 ## Related
 
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Shared adapter concepts
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
 - [Hono Adapter](/reference/v1/server/hono-adapter) - Alternative adapter
 - [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
 - [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes

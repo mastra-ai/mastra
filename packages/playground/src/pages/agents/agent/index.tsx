@@ -10,6 +10,7 @@ import {
   AgentInformation,
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
+  type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -40,18 +41,36 @@ function Agent() {
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
-  const defaultSettings = useMemo(() => {
-    if (agent) {
-      let providerOptions = undefined;
-      if (typeof agent.instructions === 'object' && 'providerOptions' in agent.instructions) {
-        providerOptions = agent.instructions.providerOptions;
-      }
-      return {
-        modelSettings: {
-          providerOptions,
-        },
-      };
+  const defaultSettings = useMemo((): AgentSettingsType => {
+    if (!agent) {
+      return { modelSettings: {} };
     }
+
+    const agentDefaultOptions = agent.defaultOptions as
+      | {
+          maxSteps?: number;
+          modelSettings?: Record<string, unknown>;
+          providerOptions?: AgentSettingsType['modelSettings']['providerOptions'];
+        }
+      | undefined;
+
+    // Map AI SDK v5 names back to UI names (maxOutputTokens -> maxTokens)
+    const { maxOutputTokens, ...restModelSettings } = (agentDefaultOptions?.modelSettings ?? {}) as {
+      maxOutputTokens?: number;
+      [key: string]: unknown;
+    };
+
+    return {
+      modelSettings: {
+        ...(restModelSettings as AgentSettingsType['modelSettings']),
+        // Only include properties if they have actual values (to not override fallback defaults)
+        ...(maxOutputTokens !== undefined && { maxTokens: maxOutputTokens }),
+        ...(agentDefaultOptions?.maxSteps !== undefined && { maxSteps: agentDefaultOptions.maxSteps }),
+        ...(agentDefaultOptions?.providerOptions !== undefined && {
+          providerOptions: agentDefaultOptions.providerOptions,
+        }),
+      },
+    };
   }, [agent]);
 
   if (isAgentLoading) {

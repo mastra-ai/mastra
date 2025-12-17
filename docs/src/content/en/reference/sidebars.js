@@ -227,6 +227,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "workflows/run-methods/startAsync",
+              label: ".startAsync()",
+            },
+            {
+              type: "doc",
               id: "workflows/run-methods/resume",
               label: ".resume()",
             },
@@ -530,6 +535,16 @@ const sidebars = {
           type: "doc",
           id: "ai-sdk/to-ai-sdk-stream",
           label: "toAISdkStream()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/to-ai-sdk-v4-messages",
+          label: "toAISdkV4Messages()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/to-ai-sdk-v5-messages",
+          label: "toAISdkV5Messages()",
         },
         { type: "doc", id: "ai-sdk/with-mastra", label: "withMastra()" },
         { type: "doc", id: "ai-sdk/workflow-route", label: "workflowRoute()" },

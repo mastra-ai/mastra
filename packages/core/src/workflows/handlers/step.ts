@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
-import { ErrorDomain, ErrorCategory } from '../../error';
+import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
@@ -476,9 +476,9 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
       scorersToUse = await scorersToUse({
         requestContext: requestContext,
       });
-    } catch (error) {
-      engine.preprocessExecutionError(
-        error,
+    } catch (e) {
+      const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
+      const mastraError = new MastraError(
         {
           id: 'WORKFLOW_FAILED_TO_FETCH_SCORERS',
           domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -489,8 +489,10 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
             stepId,
           },
         },
-        'Error fetching scorers: ',
+        errorInstance,
       );
+      engine.getLogger()?.trackException(mastraError);
+      engine.getLogger()?.error('Error fetching scorers: ' + errorInstance?.stack);
     }
   }
 

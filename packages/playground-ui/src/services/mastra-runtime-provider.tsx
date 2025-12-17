@@ -114,18 +114,19 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
             } else if (part.toolInvocation.state === 'call') {
               // Only return pending tool calls that are legitimately awaiting approval
               const toolCallId = part.toolInvocation.toolCallId;
+              const toolName = part.toolInvocation.toolName;
               const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
               const suspensionData = pendingToolApprovals?.[toolCallId];
               if (suspensionData) {
                 return {
                   type: 'tool-call',
                   toolCallId,
-                  toolName: part.toolInvocation.toolName,
+                  toolName,
                   args: part.toolInvocation.args,
                   metadata: {
                     mode: 'stream',
                     requireApprovalMetadata: {
-                      [toolCallId]: suspensionData,
+                      [toolName]: suspensionData,
                     },
                   },
                 };
@@ -208,6 +209,7 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
+    seed,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
@@ -221,14 +223,15 @@ export function MastraRuntimeProvider({
     requestContextInstance.set(key, value);
   });
 
-  const modelSettingsArgs: ModelSettings = {
+  const modelSettingsArgs = {
     frequencyPenalty,
     presencePenalty,
     maxRetries,
     temperature,
     topK,
     topP,
-    maxTokens,
+    seed,
+    maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
     instructions,
     providerOptions,
     maxSteps,
@@ -355,6 +358,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -472,6 +476,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
