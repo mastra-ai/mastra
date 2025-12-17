@@ -13,10 +13,6 @@
 export interface SerializationLimits {
   /** Maximum characters for any single attribute string (default: 1024) */
   maxAttrChars: number;
-  /** Maximum characters for preview strings (default: 256) */
-  maxPreviewChars: number;
-  /** Maximum array items to show in preview (default: 10) */
-  maxArrayPreviewItems: number;
   /** Maximum depth for recursive serialization (default: 6) */
   maxDepth: number;
   /** Maximum object keys to serialize (default: 50) */
@@ -29,8 +25,6 @@ export interface SerializationLimits {
 
 export const DEFAULT_SERIALIZATION_LIMITS: SerializationLimits = {
   maxAttrChars: 1024,
-  maxPreviewChars: 256,
-  maxArrayPreviewItems: 10,
   maxDepth: 6,
   maxKeys: 50,
   maxArrayItems: 50,
@@ -46,185 +40,6 @@ export function truncateString(s: string, maxChars: number): string {
 }
 
 /**
- * Small, non-recursive preview of unknown values.
- * Never walks object graphs deeply - meant for span attributes (cheap + safe).
- *
- * @param value - The value to preview
- * @param limits - Optional limits (uses defaults if not provided)
- * @returns A string representation of the value
- */
-export function previewValue(value: unknown, limits: Partial<SerializationLimits> = {}): string {
-  const { maxAttrChars, maxPreviewChars, maxArrayPreviewItems } = {
-    ...DEFAULT_SERIALIZATION_LIMITS,
-    ...limits,
-  };
-
-  if (value == null) return String(value);
-
-  switch (typeof value) {
-    case 'string': {
-      const s = value as string;
-      const preview = s.length > maxPreviewChars ? s.slice(0, maxPreviewChars) + '…' : s;
-      return truncateString(preview, maxAttrChars);
-    }
-
-    case 'number':
-    case 'boolean':
-      return String(value);
-
-    case 'bigint':
-      return `${value}n`;
-
-    case 'function':
-      return '[Function]';
-
-    case 'symbol': {
-      const sym = value as symbol;
-      return sym.description ? `[Symbol(${sym.description})]` : '[Symbol]';
-    }
-
-    default:
-      break;
-  }
-
-  // Handle special object types
-  if (value instanceof Error) {
-    return truncateString(`[Error ${value.name}: ${value.message}]`, maxAttrChars);
-  }
-
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
-    return `[Buffer length=${value.length}]`;
-  }
-
-  if (ArrayBuffer.isView(value)) {
-    const ctor = (value as any).constructor?.name ?? 'TypedArray';
-    const byteLength = (value as any).byteLength ?? '?';
-    return `[${ctor} byteLength=${byteLength}]`;
-  }
-
-  if (value instanceof ArrayBuffer) {
-    return `[ArrayBuffer byteLength=${value.byteLength}]`;
-  }
-
-  if (Array.isArray(value)) {
-    const len = value.length;
-    const sample = value.slice(0, maxArrayPreviewItems).map(v => {
-      const pv = previewValue(v, limits);
-      return pv.length > 64 ? pv.slice(0, 64) + '…' : pv;
-    });
-    return truncateString(`[Array length=${len} sample=[${sample.join(', ')}]]`, maxAttrChars);
-  }
-
-  // Generic object handling
-  const ctor = (value as any)?.constructor?.name ?? 'Object';
-  let keys: string[] | undefined;
-  try {
-    keys = Object.keys(value as any).slice(0, 10);
-  } catch {
-    keys = undefined;
-  }
-  if (keys && keys.length) {
-    return truncateString(`[${ctor} keys=${keys.join(',')}${keys.length === 10 ? ',…' : ''}]`, maxAttrChars);
-  }
-  return truncateString(`[${ctor}]`, maxAttrChars);
-}
-
-/**
- * Bounded safe stringify for when you need JSON output.
- * Still capped and depth/size limited to prevent memory issues.
- *
- * @param value - The value to stringify
- * @param limits - Optional limits (uses defaults if not provided)
- * @returns A JSON string representation with enforced limits
- */
-export function boundedStringify(value: unknown, limits: Partial<SerializationLimits> = {}): string {
-  const { maxAttrChars, maxDepth, maxKeys, maxArrayItems, maxTotalChars } = {
-    ...DEFAULT_SERIALIZATION_LIMITS,
-    ...limits,
-  };
-
-  const seen = new WeakSet<object>();
-
-  function helper(v: any, depth: number): any {
-    if (v == null) return v;
-
-    const t = typeof v;
-    if (t === 'string') {
-      return v.length > maxAttrChars ? v.slice(0, maxAttrChars) + '…[truncated]' : v;
-    }
-    if (t === 'number' || t === 'boolean') return v;
-    if (t === 'bigint') return `${v}n`;
-    if (t === 'function') return '[Function]';
-    if (t === 'symbol') return v.description ? `[Symbol(${v.description})]` : '[Symbol]';
-
-    if (v instanceof Error) {
-      return {
-        name: v.name,
-        message: v.message ? truncateString(v.message, maxAttrChars) : undefined,
-      };
-    }
-
-    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) {
-      return `[Buffer length=${v.length}]`;
-    }
-
-    if (ArrayBuffer.isView(v)) {
-      const ctor = v.constructor?.name ?? 'TypedArray';
-      const byteLength = (v as any).byteLength ?? '?';
-      return `[${ctor} byteLength=${byteLength}]`;
-    }
-
-    if (v instanceof ArrayBuffer) {
-      return `[ArrayBuffer byteLength=${v.byteLength}]`;
-    }
-
-    if (depth <= 0) {
-      const ctor = v?.constructor?.name ?? 'Object';
-      return `[${ctor} depthLimit]`;
-    }
-
-    if (typeof v === 'object') {
-      if (seen.has(v)) return '[Circular]';
-      seen.add(v);
-
-      if (Array.isArray(v)) {
-        const result = v.slice(0, maxArrayItems).map(x => helper(x, depth - 1));
-        if (v.length > maxArrayItems) {
-          result.push(`[…${v.length - maxArrayItems} more items]`);
-        }
-        return result;
-      }
-
-      const out: Record<string, any> = {};
-      const keys = Object.keys(v).slice(0, maxKeys);
-      for (const k of keys) {
-        try {
-          out[k] = helper(v[k], depth - 1);
-        } catch {
-          out[k] = '[Not Serializable]';
-        }
-      }
-      if (Object.keys(v).length > keys.length) {
-        out.__truncated = `${Object.keys(v).length - keys.length} more keys`;
-      }
-      return out;
-    }
-
-    return String(v);
-  }
-
-  try {
-    const json = JSON.stringify(helper(value, maxDepth));
-    if (json.length > maxTotalChars) {
-      return json.slice(0, maxTotalChars) + '…[truncated]';
-    }
-    return json;
-  } catch {
-    return '[Not Serializable]';
-  }
-}
-
-/**
  * Default keys to strip from objects during deep cleaning.
  * These are typically internal/sensitive fields that shouldn't be traced.
  */
@@ -235,6 +50,9 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
   'steps',
   'tracingContext',
 ]);
+
+/** Empty set for when you don't want to strip any keys */
+const NO_KEYS_TO_STRIP = new Set<string>();
 
 export interface DeepCleanOptions {
   keysToStrip?: Set<string>;
@@ -254,12 +72,7 @@ export interface DeepCleanOptions {
  * @param options - Optional configuration for cleaning behavior
  * @returns A cleaned version of the input with size limits enforced
  */
-export function deepClean(
-  value: any,
-  options: DeepCleanOptions = {},
-  _seen: WeakSet<any> = new WeakSet(),
-  _depth: number = 0,
-): any {
+export function deepClean(value: any, options: DeepCleanOptions = {}): any {
   const {
     keysToStrip = DEFAULT_KEYS_TO_STRIP,
     maxDepth = DEFAULT_SERIALIZATION_LIMITS.maxDepth,
@@ -268,84 +81,132 @@ export function deepClean(
     maxObjectKeys = DEFAULT_SERIALIZATION_LIMITS.maxKeys,
   } = options;
 
-  if (_depth > maxDepth) {
-    return '[MaxDepth]';
-  }
+  const seen = new WeakSet<any>();
 
-  // Handle primitives
-  if (value === null || value === undefined) {
-    return value;
-  }
-
-  // Handle strings - enforce length limit
-  if (typeof value === 'string') {
-    if (value.length > maxStringLength) {
-      return value.slice(0, maxStringLength) + `…[truncated, was ${value.length} chars]`;
+  function helper(val: any, depth: number): any {
+    if (depth > maxDepth) {
+      return '[MaxDepth]';
     }
-    return value;
-  }
 
-  // Handle other primitives
-  if (typeof value !== 'object') {
-    try {
-      JSON.stringify(value);
-      return value;
-    } catch (error) {
-      return `[${error instanceof Error ? error.message : String(error)}]`;
+    // Handle primitives
+    if (val === null || val === undefined) {
+      return val;
     }
-  }
 
-  // Handle circular references
-  if (_seen.has(value)) {
-    return '[Circular]';
-  }
-
-  _seen.add(value);
-
-  // Handle arrays - enforce length limit
-  if (Array.isArray(value)) {
-    const limitedArray = value.slice(0, maxArrayLength);
-    const cleaned = limitedArray.map(item => deepClean(item, options, _seen, _depth + 1));
-    if (value.length > maxArrayLength) {
-      cleaned.push(`[…${value.length - maxArrayLength} more items]`);
+    // Handle strings - enforce length limit
+    if (typeof val === 'string') {
+      if (val.length > maxStringLength) {
+        return val.slice(0, maxStringLength) + '…[truncated]';
+      }
+      return val;
     }
+
+    // Handle other non-object primitives explicitly
+    if (typeof val === 'number' || typeof val === 'boolean') {
+      return val;
+    }
+    if (typeof val === 'bigint') {
+      return `${val}n`;
+    }
+    if (typeof val === 'function') {
+      return '[Function]';
+    }
+    if (typeof val === 'symbol') {
+      return val.description ? `[Symbol(${val.description})]` : '[Symbol]';
+    }
+
+    // Handle Errors specially - preserve name and message
+    if (val instanceof Error) {
+      return {
+        name: val.name,
+        message: val.message
+          ? val.message.length > maxStringLength
+            ? val.message.slice(0, maxStringLength) + '…[truncated]'
+            : val.message
+          : undefined,
+      };
+    }
+
+    // Handle circular references
+    if (typeof val === 'object') {
+      if (seen.has(val)) {
+        return '[Circular]';
+      }
+      seen.add(val);
+    }
+
+    // Handle arrays - enforce length limit
+    if (Array.isArray(val)) {
+      const limitedArray = val.slice(0, maxArrayLength);
+      const cleaned = limitedArray.map(item => helper(item, depth + 1));
+      if (val.length > maxArrayLength) {
+        cleaned.push(`[…${val.length - maxArrayLength} more items]`);
+      }
+      return cleaned;
+    }
+
+    // Handle Buffer and typed arrays - don't serialize large binary data
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(val)) {
+      return `[Buffer length=${val.length}]`;
+    }
+
+    if (ArrayBuffer.isView(val)) {
+      const ctor = (val as any).constructor?.name ?? 'TypedArray';
+      const byteLength = (val as any).byteLength ?? '?';
+      return `[${ctor} byteLength=${byteLength}]`;
+    }
+
+    if (val instanceof ArrayBuffer) {
+      return `[ArrayBuffer byteLength=${val.byteLength}]`;
+    }
+
+    // Handle objects - enforce key limit
+    const cleaned: Record<string, any> = {};
+    const entries = Object.entries(val);
+    let keyCount = 0;
+
+    for (const [key, v] of entries) {
+      if (keysToStrip.has(key)) {
+        continue;
+      }
+
+      if (keyCount >= maxObjectKeys) {
+        cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
+        break;
+      }
+
+      try {
+        cleaned[key] = helper(v, depth + 1);
+        keyCount++;
+      } catch (error) {
+        cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
+        keyCount++;
+      }
+    }
+
     return cleaned;
   }
 
-  // Handle Buffer and typed arrays - don't serialize large binary data
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
-    return `[Buffer length=${value.length}]`;
-  }
+  return helper(value, 0);
+}
 
-  if (ArrayBuffer.isView(value)) {
-    const ctor = (value as any).constructor?.name ?? 'TypedArray';
-    const byteLength = (value as any).byteLength ?? '?';
-    return `[${ctor} byteLength=${byteLength}]`;
-  }
+/**
+ * Bounded safe stringify for when you need JSON output.
+ * Uses deepClean internally, then JSON.stringify with total length limit.
+ *
+ * @param value - The value to stringify
+ * @returns A JSON string representation with enforced limits
+ */
+export function boundedStringify(value: unknown): string {
+  const cleaned = deepClean(value, { keysToStrip: NO_KEYS_TO_STRIP });
 
-  // Handle objects - enforce key limit
-  const cleaned: Record<string, any> = {};
-  const entries = Object.entries(value);
-  let keyCount = 0;
-
-  for (const [key, val] of entries) {
-    if (keysToStrip.has(key)) {
-      continue;
+  try {
+    const json = JSON.stringify(cleaned);
+    if (json.length > DEFAULT_SERIALIZATION_LIMITS.maxTotalChars) {
+      return json.slice(0, DEFAULT_SERIALIZATION_LIMITS.maxTotalChars) + '…[truncated]';
     }
-
-    if (keyCount >= maxObjectKeys) {
-      cleaned['__truncated'] = `${entries.length - keyCount} more keys omitted`;
-      break;
-    }
-
-    try {
-      cleaned[key] = deepClean(val, options, _seen, _depth + 1);
-      keyCount++;
-    } catch (error) {
-      cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-      keyCount++;
-    }
+    return json;
+  } catch {
+    return '[Not Serializable]';
   }
-
-  return cleaned;
 }

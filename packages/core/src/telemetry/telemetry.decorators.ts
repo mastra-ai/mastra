@@ -1,7 +1,7 @@
 import { context, propagation, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 
-import { previewValue, boundedStringify } from '../ai-tracing/serialization';
+import { boundedStringify } from '../ai-tracing/serialization';
 import { getBaggageValues, hasActiveTelemetry } from './utility';
 
 interface StreamFinishData {
@@ -66,25 +66,19 @@ function enhanceStreamingArgumentsWithTelemetry(args: unknown[], span: EnhancedS
   const originalOnFinish = enhancedStreamOptions.onFinish;
 
   enhancedStreamOptions.onFinish = async (finishData: StreamFinishData) => {
-    try {
-      const telemetryData = {
-        text: finishData.text,
-        usage: finishData.usage,
-        finishReason: finishData.finishReason,
-        toolCalls: finishData.toolCalls,
-        toolResults: finishData.toolResults,
-        warnings: finishData.warnings,
-        ...(finishData.object !== undefined && { object: finishData.object }),
-      };
+    const telemetryData = {
+      text: finishData.text,
+      usage: finishData.usage,
+      finishReason: finishData.finishReason,
+      toolCalls: finishData.toolCalls,
+      toolResults: finishData.toolResults,
+      warnings: finishData.warnings,
+      ...(finishData.object !== undefined && { object: finishData.object }),
+    };
 
-      span.setAttribute(`${spanName}.result`, boundedStringify(telemetryData));
-      span.setStatus({ code: SpanStatusCode.OK });
-      endSpanOnce(span);
-    } catch {
-      span.setAttribute(`${spanName}.result`, '[Telemetry Capture Error]');
-      span.setStatus({ code: SpanStatusCode.ERROR });
-      endSpanOnce(span);
-    }
+    span.setAttribute(`${spanName}.result`, boundedStringify(telemetryData));
+    span.setStatus({ code: SpanStatusCode.OK });
+    endSpanOnce(span);
 
     if (originalOnFinish) return await originalOnFinish(finishData);
   };
@@ -135,9 +129,9 @@ export function withSpan(options: {
       // Always bind span to the active context
       let ctx = trace.setSpan(context.active(), span);
 
-      // Record input arguments (small previews only)
+      // Record input arguments with bounded serialization
       args.forEach((arg, index) => {
-        span.setAttribute(`${spanName}.argument.${index}`, previewValue(arg));
+        span.setAttribute(`${spanName}.argument.${index}`, boundedStringify(arg));
       });
 
       // Attach baggage-derived fields (these should be small)
@@ -206,7 +200,7 @@ export function withSpan(options: {
                 return resolvedValue;
               }
 
-              span.setAttribute(`${spanName}.result`, previewValue(resolvedValue));
+              span.setAttribute(`${spanName}.result`, boundedStringify(resolvedValue));
               span.setStatus({ code: SpanStatusCode.OK });
               return resolvedValue;
             })
@@ -219,6 +213,8 @@ export function withSpan(options: {
                 // recordException is okay, but can include stack; rely on OTel/Sentry settings
                 span.recordException(err);
               }
+              // End span on error - for streaming methods, onFinish won't be called if there's an error
+              endSpanOnce(span);
               throw err;
             })
             .finally(() => {
@@ -228,7 +224,7 @@ export function withSpan(options: {
 
         // Non-promise return
         if (!isStreamingMethod(methodName)) {
-          span.setAttribute(`${spanName}.result`, previewValue(result));
+          span.setAttribute(`${spanName}.result`, boundedStringify(result));
         }
         span.setStatus({ code: SpanStatusCode.OK });
         return result;
@@ -240,10 +236,12 @@ export function withSpan(options: {
         if (error instanceof Error) {
           span.recordException(error);
         }
+        // End span on error - for streaming methods, onFinish won't be called if there's an error
+        endSpanOnce(span);
         throw error;
       } finally {
-        // End span for sync methods (streaming ends in onFinish)
-        if (!isStreamingMethod(methodName)) {
+        // End span for sync non-streaming methods (streaming ends in onFinish or catch)
+        if (!isStreamingMethod(methodName) && !span.__mastraEnded) {
           endSpanOnce(span);
         }
       }
