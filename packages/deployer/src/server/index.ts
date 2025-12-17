@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -23,8 +24,10 @@ import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-r
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 // Get studio path from env or default to ./playground relative to cwd
-const getStudioPath = () => process.env.MASTRA_STUDIO_PATH || './playground';
+const getStudioPath = () => process.env.MASTRA_STUDIO_PATH || join(__dirname, './playground');
 
 // Use adapter type definitions
 type Bindings = HonoBindings;
@@ -258,6 +261,7 @@ export async function createHonoServer(
         });
       },
     );
+
     // Playground routes - these should come after API routes
     // Serve static assets from playground directory
     // Note: Vite builds with base: './' so all asset URLs are relative
