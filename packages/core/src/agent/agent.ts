@@ -2589,10 +2589,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<OUTPUT extends OutputSchema | undefined = undefined>({
+    methodType,
+    resumeContext,
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {

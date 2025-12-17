@@ -3127,6 +3127,13 @@ We're building Mastra Cloud to be the easiest place to deploy and observe your M
 
 Learn more in the [Mastra Cloud docs](/docs/v1/mastra-cloud/overview).
 
+## Workflow Runners
+
+Mastra supports deploying workflows to specialized workflow execution platforms that handle orchestration, monitoring, and reliability. [Inngest](https://www.inngest.com) is a developer platform for running background workflows without managing infrastructure. Mastra workflows can be deployed to Inngest, which provides step memoization, automatic retries, real-time monitoring, and suspend/resume capabilities.
+
+- [Inngest deployment guide](/guides/v1/deployment/inngest)
+- [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest)
+
 
 ---
 title: "Deploy with a Web Framework | Deployment"
@@ -21439,16 +21446,9 @@ The Examples section is a short list of example projects demonstrating basic AI 
 
 <CardItems
   titles={[
-    "Workflow",
     "Voice",
   ]}
   items={{
-    Workflow: [
-      {
-        title: "Inngest Workflow",
-        href: "/examples/v1/workflows/inngest-workflow",
-      },
-    ],
     Voice: [
       { title: "Text to Speech", href: "/examples/v1/voice/text-to-speech" },
       { title: "Speech to Text", href: "/examples/v1/voice/speech-to-text" },
@@ -26054,6 +26054,396 @@ Before deploying to a cloud provider, ensure you have:
 
 
 ---
+title: "Inngest | Deployment"
+description: "Deploy Mastra workflows with Inngest"
+---
+
+# Inngest Workflow
+[EN] Source: https://mastra.ai/en/guides/deployment/inngest
+
+[Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
+
+For a complete example with advanced flow control features, see the [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest).
+
+## How Inngest Works with Mastra
+
+Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow` and `createStep` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
+
+The `serve` function bridges the two systems by registering Mastra workflows as Inngest functions and setting up the necessary event handlers for execution and monitoring.
+
+When an event triggers a workflow, Inngest executes it step by step, memoizing each step's result. This means if a workflow is retried or resumed, completed steps are skipped, ensuring efficient and reliable execution. Control flow primitives in Mastra, such as loops, conditionals, and nested workflows are seamlessly translated into the same Inngest's function/step model, preserving advanced workflow features like composition, branching, and suspension.
+
+Real-time monitoring, suspend/resume, and step-level observability are enabled via Inngest's publish-subscribe system and dashboard. As each step executes, its state and output are tracked using Mastra storage and can be resumed as needed.
+
+## Setup
+
+Install the required Inngest package:
+
+```sh
+npm install @mastra/inngest@beta
+```
+
+## Building an Inngest Workflow
+
+This guide walks through creating a workflow with Inngest and Mastra, demonstrating a counter application that increments a value until it reaches 10.
+
+### Inngest Initialization
+
+Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
+
+In development:
+
+```ts title="src/mastra/inngest/index.ts"
+import { Inngest } from "inngest";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
+
+export const inngest = new Inngest({
+  id: "mastra",
+  baseUrl: "http://localhost:8288",
+  isDev: true,
+  middleware: [realtimeMiddleware()],
+});
+```
+
+In production:
+
+```ts title="src/mastra/inngest/index.ts"
+import { Inngest } from "inngest";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
+
+export const inngest = new Inngest({
+  id: "mastra",
+  middleware: [realtimeMiddleware()],
+});
+```
+
+### Creating Steps
+
+Define the individual steps that will compose your workflow:
+
+```ts title="src/mastra/workflows/index.ts"
+import { z } from "zod";
+import { inngest } from "../inngest";
+import { init } from "@mastra/inngest";
+
+// Initialize Inngest with Mastra, pointing to your local Inngest server
+const { createWorkflow, createStep } = init(inngest);
+
+// Step: Increment the counter value
+const incrementStep = createStep({
+  id: "increment",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 };
+  },
+});
+```
+
+### Creating the Workflow
+
+Compose the steps into a workflow using the `dountil` loop pattern. The createWorkflow function creates a function on inngest server that is invocable.
+
+```ts title="src/mastra/workflows/index.ts"
+// workflow that is registered as a function on inngest server
+const workflow = createWorkflow({
+  id: "increment-workflow",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+}).then(incrementStep);
+
+workflow.commit();
+
+export { workflow as incrementWorkflow };
+```
+
+### Configuring the Mastra Instance and Executing the Workflow
+
+Register the workflow with Mastra and configure the Inngest API endpoint:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { serve as inngestServe } from "@mastra/inngest";
+import { incrementWorkflow } from "./workflows";
+import { inngest } from "./inngest";
+import { PinoLogger } from "@mastra/loggers";
+
+// Configure Mastra with the workflow and Inngest API endpoint
+export const mastra = new Mastra({
+  workflows: {
+    incrementWorkflow,
+  },
+  server: {
+    // The server configuration is required to allow local docker container can connect to the mastra server
+    host: "0.0.0.0",
+    apiRoutes: [
+      // This API route is used to register the Mastra workflow (inngest function) on the inngest server
+      {
+        path: "/api/inngest",
+        method: "ALL",
+        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+        // The inngestServe function integrates Mastra workflows with Inngest by:
+        // 1. Creating Inngest functions for each workflow with unique IDs (workflow.${workflowId})
+        // 2. Setting up event handlers that:
+        //    - Generate unique run IDs for each workflow execution
+        //    - Create an InngestExecutionEngine to manage step execution
+        //    - Handle workflow state persistence and real-time updates
+        // 3. Establishing a publish-subscribe system for real-time monitoring
+        //    through the workflow:${workflowId}:${runId} channel
+        //
+        // Optional: You can also pass additional Inngest functions to serve alongside workflows:
+        // createHandler: async ({ mastra }) => inngestServe({
+        //   mastra,
+        //   inngest,
+        //   functions: [customFunction1, customFunction2] // User-defined Inngest functions
+        // }),
+      },
+    ],
+  },
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+```
+
+### Running the Workflow locally
+
+:::info[Prerequisites]
+
+- Docker installed and running
+- Mastra project set up
+- Dependencies installed (`npm install`)
+
+:::
+
+1. Run `npx mastra dev` to start the Mastra server on local to serve the server on port 4111.
+2. Start the Inngest Dev Server (via Docker)
+   In a new terminal, run:
+
+    ```sh
+    docker run --rm -p 8288:8288 \
+      inngest/inngest \
+      inngest dev -u http://host.docker.internal:4111/api/inngest
+    ```
+
+    :::note
+
+    The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint.
+
+    :::
+
+3. Open the Inngest Dashboard
+
+    - Visit [http://localhost:8288](http://localhost:8288) in your browser.
+    - Go to the **Apps** section in the sidebar.
+    - You should see your Mastra workflow registered.
+
+    ![Inngest Dashboard](/img/inngest-apps-dashboard.png)
+
+4. Invoke the Workflow
+
+    - Go to the **Functions** section in the sidebar.
+    - Select your Mastra workflow.
+    - Click **Invoke** and use the following input:
+
+    ```json
+    {
+      "data": {
+        "inputData": {
+          "value": 5
+        }
+      }
+    }
+    ```
+
+    ![Inngest Function](/img/inngest-function-dashboard.png)
+
+5. **Monitor the Workflow Execution**
+
+    - Go to the **Runs** tab in the sidebar.
+    - Click on the latest run to see step-by-step execution progress.
+
+    ![Inngest Function Run](/img/inngest-runs-dashboard.png)
+
+### Running the Workflow in Production
+
+:::info[Prerequisites]
+
+- Vercel account and Vercel CLI installed (`npm i -g vercel`)
+- Inngest account
+- Vercel token (recommended: set as environment variable)
+
+:::
+
+1. Add Vercel Deployer to Mastra instance
+
+    ```ts title="src/mastra/index.ts"
+    import { VercelDeployer } from "@mastra/deployer-vercel";
+
+    export const mastra = new Mastra({
+      // ...other config
+      deployer: new VercelDeployer({
+        teamSlug: "your_team_slug",
+        projectName: "your_project_name",
+        // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
+        // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
+        token: "your_vercel_token",
+      }),
+    });
+    ```
+
+    :::note
+
+    Set your Vercel token in your environment:
+
+    ```sh
+    export VERCEL_TOKEN=your_vercel_token
+    ```
+
+    :::
+
+2. Build the mastra instance
+
+    ```sh
+    npx mastra build
+    ```
+
+3. Deploy to Vercel
+
+    ```sh
+    cd .mastra/output
+    vercel --prod
+    ```
+
+    :::tip
+
+    If you haven't already, log in to Vercel CLI with `vercel login`.
+
+    :::
+
+4. Sync with Inngest Dashboard
+
+    - Go to the [Inngest dashboard](https://app.inngest.com/env/production/apps).
+    - Click **Sync new app with Vercel** and follow the instructions.
+    - You should see your Mastra workflow registered as an app.
+
+    ![Inngest Dashboard](/img/inngest-apps-dashboard-prod.png)
+
+5. Invoke the Workflow
+
+    - In the **Functions** section, select `workflow.increment-workflow`.
+    - Click **All actions** (top right) > **Invoke**.
+    - Provide the following input:
+
+    ```json
+    {
+      "data": {
+        "inputData": {
+          "value": 5
+        }
+      }
+    }
+    ```
+
+    ![Inngest Function Run](/img/inngest-function-dashboard-prod.png)
+
+6.  Monitor Execution
+
+    - Go to the **Runs** tab.
+    - Click the latest run to see step-by-step execution progress.
+
+        ![Inngest Function Run](/img/inngest-runs-dashboard-prod.png)
+
+## Advanced Usage: Adding Custom Inngest Functions
+
+You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `inngestServe`.
+
+### Creating Custom Functions
+
+First, create your custom Inngest functions:
+
+```ts title="src/inngest/custom-functions.ts"
+import { inngest } from "./inngest";
+
+// Define custom Inngest functions
+export const customEmailFunction = inngest.createFunction(
+  { id: "send-welcome-email" },
+  { event: "user/registered" },
+  async ({ event }) => {
+    // Custom email logic here
+    console.log(`Sending welcome email to ${event.data.email}`);
+    return { status: "email_sent" };
+  },
+);
+
+export const customWebhookFunction = inngest.createFunction(
+  { id: "process-webhook" },
+  { event: "webhook/received" },
+  async ({ event }) => {
+    // Custom webhook processing
+    console.log(`Processing webhook: ${event.data.type}`);
+    return { processed: true };
+  },
+);
+```
+
+### Serving Custom Functions with Workflows
+
+Update your Mastra configuration to include the custom functions:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { serve as inngestServe } from "@mastra/inngest";
+import { incrementWorkflow } from "./workflows";
+import { inngest } from "./inngest";
+import {
+  customEmailFunction,
+  customWebhookFunction,
+} from "./inngest/custom-functions";
+
+export const mastra = new Mastra({
+  workflows: {
+    incrementWorkflow,
+  },
+  server: {
+    host: "0.0.0.0",
+    apiRoutes: [
+      {
+        path: "/api/inngest",
+        method: "ALL",
+        createHandler: async ({ mastra }) =>
+          inngestServe({
+            mastra,
+            inngest,
+            functions: [customEmailFunction, customWebhookFunction], // Add your custom functions
+          }),
+      },
+    ],
+  },
+});
+```
+
+### Function Registration
+
+When you include custom functions:
+
+1. **Mastra workflows** are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
+2. **Custom functions** retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
+3. **All functions** are served together on the same `/api/inngest` endpoint
+
+This allows you to combine Mastra's workflow orchestration with your existing Inngest functions seamlessly.
+
+
+---
 title: "NetlifyDeployer | Deployment"
 description: "Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer"
 ---
@@ -26286,606 +26676,447 @@ The `VercelDeployer` automatically generates a `config.json` configuration file 
 
 
 ---
-title: "Integrate Mastra in your Astro project | Frameworks"
-description: A step-by-step guide to integrating Mastra with Astro.
+title: "Astro | Frameworks"
+description: "Get started with Mastra and Astro"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 
 # Integrate Mastra in your Astro project
 [EN] Source: https://mastra.ai/en/guides/getting-started/astro
 
-Mastra integrates with Astro, making it easy to:
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to Astro by importing and calling the agent directly from your routes.
 
-- Build flexible APIs to serve AI-powered features
-- Simplify deployment with a unified codebase for frontend and backend
-- Take advantage of Astro's built-in [Actions](https://docs.astro.build/en/guides/actions/) or [Server Endpoints](https://docs.astro.build/en/guides/endpoints/#server-endpoints-api-routes) for efficient server-client workflows
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
-Use this guide to scaffold and integrate Mastra with your Astro project.
+:::note
 
-<Tabs>
-  <TabItem value="actions" label="Actions">
-
-:::warning
-
-This guide assumes you're using Astro's Actions with React and the Vercel adapter.
+While this guide shows you how to use Astro with React and full server-side rendering (SSR), there are many ways to use Astro with Mastra. You can [opt-in to SSR](https://docs.astro.build/en/guides/on-demand-rendering/#enabling-on-demand-rendering) on a per-file basis and use other frameworks like Svelte, Vue, Solid, or Preact. You can use Astro to build out a chat interface and call endpoints [natively in Astro](https://docs.astro.build/en/recipes/call-endpoints/).
 
 :::
 
-  <Steps>
+## Before you begin
 
-<StepItem>
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
-Install the required packages:
+## Create a new Astro app (optional)
 
-<Tabs>
+If you already have an Astro app, skip to the next step. Your Astro app should be setup like this:
+
+- Use SSR (`output: "server"` in `astro.config.mjs`)
+- Use the [React integration](https://docs.astro.build/en/guides/integrations-guide/react/)
+- Tailwind installed
+
+To support [on-demand rendering](https://docs.astro.build/en/guides/on-demand-rendering/) this guide will use the [Node.js adapter](https://docs.astro.build/en/guides/integrations-guide/node/) but any of the supported server adapters will work.
+
+<Tabs groupId="pm">
 <TabItem value="npm" label="npm">
-
 ```bash
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
+npm create astro@latest mastra-astro -- --add node --add react --add tailwind --install --skip-houston --template minimal --git
 ```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-```
-
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
-
 ```bash
-pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
+pnpm create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
 ```
-
+</TabItem>
+<TabItem value="yarn" label="yarn">
+```bash
+yarn create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
+```
 </TabItem>
 <TabItem value="bun" label="bun">
-
 ```bash
-bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
+bun create astro@latest mastra-astro --add node --add react --add tailwind --install --skip-houston --template minimal --git
 ```
-
 </TabItem>
 </Tabs>
 
-</StepItem>
+This creates a project called `mastra-astro`, but you can replace it with any name you want.
 
-<StepItem>
+`cd` into your project and edit the `astro.config.mjs` file to set the [`output` setting](https://docs.astro.build/en/reference/configuration-reference/#output) to `"server"`:
 
-To integrate Mastra into your project, you have two options:
+```js title="astro.config.mjs {10}
+// @ts-check
+import { defineConfig } from 'astro/config';
 
-- Use the One-Liner
+import node from '@astrojs/node';
+import react from '@astrojs/react';
+import tailwindcss from '@tailwindcss/vite';
 
-  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
-
-  ```bash copy
-  npx mastra@beta init --default
-  ```
-
-  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
-
-- Use the Interactive CLI
-
-  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
-
-  ```bash copy
-  npx mastra@beta init
-  ```
-
-Add the `dev` and `build` scripts to `package.json`:
-
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev",
-    "build:mastra": "mastra build"
-  }
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Modify the `tsconfig.json` file in your project root:
-
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Setup your API key in a `.env` file:
-
-```bash title=".env"
-OPENAI_API_KEY=<your-api-key>
-```
-
-</StepItem>
-
-<StepItem>
-
-Add `.mastra` and `.vercel` to your `.gitignore` file:
-
-```bash title=".gitignore"
-.mastra
-.vercel
-```
-
-</StepItem>
-
-<StepItem>
-
-Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
-
-```typescript title="src/mastra/agents/weather-agent.ts"
- import { createOpenAI } from "@ai-sdk/openai";
-
- const openai = createOpenAI({
-   apiKey: import.meta.env?.OPENAI_API_KEY,
-   compatibility: "strict"
- });
-```
-
-> More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
-
-</StepItem>
-
-<StepItem>
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
-<TabItem value="npm" label="npm">
-
-```bash
-npm run dev:mastra
-```
-
-</TabItem>
-<TabItem value="cli" label="CLI">
-
-```bash
-mastra dev:mastra
-```
-
-</TabItem>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
-
-</StepItem>
-
-<StepItem>
-
-With the Mastra Dev Server running, you can start your Astro site in the usual way.
-
-</StepItem>
-
-<StepItem>
-
-Create an `actions` directory:
-
-```bash
-mkdir src/actions
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Action, and add the example code:
-
-```bash
-touch src/actions/index.ts
-```
-
-```typescript title="src/actions/index.ts"
-import { defineAction } from "astro:actions";
-import { z } from "astro:schema";
-
-import { mastra } from "../mastra";
-
-export const server = {
-  getWeatherInfo: defineAction({
-    input: z.object({
-      city: z.string(),
-    }),
-    handler: async (input) => {
-      const city = inputData.city;
-      const agent = mastra.getAgent("weatherAgent");
-
-      const result = await agent.generate(
-        `What's the weather like in ${city}?`,
-      );
-
-      return result.text;
-    },
+// https://astro.build/config
+export default defineConfig({
+  output: 'server',
+  adapter: node({
+    mode: 'standalone'
   }),
-};
-```
 
-</StepItem>
+  integrations: [react()],
 
-<StepItem>
-
-Create a new Form component, and add the example code:
-
-```bash
-touch src/components/form.tsx
-```
-
-```typescript title="src/components/form.tsx"
-import { actions } from "astro:actions";
-import { useState } from "react";
-
-export const Form = () => {
-  const [result, setResult] = useState<string | null>(null);
-
-  async function handleSubmit(formData: FormData) {
-    const city = formData.get("city")!.toString();
-    const { data } = await actions.getWeatherInfo({ city });
-
-    setResult(data || null);
+  vite: {
+    plugins: [tailwindcss()]
   }
-
-  return (
-    <>
-      <form action={handleSubmit}>
-        <input name="city" placeholder="Enter city" required />
-        <button type="submit">Get Weather</button>
-      </form>
-      {result && <pre>{result}</pre>}
-    </>
-  );
-};
+});
 ```
 
-</StepItem>
+Lastly, edit the `tsconfig.json` to resolve paths:
 
-<StepItem>
-
-Create a new Page, and add the example code:
-
-```bash
-touch src/pages/test.astro
+```ts title="tsconfig.json"
+{
+  "compilerOptions": {
+    // ...
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+    // ...
+  }
+}
 ```
 
-```astro title="src/pages/test.astro"
----
-import { Form } from '../components/form'
----
+## Initialize Mastra
 
-<h1>Test</h1>
-<Form client:load />
-```
+Run [`mastra init`](/reference/v1/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-> You can now navigate to `/test` in your browser to try it out.
-
-Submitting **London** as the city would return a result similar to:
-
-```plaintext
-Agent response: The current weather in London is as follows:
-
-- **Temperature:** 12.9°C (Feels like 9.7°C)
-- **Humidity:** 63%
-- **Wind Speed:** 14.7 km/h
-- **Wind Gusts:** 32.4 km/h
-- **Conditions:** Overcast
-
-Let me know if you need more information!
-```
-
-</StepItem>
-
-  </Steps>
-  </TabItem>
-
-  <TabItem value="server-endpoints" label="Server Endpoints">
-
-:::warning
-
-This guide assumes you're using Astro's Endpoints with React and the Vercel adapter, and your output is set to server.
-
-:::
-
-## Prerequisites
-
-Before proceeding, ensure your Astro project is configured as follows:
-
-- Astro React integration: [@astrojs/react](https://docs.astro.build/en/guides/integrations-guide/react/)
-- Vercel adapter: [@astrojs/vercel](https://docs.astro.build/en/guides/integrations-guide/vercel/)
-- `astro.config.mjs` is set to `output: "server"`
-
-<Steps>
-
-<StepItem>
-
-Install the required packages:
-
-<Tabs>
+<Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
 ```bash
-npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-```
-
-</TabItem>
-<TabItem value="yarn" label="yarn">
-
-```bash
-yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
+npx mastra@beta init
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
 ```bash
-pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn dlx mastra@beta init
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
 ```bash
-bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
+bunx mastra@beta init
 ```
 
 </TabItem>
 </Tabs>
 
-</StepItem>
+This creates a `src/mastra` folder with an example weather agent and the following files:
 
-<StepItem>
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
-To integrate Mastra into your project, you have two options:
+You'll call `weather-agent.ts` from your Astro routes in the next steps.
 
-- Use the One-Liner
+## Install AI SDK UI & AI Elements
 
-  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+Install AI SDK UI along with the Mastra adapter:
 
-  ```bash copy
-  npx mastra@beta init --default
-  ```
-
-  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
-
-- Use the Interactive CLI
-
-  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
-
-  ```bash copy
-  npx mastra@beta init
-  ```
-
-Add the `dev` and `build` scripts to `package.json`:
-
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev",
-    "build:mastra": "mastra build"
-  }
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Modify the `tsconfig.json` file in your project root:
-
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Setup your API key in a `.env` file:
-
-```bash title=".env"
-OPENAI_API_KEY=<your-api-key>
-```
-
-</StepItem>
-
-<StepItem>
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash title=".gitignore"
-.mastra
-.vercel
-```
-
-</StepItem>
-
-<StepItem>
-
-Astro uses Vite, which accesses environment variables via `import.meta.env` rather than `process.env`. As a result, the model constructor must explicitly receive the `apiKey` from the Vite environment like this:
-
-```typescript title="src/mastra/agents/weather-agent.ts"
- import { createOpenAI } from "@ai-sdk/openai";
-
- const openai = createOpenAI({
-   apiKey: import.meta.env?.OPENAI_API_KEY,
-   compatibility: "strict"
- });
-```
-
-> More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
-
-</StepItem>
-
-<StepItem>
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
+<Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
 ```bash
-npm run dev:mastra
+npm install @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
-<TabItem value="cli" label="CLI">
+<TabItem value="pnpm" label="pnpm">
 
 ```bash
-mastra dev:mastra
+pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
 </Tabs>
 
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
+Next, initialize AI Elements. When prompted, choose the default options:
 
-</StepItem>
-
-<StepItem>
-
-With the Mastra Dev Server running, you can start your Astro site in the usual way.
-
-</StepItem>
-
-<StepItem>
-
-Create an `api` directory:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
 ```bash
-mkdir src/pages/api
+npx ai-elements@latest
 ```
 
-</StepItem>
-
-<StepItem>
-
-Create a new Endpoint, and add the example code:
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
 ```bash
-touch src/pages/api/test.ts
+pnpm dlx ai-elements@latest
 ```
 
-```typescript title="src/pages/api/test.ts"
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn dlx ai-elements@latest
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bunx ai-elements@latest
+```
+
+</TabItem>
+</Tabs>
+
+This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+
+## Create a chat route
+
+Create `src/pages/api/chat.ts`:
+
+```ts title="src/pages/api/chat.ts"
 import type { APIRoute } from "astro";
+import { handleChatStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
+import { createUIMessageStreamResponse } from 'ai';
+import { mastra } from '@/mastra';
 
-import { mastra } from "../../mastra";
+const THREAD_ID = 'example-user-id';
+const RESOURCE_ID = 'weather-chat';
 
 export const POST: APIRoute = async ({ request }) => {
-  const { city } = await new Response(request.body).json();
-  const agent = mastra.getAgent("weatherAgent");
+  const params = await request.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weather-agent',
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
+      }
+    }
+  })
 
-  const result = await agent.generate(`What's the weather like in ${city}?`);
+  return createUIMessageStreamResponse({ stream })
+}
 
-  return new Response(JSON.stringify(result.text));
-};
-```
+export const GET: APIRoute = async () => {
+  const memory = await mastra.getAgentById('weather-agent').getMemory()
+  let response = null
 
-</StepItem>
-
-<StepItem>
-
-Create a new Form component, and add the example code:
-
-```bash
-touch src/components/form.tsx
-```
-
-```typescript title="src/components/form.tsx"
-import { useState } from "react";
-
-export const Form = () => {
-  const [result, setResult] = useState<string | null>(null);
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const formData = new FormData(event.currentTarget);
-    const city = formData.get("city")?.toString();
-
-    const response = await fetch("/api/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ city })
-    });
-
-    const text = await response.json();
-    setResult(text);
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    })
+  } catch {
+    console.log('No previous messages found.')
   }
 
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return Response.json(uiMessages)
+}
+```
+
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
+
+## Create a chat component
+
+Create `src/components/chat.tsx`:
+
+```tsx title="src/components/chat.tsx"
+import '@/styles/global.css';
+import { useEffect, useState } from 'react';
+import { DefaultChatTransport, type ToolUIPart } from 'ai';
+import { useChat } from '@ai-sdk/react';
+
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+} from '@/components/ai-elements/prompt-input';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+
+import {
+  Tool,
+  ToolHeader,
+  ToolContent,
+  ToolInput,
+  ToolOutput,
+} from '@/components/ai-elements/tool';
+
+
+function Chat() {
+  const [input, setInput] = useState<string>('');
+
+  const { messages, setMessages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+  });
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      const res = await fetch('/api/chat');
+      const data = await res.json();
+      setMessages([...data]);
+    };
+    fetchMessages();
+  }, [setMessages]);
+
+  const handleSubmit = async () => {
+    if (!input.trim()) return;
+
+    sendMessage({ text: input });
+    setInput('');
+  };
+
   return (
-    <>
-      <form onSubmit={handleSubmit}>
-        <input name="city" placeholder="Enter city" required />
-        <button type="submit">Get Weather</button>
-      </form>
-      {result && <pre>{result}</pre>}
-    </>
+    <div className="w-full p-6 relative size-full h-screen">
+      <div className="flex flex-col h-full">
+        <Conversation className="h-full">
+          <ConversationContent>
+            {messages.map((message) => (
+              <div key={message.id}>
+                {message.parts?.map((part, i) => {
+                  if (part.type === 'text') {
+                    return (
+                      <Message
+                        key={`${message.id}-${i}`}
+                        from={message.role}>
+                          <MessageContent>
+                            <MessageResponse>{part.text}</MessageResponse>
+                          </MessageContent>
+                      </Message>
+                    );
+                  }
+
+                  if (part.type?.startsWith('tool-')) {
+                    return (
+                      <Tool key={`${message.id}-${i}`}>
+                        <ToolHeader
+                          type={(part as ToolUIPart).type}
+                          state={(part as ToolUIPart).state || 'output-available'}
+                          className="cursor-pointer"
+                        />
+                        <ToolContent>
+                          <ToolInput input={(part as ToolUIPart).input || {}} />
+                          <ToolOutput
+                            output={(part as ToolUIPart).output}
+                            errorText={(part as ToolUIPart).errorText}
+                          />
+                        </ToolContent>
+                      </Tool>
+                    );
+                  }
+
+                  return null;
+                })}
+              </div>
+            ))}
+            <ConversationScrollButton />
+          </ConversationContent>
+        </Conversation>
+
+        <PromptInput onSubmit={handleSubmit} className="mt-20">
+          <PromptInputBody>
+            <PromptInputTextarea
+              onChange={(e) => setInput(e.target.value)}
+              className="md:leading-10"
+              value={input}
+              placeholder="Type your message..."
+              disabled={status !== 'ready'}
+            />
+          </PromptInputBody>
+        </PromptInput>
+      </div>
+    </div>
   );
-};
+}
+
+export default Chat;
 ```
 
-</StepItem>
+This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
 
-<StepItem>
+It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
-Create a new Page, and add the example code:
+## Render the chat component
 
-```bash
-touch src/pages/test.astro
-```
+The last step is to render the chat component on your index page. Edit `src/pages/index.astro`:
 
-```astro title="src/pages/test.astro"
+```html title="src/pages/index.astro" {2,14}
 ---
-import { Form } from '../components/form'
+import Chat from '@/components/chat';
 ---
 
-<h1>Test</h1>
-<Form client:load />
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Astro</title>
+	</head>
+	<body>
+		<Chat client:load />
+	</body>
+</html>
 ```
 
-> You can now navigate to `/test` in your browser to try it out.
+Import the `Chat` component and add it to the body with the `client:load` [directive](https://docs.astro.build/en/reference/directives-reference/#client-directives) so it runs on the client side.
 
-Submitting **London** as the city would return a result similar to:
+## Test your agent
 
-```plaintext
-Agent response: The current weather in London is as follows:
+1. Run your Astro app with `npm run dev`
+2. Open the chat at http://localhost:4321
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
-- **Temperature:** 12.9°C (Feels like 9.7°C)
-- **Humidity:** 63%
-- **Wind Speed:** 14.7 km/h
-- **Wind Gusts:** 32.4 km/h
-- **Conditions:** Overcast
+## Next steps
 
-Let me know if you need more information!
-```
+Congratulations on building your Mastra agent with Astro! 🎉
 
-</StepItem>
+From here, you can extend the project with your own tools and logic:
 
-  </Steps>
-  </TabItem>
-</Tabs>
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
 
-## Next Steps
+When you're ready, read more about how Mastra integrates with AI SDK UI and how to deploy your agent anywhere:
 
-- [Deployment | With Astro on Vercel](/docs/v1/deployment/web-framework#with-astro-on-vercel)
-- [Monorepo Deployment](/docs/v1/deployment/monorepo)
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
 
 
 ---
@@ -27449,7 +27680,7 @@ export async function POST(req: Request) {
   const params = await req.json();
   const stream = await handleChatStream({
     mastra,
-    agentId: 'weatherAgent',
+    agentId: 'weather-agent',
     params: {
       ...params,
       memory: {
@@ -27463,7 +27694,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  const memory = await mastra.getAgent('weatherAgent').getMemory()
+  const memory = await mastra.getAgentById('weather-agent').getMemory()
   let response = null
   
   try {
@@ -27481,7 +27712,7 @@ export async function GET() {
 }
 ```
 
-The POST route accepts a prompt and streams the agent's response back in AI SDK format, while the GET route fetches message history from memory so the UI can be hydrated when the client reloads.
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
 
 ## Create a chat page
 
@@ -27613,7 +27844,6 @@ This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-u
 
 It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
-
 ## Test your agent
 
 1. Run your Next.js app with `npm run dev`
@@ -27738,506 +27968,335 @@ Try asking about the weather. If your API key is set up correctly, you'll get a 
 
 
 ---
-title: "Integrate Mastra in your SvelteKit project | Frameworks"
-description: A step-by-step guide to integrating Mastra with SvelteKit.
+title: "SvelteKit | Frameworks"
+description: "Get started with Mastra and SvelteKit"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 
 # Integrate Mastra in your SvelteKit project
 [EN] Source: https://mastra.ai/en/guides/getting-started/sveltekit
 
-Mastra integrates with SvelteKit, making it easy to:
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to SvelteKit by importing and calling the agent directly from your routes.
 
-- Build flexible APIs to serve AI-powered features
-- Simplify deployment with a unified codebase for frontend and backend
-- Take advantage of SvelteKit's built-in [Actions](https://kit.svelte.dev/docs/form-actions) or [Server Endpoints](https://svelte.dev/docs/kit/routing#server) for efficient server-client workflows
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience.
 
-Use this guide to scaffold and integrate Mastra with your SvelteKit project.
+## Before you begin
 
-<Tabs>
-  <TabItem value="actions" label="Actions">
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
 
-  <Steps>
+## Create a new SvelteKit app (optional)
 
-<StepItem>
+If you already have a SvelteKit app using Tailwind, skip to the next step.
 
-Install Mastra
+Run the following command to [create a new SvelteKit app](https://svelte.dev/docs/kit/creating-a-project):
 
-Install the required packages:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-</Tabs>
-
-</StepItem>
-
-<StepItem>
-
-To integrate Mastra into your project, you have two options:
-
-- Use the One-Liner
-
-  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
-
-  ```bash copy
-  npx mastra@beta init --default
-  ```
-
-  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
-
-- Use the Interactive CLI
-
-  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
-
-  ```bash copy
-  npx mastra@beta init
-  ```
-
-Add the `dev` and `build` scripts to `package.json`:
-
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev",
-    "build:mastra": "mastra build"
-  }
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Modify the `tsconfig.json` file in your project root:
-
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
-[Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
-
-```bash title=".env"
-VITE_OPENAI_API_KEY=<your-api-key>
-```
-
-</StepItem>
-
-<StepItem>
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash title=".gitignore"
-.mastra
-```
-
-</StepItem>
-
-<StepItem>
-
-Update the Mastra Agent
-
-```typescript title="src/mastra/agents/weather-agent.ts"
-import { createOpenAI } from "@ai-sdk/openai";
-
- const openai = createOpenAI({
-   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
-   compatibility: "strict"
- });
-```
-
-By reading env vars from both `import.meta.env` and `process.env`, we ensure that the API key is available in both the SvelteKit dev server and the Mastra Dev Server.
-
-> More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
-
-</StepItem>
-
-<StepItem>
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </TabItem>
-  <TabItem value="cli" label="CLI">
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </TabItem>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
-
-</StepItem>
-
-<StepItem>
-
-With the Mastra Dev Server running, you can start your SvelteKit site in the usual way.
-
-</StepItem>
-
-<StepItem>
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
 ```bash
-mkdir src/routes/test
+npx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install npm
 ```
 
-</StepItem>
-
-<StepItem>
-
-Create a new Action, and add the example code:
-
-```bash
-touch src/routes/test/+page.server.ts
-```
-
-```typescript title="src/routes/test/+page.server.ts"
-import type { Actions } from "./$types";
-import { mastra } from "../../mastra";
-
-export const actions = {
-  default: async (event) => {
-    const city = (await event.request.formData()).get("city")!.toString();
-    const agent = mastra.getAgent("weatherAgent");
-
-    const result = await agent.generate(`What's the weather like in ${city}?`);
-    return { result: result.text };
-  },
-} satisfies Actions;
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Page file, and add the example code:
-
-```bash
-touch src/routes/test/+page.svelte
-```
-
-```typescript title="src/routes/test/+page.svelte"
-<script lang="ts">
-	import type { PageProps} from './$types';
-	let { form }: PageProps = $props();
-</script>
-
-<h1>Test</h1>
-
-<form method="POST">
-	<input name="city" placeholder="Enter city" required />
-	<button type="submit">Get Weather</button>
-</form>
-
-{#if form?.result}
-	<pre>{form.result}</pre>
-{/if}
-
-```
-
-> You can now navigate to `/test` in your browser to try it out.
-
-Submitting **London** as the city would return a result similar to:
-
-```plaintext
-The current weather in London is as follows:
-
-- **Temperature:** 16°C (feels like 13.8°C)
-- **Humidity:** 62%
-- **Wind Speed:** 12.6 km/h
-- **Wind Gusts:** 32.4 km/h
-- **Conditions:** Overcast
-
-If you need more details or information about a different location, feel free to ask!
-```
-
-</StepItem>
-
-  </Steps>
 </TabItem>
+<TabItem value="pnpm" label="pnpm">
 
-<TabItem value="server-endpoints" label="Server Endpoints">
+```bash
+pnpm dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install pnpm
+```
 
-  <Steps>
+</TabItem>
+<TabItem value="yarn" label="yarn">
 
-<StepItem>
+```bash
+yarn dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install yarn
+```
 
-Install the required packages:
+</TabItem>
+<TabItem value="bun" label="bun">
 
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="yarn" label="yarn">
-    ```bash copy
-    yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="pnpm" label="pnpm">
-    ```bash copy
-    pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
-  <TabItem value="bun" label="bun">
-    ```bash copy
-    bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
-    ```
-  </TabItem>
+```bash
+bun dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install bun
+```
+
+</TabItem>
 </Tabs>
 
-</StepItem>
+This creates a project called `mastra-svelte`, but you can replace it with any name you want. Tailwind was added for styling purposes later on.
 
-<StepItem>
+## Initialize Mastra
 
-To integrate Mastra into your project, you have two options:
+`cd` into your SvelteKit project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
 
-- Use the One-Liner
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
-  Run the following command to quickly scaffold the default Weather agent with sensible defaults:
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
 
-  ```bash copy
-  npx mastra@beta init --default
-  ```
+```bash
+cd mastra-svelte
+npx mastra@beta init
+```
 
-  > See [mastra init](/reference/v1/cli/create-mastra) for more information.
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
 
-- Use the Interactive CLI
+```bash
+cd mastra-svelte
+pnpm dlx mastra@beta init
+```
 
-  If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
+</TabItem>
+<TabItem value="yarn" label="yarn">
 
-  ```bash copy
-  npx mastra@beta init
-  ```
+```bash
+cd mastra-svelte
+yarn dlx mastra@beta init
+```
 
-Add the `dev` and `build` scripts to `package.json`:
+</TabItem>
+<TabItem value="bun" label="bun">
 
-```json title="package.json"
-{
-  "scripts": {
-    ...
-    "dev:mastra": "mastra dev",
-    "build:mastra": "mastra build"
+```bash
+cd mastra-svelte
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your SvelteKit routes in the next steps.
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+</Tabs>
+
+## Create a chat route
+
+Create `src/routes/api/chat/+server.ts`:
+
+```ts title="src/routes/api/chat/+server.ts"
+import type { RequestHandler } from "./$types";
+import { handleChatStream } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { createUIMessageStreamResponse } from "ai";
+import { mastra } from "../../../mastra";
+
+const THREAD_ID = "example-user-id";
+const RESOURCE_ID = "weather-chat";
+
+export const POST: RequestHandler = async ({ request }) => {
+  const params = await request.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: "weather-agent",
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
+      },
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+};
+
+export const GET: RequestHandler = async () => {
+  const memory = await mastra.getAgentById("weather-agent").getMemory();
+  let response = null;
+
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    });
+  } catch {
+    console.log("No previous messages found.");
   }
-}
+
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return Response.json(uiMessages);
+};
 ```
 
-</StepItem>
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
 
-<StepItem>
+In order for the `GET` handler to be called, you need to create a `src/routes/+page.ts` file. Its `load()` function runs alongside `+page.svelte`.
 
-Modify the `tsconfig.json` file in your project root:
+```ts title="src/routes/+page.ts"
+import type { UIDataTypes, UIMessage, UITools } from "ai";
+import type { PageLoad } from "./$types";
 
-```json title="tsconfig.json"
-{
-  ...
-  "exclude": ["dist", ".mastra"]
-}
+export const load: PageLoad = async ({ fetch }) => {
+  const response = await fetch("/api/chat");
+  const initialMessages = (await response.json()) as UIMessage<
+    unknown,
+    UIDataTypes,
+    UITools
+  >[];
+  return { initialMessages };
+};
 ```
 
-</StepItem>
+## Add the chat UI
 
-<StepItem>
+Replace `src/routes/+page.svelte` with the following.
 
-The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
-[Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
-
-```bash title=".env"
-VITE_OPENAI_API_KEY=<your-api-key>
-```
-
-</StepItem>
-
-<StepItem>
-
-Add `.mastra` to your `.gitignore` file:
-
-```bash title=".gitignore"
-.mastra
-```
-
-</StepItem>
-
-<StepItem>
-
-Update the Mastra Agent
-
-```typescript title="src/mastra/agents/weather-agent.ts"
-import { createOpenAI } from "@ai-sdk/openai";
-
-const openai = createOpenAI({
-   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
-   compatibility: "strict"
- });
-```
-
-By reading env vars from both `import.meta.env` and `process.env`, we ensure that the API key is available in both the SvelteKit dev server and the Mastra Dev Server.
-
-> More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
-
-</StepItem>
-
-<StepItem>
-
-Start the Mastra Dev Server to expose your agents as REST endpoints:
-
-<Tabs>
-  <TabItem value="npm" label="npm">
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </TabItem>
-  <TabItem value="cli" label="CLI">
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </TabItem>
-</Tabs>
-
-> Once running, your agents are available locally. See [Local Development Environment](/docs/v1/getting-started/studio) for more information.
-
-</StepItem>
-
-<StepItem>
-
-With the Mastra Dev Server running, you can start your SvelteKit site in the usual way.
-
-</StepItem>
-
-<StepItem>
-
-```bash
-mkdir src/routes/weather-api
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Endpoint, and add the example code:
-
-```bash
-touch src/routes/weather-api/+server.ts
-```
-
-```typescript title="src/routes/weather-api/+server.ts"
-import { json } from "@sveltejs/kit";
-import { mastra } from "../../mastra";
-
-export async function POST({ request }) {
-  const { city } = await request.json();
-
-  const response = await mastra
-    .getAgent("weatherAgent")
-    .generate(`What's the weather like in ${city}?`);
-
-  return json({ result: response.text });
-}
-```
-
-</StepItem>
-
-<StepItem>
-
-Create a new Page, and add the example code:
-
-```bash
-touch src/routes/weather-api-test/+page.svelte
-```
-
-```typescript title="src/routes/weather-api-test/+page.svelte"
+```html title="src/routes/+page.svelte"
 <script lang="ts">
-	let result = $state<string | null>(null);
-	async function handleFormSubmit(event: Event) {
-		event.preventDefault();
-		const formData = new FormData(event.currentTarget);
-		const city = formData.get('city')?.toString();
-		if (city) {
-			const response = await fetch('/weather-api', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ city })
-			});
-			const data = await response.json();
-			result = data.result;
-		}
-	}
+  import { Chat } from '@ai-sdk/svelte';
+  import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+  let input = $state('');
+  const { data } = $props();
+  let messages = $derived(data.initialMessages)
+
+  const chat = new Chat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat'
+    }),
+    get messages() {
+      return messages;
+    }
+  });
+
+  function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    chat.sendMessage({ text: input });
+    input = '';
+  }
+
+  const STATE_TO_LABEL_MAP: Record<ToolUIPart["state"], string> = {
+    "input-streaming": "Pending",
+    "input-available": "Running",
+    // @ts-expect-error - Only available in AI SDK v6
+    "approval-requested": "Awaiting Approval",
+    "approval-responded": "Responded",
+    "output-available": "Completed",
+    "output-error": "Error",
+    "output-denied": "Denied",
+  };
 </script>
 
-<h1>Test</h1>
-<form method="POST" onsubmit={handleFormSubmit}>
-	<input name="city" placeholder="Enter city" required />
-	<button type="submit">Get Weather</button>
-</form>
-
-{#if result}
-	<pre>{result}</pre>
-{/if}
+<main class="max-w-3xl mx-auto p-6 size-full h-screen">
+  <div class="flex flex-col h-full">
+    <div class="flex-1 min-h-0 overflow-y-auto" data-name="conversation">
+      <div data-name="conversation-content" class="flex flex-col gap-8">
+        {#each chat.messages as message, messageIndex (messageIndex)}
+          <div>
+            {#each message.parts as part, partIndex (partIndex)}
+              {#if part.type === 'text'}
+                <div data-name="message" class={[message.role === 'user' && 'ml-auto justify-end', 'group flex w-full max-w-[95%] flex-col gap-2', message.role === 'user' ? 'is-user' : 'is-assistant']}>
+                  <div data-name="message-content" class={["is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-blue-100 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      "group-[.is-assistant]:text-foreground"]}>
+                    <div data-name="message-response" class="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      {part.text}
+                    </div>
+                  </div>
+                </div>
+              {:else if part.type.startsWith('tool-')}
+                <div data-name="tool" class="not-prose mb-6 w-full rounded-lg border border-gray-300 shadow">
+                  <details data-name="tool-header" class="w-full p-3 hover:cursor-pointer">
+                    <summary class="font-medium text-sm">{(part as ToolUIPart).type.split("-").slice(1).join("-")} - {STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available']}</summary>
+                    <div data-name="tool-content" class="">
+                      <div data-name="tool-input" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">Parameters</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).input, null, 2)}</code></pre>
+                      </div>
+                      <div data-name="tool-output" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">{(part as ToolUIPart).errorText ? 'Error' : 'Result'}</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).output, null, 2)}</code></pre>
+                        {#if (part as ToolUIPart).errorText}
+                          <div data-name="tool-error" class="text-red-600">
+                            {(part as ToolUIPart).errorText}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
+    <form class="w-full grid grid-cols-[1fr_auto] gap-6 shrink-0 pt-4" onsubmit={handleSubmit} data-name="prompt-input">
+      <input name="chat-input" class="rounded-lg border border-gray-300 shadow h-10" placeholder="City name" bind:value={input} />
+      <button class="bg-blue-600 text-white shadow-lg border border-blue-400 px-4 whitespace-nowrap rounded-lg text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" type="submit">Send</button>
+    </form>
+  </div>
+</main>
 ```
 
-> You can now navigate to `/weather-api-test` in your browser to try it out.
+This page connects [`Chat`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
 
-Submitting **London** as the city would return a result similar to:
+It renders the response text using custom message and tool components.
 
-```plaintext
-The current weather in London is as follows:
+## Test your agent
 
-- **Temperature:** 16.1°C (feels like 14.2°C)
-- **Humidity:** 64%
-- **Wind Speed:** 11.9 km/h
-- **Wind Gusts:** 30.6 km/h
-- **Conditions:** Overcast
+1. Run your SvelteKit app with `npm run dev`
+2. Open the chat at http://localhost:5173
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
-If you need more details or information about a different location, feel free to ask!
-```
+## Next steps
 
-</StepItem>
+Congratulations on building your Mastra agent with SvelteKit! 🎉
 
-  </Steps>
-  </TabItem>
-</Tabs>
+From here, you can extend the project with your own tools and logic:
 
-## Next steps
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
 
-- [Monorepo Deployment](/docs/v1/deployment/monorepo)
+When you're ready, read more about how Mastra integrates with AI SDK UI and SvelteKit, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+- Try the [unofficial Svelte AI Elements](https://svelte-ai-elements.vercel.app/)
 
 
 ---
@@ -28381,7 +28440,7 @@ Edit `tsconfig.app.json` to resolve paths:
 
 ## Initialize Mastra
 
-Run [`mastra init`](/reference/v1/cli/create-mastra). When prompted, choose a provider (e.g. OpenAI) and enter your key:
+Run [`mastra init`](/reference/v1/cli/mastra#mastra-init). When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
@@ -35453,12 +35512,12 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo="https://models.dev/logos/azure-openai.svg"
     />    <CardGridItem
       title="Netlify"
-      description="49 models"
+      description="52 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="134 models"
+      description="135 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -35484,7 +35543,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 49 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 52 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -35545,6 +35604,7 @@ ANTHROPIC_API_KEY=ant-...
 | `gemini/gemini-2.5-flash-lite-preview-09-2025` |
 | `gemini/gemini-2.5-flash-preview-09-2025` |
 | `gemini/gemini-2.5-pro` |
+| `gemini/gemini-3-flash-preview` |
 | `gemini/gemini-3-pro-image-preview` |
 | `gemini/gemini-3-pro-preview` |
 | `gemini/gemini-flash-latest` |
@@ -35568,7 +35628,9 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
+| `openai/gpt-5.2-2025-12-11` |
 | `openai/gpt-5.2-pro` |
+| `openai/gpt-5.2-pro-2025-12-11` |
 | `openai/o3` |
 | `openai/o3-mini` |
 | `openai/o4-mini` |
@@ -35587,7 +35649,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 134 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 135 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -35658,6 +35720,7 @@ ANTHROPIC_API_KEY=ant-...
 | `google/gemini-2.5-pro` |
 | `google/gemini-2.5-pro-preview-05-06` |
 | `google/gemini-2.5-pro-preview-06-05` |
+| `google/gemini-3-flash-preview` |
 | `google/gemini-3-pro-preview` |
 | `google/gemma-2-9b-it:free` |
 | `google/gemma-3-12b-it` |
@@ -35905,7 +35968,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 60+ AI providers and 1368+ models through Mastra's model router."
+description: "Access 61+ AI providers and 1447+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35918,7 +35981,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1368 models from 60 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1447 models from 61 providers through a single API.
 
 ## Features
 
@@ -36046,7 +36109,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 53 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 54 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -42399,7 +42462,7 @@ npm install @ai-sdk/google-vertex
 
 ---
 title: "Google | Models | Mastra"
-description: "Use Google models with Mastra. 25 models available."
+description: "Use Google models with Mastra. 26 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -42410,7 +42473,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 [EN] Source: https://mastra.ai/en/models/providers/google
 
-Access 25 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
+Access 26 Google models through Mastra's model router. Authentication is handled automatically using the `GOOGLE_GENERATIVE_AI_API_KEY` environment variable.
 
 Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/pricing).
 
@@ -42669,6 +42732,18 @@ for await (const chunk of stream) {
     "maxOutput": 16000,
     "inputCost": 1,
     "outputCost": 20
+  },
+  {
+    "model": "google/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 3
   },
   {
     "model": "google/gemini-3-pro-preview",
@@ -45088,7 +45163,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/anthropic.svg"
     />    <CardGridItem
       title="Google"
-      description="25 models"
+      description="26 models"
       href="/models/v1/providers/google"
       logo="https://models.dev/logos/google.svg"
     />    <CardGridItem
@@ -45263,7 +45338,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="23 models"
+      description="24 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -45297,6 +45372,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/siliconflow"
       logo="https://models.dev/logos/siliconflow.svg"
     />    <CardGridItem
+      title="SiliconFlow (China)"
+      description="72 models"
+      href="/models/v1/providers/siliconflow-cn"
+      logo="https://models.dev/logos/siliconflow-cn.svg"
+    />    <CardGridItem
       title="submodel"
       description="9 models"
       href="/models/v1/providers/submodel"
@@ -45318,7 +45398,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="20 models"
+      description="21 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -49261,7 +49341,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 23 models available."
+description: "Use OpenCode Zen models with Mastra. 24 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -49271,7 +49351,7 @@ description: "Use OpenCode Zen models with Mastra. 23 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 23 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 24 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -49430,14 +49510,26 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
+    "model": "opencode/gemini-3-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 3
+  },
+  {
     "model": "opencode/gemini-3-pro",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
     "inputCost": 2,
     "outputCost": 12
   },
@@ -51988,6 +52080,960 @@ const agent = new Agent({
 
 
 ---
+title: "SiliconFlow (China) | Models | Mastra"
+description: "Use SiliconFlow (China) models with Mastra. 72 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/siliconflow-cn.svg" alt="SiliconFlow (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />SiliconFlow (China)
+[EN] Source: https://mastra.ai/en/models/providers/siliconflow-cn
+
+Access 72 SiliconFlow (China) models through Mastra's model router. Authentication is handled automatically using the `SILICONFLOW_API_KEY` environment variable.
+
+Learn more in the [SiliconFlow (China) documentation](https://cloud.siliconflow.com/models).
+
+```bash
+SILICONFLOW_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "siliconflow-cn/baidu-ernie-4.5-300b-a47b"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [SiliconFlow (China) documentation](https://cloud.siliconflow.com/models) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "siliconflow-cn/baidu-ernie-4.5-300b-a47b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.28,
+    "outputCost": 1.1
+  },
+  {
+    "model": "siliconflow-cn/bytedance-seed-seed-oss-36b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.21,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-r1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 164000,
+    "maxOutput": 164000,
+    "inputCost": 0.5,
+    "outputCost": 2.18
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-r1-distill-qwen-14b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-r1-distill-qwen-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.18,
+    "outputCost": 0.18
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-r1-distill-qwen-7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 33000,
+    "maxOutput": 16000,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-v3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 164000,
+    "maxOutput": 164000,
+    "inputCost": 0.25,
+    "outputCost": 1
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-v3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 164000,
+    "maxOutput": 164000,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-v3.1-terminus",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 164000,
+    "maxOutput": 164000,
+    "inputCost": 0.27,
+    "outputCost": 1
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-v3.2-exp",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 164000,
+    "maxOutput": 164000,
+    "inputCost": 0.27,
+    "outputCost": 0.41
+  },
+  {
+    "model": "siliconflow-cn/deepseek-ai-deepseek-vl2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 4000,
+    "maxOutput": 4000,
+    "inputCost": 0.15,
+    "outputCost": 0.15
+  },
+  {
+    "model": "siliconflow-cn/inclusionai-ling-flash-2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/inclusionai-ling-mini-2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "siliconflow-cn/inclusionai-ring-flash-2.0",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/meta-llama-meta-llama-3.1-8b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.06,
+    "outputCost": 0.06
+  },
+  {
+    "model": "siliconflow-cn/minimaxai-minimax-m1-80k",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.55,
+    "outputCost": 2.2
+  },
+  {
+    "model": "siliconflow-cn/minimaxai-minimax-m2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 197000,
+    "maxOutput": 131000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "siliconflow-cn/moonshotai-kimi-dev-72b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.29,
+    "outputCost": 1.15
+  },
+  {
+    "model": "siliconflow-cn/moonshotai-kimi-k2-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.58,
+    "outputCost": 2.29
+  },
+  {
+    "model": "siliconflow-cn/moonshotai-kimi-k2-instruct-0905",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "siliconflow-cn/moonshotai-kimi-k2-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.55,
+    "outputCost": 2.5
+  },
+  {
+    "model": "siliconflow-cn/nex-agi-deepseek-v3.1-nex-n1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.5,
+    "outputCost": 2
+  },
+  {
+    "model": "siliconflow-cn/openai-gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 8000,
+    "inputCost": 0.05,
+    "outputCost": 0.45
+  },
+  {
+    "model": "siliconflow-cn/openai-gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 8000,
+    "inputCost": 0.04,
+    "outputCost": 0.18
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-14b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.1,
+    "outputCost": 0.1
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-32b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.18,
+    "outputCost": 0.18
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-72b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.59,
+    "outputCost": 0.59
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-72b-instruct-128k",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 4000,
+    "inputCost": 0.59,
+    "outputCost": 0.59
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-7b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-coder-32b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.18,
+    "outputCost": 0.18
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-vl-32b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.27,
+    "outputCost": 0.27
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-vl-72b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 4000,
+    "inputCost": 0.59,
+    "outputCost": 0.59
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen2.5-vl-7b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 4000,
+    "inputCost": 0.05,
+    "outputCost": 0.05
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-14b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-235b-a22b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.35,
+    "outputCost": 1.42
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-235b-a22b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.09,
+    "outputCost": 0.6
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-235b-a22b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.13,
+    "outputCost": 0.6
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-30b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.09,
+    "outputCost": 0.45
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-30b-a3b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.09,
+    "outputCost": 0.3
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-30b-a3b-thinking-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 131000,
+    "inputCost": 0.09,
+    "outputCost": 0.3
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-8b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.06,
+    "outputCost": 0.06
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-coder-30b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.07,
+    "outputCost": 0.28
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-coder-480b-a35b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.25,
+    "outputCost": 1
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-next-80b-a3b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.14,
+    "outputCost": 1.4
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-next-80b-a3b-thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.14,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-omni-30b-a3b-captioner",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 66000,
+    "maxOutput": 66000,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-omni-30b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 66000,
+    "maxOutput": 66000,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-omni-30b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 66000,
+    "maxOutput": 66000,
+    "inputCost": 0.1,
+    "outputCost": 0.4
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-235b-a22b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.3,
+    "outputCost": 1.5
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-235b-a22b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.45,
+    "outputCost": 3.5
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-30b-a3b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.29,
+    "outputCost": 1
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-30b-a3b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.29,
+    "outputCost": 1
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-32b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-32b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.2,
+    "outputCost": 1.5
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-8b-instruct",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.18,
+    "outputCost": 0.68
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwen3-vl-8b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.18,
+    "outputCost": 2
+  },
+  {
+    "model": "siliconflow-cn/qwen-qwq-32b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.15,
+    "outputCost": 0.58
+  },
+  {
+    "model": "siliconflow-cn/stepfun-ai-step3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 66000,
+    "maxOutput": 66000,
+    "inputCost": 0.57,
+    "outputCost": 1.42
+  },
+  {
+    "model": "siliconflow-cn/tencent-hunyuan-a13b-instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/tencent-hunyuan-mt-7b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 33000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "siliconflow-cn/thudm-glm-4-32b-0414",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 33000,
+    "inputCost": 0.27,
+    "outputCost": 0.27
+  },
+  {
+    "model": "siliconflow-cn/thudm-glm-4-9b-0414",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 33000,
+    "maxOutput": 33000,
+    "inputCost": 0.086,
+    "outputCost": 0.086
+  },
+  {
+    "model": "siliconflow-cn/thudm-glm-4.1v-9b-thinking",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 66000,
+    "maxOutput": 66000,
+    "inputCost": 0.035,
+    "outputCost": 0.14
+  },
+  {
+    "model": "siliconflow-cn/thudm-glm-z1-32b-0414",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.57
+  },
+  {
+    "model": "siliconflow-cn/thudm-glm-z1-9b-0414",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.086,
+    "outputCost": 0.086
+  },
+  {
+    "model": "siliconflow-cn/z-ai-glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "siliconflow-cn/z-ai-glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.86
+  },
+  {
+    "model": "siliconflow-cn/zai-org-glm-4.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.4,
+    "outputCost": 2
+  },
+  {
+    "model": "siliconflow-cn/zai-org-glm-4.5-air",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
+    "inputCost": 0.14,
+    "outputCost": 0.86
+  },
+  {
+    "model": "siliconflow-cn/zai-org-glm-4.5v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 66000,
+    "maxOutput": 66000,
+    "inputCost": 0.14,
+    "outputCost": 0.86
+  },
+  {
+    "model": "siliconflow-cn/zai-org-glm-4.6",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 205000,
+    "maxOutput": 205000,
+    "inputCost": 0.5,
+    "outputCost": 1.9
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.siliconflow.cn/v1",
+    id: "siliconflow-cn/baidu-ernie-4.5-300b-a47b",
+    apiKey: process.env.SILICONFLOW_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "siliconflow-cn/zai-org-glm-4.6"
+      : "siliconflow-cn/baidu-ernie-4.5-300b-a47b";
+  }
+});
+```
+
+
+
+
+---
 title: "SiliconFlow | Models | Mastra"
 description: "Use SiliconFlow models with Mastra. 72 models available."
 ---
@@ -53854,7 +54900,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 20 models available."
+description: "Use Venice AI models with Mastra. 21 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -53864,7 +54910,7 @@ description: "Use Venice AI models with Mastra. 20 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 20 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 21 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -53925,6 +54971,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.4,
     "outputCost": 1
+  },
+  {
+    "model": "venice/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256576,
+    "maxOutput": 65536,
+    "inputCost": 0.7,
+    "outputCost": 3.75
   },
   {
     "model": "venice/gemini-3-pro-preview",
