@@ -125,6 +125,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/snapshots",
+          label: "Snapshots",
+        },
+        {
+          type: "doc",
           id: "workflows/suspend-and-resume",
           label: "Suspend & Resume",
         },
@@ -132,11 +137,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/human-in-the-loop",
           label: "Human-in-the-loop",
-        },
-        {
-          type: "doc",
-          id: "workflows/snapshots",
-          label: "Snapshots",
         },
         {
           type: "doc",

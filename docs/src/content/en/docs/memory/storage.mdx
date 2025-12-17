@@ -5,9 +5,8 @@ description: Configure storage for Mastra's memory system to persist conversatio
 
 # Storage
 
-For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider—simply choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
+For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
 
-On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
 ```typescript copy
 import { Mastra } from "@mastra/core";
@@ -20,8 +19,7 @@ const mastra = new Mastra({
   }),
 });
 ```
-
-If you do not specify any `storage` configuration, Mastra will not persist data across application restarts or deployments. For any deployment beyond local testing, provide your own storage configuration.
+On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
 
 ## Supported Providers
 
@@ -38,8 +36,8 @@ Each provider page includes installation instructions, configuration parameters,
 - [LanceDB](/reference/v1/storage/lance)
 - [Microsoft SQL Server](/reference/v1/storage/mssql)
 
-:::note
-libSQL is file-based and works well for local development without requiring a separate database server. We use it throughout our examples for this reason.
+:::tip
+libSQL is the easiest way to get started because it doesn’t require running a separate database server
 :::
 
 ## Configuration Scope
@@ -106,12 +104,14 @@ const stream = await agent.stream("message for agent", {
 ```
 
 :::note
-Mastra Studio automatically generates a thread and resource for you.
+[Studio](/docs/v1/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
 :::
 
 ### Thread title generation
 
-Mastra can automatically generate descriptive thread titles based on the user's first message. This feature is disabled by default but can be enabled by setting `generateTitle` to `true`:
+Mastra can automatically generate descriptive thread titles based on the user's first message.
+
+Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
 
 ```typescript showLineNumbers copy
 export const testAgent = new Agent({

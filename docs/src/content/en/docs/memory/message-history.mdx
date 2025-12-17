@@ -7,12 +7,10 @@ description: "Learn how to configure message history in Mastra to store recent m
 
 Message history is the simplest kind of memory. It is a list of messages from the current conversation.
 
-By default, each request includes the last 10 messages from the current memory thread, giving the agent short-term conversational context. This limit can be increased using the `lastMessages` parameter.
+Once enabled, each request includes the last 10 messages from the current memory thread, giving the agent short-term conversational context. This limit can be increased using the `lastMessages` parameter:
 
-You can increase this limit by passing the `lastMessages` parameter to the `Memory` instance.
-
-```typescript {3-7} showLineNumbers
-export const testAgent = new Agent({
+```typescript
+export const agent = new Agent({
   id: "test-agent",
   // ...
   memory: new Memory({
