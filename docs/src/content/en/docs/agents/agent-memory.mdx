@@ -20,7 +20,7 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
 
 To enable memory in Mastra, install the `@mastra/memory` package along with a storage provider.
 
-```bash npm2yarn copy
+```bash npm2yarn
 npm install @mastra/memory@beta @mastra/libsql@beta
 ```
 
@@ -35,7 +35,7 @@ Memory requires a storage provider to persist message history, including user me
 
 Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
-```typescript {6-9} title="src/mastra/agents/memory-agent.ts" copy
+```typescript {6-9} title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
@@ -63,7 +63,7 @@ See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list o
 
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
-```typescript {6-8} title="src/mastra/index.ts" copy
+```typescript {6-8} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
@@ -87,7 +87,7 @@ See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of c
 
 Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
 
-```typescript {7-10} title="src/mastra/agents/memory-agent.ts" copy
+```typescript {7-10} title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -143,7 +143,7 @@ To learn more about memory see the [Memory](../memory/overview) documentation.
 
 Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
-```typescript title="src/mastra/agents/memory-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/memory-agent.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

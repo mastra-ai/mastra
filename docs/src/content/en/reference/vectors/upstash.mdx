@@ -164,7 +164,7 @@ Returns an array of index names (namespaces) as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -238,7 +238,7 @@ Upstash Vector supports hybrid search that combines semantic search (dense vecto
 
 ### Basic Hybrid Usage
 
-```typescript copy
+```typescript
 import { UpstashVector } from "@mastra/upstash";
 
 const vectorStore = new UpstashVector({
@@ -275,7 +275,7 @@ const results = await vectorStore.query({
 
 ### Advanced Hybrid Search Options
 
-```typescript copy
+```typescript
 import { FusionAlgorithm, QueryMode } from "@upstash/vector";
 
 // Query with specific fusion algorithm
@@ -307,7 +307,7 @@ const sparseResults = await vectorStore.query({
 
 ### Updating Hybrid Vectors
 
-```typescript copy
+```typescript
 // Update both dense and sparse components
 await vectorStore.updateVector({
   indexName: "hybrid-index",
@@ -324,7 +324,7 @@ await vectorStore.updateVector({
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -337,7 +337,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

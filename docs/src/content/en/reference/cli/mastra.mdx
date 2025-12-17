@@ -41,7 +41,7 @@ You can set certain environment variables to modify the behavior of `mastra dev`
 
 Set `MASTRA_DEV_NO_CACHE=1` to force a full rebuild rather than using the cached assets under `.mastra/`:
 
-```bash copy
+```bash
 MASTRA_DEV_NO_CACHE=1 mastra dev
 ```
 
@@ -51,7 +51,7 @@ This helps when you are debugging bundler plugins or suspect stale output.
 
 `MASTRA_CONCURRENCY` caps how many expensive operations run in parallel (primarily build and evaluation steps). For example:
 
-```bash copy
+```bash
 MASTRA_CONCURRENCY=4 mastra dev
 ```
 
@@ -61,7 +61,7 @@ Leave it unset to let the CLI pick a sensible default for the machine.
 
 When using providers supported by the Vercel AI SDK you can redirect requests through proxies or internal gateways by setting a base URL. For OpenAI:
 
-```bash copy
+```bash
 OPENAI_API_KEY=<your-api-key> \
 OPENAI_BASE_URL=https://openrouter.example/v1 \
 mastra dev
@@ -69,7 +69,7 @@ mastra dev
 
 For Anthropic:
 
-```bash copy
+```bash
 ANTHROPIC_API_KEY=<your-api-key> \
 ANTHROPIC_BASE_URL=https://anthropic.internal \
 mastra dev
@@ -98,7 +98,7 @@ You can set certain environment variables to modify the behavior of `mastra buil
 
 For CI or when running in resource constrained environments you can cap how many expensive tasks run at once by setting `MASTRA_CONCURRENCY`.
 
-```bash copy
+```bash
 MASTRA_CONCURRENCY=2 mastra build
 ```
 
@@ -152,13 +152,13 @@ Read the [Scorers overview](/docs/v1/evals/overview) to learn more.
 
 Add a new scorer to your project. You can use an interactive prompt:
 
-```bash copy
+```bash
 mastra scorers add
 ```
 
 Or provide a scorer name directly:
 
-```bash copy
+```bash
 mastra scorers add answer-relevancy
 ```
 
@@ -258,13 +258,13 @@ By default, Mastra collects anonymous information about your project like your O
 
 You can opt out of the CLI analytics by setting an environment variable:
 
-```bash copy
+```bash
 MASTRA_TELEMETRY_DISABLED=1
 ```
 
 You can also set this while using other `mastra` commands:
 
-```bash copy
+```bash
 MASTRA_TELEMETRY_DISABLED=1 mastra dev
 ```
 

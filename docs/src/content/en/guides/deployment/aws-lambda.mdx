@@ -37,7 +37,7 @@ Lambda functions have limitations with file system storage. Configure your Mastr
 
 ### Option 1: In-Memory (Simplest)
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts"
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
@@ -50,7 +50,7 @@ const storage = new LibSQLStore({
 
 For persistent memory across Lambda invocations, use external storage providers like `LibSQLStore` with Turso or other storage providers like `PostgreStore`:
 
-```typescript title="src/mastra/index.ts" copy showLineNumbers
+```typescript title="src/mastra/index.ts"
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
@@ -66,7 +66,7 @@ For more memory configuration options, see the [Memory documentation](/docs/v1/m
 
 Create a `Dockerfile` in your Mastra project root directory:
 
-```dockerfile title="Dockerfile" copy showLineNumbers
+```dockerfile title="Dockerfile"
 FROM node:22-alpine
 
 WORKDIR /app
@@ -100,7 +100,7 @@ CMD ["node", ".mastra/output/index.mjs"]
 
 Set up your environment variables for the deployment process:
 
-```bash copy
+```bash
 export PROJECT_NAME="your-mastra-app"
 export AWS_REGION="us-east-1"
 export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -112,7 +112,7 @@ export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output tex
 
 Build your Docker image locally:
 
-```bash copy
+```bash
 docker build -t "$PROJECT_NAME" .
 ```
 
@@ -122,7 +122,7 @@ docker build -t "$PROJECT_NAME" .
 
 Create an Amazon ECR repository to store your Docker image:
 
-```bash copy
+```bash
 aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGION"
 ```
 
@@ -132,7 +132,7 @@ aws ecr create-repository --repository-name "$PROJECT_NAME" --region "$AWS_REGIO
 
 Log in to Amazon ECR:
 
-```bash copy
+```bash
 aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 ```
 
@@ -142,7 +142,7 @@ aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS 
 
 Tag your image with the ECR repository URI and push it:
 
-```bash copy
+```bash
 docker tag "$PROJECT_NAME":latest "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
 docker push "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT_NAME":latest
 ```
@@ -219,7 +219,7 @@ For more information about available API endpoints, see the [Server documentatio
 
 Update your client application to use the Lambda function URL:
 
-```typescript title="src/client.ts" copy showLineNumbers
+```typescript title="src/client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({

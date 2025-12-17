@@ -180,6 +180,33 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
+   * For Inngest, lifecycle callbacks are invoked in the workflow's finalize step
+   * (wrapped in step.run for durability), not in execute(). Override to skip.
+   */
+  public async invokeLifecycleCallbacks(_result: {
+    status: any;
+    result?: any;
+    error?: any;
+    steps: Record<string, any>;
+    tripwire?: any;
+  }): Promise<void> {
+    // No-op: Inngest handles callbacks in workflow.ts finalize step
+  }
+
+  /**
+   * Actually invoke the lifecycle callbacks. Called from workflow.ts finalize step.
+   */
+  public async invokeLifecycleCallbacksInternal(result: {
+    status: any;
+    result?: any;
+    error?: any;
+    steps: Record<string, any>;
+    tripwire?: any;
+  }): Promise<void> {
+    return super.invokeLifecycleCallbacks(result);
+  }
+
+  /**
    * Execute nested InngestWorkflow using inngestStep.invoke() for durability.
    * This MUST be called directly (not inside step.run()) due to Inngest constraints.
    */

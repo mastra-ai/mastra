@@ -52,11 +52,9 @@ export const testAgent = new Agent({
   }),
 });
 ```
-
 When you send a new message, the model can now "see" the previous 20 messages, which gives it better context for the conversation and leads to more coherent, accurate replies.
 
 This example configures basic [message history](/docs/v1/memory/message-history). You can also enable [working memory](/docs/v1/memory/working-memory) and [semantic recall](/docs/v1/memory/semantic-recall) by passing additional options to `Memory`.
-
 
 ## Storage
 
@@ -73,7 +71,6 @@ When tracing is enabled, you can inspect exactly which messages the agent uses f
 This visibility helps you understand why an agent made specific decisions and verify that memory retrieval is working as expected.
 
 For more details on enabling and configuring tracing, see [Tracing](../observability/tracing/overview).
-
 
 ## Next Steps
 

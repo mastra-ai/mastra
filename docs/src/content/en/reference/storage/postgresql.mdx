@@ -9,13 +9,13 @@ The PostgreSQL storage implementation provides a production-ready storage soluti
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/pg@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
@@ -105,7 +105,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
@@ -120,7 +120,7 @@ const mastra = new Mastra({
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
-```typescript copy
+```typescript
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
@@ -245,7 +245,7 @@ These indexes significantly improve performance for filtered queries with sortin
 
 Create additional indexes to optimize specific query patterns:
 
-```typescript copy
+```typescript
 // Basic index for common queries
 await storage.createIndex({
   name: "idx_threads_resource",
@@ -349,7 +349,7 @@ For more advanced use cases, you can also use:
 
 List and monitor existing indexes:
 
-```typescript copy
+```typescript
 // List all indexes
 const allIndexes = await storage.listIndexes();
 console.log(allIndexes);
@@ -392,7 +392,7 @@ await storage.dropIndex("idx_threads_status");
 
 When using custom schemas, indexes are created with schema prefixes:
 
-```typescript copy
+```typescript
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,

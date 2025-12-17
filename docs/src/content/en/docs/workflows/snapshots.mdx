@@ -127,7 +127,7 @@ console.log(snapshot);
 
 Snapshots are persisted using a `storage` instance configured on the `Mastra` class. This storage layer is shared across all workflows registered to that instance. Mastra supports multiple storage options for flexibility in different environments.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts" 
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 import { approvalWorkflow } from "./workflows";
@@ -161,7 +161,7 @@ export const mastra = new Mastra({
 
 You can attach custom metadata when suspending a workflow by defining a `suspendSchema`. This metadata is stored in the snapshot and made available when the workflow is resumed.
 
-```typescript {30-34} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {30-34} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -210,7 +210,7 @@ const approvalStep = createStep({
 
 Use `resumeData` to pass structured input when resuming a suspended step. It must match the step’s `resumeSchema`.
 
-```typescript {14-20} showLineNumbers copy
+```typescript {14-20}
 const workflow = mastra.getWorkflow("approvalWorkflow");
 
 const run = await workflow.createRun();

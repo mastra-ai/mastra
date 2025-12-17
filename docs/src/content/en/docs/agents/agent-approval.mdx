@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 
 When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in its configuration.
 
-```typescript showLineNumbers
+```typescript
 const stream = await agent.stream("What's the weather in London?", {
   requireToolApproval: true
 });
@@ -43,7 +43,7 @@ const stream = await agent.stream("What's the weather in London?", {
 
 To approve a tool call, access `approveToolCall` from the `agent`, passing in the `runId` of the stream. This will let the agent know its now OK to call its tools.
 
-```typescript showLineNumbers
+```typescript
 const handleApproval = async () => {
   const approvedStream = await agent.approveToolCall({ runId: stream.runId });
 
@@ -58,7 +58,7 @@ const handleApproval = async () => {
 
 To decline a tool call, access the `declineToolCall` from the `agent`. You will see the streamed response from the agent, but it won't call its tools.
 
-```typescript showLineNumbers
+```typescript
 const handleDecline = async () => {
   const declinedStream = await agent.declineToolCall({ runId: stream.runId });
 

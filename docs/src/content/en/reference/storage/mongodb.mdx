@@ -9,7 +9,7 @@ The MongoDB storage implementation provides a scalable storage solution using Mo
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/mongodb@beta
 ```
 
@@ -17,7 +17,7 @@ npm install @mastra/mongodb@beta
 
 Ensure you have a MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instance with Atlas Search enabled. MongoDB 7.0+ is recommended.
 
-```typescript copy showLineNumbers
+```typescript
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
@@ -97,7 +97,7 @@ The storage implementation handles collection creation and management automatica
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { MongoDBStore } from "@mastra/mongodb";
 
@@ -113,7 +113,7 @@ const mastra = new Mastra({
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the collections:
 
-```typescript copy
+```typescript
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
@@ -138,7 +138,7 @@ MongoDB storage includes built-in vector search capabilities for AI applications
 
 ### Vector Index Creation
 
-```typescript copy
+```typescript
 import { MongoDBVector } from "@mastra/mongodb";
 
 const vectorStore = new MongoDBVector({
@@ -155,7 +155,7 @@ await vectorStore.createIndex({
 
 ### Vector Operations
 
-```typescript copy
+```typescript
 // Store vectors with metadata
 await vectorStore.upsert({
   indexName: "document_embeddings",

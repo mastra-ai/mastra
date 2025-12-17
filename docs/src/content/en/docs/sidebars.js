@@ -148,11 +148,6 @@ const sidebars = {
           id: "workflows/error-handling",
           label: "Error Handling",
         },
-        {
-          type: "doc",
-          id: "workflows/inngest-workflow",
-          label: "Inngest Workflow",
-        },
       ],
     },
     {

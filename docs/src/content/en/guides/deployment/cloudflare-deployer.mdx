@@ -13,13 +13,13 @@ Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQL
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/deployer-cloudflare@beta
 ```
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
@@ -42,13 +42,13 @@ Manual deployments are also possible using the [Cloudflare Wrangler CLI](https:/
 
 With the Wrangler CLI installed, login and authenticate with your Cloudflare logins:
 
-```bash copy
+```bash
 npx wrangler login
 ```
 
 Run the following to build and deploy your application to Cloudflare
 
-```bash copy
+```bash
 npm run build && wrangler deploy --config .mastra/output/wrangler.json
 ```
 

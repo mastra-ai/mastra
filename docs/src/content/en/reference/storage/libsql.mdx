@@ -13,13 +13,11 @@ For vectors like semantic recall or traditional RAG, use [libSQL Vector](/refere
 
 Storage providers must be installed as separate packages:
 
-```bash copy
+```bash
 npm install @mastra/libsql@beta
 ```
 
 ## Usage
-
-Instance-level file storage:
 
 ```typescript
 import { LibSQLStore } from "@mastra/libsql";
@@ -55,10 +53,9 @@ export const agent = new Agent({
 File storage doesn't work with serverless platforms that have ephemeral file systems. For serverless deployments, use [Turso](https://turso.tech) or a different database engine.
 :::
 
-
 Production with remote database:
 
-```typescript copy
+```typescript 
 storage: new LibSQLStore({
   id: 'libsql-storage',
   url: "libsql://your-db-name.aws-ap-northeast-1.turso.io",
@@ -68,13 +65,12 @@ storage: new LibSQLStore({
 
 For local development and testing, you can store data in memory:
 
-```typescript copy
+```typescript 
 storage: new LibSQLStore({
   id: 'libsql-storage',
   url: ":memory:",
 })
 ```
-
 :::warning
 In-memory storage resets when the process changes. Only suitable for development.
 :::
@@ -103,7 +99,10 @@ In-memory storage resets when the process changes. Only suitable for development
 
 When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/v1/storage/overview#core-schema):
 
-```typescript copy
+```typescript 
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
 const storage = new LibSQLStore({
   id: 'libsql-storage',
   url: "file:./storage.db",
@@ -116,7 +115,9 @@ const mastra = new Mastra({
 
 If using storage directly without Mastra, call `init()` explicitly:
 
-```typescript copy
+```typescript 
+import { LibSQLStore } from "@mastra/libsql";
+
 const storage = new LibSQLStore({
   id: 'libsql-storage',
   url: "file:./storage.db",
