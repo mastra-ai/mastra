@@ -490,6 +490,8 @@ function isV3Usage(usage: unknown): usage is LanguageModelV3Usage {
  * Normalizes usage from either V2 (flat) or V3 (nested) format to Mastra's flat format.
  * V2 format: { inputTokens: number, outputTokens: number, totalTokens?: number }
  * V3 format: { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
+ *
+ * The original usage data is preserved in the `raw` field for advanced use cases.
  */
 function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined): LanguageModelUsage {
   if (!usage) {
@@ -499,6 +501,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: undefined,
       reasoningTokens: undefined,
       cachedInputTokens: undefined,
+      raw: undefined,
     };
   }
 
@@ -512,6 +515,7 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
       totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
       reasoningTokens: usage.outputTokens.reasoning,
       cachedInputTokens: usage.inputTokens.cacheRead,
+      raw: usage,
     };
   }
 
@@ -523,5 +527,6 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
+    raw: usage,
   };
 }

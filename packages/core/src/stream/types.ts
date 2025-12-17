@@ -683,6 +683,12 @@ export interface LanguageModelUsage {
   totalTokens?: number;
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  /**
+   * Raw usage data from the provider, preserved for advanced use cases.
+   * For V3 models, contains the full nested structure:
+   * { inputTokens: { total, noCache, cacheRead, cacheWrite }, outputTokens: { total, text, reasoning } }
+   */
+  raw?: unknown;
 }
 
 export type partialModel = {
