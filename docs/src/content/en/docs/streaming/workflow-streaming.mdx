@@ -24,7 +24,7 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,8,15} showLineNumbers copy
+```typescript {5,8,15} copy
 import { createStep } from "@mastra/core/workflows";
 
 export const testStep = createStep({
@@ -55,7 +55,7 @@ export const testStep = createStep({
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or step-specific data.
 
-```typescript showLineNumbers copy
+```typescript copy
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 
 const run = await testWorkflow.createRun();
@@ -86,7 +86,7 @@ if (result!.status === "suspended") {
 
 If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 
-```typescript showLineNumbers copy
+```typescript copy
 const newStream = await run.resumeStream();
 
 for await (const chunk of newStream) {
@@ -98,7 +98,7 @@ for await (const chunk of newStream) {
 
 Pipe an agent's `textStream` to the workflow step's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the workflow run.
 
-```typescript showLineNumbers copy
+```typescript copy
 import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 

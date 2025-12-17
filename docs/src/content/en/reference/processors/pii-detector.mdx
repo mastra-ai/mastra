@@ -137,7 +137,7 @@ const processor = new PIIDetector({
 
 ### Input processing
 
-```typescript title="src/mastra/agents/private-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/private-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { PIIDetector } from "@mastra/core/processors";
 
@@ -164,7 +164,7 @@ export const agent = new Agent({
 
 When using `PIIDetector` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the PII detector, reducing the number of LLM calls required for detection.
 
-```typescript title="src/mastra/agents/output-pii-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/output-pii-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { BatchPartsProcessor, PIIDetector } from "@mastra/core/processors";
 

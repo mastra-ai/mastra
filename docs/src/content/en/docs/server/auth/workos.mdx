@@ -40,7 +40,7 @@ npm install @mastra/auth-workos@beta
 
 ### Basic usage with environment variables
 
-```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7} title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
@@ -54,7 +54,7 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-10} title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
@@ -82,7 +82,7 @@ By default, `MastraAuthWorkos` checks whether the authenticated user has an 'adm
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
-```typescript title="src/mastra/auth.ts" showLineNumbers copy
+```typescript title="src/mastra/auth.ts" copy
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 const workosAuth = new MastraAuthWorkos({
@@ -112,7 +112,7 @@ npm install @workos-inc/node
 
 After users complete the WorkOS authentication flow and return with an authorization code, exchange it for an access token:
 
-```typescript title="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts" copy
 import { WorkOS } from "@workos-inc/node";
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY);
@@ -137,7 +137,7 @@ export const authenticateWithWorkos = async (
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
-```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra/mastra-client.ts" copy
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
@@ -160,7 +160,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 <Tabs>
   <TabItem value="react" label="React">
-    ```typescript title="src/api/agents.ts" showLineNumbers copy
+    ```typescript title="src/api/agents.ts" copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
 

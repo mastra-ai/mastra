@@ -186,7 +186,7 @@ Create a new Action, and add the example code:
 touch src/routes/test/+page.server.ts
 ```
 
-```typescript title="src/routes/test/+page.server.ts" showLineNumbers copy
+```typescript title="src/routes/test/+page.server.ts" copy
 import type { Actions } from "./$types";
 import { mastra } from "../../mastra";
 
@@ -211,7 +211,7 @@ Create a new Page file, and add the example code:
 touch src/routes/test/+page.svelte
 ```
 
-```typescript title="src/routes/test/+page.svelte" showLineNumbers copy
+```typescript title="src/routes/test/+page.svelte" copy
 <script lang="ts">
 	import type { PageProps} from './$types';
 	let { form }: PageProps = $props();
@@ -416,7 +416,7 @@ Create a new Endpoint, and add the example code:
 touch src/routes/weather-api/+server.ts
 ```
 
-```typescript title="src/routes/weather-api/+server.ts" showLineNumbers copy
+```typescript title="src/routes/weather-api/+server.ts" copy
 import { json } from "@sveltejs/kit";
 import { mastra } from "../../mastra";
 
@@ -441,7 +441,7 @@ Create a new Page, and add the example code:
 touch src/routes/weather-api-test/+page.svelte
 ```
 
-```typescript title="src/routes/weather-api-test/+page.svelte" showLineNumbers copy
+```typescript title="src/routes/weather-api-test/+page.svelte" copy
 <script lang="ts">
 	let result = $state<string | null>(null);
 	async function handleFormSubmit(event: Event) {

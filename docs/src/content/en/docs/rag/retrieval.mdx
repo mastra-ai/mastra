@@ -26,7 +26,7 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
-```ts showLineNumbers copy
+```ts copy
 import { embed } from "ai";
 import { PgVector } from "@mastra/pg";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
@@ -56,7 +56,7 @@ The `topK` parameter specifies the maximum number of most similar results to ret
 
 Results include both the text content and a similarity score:
 
-```ts showLineNumbers copy
+```ts copy
 [
   {
     text: "Climate change poses significant challenges...",
@@ -84,7 +84,7 @@ For detailed information about available operators and syntax, see the [Metadata
 
 Basic filtering examples:
 
-```ts showLineNumbers copy
+```ts copy
 // Simple equality filter
 const results = await pgVector.query({
   indexName: "embeddings",
@@ -152,7 +152,7 @@ Common use cases for metadata filtering:
 
 Sometimes you want to give your agent the ability to query a vector database directly. The Vector Query Tool allows your agent to be in charge of retrieval decisions, combining semantic search with optional filtering and reranking based on the agent's understanding of the user's needs.
 
-```ts showLineNumbers copy
+```ts copy
 import { createVectorQueryTool } from "@mastra/rag";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
@@ -182,7 +182,7 @@ These configurations are for **query-time options** like namespaces, performance
 Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ connectionUrl: '...' })`).
 :::
 
-```ts showLineNumbers copy
+```ts copy
 import { createVectorQueryTool } from "@mastra/rag";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
@@ -257,7 +257,7 @@ const lanceQueryTool = createVectorQueryTool({
 
 You can also override these configurations at runtime using the request context:
 
-```ts showLineNumbers copy
+```ts copy
 import { RequestContext } from "@mastra/core/request-context";
 
 const requestContext = new RequestContext();
@@ -284,7 +284,7 @@ When implementing filtering, these prompts are required in the agent's instructi
 <Tabs>
   <TabItem value="pgvector" label="pgVector">
 
-```ts showLineNumbers copy
+```ts copy
 import { PGVECTOR_PROMPT } from "@mastra/pg";
 
 export const ragAgent = new Agent({
@@ -303,7 +303,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="pinecone" label="Pinecone">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { PINECONE_PROMPT } from "@mastra/pinecone";
 
 export const ragAgent = new Agent({
@@ -322,7 +322,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="qdrant" label="Qdrant">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { QDRANT_PROMPT } from "@mastra/qdrant";
 
 export const ragAgent = new Agent({
@@ -341,7 +341,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="chroma" label="Chroma">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { CHROMA_PROMPT } from "@mastra/chroma";
 
 export const ragAgent = new Agent({
@@ -360,7 +360,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="astra" label="Astra">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { ASTRA_PROMPT } from "@mastra/astra";
 
 export const ragAgent = new Agent({
@@ -379,7 +379,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="libsql" label="LibSQL">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { LIBSQL_PROMPT } from "@mastra/libsql";
 
 export const ragAgent = new Agent({
@@ -398,7 +398,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="upstash" label="Upstash">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { UPSTASH_PROMPT } from "@mastra/upstash";
 
 export const ragAgent = new Agent({
@@ -417,7 +417,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="vectorize" label="Vectorize">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { VECTORIZE_PROMPT } from "@mastra/vectorize";
 
 export const ragAgent = new Agent({
@@ -436,7 +436,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="mongodb" label="MongoDB">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { MONGODB_PROMPT } from "@mastra/mongodb";
 
 export const ragAgent = new Agent({
@@ -455,7 +455,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="opensearch" label="OpenSearch">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { OPENSEARCH_PROMPT } from "@mastra/opensearch";
 
 export const ragAgent = new Agent({
@@ -474,7 +474,7 @@ export const ragAgent = new Agent({
 
   <TabItem value="s3vectors" label="S3Vectors">
 
-```ts title="vector-store.ts" showLineNumbers copy
+```ts title="vector-store.ts" copy
 import { S3VECTORS_PROMPT } from "@mastra/s3vectors";
 
 export const ragAgent = new Agent({
@@ -503,7 +503,7 @@ Initial vector similarity search can sometimes miss nuanced relevance. Re-rankin
 
 Here's how to use re-ranking:
 
-```ts showLineNumbers copy
+```ts copy
 import {
   rerankWithScorer as rerank,
   MastraAgentRelevanceScorer
@@ -547,11 +547,11 @@ For semantic scoring to work properly during re-ranking, each result must includ
 
 You can also use other relevance score providers like Cohere or ZeroEntropy:
 
-```ts showLineNumbers copy
+```ts copy
 const relevanceProvider = new CohereRelevanceScorer("rerank-v3.5");
 ```
 
-```ts showLineNumbers copy
+```ts copy
 const relevanceProvider = new ZeroEntropyRelevanceScorer("zerank-1");
 ```
 

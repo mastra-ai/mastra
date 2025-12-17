@@ -118,7 +118,7 @@ instructions: {
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
+```typescript {6} title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
@@ -132,7 +132,7 @@ export const mastra = new Mastra({
 
 You can call agents from workflow steps, tools, the Mastra Client, or the command line. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
 
-```typescript showLineNumbers copy
+```typescript copy
 const testAgent = mastra.getAgent("testAgent");
 ```
 
@@ -152,7 +152,7 @@ Pass a single string for simple prompts, an array of strings when providing mult
 
 (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
-```typescript showLineNumbers copy
+```typescript copy
 const response = await testAgent.generate([
   { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
@@ -172,7 +172,7 @@ Pass a single string for simple prompts, an array of strings when providing mult
 
 (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
-```typescript showLineNumbers copy
+```typescript copy
 const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
@@ -193,7 +193,7 @@ for await (const chunk of stream.textStream) {
 When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
 It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
 
-```typescript showLineNumbers copy
+```typescript copy
 const stream = await testAgent.stream("Help me organize my day", {
   onFinish: ({ steps, text, finishReason, usage }) => {
     console.log({ steps, text, finishReason, usage });
@@ -220,7 +220,7 @@ Agents can return structured, type-safe data using Zod or JSON Schema. The parse
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
 
-```typescript showLineNumbers copy
+```typescript copy
 const response = await testAgent.generate([
   {
     role: "user",
@@ -246,7 +246,7 @@ console.log(response.text);
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
-```typescript showLineNumbers copy
+```typescript copy
 const response = await testAgent.generate("Help me organize my day", {
   maxSteps: 10,
 });
@@ -260,7 +260,7 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 
 `onStepFinish` is only available when streaming or generating text without structured output.
 
-```typescript showLineNumbers copy
+```typescript copy
 const response = await testAgent.generate("Help me organize my day", {
   onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
     console.log({ text, toolCalls, toolResults, finishReason, usage });
@@ -272,7 +272,7 @@ const response = await testAgent.generate("Help me organize my day", {
 
 Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
 
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts"
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
@@ -287,7 +287,7 @@ export const testAgent = new Agent({
 
 Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

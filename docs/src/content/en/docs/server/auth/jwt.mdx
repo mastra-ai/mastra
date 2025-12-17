@@ -20,7 +20,7 @@ npm install @mastra/auth@beta
 
 ## Usage example
 
-```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7-9} title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
@@ -40,7 +40,7 @@ export const mastra = new Mastra({
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
-```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} title="lib/mastra/mastra-client.ts" copy
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -59,7 +59,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 
 <Tabs>
   <TabItem value="react" label="React">
-    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
+    ```tsx title="src/components/test-agent.tsx" copy
     import { mastraClient } from "../../lib/mastra-client";
 
     export const TestAgent = () => {

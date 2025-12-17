@@ -33,7 +33,7 @@ Initialize the Inngest integration to obtain Mastra-compatible workflow helpers.
 
 In development
 
-```ts showLineNumbers copy title="src/mastra/inngest/index.ts"
+```ts copy title="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
 import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
@@ -47,7 +47,7 @@ export const inngest = new Inngest({
 
 In production
 
-```ts showLineNumbers copy title="src/mastra/inngest/index.ts"
+```ts copy title="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
 import { realtimeMiddleware } from "@inngest/realtime/middleware";
 
@@ -61,7 +61,7 @@ export const inngest = new Inngest({
 
 Define the individual steps that will compose your workflow:
 
-```ts showLineNumbers copy title="src/mastra/workflows/index.ts"
+```ts copy title="src/mastra/workflows/index.ts"
 import { z } from "zod";
 import { inngest } from "../inngest";
 import { init } from "@mastra/inngest";
@@ -88,7 +88,7 @@ const incrementStep = createStep({
 
 Compose the steps into a workflow using the `dountil` loop pattern. The createWorkflow function creates a function on inngest server that is invocable.
 
-```ts showLineNumbers copy title="src/mastra/workflows/index.ts"
+```ts copy title="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
 const workflow = createWorkflow({
   id: "increment-workflow",
@@ -109,7 +109,7 @@ export { workflow as incrementWorkflow };
 
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
-```ts showLineNumbers copy title="src/mastra/index.ts"
+```ts copy title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
@@ -216,7 +216,7 @@ docker run --rm -p 8288:8288 \
 
 1. Add Vercel Deployer to Mastra instance
 
-```ts showLineNumbers copy title="src/mastra/index.ts"
+```ts copy title="src/mastra/index.ts"
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
@@ -291,7 +291,7 @@ You can serve additional Inngest functions alongside your Mastra workflows by us
 
 First, create your custom Inngest functions:
 
-```ts showLineNumbers copy title="src/inngest/custom-functions.ts"
+```ts copy title="src/inngest/custom-functions.ts"
 import { inngest } from "./inngest";
 
 // Define custom Inngest functions
@@ -320,7 +320,7 @@ export const customWebhookFunction = inngest.createFunction(
 
 Update your Mastra configuration to include the custom functions:
 
-```ts showLineNumbers copy title="src/mastra/index.ts"
+```ts copy title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { serve as inngestServe } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";

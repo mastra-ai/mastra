@@ -118,7 +118,7 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
 
 The handler receives validated parameters plus runtime context:
 
-```typescript copy showLineNumbers
+```typescript copy
 handler: async (params) => {
   // From schemas (typed from Zod)
   params.id;              // From pathParamSchema
@@ -142,7 +142,7 @@ Returns a `ServerRoute` object that can be registered with an adapter.
 
 ### GET route with path params
 
-```typescript copy showLineNumbers
+```typescript copy
 import { createRoute } from '@mastra/server/server-adapter';
 import { z } from 'zod';
 
@@ -167,7 +167,7 @@ const getAgent = createRoute({
 
 ### POST route with body
 
-```typescript copy showLineNumbers
+```typescript copy
 const createItem = createRoute({
   method: 'POST',
   path: '/api/items',
@@ -190,7 +190,7 @@ const createItem = createRoute({
 
 ### Query params with coercion
 
-```typescript copy showLineNumbers
+```typescript copy
 const listItems = createRoute({
   method: 'GET',
   path: '/api/items',
@@ -209,7 +209,7 @@ const listItems = createRoute({
 
 ### Streaming route
 
-```typescript copy showLineNumbers
+```typescript copy
 const streamAgent = createRoute({
   method: 'POST',
   path: '/api/agents/:agentId/stream',
@@ -230,7 +230,7 @@ const streamAgent = createRoute({
 
 ### Custom body size limit
 
-```typescript copy showLineNumbers
+```typescript copy
 const uploadRoute = createRoute({
   method: 'POST',
   path: '/api/upload',
@@ -279,7 +279,7 @@ const bodySchema = z.object({
 
 Throw an error with a `status` property to return specific HTTP status codes from handlers. If using Hono, you can use `HTTPException` from `hono/http-exception`:
 
-```typescript copy showLineNumbers
+```typescript copy
 import { createRoute } from '@mastra/server/server-adapter';
 import { HTTPException } from 'hono/http-exception';
 
@@ -300,7 +300,7 @@ const getAgent = createRoute({
 
 For Express or framework-agnostic code, throw an error with a `status` property:
 
-```typescript copy showLineNumbers
+```typescript copy
 class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);

@@ -9,7 +9,7 @@ The `Workflow` class enables you to create state machines for complex sequences 
 
 ## Usage example
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts" copy
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -92,7 +92,7 @@ export const workflow = createWorkflow({
 
 When starting a workflow run, you can pass `initialState` to set the starting values for the workflow's state:
 
-```typescript showLineNumbers copy
+```typescript copy
 const run = await workflow.createRun();
 
 const result = await run.start({
@@ -143,7 +143,7 @@ A workflow's `status` indicates its current execution state. The possible values
 
 When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
 
-```typescript showLineNumbers copy
+```typescript copy
 const run = await workflow.createRun();
 const result = await run.start({ inputData: { message: "Hello" } });
 

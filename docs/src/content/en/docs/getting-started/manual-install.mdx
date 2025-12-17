@@ -148,7 +148,7 @@ mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
 
 Add the following code:
 
-```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```ts title="src/mastra/tools/weather-tool.ts" copy
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -187,7 +187,7 @@ mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
 
 Add the following code:
 
-```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```ts title="src/mastra/agents/weather-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
@@ -223,7 +223,7 @@ touch src/mastra/index.ts
 
 Add the following code:
 
-```ts title="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weather-agent";
 

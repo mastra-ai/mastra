@@ -89,7 +89,7 @@ When `expectedToolOrder` is provided, the scorer validates tool calling sequence
 
 ### Code-Based Scorer Options
 
-```typescript showLineNumbers copy
+```typescript copy
 // Standard mode - passes if expected tool is called
 const lenientScorer = createCodeScorer({
   expectedTool: "search-tool",
@@ -135,7 +135,7 @@ The code-based scorer provides deterministic, binary scoring (0 or 1) based on e
 
 ### Correct tool selection
 
-```typescript title="src/example-correct-tool.ts" showLineNumbers copy
+```typescript title="src/example-correct-tool.ts" copy
 const scorer = createToolCallAccuracyScorerCode({
   expectedTool: "weather-tool",
 });
@@ -177,7 +177,7 @@ console.log(result.preprocessStepResult?.correctToolCalled); // true
 
 Only passes if exactly one tool is called:
 
-```typescript title="src/example-strict-mode.ts" showLineNumbers copy
+```typescript title="src/example-strict-mode.ts" copy
 const strictScorer = createToolCallAccuracyScorerCode({
   expectedTool: "weather-tool",
   strictMode: true,
@@ -216,7 +216,7 @@ console.log(result.score); // 0 - fails because multiple tools were called
 
 Validates that tools are called in a specific sequence:
 
-```typescript title="src/example-order-validation.ts" showLineNumbers copy
+```typescript title="src/example-order-validation.ts" copy
 const orderScorer = createToolCallAccuracyScorerCode({
   expectedTool: "auth-tool", // ignored when order is specified
   expectedToolOrder: ["auth-tool", "fetch-tool"],
@@ -255,7 +255,7 @@ console.log(result.score); // 1 - correct order
 
 Allows extra tools as long as expected tools maintain relative order:
 
-```typescript title="src/example-flexible-order.ts" showLineNumbers copy
+```typescript title="src/example-flexible-order.ts" copy
 const flexibleOrderScorer = createToolCallAccuracyScorerCode({
   expectedTool: "auth-tool",
   expectedToolOrder: ["auth-tool", "fetch-tool"],
@@ -346,7 +346,7 @@ The LLM-based scorer provides:
 
 ### LLM-Based Scorer Options
 
-```typescript showLineNumbers copy
+```typescript copy
 // Basic configuration
 const basicLLMScorer = createLLMScorer({
   model: 'openai/gpt-5.1',
@@ -387,7 +387,7 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 
 ### Basic LLM evaluation
 
-```typescript title="src/example-llm-basic.ts" showLineNumbers copy
+```typescript title="src/example-llm-basic.ts" copy
 const llmScorer = createToolCallAccuracyScorerLLM({
   model: "openai/gpt-5.1",
   availableTools: [
@@ -440,7 +440,7 @@ console.log(result.reason); // "The agent correctly used the weather-tool to add
 
 ### Handling inappropriate tool usage
 
-```typescript title="src/example-llm-inappropriate.ts" showLineNumbers copy
+```typescript title="src/example-llm-inappropriate.ts" copy
 const inputMessages = [
   createUIMessage({
     content: "What is the weather in Tokyo?",
@@ -477,7 +477,7 @@ console.log(result.reason); // "The agent used search-tool when weather-tool wou
 
 The LLM scorer recognizes when agents appropriately ask for clarification:
 
-```typescript title="src/example-llm-clarification.ts" showLineNumbers copy
+```typescript title="src/example-llm-clarification.ts" copy
 const vagueInput = [
   createUIMessage({
     content: 'I need help with something',
@@ -509,7 +509,7 @@ console.log(result.reason); // "The agent appropriately asked for clarification 
 
 Here's an example using both scorers on the same data:
 
-```typescript title="src/example-comparison.ts" showLineNumbers copy
+```typescript title="src/example-comparison.ts" copy
 import {
   createToolCallAccuracyScorerCode as createCodeScorer,
   createToolCallAccuracyScorerLLM as createLLMScorer

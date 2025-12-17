@@ -58,7 +58,7 @@ To make tools available to an agent, you configure them in the agent's definitio
 
 Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers
+```typescript title="src/mastra/tools/test-tool.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

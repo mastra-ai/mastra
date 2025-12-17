@@ -35,7 +35,7 @@ npm install @mastra/evals@beta
 
 You can add built-in scorers to your agents to automatically evaluate their outputs. See the [full list of built-in scorers](/docs/v1/evals/built-in-scorers) for all available options.
 
-```typescript title="src/mastra/agents/evaluated-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/evaluated-agent.ts" copy
 import { Agent } from "@mastra/core/agent";
 import {
   createAnswerRelevancyScorer,
@@ -61,7 +61,7 @@ export const evaluatedAgent = new Agent({
 
 You can also add scorers to individual workflow steps to evaluate outputs at specific points in your process:
 
-```typescript title="src/mastra/workflows/content-generation.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/content-generation.ts" copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";

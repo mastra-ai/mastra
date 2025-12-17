@@ -675,7 +675,7 @@ const stream = await agent.stream("message for agent");
 
 ### Mastra Format (Default)
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts" copy
 import { stepCountIs } from "ai-v5";
 
 const stream = await agent.stream("Tell me a story", {
@@ -703,7 +703,7 @@ const fullText = await stream.text;
 
 To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts" copy
 import { stepCountIs, createUIMessageStreamResponse } from "ai";
 import { toAISdkStream } from "@mastra/ai-sdk";
 
@@ -724,7 +724,7 @@ return createUIMessageStreamResponse({
 
 All callback functions are now available as top-level properties for a cleaner API experience.
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts" copy
 const stream = await agent.stream("Tell me a story", {
   onFinish: (result) => {
     console.log("Streaming finished:", result);
@@ -751,7 +751,7 @@ for await (const chunk of stream.textStream) {
 
 ### Advanced Example with Options
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts" copy
 import { z } from "zod";
 import { stepCountIs } from "ai";
 

@@ -13,7 +13,7 @@ Human-in-the-loop input works much like [pausing a workflow](/docs/v1/workflows/
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
-```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {12-17,22-26} title="src/mastra/workflows/test-workflow.ts" copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -64,7 +64,7 @@ export const testWorkflow = createWorkflow({
 
 When a workflow is suspended, you can access the payload returned by `suspend()` by identifying the suspended step and reading its `suspendPayload`.
 
-```typescript {12} title="src/test-workflow.ts" showLineNumbers copy
+```typescript {12} title="src/test-workflow.ts" copy
 const workflow = mastra.getWorkflow("testWorkflow");
 const run = await workflow.createRun();
 
@@ -95,7 +95,7 @@ As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
-```typescript {13} showLineNumbers copy
+```typescript {13} copy
 const workflow = mastra.getWorkflow("testWorkflow");
 const run = await workflow.createRun();
 
@@ -117,7 +117,7 @@ const handleResume = async () => {
 
 Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `success` status, and any logic after the call to `bail()` is skipped.
 
-```typescript {7-11} showLineNumbers copy
+```typescript {7-11} copy
 const step1 = createStep({
   // ...
   execute: async ({ inputData, resumeData, suspend, bail }) => {
@@ -147,7 +147,7 @@ const step1 = createStep({
 
 For workflows that require input at multiple stages, the suspend pattern remains the same. Each step defines a `resumeSchema`, and `suspendSchema` typically with a reason that can be used to provide user feedback.
 
-```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {11-16,21-25} title="src/mastra/workflows/test-workflow.ts" copy
 const step1 = createStep({...});
 
 const step2 = createStep({
@@ -196,7 +196,7 @@ export const testWorkflow = createWorkflow({
 
 Each step must be resumed in sequence, with a separate call to `resume()` for each suspended step. This approach helps manage multi-step approvals with consistent UI feedback and clear input handling at each stage.
 
-```typescript {4,11} showLineNumbers copy
+```typescript {4,11} copy
 const handleResume = async () => {
   const result = await run.resume({
     step: "step-1",

@@ -21,7 +21,7 @@ npm install @mastra/core@beta @mastra/memory@beta @mastra/libsql@beta
 
 Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
 
-```typescript {6-8} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {6-8} title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
@@ -36,7 +36,7 @@ export const mastra = new Mastra({
 
 Now, enable memory by passing a `Memory` instance to the agent's `memory` parameter:
 
-```typescript {3-5} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {3-5} title="src/mastra/agents/test-agent.ts" copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 
@@ -81,7 +81,7 @@ Agents can be configured with their own dedicated storage, keeping tasks, conver
 
 To assign dedicated storage to an agent, install and import the required dependency and pass a `storage` instance to the `Memory` constructor:
 
-```typescript {3, 9-11} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {3, 9-11} title="src/mastra/agents/test-agent.ts" copy
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";

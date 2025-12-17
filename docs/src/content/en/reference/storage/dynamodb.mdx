@@ -36,7 +36,7 @@ Detailed instructions for setting up the table using AWS CloudFormation or AWS C
 
 ### Basic Usage
 
-```typescript copy showLineNumbers
+```typescript copy
 import { Memory } from "@mastra/memory";
 import { DynamoDBStore } from "@mastra/dynamodb";
 
@@ -72,7 +72,7 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 2.  **Configure `DynamoDBStore` to use the local endpoint:**
 
-    ```typescript copy showLineNumbers
+    ```typescript copy
     import { DynamoDBStore } from "@mastra/dynamodb";
 
     const storage = new DynamoDBStore({

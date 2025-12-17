@@ -28,7 +28,7 @@ The `.set()` method takes two arguments:
 1. **key**: The name used to identify the value.
 2. **value**: The data to associate with that key.
 
-```typescript showLineNumbers
+```typescript
 import { RequestContext } from "@mastra/core/request-context";
 
 export type UserTier = {
@@ -74,7 +74,7 @@ await weatherTool.execute({
 
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { RequestContext } from "@mastra/core/request-context";
 import { testWeatherAgent } from "./agents/test-weather-agent";
@@ -105,7 +105,7 @@ export const mastra = new Mastra({
 
 You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts" showLineNumbers
+```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -141,7 +141,7 @@ You can also use `requestContext` with other options like `agents`, `workflows`,
 
 You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts" copy
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -165,7 +165,7 @@ const stepOne = createStep({
 
 You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/tools/weather-tool.ts" showLineNumbers
+```typescript {7-8} title="src/mastra/tools/weather-tool.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };

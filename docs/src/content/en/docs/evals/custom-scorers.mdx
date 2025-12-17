@@ -243,7 +243,7 @@ Together, these components allow you to define custom evaluation logic using LLM
 
 > See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
 
-```typescript title="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
+```typescript title="src/mastra/scorers/gluten-checker.ts" copy
 import { createScorer } from "@mastra/core/evals";
 import { z } from "zod";
 
@@ -399,7 +399,7 @@ The reason generation step creates explanations that help users understand why a
 
 ## High gluten-free example
 
-```typescript title="src/example-high-gluten-free.ts" showLineNumbers copy
+```typescript title="src/example-high-gluten-free.ts" copy
 const result = await glutenCheckerScorer.run({
   input: [{ role: 'user', content: 'Mix rice, beans, and vegetables' }],
   output: { text: 'Mix rice, beans, and vegetables' },
@@ -425,7 +425,7 @@ console.log('Reason:', result.reason);
 
 ## Partial gluten example
 
-```typescript title="src/example-partial-gluten.ts" showLineNumbers copy
+```typescript title="src/example-partial-gluten.ts" copy
 const result = await glutenCheckerScorer.run({
   input: [{ role: "user", content: "Mix flour and water to make dough" }],
   output: { text: "Mix flour and water to make dough" },
@@ -451,7 +451,7 @@ console.log("Reason:", result.reason);
 
 ## Low gluten-free example
 
-```typescript title="src/example-low-gluten-free.ts" showLineNumbers copy
+```typescript title="src/example-low-gluten-free.ts" copy
 const result = await glutenCheckerScorer.run({
   input: [{ role: "user", content: "Add soy sauce and noodles" }],
   output: { text: "Add soy sauce and noodles" },

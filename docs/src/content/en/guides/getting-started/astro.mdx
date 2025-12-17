@@ -202,7 +202,7 @@ Create a new Action, and add the example code:
 touch src/actions/index.ts
 ```
 
-```typescript title="src/actions/index.ts" showLineNumbers copy
+```typescript title="src/actions/index.ts" copy
 import { defineAction } from "astro:actions";
 import { z } from "astro:schema";
 
@@ -237,7 +237,7 @@ Create a new Form component, and add the example code:
 touch src/components/form.tsx
 ```
 
-```typescript title="src/components/form.tsx" showLineNumbers copy
+```typescript title="src/components/form.tsx" copy
 import { actions } from "astro:actions";
 import { useState } from "react";
 
@@ -273,7 +273,7 @@ Create a new Page, and add the example code:
 touch src/pages/test.astro
 ```
 
-```astro title="src/pages/test.astro" showLineNumbers copy
+```astro title="src/pages/test.astro" copy
 ---
 import { Form } from '../components/form'
 ---
@@ -494,7 +494,7 @@ Create a new Endpoint, and add the example code:
 touch src/pages/api/test.ts
 ```
 
-```typescript title="src/pages/api/test.ts" showLineNumbers copy
+```typescript title="src/pages/api/test.ts" copy
 import type { APIRoute } from "astro";
 
 import { mastra } from "../../mastra";
@@ -519,7 +519,7 @@ Create a new Form component, and add the example code:
 touch src/components/form.tsx
 ```
 
-```typescript title="src/components/form.tsx" showLineNumbers copy
+```typescript title="src/components/form.tsx" copy
 import { useState } from "react";
 
 export const Form = () => {
@@ -563,7 +563,7 @@ Create a new Page, and add the example code:
 touch src/pages/test.astro
 ```
 
-```astro title="src/pages/test.astro" showLineNumbers copy
+```astro title="src/pages/test.astro" copy
 ---
 import { Form } from '../components/form'
 ---

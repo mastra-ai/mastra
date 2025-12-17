@@ -23,7 +23,7 @@ Time travel requires storage to be configured since it relies on persisted workf
 
 Use `run.timeTravel()` to re-execute a workflow from a specific step:
 
-```typescript showLineNumbers copy
+```typescript copy
 import { mastra } from "./mastra";
 
 const workflow = mastra.getWorkflow("myWorkflow");
@@ -41,7 +41,7 @@ You can specify the target step using either a step reference or a step ID:
 
 ### Using step reference
 
-```typescript showLineNumbers copy
+```typescript copy
 const result = await run.timeTravel({
   step: step2,
   inputData: { value: 10 },
@@ -50,7 +50,7 @@ const result = await run.timeTravel({
 
 ### Using step ID
 
-```typescript showLineNumbers copy
+```typescript copy
 const result = await run.timeTravel({
   step: "step2",
   inputData: { value: 10 },
@@ -61,7 +61,7 @@ const result = await run.timeTravel({
 
 For steps inside nested workflows, use dot notation, an array of step IDS or an array of step references:
 
-```typescript showLineNumbers copy
+```typescript copy
 // Using dot notation
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
@@ -85,7 +85,7 @@ const result = await run.timeTravel({
 
 You can provide context to specify the state of previous steps when time traveling:
 
-```typescript {3-13} showLineNumbers copy
+```typescript {3-13} copy
 const result = await run.timeTravel({
   step: "step2",
   context: {
@@ -114,7 +114,7 @@ The context object contains step results keyed by step ID. Each step result incl
 
 Time travel is particularly useful for debugging and recovering from failed workflow executions:
 
-```typescript showLineNumbers copy
+```typescript copy
 const workflow = mastra.getWorkflow("myWorkflow");
 const run = await workflow.createRun();
 
@@ -136,7 +136,7 @@ if (failedResult.status === "failed") {
 
 You can time travel to resume a suspended workflow from an earlier step:
 
-```typescript showLineNumbers copy
+```typescript copy
 const run = await workflow.createRun();
 
 // Start workflow - suspends at promptAgent step
@@ -159,7 +159,7 @@ if (initialResult.status === "suspended") {
 
 Use `timeTravelStream()` to receive streaming events during time travel execution:
 
-```typescript showLineNumbers copy
+```typescript copy
 const run = await workflow.createRun();
 
 const output = run.timeTravelStream({
@@ -180,7 +180,7 @@ const result = await output.result;
 
 You can provide initial state when time traveling to set workflow-level state:
 
-```typescript showLineNumbers copy
+```typescript copy
 const result = await run.timeTravel({
   step: "step2",
   inputData: { value: 10 },
@@ -199,7 +199,7 @@ Time travel throws errors in specific situations:
 
 You cannot time travel to a workflow that is currently running:
 
-```typescript showLineNumbers copy
+```typescript copy
 try {
   await run.timeTravel({ step: "step2" });
 } catch (error) {
@@ -211,7 +211,7 @@ try {
 
 Time travel throws if the target step doesn't exist in the workflow:
 
-```typescript showLineNumbers copy
+```typescript copy
 try {
   await run.timeTravel({ step: "nonExistentStep" });
 } catch (error) {
@@ -223,7 +223,7 @@ try {
 
 When `validateInputs` is enabled, time travel validates the input data against the step's schema:
 
-```typescript showLineNumbers copy
+```typescript copy
 try {
   await run.timeTravel({
     step: "step2",
@@ -238,7 +238,7 @@ try {
 
 When time traveling into a nested workflow, you can provide context for both the parent and nested workflow steps:
 
-```typescript showLineNumbers copy
+```typescript copy
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
   context: {
@@ -275,7 +275,7 @@ const result = await run.timeTravel({
 
 Re-run a failed step with the same or modified input to diagnose issues:
 
-```typescript showLineNumbers copy
+```typescript copy
 const result = await run.timeTravel({
   step: failedStepId,
   context: originalContext, // Use context from the failed run
@@ -286,7 +286,7 @@ const result = await run.timeTravel({
 
 Test individual steps with specific inputs on a new workflow run, useful for testing a step logic without starting workflow execution from the beginning.
 
-```typescript showLineNumbers copy
+```typescript copy
 const result = await run.timeTravel({
   step: "processData",
   inputData: { testData: "specific test case" },
@@ -297,7 +297,7 @@ const result = await run.timeTravel({
 
 Re-run steps that failed due to temporary issues (network errors, rate limits):
 
-```typescript showLineNumbers copy
+```typescript copy
 // After fixing the external service issue
 const result = await run.timeTravel({
   step: "callExternalApi",

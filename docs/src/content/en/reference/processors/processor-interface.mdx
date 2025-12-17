@@ -598,7 +598,7 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
 
 #### Example: Quality guardrail with retry
 
-```typescript title="src/mastra/processors/quality-guardrail.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/quality-guardrail.ts" copy
 import type { Processor } from "@mastra/core";
 
 export class QualityGuardrail implements Processor {
@@ -648,7 +648,7 @@ type OutputProcessor = Processor & (
 
 ### Basic input processor
 
-```typescript title="src/mastra/processors/lowercase.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/lowercase.ts" copy
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class LowercaseProcessor implements Processor {
@@ -672,7 +672,7 @@ export class LowercaseProcessor implements Processor {
 
 ### Per-step processor with processInputStep
 
-```typescript title="src/mastra/processors/dynamic-model.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/dynamic-model.ts" copy
 import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from "@mastra/core";
 
 export class DynamicModelProcessor implements Processor {
@@ -705,7 +705,7 @@ export class DynamicModelProcessor implements Processor {
 
 ### Message transformer with processInputStep
 
-```typescript title="src/mastra/processors/reasoning-transformer.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/reasoning-transformer.ts" copy
 import type { Processor, MastraDBMessage } from "@mastra/core";
 
 export class ReasoningTransformer implements Processor {
@@ -730,7 +730,7 @@ export class ReasoningTransformer implements Processor {
 
 ### Hybrid processor (input and output)
 
-```typescript title="src/mastra/processors/content-filter.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/content-filter.ts" copy
 import type { Processor, MastraDBMessage, ChunkType } from "@mastra/core";
 
 export class ContentFilter implements Processor {
@@ -768,7 +768,7 @@ export class ContentFilter implements Processor {
 
 ### Stream accumulator with state
 
-```typescript title="src/mastra/processors/word-counter.ts" showLineNumbers copy
+```typescript title="src/mastra/processors/word-counter.ts" copy
 import type { Processor, ChunkType } from "@mastra/core";
 
 export class WordCounter implements Processor {
