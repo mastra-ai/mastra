@@ -36,28 +36,28 @@ Install the required packages:
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
@@ -119,7 +119,7 @@ Modify the `tsconfig.json` file in your project root:
 
 Setup your API key in a `.env` file:
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -129,7 +129,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` and `.vercel` to your `.gitignore` file:
 
-```bash title=".gitignore" copy
+```bash title=".gitignore"
 .mastra
 .vercel
 ```
@@ -160,14 +160,14 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm run dev:mastra
 ```
 
 </TabItem>
 <TabItem value="cli" label="CLI">
 
-```bash copy
+```bash
 mastra dev:mastra
 ```
 
@@ -188,7 +188,7 @@ With the Mastra Dev Server running, you can start your Astro site in the usual w
 
 Create an `actions` directory:
 
-```bash copy
+```bash
 mkdir src/actions
 ```
 
@@ -198,11 +198,11 @@ mkdir src/actions
 
 Create a new Action, and add the example code:
 
-```bash copy
+```bash
 touch src/actions/index.ts
 ```
 
-```typescript title="src/actions/index.ts" showLineNumbers copy
+```typescript title="src/actions/index.ts"
 import { defineAction } from "astro:actions";
 import { z } from "astro:schema";
 
@@ -233,11 +233,11 @@ export const server = {
 
 Create a new Form component, and add the example code:
 
-```bash copy
+```bash
 touch src/components/form.tsx
 ```
 
-```typescript title="src/components/form.tsx" showLineNumbers copy
+```typescript title="src/components/form.tsx"
 import { actions } from "astro:actions";
 import { useState } from "react";
 
@@ -269,11 +269,11 @@ export const Form = () => {
 
 Create a new Page, and add the example code:
 
-```bash copy
+```bash
 touch src/pages/test.astro
 ```
 
-```astro title="src/pages/test.astro" showLineNumbers copy
+```astro title="src/pages/test.astro"
 ---
 import { Form } from '../components/form'
 ---
@@ -328,28 +328,28 @@ Install the required packages:
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm install mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun add mastra@beta @mastra/core@beta @mastra/libsql@beta @ai-sdk/openai
 ```
 
@@ -411,7 +411,7 @@ Modify the `tsconfig.json` file in your project root:
 
 Setup your API key in a `.env` file:
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -421,7 +421,7 @@ OPENAI_API_KEY=<your-api-key>
 
 Add `.mastra` to your `.gitignore` file:
 
-```bash title=".gitignore" copy
+```bash title=".gitignore"
 .mastra
 .vercel
 ```
@@ -452,14 +452,14 @@ Start the Mastra Dev Server to expose your agents as REST endpoints:
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm run dev:mastra
 ```
 
 </TabItem>
 <TabItem value="cli" label="CLI">
 
-```bash copy
+```bash
 mastra dev:mastra
 ```
 
@@ -480,7 +480,7 @@ With the Mastra Dev Server running, you can start your Astro site in the usual w
 
 Create an `api` directory:
 
-```bash copy
+```bash
 mkdir src/pages/api
 ```
 
@@ -490,11 +490,11 @@ mkdir src/pages/api
 
 Create a new Endpoint, and add the example code:
 
-```bash copy
+```bash
 touch src/pages/api/test.ts
 ```
 
-```typescript title="src/pages/api/test.ts" showLineNumbers copy
+```typescript title="src/pages/api/test.ts"
 import type { APIRoute } from "astro";
 
 import { mastra } from "../../mastra";
@@ -515,11 +515,11 @@ export const POST: APIRoute = async ({ request }) => {
 
 Create a new Form component, and add the example code:
 
-```bash copy
+```bash
 touch src/components/form.tsx
 ```
 
-```typescript title="src/components/form.tsx" showLineNumbers copy
+```typescript title="src/components/form.tsx"
 import { useState } from "react";
 
 export const Form = () => {
@@ -559,11 +559,11 @@ export const Form = () => {
 
 Create a new Page, and add the example code:
 
-```bash copy
+```bash
 touch src/pages/test.astro
 ```
 
-```astro title="src/pages/test.astro" showLineNumbers copy
+```astro title="src/pages/test.astro"
 ---
 import { Form } from '../components/form'
 ---

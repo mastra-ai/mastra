@@ -304,10 +304,17 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (contextRequestContext && defaultOptions?.requestContext) {
+      // Prioritize requestContext from middleware/route options over body
+      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
         mastra
           .getLogger()
-          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
       }
 
       if (!agentToUse) {
@@ -319,7 +326,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         agentId: agentToUse,
         params: {
           ...params,
-          requestContext: contextRequestContext || params.requestContext,
+          requestContext: effectiveRequestContext,
         },
         defaultOptions,
         sendStart,

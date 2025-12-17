@@ -40,7 +40,7 @@ memory: new Memory({
 
 **Example:**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -89,7 +89,7 @@ memory: new Memory({
 
 **Example:**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -145,7 +145,7 @@ memory: new Memory({
 
 **Example:**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -169,7 +169,7 @@ const agent = new Agent({
 
 If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra will **not** automatically add it. This gives you full control over processor ordering:
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { MessageHistory } from "@mastra/memory/processors";
@@ -236,7 +236,7 @@ Output guardrails run **before** memory processors save messages. If a guardrail
 - Memory processors are skipped
 - **No messages are persisted to storage**
 
-```typescript copy showLineNumbers
+```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
@@ -281,7 +281,7 @@ Input guardrails run **after** memory processors load history. If a guardrail ab
 - Output processors (including memory persistence) are skipped
 - **No messages are persisted to storage**
 
-```typescript copy showLineNumbers
+```typescript
 // Input guardrail that validates user input
 const inputValidator = {
   id: "input-validator",

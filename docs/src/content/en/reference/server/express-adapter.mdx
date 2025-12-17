@@ -25,8 +25,8 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 Install the Express adapter and Express framework:
 
-```bash copy
-npm install @mastra/express express
+```bash
+npm install @mastra/express@beta express
 ```
 
 </StepItem>
@@ -35,7 +35,7 @@ npm install @mastra/express express
 
 Create your server file:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -63,7 +63,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 ## Full example
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import express from 'express';
 import { MastraServer } from '@mastra/express';
 import { mastra } from './mastra';
@@ -166,7 +166,7 @@ app.listen(4111);
 
 Add routes directly to the Express app:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 const app = express();
 app.use(express.json());
 
@@ -196,7 +196,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Express middleware and routes, access Mastra context via `res.locals`:
 
-```typescript copy
+```typescript
 app.get('/custom', (req, res) => {
   const mastra = res.locals.mastra;
   const requestContext = res.locals.requestContext;
@@ -223,7 +223,7 @@ Available properties on `res.locals`:
 
 Add Express middleware before or after `init()`:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 const app = express();
 app.use(express.json());
 

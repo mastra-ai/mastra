@@ -2881,6 +2881,15 @@ export class MessageList {
           return p;
         }
 
+        // Handle data-* parts (custom parts emitted by tools via writer.custom())
+        // These are preserved as-is to allow roundtripping through storage
+        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+          return {
+            type: p.type,
+            data: 'data' in p ? (p as any).data : undefined,
+          };
+        }
+
         return null;
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);

@@ -32,7 +32,7 @@ Steps are the building blocks of workflows. Create a step using `createStep()` w
 
 The `execute` function defines what the step does. Use it to call functions in your codebase, external APIs, agents, or tools.
 
-```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({
@@ -63,7 +63,7 @@ Workflow steps can also call registered agents or import and execute tools direc
 
 Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. Add steps using `.then()` and complete the workflow with `.commit()`.
 
-```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -92,7 +92,7 @@ Workflows can be composed using a number of different methods. The method you ch
 
 Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress, accumulating results, or sharing configuration across the entire workflow.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({ message: z.string() }),
@@ -116,7 +116,7 @@ const step1 = createStep({
 
 Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/v1/workflows/control-flow).
 
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {26} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -150,7 +150,7 @@ export const testWorkflow = createWorkflow({
 
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
 
-```typescript {6} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6} title="src/mastra/workflows/test-workflow.ts"
 import { cloneWorkflow } from "@mastra/core/workflows";
 
 const step1 = createStep({...});
@@ -168,7 +168,7 @@ export const testWorkflow = createWorkflow({...})
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
-```typescript {6} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
@@ -182,7 +182,7 @@ export const mastra = new Mastra({
 
 You can run workflows from agents, tools, the Mastra Client, or the command line. Get a reference by calling `.getWorkflow()` on your `mastra` or `mastraClient` instance, depending on your setup:
 
-```typescript showLineNumbers copy
+```typescript
 const testWorkflow = mastra.getWorkflow("testWorkflow");
 ```
 :::info
@@ -197,7 +197,7 @@ Workflows can be run in two modes: start waits for all steps to complete before 
   <TabItem value="start" label="Start">
 Create a workflow run instance using `createRun()`, then call `.start()` with `inputData` matching the workflow's `inputSchema`. The workflow executes all steps and returns the final result.
 
-```typescript showLineNumbers copy
+```typescript
 const run = await testWorkflow.createRun();
 
 const result = await run.start({
@@ -212,7 +212,7 @@ console.log(result);
   <TabItem value="stream" label="Stream">
 Create a workflow run instance using `.createRun()`, then call `.stream()` with `inputData` matching the workflow's `inputSchema`. The workflow emits events as each step executes, which you can iterate over to track progress.
 
-```typescript showLineNumbers copy
+```typescript
 const run = await testWorkflow.createRun();
 
 const result = await run.stream({
@@ -278,7 +278,7 @@ When a workflow run loses connection to the server, it can be restarted from the
 
 Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a workflow. This helps restart all active workflow runs of a workflow, without having to manually loop through each run and restart.
 
-```typescript showLineNumbers copy
+```typescript
 workflow.restartAllActiveWorkflowRuns();
 ```
 
@@ -286,7 +286,7 @@ workflow.restartAllActiveWorkflowRuns();
 
 Use `restart()` to restart an active workflow run from the last active step. This will resume execution from the last active step, and the workflow will continue from there.
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
@@ -300,7 +300,7 @@ const restartedResult = await run.restart();
 
 When a workflow run is active, it will have a `status` of `running` or `waiting`. You can check the workflow's `status` to confirm it's active, and use `active` to identify the active workflow run.
 
-```typescript showLineNumbers copy
+```typescript
 const activeRuns = await workflow.listActiveWorkflowRuns();
 if (activeRuns.runs.length > 0) {
   console.log(activeRuns.runs);
@@ -317,7 +317,7 @@ When running the local mastra server, all active workflow runs will be restarted
 
 Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
