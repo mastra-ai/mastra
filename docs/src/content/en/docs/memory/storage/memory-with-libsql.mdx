@@ -11,13 +11,13 @@ This example demonstrates how to use Mastra's memory system with LibSQL as the s
 
 This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 ```
 
 And install the following package:
 
-```bash copy
+```bash
 npm install @mastra/libsql@beta
 ```
 
@@ -25,7 +25,7 @@ npm install @mastra/libsql@beta
 
 To add LibSQL memory to an agent use the `Memory` class and create a new `storage` key using `LibSQLStore`. The `url` can either by a remote location, or a local file system resource.
 
-```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-libsql-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore } from "@mastra/libsql";
@@ -54,13 +54,13 @@ Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve r
 
 Install `fastembed` to get started:
 
-```bash copy
+```bash
 npm install @mastra/fastembed@beta
 ```
 
 Add the following to your agent:
 
-```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-libsql-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
@@ -100,7 +100,7 @@ export const libsqlAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript title="src/test-libsql-agent.ts" showLineNumbers copy
+```typescript title="src/test-libsql-agent.ts"
 import "dotenv/config";
 
 import { mastra } from "./mastra";

@@ -131,7 +131,7 @@ Connect to your Droplet and clone your repository:
 <Tabs>
   <TabItem value="public" label="Public Repository">
 
-```bash copy
+```bash
 git clone https://github.com/<your-username>/<your-repository>.git
 ```
 
@@ -139,7 +139,7 @@ git clone https://github.com/<your-username>/<your-repository>.git
 
   <TabItem value="private" label="Private Repository">
 
-```bash copy
+```bash
 git clone https://<your-username>:<your-personal-access-token>@github.com/<your-username>/<your-repository>.git
 ```
 
@@ -148,7 +148,7 @@ git clone https://<your-username>:<your-personal-access-token>@github.com/<your-
 
 Navigate to the repository directory:
 
-```bash copy
+```bash
 cd "<your-repository>"
 ```
 
@@ -158,7 +158,7 @@ cd "<your-repository>"
 
 Install dependencies
 
-```bash copy
+```bash
 npm install
 ```
 
@@ -170,13 +170,13 @@ Set up environment variables
 
 Create a `.env` file and add your environment variables:
 
-```bash copy
+```bash
 touch .env
 ```
 
 Edit the `.env` file and add your environment variables:
 
-```bash copy
+```bash
 OPENAI_API_KEY=<your-openai-api-key>
 # Add other required environment variables
 ```
@@ -187,7 +187,7 @@ OPENAI_API_KEY=<your-openai-api-key>
 
 Build the application
 
-```bash copy
+```bash
 npm run build
 ```
 
@@ -197,7 +197,7 @@ npm run build
 
 Run the application
 
-```bash copy
+```bash
 node --env-file=".env" .mastra/output/index.mjs
 ```
 
@@ -219,7 +219,7 @@ You can now connect to your Mastra server from your client application using a `
 
 Refer to the [`MastraClient` documentation](/docs/v1/server/mastra-client) for more information.
 
-```typescript copy showLineNumbers
+```typescript
 import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({

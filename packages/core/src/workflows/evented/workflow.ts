@@ -325,6 +325,8 @@ export function createWorkflow<
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
+      onFinish: params.options?.onFinish,
+      onError: params.options?.onError,
     },
   });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
