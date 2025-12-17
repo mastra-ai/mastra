@@ -1,5 +1,45 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.13
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.13
+
+## 0.1.0-beta.12
+
+### Patch Changes
+
+- Remove redundant toolCalls from network agent finalResult ([#11189](https://github.com/mastra-ai/mastra/pull/11189))
+
+  The network agent's `finalResult` was storing `toolCalls` separately even though all tool call information is already present in the `messages` array (as `tool-call` and `tool-result` type messages). This caused significant token waste since the routing agent reads this data from memory on every iteration.
+
+  **Before:** `finalResult: { text, toolCalls, messages }`
+  **After:** `finalResult: { text, messages }`
+
+  +**Migration:** If you were accessing `finalResult.toolCalls`, retrieve tool calls from `finalResult.messages` by filtering for messages with `type: 'tool-call'`.
+
+  Updated `@mastra/react` to extract tool calls directly from the `messages` array instead of the removed `toolCalls` field when resolving initial messages from memory.
+
+  Fixes #11059
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Updated dependencies [[`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`695a621`](https://github.com/mastra-ai/mastra/commit/695a621528bdabeb87f83c2277cf2bb084c7f2b4), [`1b85674`](https://github.com/mastra-ai/mastra/commit/1b85674123708d9b85834dccc9eae601a9d0891c), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`439eaf7`](https://github.com/mastra-ai/mastra/commit/439eaf75447809b05e326666675a4dcbf9c334ce)]:
+  - @mastra/client-js@1.0.0-beta.12
+
 ## 0.1.0-beta.11
 
 ### Patch Changes

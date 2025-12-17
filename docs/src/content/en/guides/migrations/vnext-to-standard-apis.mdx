@@ -106,7 +106,7 @@ See the following API references for more information:
 
 No `format` option: Always return AI SDK v4 types
 
-```typescript showLineNumbers copy
+```typescript
 // Mastra native format (default)
 const result = await agent.stream(messages);
 ```
@@ -118,7 +118,7 @@ Use `format` option to choose output:
 - `'mastra'` (default)
 - `'aisdk'` (AI SDK v5 compatible)
 
-```typescript showLineNumbers copy
+```typescript
 // AI SDK v5 compatibility
 const result = await agent.stream(messages, {
   format: "aisdk",
@@ -131,7 +131,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `format` - Choose between 'mastra' or 'aisdk' output format:
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     format: "aisdk", // or 'mastra' (default)
   });
@@ -139,7 +139,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `system` - Custom system message (separate from instructions).
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     system: "You are a helpful assistant",
   });
@@ -153,7 +153,7 @@ The following options are available in the standard `.stream()` and `generate()`
     - 'error' - throw an error
     - 'fallback' - return a fallback value you provide
 
-    ```typescript showLineNumbers copy
+    ```typescript copy
     const result = await agent.generate(messages, {
       structuredOutput: {
         schema: z.object({
@@ -170,7 +170,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `stopWhen` - Flexible stop conditions (step count, token limit, etc).
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     stopWhen: ({ steps, totalTokens }) => steps >= 5 || totalTokens >= 10000,
   });
@@ -178,7 +178,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `providerOptions` - Provider-specific options (e.g., OpenAI-specific settings)
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     providerOptions: {
       openai: {
@@ -191,7 +191,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `onChunk` - Callback for each streaming chunk.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     onChunk: (chunk) => {
       console.log("Received chunk:", chunk);
@@ -201,7 +201,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `onError` - Error callback.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     onError: (error) => {
       console.error("Stream error:", error);
@@ -211,7 +211,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `onAbort` - Abort callback.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     onAbort: () => {
       console.log("Stream aborted");
@@ -221,7 +221,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `activeTools` - Specify which tools are active for this execution.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     activeTools: ["search", "calculator"], // Only these tools will be available
   });
@@ -229,7 +229,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `abortSignal` - AbortSignal for cancellation.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const controller = new AbortController();
   const result = await agent.stream(messages, {
     abortSignal: controller.signal,
@@ -240,7 +240,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `prepareStep` - Callback before each step in multi-step execution.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     prepareStep: ({ step, state }) => {
       console.log("About to execute step:", step);
@@ -253,7 +253,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `requireToolApproval` - Require approval for all tool calls.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     requireToolApproval: true,
   });
@@ -265,7 +265,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
   Unified in `modelSettings`
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     modelSettings: {
       temperature: 0.7,
@@ -279,7 +279,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
   Moved to memory object.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.stream(messages, {
     memory: {
       resource: "user-123",
@@ -294,7 +294,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
   Use `structuredOutput` instead to allow for tool calls and an object return.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.generate(messages, {
     structuredOutput: {
       schema: z.object({
@@ -309,7 +309,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
   The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model does not natively support `response_format`.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.generate(messages, {
     structuredOutput: {
       schema: {
@@ -325,7 +325,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
   Use `memory` instead.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   const result = await agent.generate(messages, {
     memory: {
       // ...
@@ -350,7 +350,7 @@ See the following API references for more information:
 
   `toolChoice` uses the AI SDK v5 `ToolChoice` type.
 
-  ```typescript showLineNumbers copy
+  ```typescript copy
   type ToolChoice<TOOLS extends Record<string, unknown>> =
     | "auto"
     | "none"
