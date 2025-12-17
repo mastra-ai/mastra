@@ -654,6 +654,7 @@ interface InteractivePromptArgs {
   skip?: {
     llmProvider?: boolean;
     llmApiKey?: boolean;
+    gitInit?: boolean;
   };
 }
 
@@ -763,6 +764,8 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return editor;
       },
       initGit: async () => {
+        if (skip?.gitInit) return false;
+
         return p.confirm({
           message: 'Initialize a new git repository?',
           initialValue: true,
