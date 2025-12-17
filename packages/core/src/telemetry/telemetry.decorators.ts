@@ -1,23 +1,9 @@
-import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
+import { context, propagation, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 
-import { hasActiveTelemetry, getBaggageValues } from './utility';
+import { boundedStringify } from '../ai-tracing/serialization';
+import { getBaggageValues, hasActiveTelemetry } from './utility';
 
-function safeStringify(obj: unknown): string {
-  const seen = new WeakSet();
-  return JSON.stringify(obj, (_key, value) => {
-    if (typeof value === 'function') return '[Function]';
-    if (typeof value === 'bigint') return `${value}n`;
-    if (value instanceof Error) return { message: value.message, stack: value.stack };
-    if (typeof value === 'object' && value !== null) {
-      if (seen.has(value)) return '[Circular]';
-      seen.add(value);
-    }
-    return value;
-  });
-}
-
-// Type interfaces for better type safety
 interface StreamFinishData {
   text?: string;
   usage?: {
@@ -36,7 +22,7 @@ interface StreamFinishData {
   toolCalls?: unknown[];
   toolResults?: unknown[];
   warnings?: unknown;
-  object?: unknown; // For structured output
+  object?: unknown; // structured output
 }
 
 interface StreamOptions {
@@ -46,73 +32,85 @@ interface StreamOptions {
 
 interface EnhancedSpan extends Span {
   __mastraStreamingSpan?: boolean;
+  __mastraEnded?: boolean;
 }
 
-function isStreamingResult(result: unknown, methodName: string): boolean {
-  if (methodName === 'stream' || methodName === 'streamLegacy') {
-    return true;
+/**
+ * End a span at most once (guards against double-end bugs across layers).
+ */
+function endSpanOnce(span: EnhancedSpan) {
+  if (span.__mastraEnded) return;
+  span.__mastraEnded = true;
+  try {
+    span.end();
+  } catch {
+    // best-effort
   }
-
-  if (result && typeof result === 'object' && result !== null) {
-    const obj = result as Record<string, unknown>;
-    return 'textStream' in obj || 'objectStream' in obj || 'usagePromise' in obj || 'finishReasonPromise' in obj;
-  }
-
-  return false;
 }
 
-function enhanceStreamingArgumentsWithTelemetry(
-  args: unknown[],
-  span: EnhancedSpan,
-  spanName: string,
-  methodName: string,
-): unknown[] {
-  if (methodName === 'stream' || methodName === 'streamLegacy') {
-    const enhancedArgs = [...args];
-    const streamOptions = (enhancedArgs.length > 1 && (enhancedArgs[1] as StreamOptions)) || ({} as StreamOptions);
-    const enhancedStreamOptions: StreamOptions = { ...streamOptions };
-    const originalOnFinish = enhancedStreamOptions.onFinish;
+function isStreamingMethod(methodName: string): boolean {
+  return methodName === 'stream' || methodName === 'streamLegacy';
+}
 
-    enhancedStreamOptions.onFinish = async (finishData: StreamFinishData) => {
-      try {
-        const telemetryData = {
-          text: finishData.text,
-          usage: finishData.usage,
-          finishReason: finishData.finishReason,
-          toolCalls: finishData.toolCalls,
-          toolResults: finishData.toolResults,
-          warnings: finishData.warnings,
-          ...(finishData.object !== undefined && { object: finishData.object }),
-        };
+/**
+ * Attach minimal finish data to a span for streaming methods.
+ * Default behavior stores only SMALL summary fields to avoid OOM.
+ */
+function enhanceStreamingArgumentsWithTelemetry(args: unknown[], span: EnhancedSpan, spanName: string): unknown[] {
+  const enhancedArgs = [...args];
 
-        span.setAttribute(`${spanName}.result`, safeStringify(telemetryData));
-        span.setStatus({ code: SpanStatusCode.OK });
-        span.end();
-      } catch (error) {
-        console.warn('Telemetry capture failed:', error);
-        span.setAttribute(`${spanName}.result`, '[Telemetry Capture Error]');
-        span.setStatus({ code: SpanStatusCode.ERROR });
-        span.end();
-      }
+  // Helper to check if value is a plain object
+  const isPlainObject = (val: unknown): val is Record<string, unknown> =>
+    val !== null && typeof val === 'object' && !Array.isArray(val);
 
-      if (originalOnFinish) {
-        return await originalOnFinish(finishData);
-      }
+  // Create the enhanced onFinish callback
+  const createEnhancedOnFinish = (originalOnFinish?: (data: StreamFinishData) => Promise<void> | void) => {
+    const enhancedOnFinish = async (finishData: StreamFinishData) => {
+      const telemetryData = {
+        text: finishData.text,
+        usage: finishData.usage,
+        finishReason: finishData.finishReason,
+        toolCalls: finishData.toolCalls,
+        toolResults: finishData.toolResults,
+        warnings: finishData.warnings,
+        ...(finishData.object !== undefined && { object: finishData.object }),
+      };
+
+      span.setAttribute(`${spanName}.result`, boundedStringify(telemetryData));
+      span.setStatus({ code: SpanStatusCode.OK });
+      endSpanOnce(span);
+
+      if (originalOnFinish) return await originalOnFinish(finishData);
     };
+    (enhancedOnFinish as any).__hasOriginalOnFinish = !!originalOnFinish;
+    return enhancedOnFinish;
+  };
 
-    // Check if an original onFinish was passed
-    (enhancedStreamOptions.onFinish as any).__hasOriginalOnFinish = !!originalOnFinish;
-
-    enhancedArgs[1] = enhancedStreamOptions;
-    span.__mastraStreamingSpan = true;
-
-    return enhancedArgs;
+  // Case 1: Single object argument (e.g., TTS.stream({ text }))
+  if (enhancedArgs.length === 1 && isPlainObject(enhancedArgs[0])) {
+    const singleArg = enhancedArgs[0] as StreamOptions;
+    const originalOnFinish = singleArg.onFinish;
+    enhancedArgs[0] = {
+      ...singleArg,
+      onFinish: createEnhancedOnFinish(originalOnFinish),
+    };
+  }
+  // Case 2: Two-argument signature (model/prompt, options?)
+  else {
+    const streamOptions =
+      enhancedArgs.length > 1 && isPlainObject(enhancedArgs[1]) ? (enhancedArgs[1] as StreamOptions) : {};
+    const originalOnFinish = streamOptions.onFinish;
+    enhancedArgs[1] = {
+      ...streamOptions,
+      onFinish: createEnhancedOnFinish(originalOnFinish),
+    };
   }
 
-  return args;
+  span.__mastraStreamingSpan = true;
+  return enhancedArgs;
 }
 
-// Decorator factory that takes optional spanName
+// Decorator factory
 export function withSpan(options: {
   spanName?: string;
   skipIfNoTelemetry?: boolean;
@@ -126,7 +124,6 @@ export function withSpan(options: {
     const methodName = String(propertyKey);
 
     descriptor.value = function (this: unknown, ...args: unknown[]) {
-      // Skip if no telemetry is available and skipIfNoTelemetry is true
       if (options?.skipIfNoTelemetry && !hasActiveTelemetry(options?.tracerName)) {
         return originalMethod.apply(this, args);
       }
@@ -148,18 +145,18 @@ export function withSpan(options: {
 
       // Start the span with optional kind
       const span = tracer.startSpan(spanName, { kind: spanKind }) as EnhancedSpan;
+
+      // Always bind span to the active context
       let ctx = trace.setSpan(context.active(), span);
 
-      // Record input arguments as span attributes
+      // Record input arguments with bounded serialization
       args.forEach((arg, index) => {
-        try {
-          span.setAttribute(`${spanName}.argument.${index}`, safeStringify(arg));
-        } catch {
-          span.setAttribute(`${spanName}.argument.${index}`, '[Not Serializable]');
-        }
+        span.setAttribute(`${spanName}.argument.${index}`, boundedStringify(arg));
       });
 
+      // Attach baggage-derived fields (these should be small)
       const { requestId, componentName, runId, threadId, resourceId } = getBaggageValues(ctx);
+
       if (requestId) {
         span.setAttribute('http.request_id', requestId);
       }
@@ -174,73 +171,82 @@ export function withSpan(options: {
 
       if (componentName) {
         span.setAttribute('componentName', componentName);
-        // @ts-ignore - These properties may exist on the context
-        span.setAttribute('runId', runId);
+        if (runId) {
+          span.setAttribute('runId', runId);
+        }
       } else if (this && typeof this === 'object' && 'name' in this) {
         const contextObj = this as { name: string; runId?: string };
         span.setAttribute('componentName', contextObj.name);
+        if (contextObj.runId) span.setAttribute('runId', contextObj.runId);
+
+        // Best-effort baggage update, but do NOT inject undefined properties
+        const baggageEntries: Record<string, { value: string }> = {};
+
+        baggageEntries.componentName = { value: contextObj.name };
+
         if (contextObj.runId) {
-          span.setAttribute('runId', contextObj.runId);
+          baggageEntries.runId = { value: contextObj.runId };
         }
-        ctx = propagation.setBaggage(
-          ctx,
-          propagation.createBaggage({
-            // @ts-ignore
-            componentName: { value: this.name },
-            // @ts-ignore
-            runId: { value: this.runId },
-            // @ts-ignore
-            'http.request_id': { value: requestId },
-            // @ts-ignore
-            threadId: { value: threadId },
-            // @ts-ignore
-            resourceId: { value: resourceId },
-          }),
-        );
+
+        if (requestId) {
+          baggageEntries['http.request_id'] = { value: requestId };
+        }
+
+        if (threadId) {
+          baggageEntries.threadId = { value: threadId };
+        }
+
+        if (resourceId) {
+          baggageEntries.resourceId = { value: resourceId };
+        }
+
+        ctx = propagation.setBaggage(ctx, propagation.createBaggage(baggageEntries as any));
       }
 
-      let result: unknown;
       try {
-        // For streaming methods, enhance arguments with telemetry capture before calling
-        const enhancedArgs = isStreamingResult(result, methodName)
-          ? enhanceStreamingArgumentsWithTelemetry(args, span, spanName, methodName)
+        // If this is a streaming method, wrap args before invocation
+        const enhancedArgs = isStreamingMethod(methodName)
+          ? enhanceStreamingArgumentsWithTelemetry(args, span, spanName)
           : args;
 
-        // Call the original method within the context
-        result = context.with(ctx, () => originalMethod.apply(this, enhancedArgs));
+        const result = context.with(ctx, () => originalMethod.apply(this, enhancedArgs));
 
-        // Handle promises
+        // Promise
         if (result instanceof Promise) {
           return result
             .then(resolvedValue => {
-              if (isStreamingResult(resolvedValue, methodName)) {
-                return resolvedValue;
-              } else {
-                try {
-                  span.setAttribute(`${spanName}.result`, safeStringify(resolvedValue));
-                } catch {
-                  span.setAttribute(`${spanName}.result`, '[Not Serializable]');
-                }
+              // For streaming, onFinish is responsible for ending span
+              if (isStreamingMethod(methodName)) {
                 return resolvedValue;
               }
+
+              span.setAttribute(`${spanName}.result`, boundedStringify(resolvedValue));
+              span.setStatus({ code: SpanStatusCode.OK });
+              return resolvedValue;
+            })
+            .catch(err => {
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: err instanceof Error ? err.message : 'Unknown error',
+              });
+              if (err instanceof Error) {
+                // recordException is okay, but can include stack; rely on OTel/Sentry settings
+                span.recordException(err);
+              }
+              // End span on error - for streaming methods, onFinish won't be called if there's an error
+              endSpanOnce(span);
+              throw err;
             })
             .finally(() => {
-              if (!span.__mastraStreamingSpan) {
-                span.end();
-              }
+              if (!span.__mastraStreamingSpan) endSpanOnce(span);
             });
         }
 
-        // Record result for non-promise returns
-        if (!isStreamingResult(result, methodName)) {
-          try {
-            span.setAttribute(`${spanName}.result`, safeStringify(result));
-          } catch {
-            span.setAttribute(`${spanName}.result`, '[Not Serializable]');
-          }
+        // Non-promise return
+        if (!isStreamingMethod(methodName)) {
+          span.setAttribute(`${spanName}.result`, boundedStringify(result));
         }
-
-        // Return regular results
+        span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {
         span.setStatus({
@@ -250,11 +256,13 @@ export function withSpan(options: {
         if (error instanceof Error) {
           span.recordException(error);
         }
+        // End span on error - for streaming methods, onFinish won't be called if there's an error
+        endSpanOnce(span);
         throw error;
       } finally {
-        // End span for non-promise returns
-        if (!(result instanceof Promise) && !isStreamingResult(result, methodName)) {
-          span.end();
+        // End span for sync non-streaming methods (streaming ends in onFinish or catch)
+        if (!isStreamingMethod(methodName) && !span.__mastraEnded) {
+          endSpanOnce(span);
         }
       }
     };
@@ -275,9 +283,7 @@ export function InstrumentClass(options?: {
     const methods = Object.getOwnPropertyNames(target.prototype);
 
     methods.forEach(method => {
-      // Skip excluded methods
       if (options?.excludeMethods?.includes(method) || method === 'constructor') return;
-      // Apply method filter if provided
       if (options?.methodFilter && !options.methodFilter(method)) return;
 
       const descriptor = Object.getOwnPropertyDescriptor(target.prototype, method);
