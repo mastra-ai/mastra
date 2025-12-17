@@ -1,5 +1,57 @@
 # @mastra/mcp
 
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Add "Not connected" error detection to MCP auto-reconnection ([#10994](https://github.com/mastra-ai/mastra/pull/10994))
+
+  Enhanced the MCPClient auto-reconnection feature to also detect and handle "Not connected" protocol errors. When the MCP SDK's transport layer throws this error (typically when the connection is in a disconnected state), the client will now automatically reconnect and retry the operation.
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
+## 1.0.0-beta.5
+
+### Minor Changes
+
+- Add support for RequestOptions in elicitation requests to allow custom timeouts and request cancellation. ([#10849](https://github.com/mastra-ai/mastra/pull/10849))
+
+  You can now pass RequestOptions when sending elicitation requests:
+
+  ```typescript
+  // Within a tool's execute function
+  const result = await options.mcp.elicitation.sendRequest(
+    {
+      message: 'Please provide your email',
+      requestedSchema: {
+        type: 'object',
+        properties: { email: { type: 'string' } },
+      },
+    },
+    { timeout: 120000 }, // Custom 2-minute timeout
+  );
+  ```
+
+  The RequestOptions parameter supports:
+  - `timeout`: Custom timeout in milliseconds (default: 60000ms)
+  - `signal`: AbortSignal for request cancellation
+
+  Fixes #10834
+
+### Patch Changes
+
+- Fix HTTP SSE fallback to only trigger for 400/404/405 per MCP spec ([#10803](https://github.com/mastra-ai/mastra/pull/10803))
+
+  With @modelcontextprotocol/sdk 1.24.0+, SSE fallback now only occurs for HTTP status codes 400, 404, and 405. Other errors (like 401 Unauthorized) are re-thrown for proper handling.
+
+  Older SDK versions maintain the existing behavior (always fallback to SSE).
+
+- Add injectable fetch into mcp client integration. Follows from modelcontextprotocol/sdk implementation of Streamable HTTP and SSE transports. ([#10780](https://github.com/mastra-ai/mastra/pull/10780))
+
+- Updated dependencies [[`3076c67`](https://github.com/mastra-ai/mastra/commit/3076c6778b18988ae7d5c4c5c466366974b2d63f), [`85d7ee1`](https://github.com/mastra-ai/mastra/commit/85d7ee18ff4e14d625a8a30ec6656bb49804989b), [`c6c1092`](https://github.com/mastra-ai/mastra/commit/c6c1092f8fbf76109303f69e000e96fd1960c4ce), [`81dc110`](https://github.com/mastra-ai/mastra/commit/81dc11008d147cf5bdc8996ead1aa61dbdebb6fc), [`7aedb74`](https://github.com/mastra-ai/mastra/commit/7aedb74883adf66af38e270e4068fd42e7a37036), [`8f02d80`](https://github.com/mastra-ai/mastra/commit/8f02d800777397e4b45d7f1ad041988a8b0c6630), [`d7aad50`](https://github.com/mastra-ai/mastra/commit/d7aad501ce61646b76b4b511e558ac4eea9884d0), [`ce0a73a`](https://github.com/mastra-ai/mastra/commit/ce0a73abeaa75b10ca38f9e40a255a645d50ebfb), [`a02e542`](https://github.com/mastra-ai/mastra/commit/a02e542d23179bad250b044b17ff023caa61739f), [`a372c64`](https://github.com/mastra-ai/mastra/commit/a372c640ad1fd12e8f0613cebdc682fc156b4d95), [`8846867`](https://github.com/mastra-ai/mastra/commit/8846867ffa9a3746767618e314bebac08eb77d87), [`42a42cf`](https://github.com/mastra-ai/mastra/commit/42a42cf3132b9786feecbb8c13c583dce5b0e198), [`ae08bf0`](https://github.com/mastra-ai/mastra/commit/ae08bf0ebc6a4e4da992b711c4a389c32ba84cf4), [`21735a7`](https://github.com/mastra-ai/mastra/commit/21735a7ef306963554a69a89b44f06c3bcd85141), [`1d877b8`](https://github.com/mastra-ai/mastra/commit/1d877b8d7b536a251c1a7a18db7ddcf4f68d6f8b)]:
+  - @mastra/core@1.0.0-beta.7
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

@@ -86,7 +86,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/v1/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/guides/v1/deployment) you need to install the correct deployer in order to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -123,6 +123,18 @@ The path to your built Mastra output directory. Defaults to `.mastra/output`.
 #### `--no-telemetry`
 
 Disable the [OTEL Tracing](/docs/v1/observability/tracing/overview).
+
+## `mastra studio`
+
+Starts [Mastra Studio](/docs/v1/getting-started/studio) as a static server. After starting, you can enter your Mastra instance URL (e.g. `http://localhost:4111`) to connect Studio to your Mastra backend.
+
+### Flags
+
+The command accepts [common flags][common-flags] and the following additional flags:
+
+#### `--port`
+
+The port to run Studio on. Defaults to `3000`.
 
 ## `mastra lint`
 
@@ -212,7 +224,7 @@ Enable verbose logging for Mastra's internals. Defaults to `false`.
 
 ### `--env`
 
-**Available in:** `dev`, `start`
+**Available in:** `dev`, `start`, `studio`
 
 Custom environment variables file to include. By default, includes `.env.development`, `.env.local`, and `.env`.
 

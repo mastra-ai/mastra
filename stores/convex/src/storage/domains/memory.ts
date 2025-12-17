@@ -8,6 +8,7 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
   calculatePagination,
+  createStorageErrorId,
   normalizePerPage,
   safelyParseJSON,
 } from '@mastra/core/storage';
@@ -77,7 +78,7 @@ export class MemoryConvex extends MemoryStorage {
     const existing = await this.getThreadById({ threadId: id });
     if (!existing) {
       throw new MastraError({
-        id: 'CONVEX_STORAGE_THREAD_NOT_FOUND',
+        id: createStorageErrorId('CONVEX', 'UPDATE_THREAD', 'THREAD_NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -157,7 +158,7 @@ export class MemoryConvex extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'CONVEX_STORAGE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CONVEX', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },

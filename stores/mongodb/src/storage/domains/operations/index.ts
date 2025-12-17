@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { safelyParseJSON, StoreOperations, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { createStorageErrorId, safelyParseJSON, StoreOperations, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ConnectorHandler } from '../../connectors/base';
 
@@ -43,7 +43,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('MONGODB', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -67,7 +67,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
       }
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('MONGODB', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -103,7 +103,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_INSERT_FAILED',
+          id: createStorageErrorId('MONGODB', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -128,7 +128,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('MONGODB', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -146,7 +146,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_LOAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -176,7 +176,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_UPDATE_FAILED',
+          id: createStorageErrorId('MONGODB', 'UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -220,7 +220,7 @@ export class StoreOperationsMongoDB extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_BATCH_UPDATE_FAILED',
+          id: createStorageErrorId('MONGODB', 'BATCH_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },

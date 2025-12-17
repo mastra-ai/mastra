@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringSource } from '../../../evals/types';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
 import type { PaginationInfo, StoragePagination } from '../../types';
 import { ScoresStorage } from './base';
@@ -17,7 +17,7 @@ export class ScoresInMemory extends ScoresStorage {
     return this.scores.get(id) ?? null;
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     const newScore = { id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date(), ...score };
     this.scores.set(newScore.id, newScore);
     return { score: newScore };

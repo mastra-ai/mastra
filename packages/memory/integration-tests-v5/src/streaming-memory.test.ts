@@ -5,8 +5,12 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
+import type { UIMessage } from '@internal/ai-sdk-v5';
 import { toAISdkStream } from '@mastra/ai-sdk';
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { MastraClient } from '@mastra/client-js';
 import { Agent, MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
@@ -384,6 +388,234 @@ describe('Memory Streaming Tests', () => {
           m.content.parts.some(p => p.type === 'tool-invocation' && p.toolInvocation.toolName === 'clipboard'),
       );
       expect(clipboardToolInvocation.length).toBeGreaterThan(0);
+    });
+
+    it('should not create duplicate assistant messages', async () => {
+      const testThreadId = randomUUID();
+      const testResourceId = 'test-user-exact-flow-11091';
+      const mastraClient = new MastraClient({ baseUrl: `http://localhost:${port}` });
+
+      const { result } = renderHook(() => {
+        const chat = useChat({
+          transport: new DefaultChatTransport({
+            api: `http://localhost:${port}/chat/progress`,
+            async prepareSendMessagesRequest({ messages, body }) {
+              return {
+                body: {
+                  messages,
+                  body,
+                  memory: {
+                    thread: testThreadId,
+                    resource: testResourceId,
+                  },
+                },
+              };
+            },
+          }),
+        });
+        return chat;
+      });
+
+      // Turn 1
+      await act(async () => {
+        await result.current.sendMessage({
+          role: 'user',
+          parts: [{ type: 'text', text: 'Run a task called "first-task"' }],
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(result.current.messages.length).toBeGreaterThanOrEqual(2);
+        },
+        { timeout: 30000 },
+      );
+
+      // Turn 2
+      await act(async () => {
+        await result.current.sendMessage({
+          role: 'user',
+          parts: [{ type: 'text', text: 'Run another task called "second-task"' }],
+        });
+      });
+
+      await waitFor(
+        () => {
+          expect(result.current.messages.length).toBeGreaterThanOrEqual(4);
+        },
+        { timeout: 30000 },
+      );
+
+      const { messages: storageMessages } = await mastraClient.listThreadMessages(testThreadId, {
+        agentId: 'progress',
+      });
+
+      const uiMessages: UIMessage[] = toAISdkV5Messages(storageMessages);
+
+      const assistantMessages = uiMessages.filter(m => m.role === 'assistant');
+      const userMessages = uiMessages.filter(m => m.role === 'user');
+
+      // Should have exactly 4 messages: 2 user + 2 assistant (no duplicates)
+      expect(uiMessages.length).toBe(4);
+      expect(userMessages.length).toBe(2);
+      expect(assistantMessages.length).toBe(2);
+
+      // Verify that assistant message IDs from storage match UI message IDs
+      const storageAssistantIds = storageMessages
+        .filter((m: any) => m.role === 'assistant')
+        .map((m: any) => m.id)
+        .sort();
+      const uiAssistantIds = assistantMessages.map(m => m.id).sort();
+
+      expect(uiAssistantIds).toEqual(storageAssistantIds);
+
+      // Verify all IDs are UUIDs (not nanoids)
+      for (const id of uiAssistantIds) {
+        expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+      }
+
+      // Clean up
+      await mastraClient.getMemoryThread({ threadId: testThreadId, agentId: 'progress' }).delete();
+    });
+  });
+
+  describe('data-* parts persistence (issue #10477 and #10936)', () => {
+    it('should preserve data-* parts through save → recall → UI conversion round-trip', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'test-data-parts-resource';
+
+      // Create a thread first
+      await memory.createThread({
+        threadId,
+        resourceId,
+        title: 'Data Parts Test Thread',
+      });
+
+      // Save messages with data-* custom parts (simulating what writer.custom() would produce)
+      const messagesWithDataParts = [
+        {
+          id: randomUUID(),
+          threadId,
+          resourceId,
+          role: 'user' as const,
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: 'Upload my file please' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: randomUUID(),
+          threadId,
+          resourceId,
+          role: 'assistant' as const,
+          content: {
+            format: 2 as const,
+            parts: [
+              { type: 'text' as const, text: 'Processing your file...' },
+              {
+                type: 'data-upload-progress' as const,
+                data: {
+                  fileName: 'document.pdf',
+                  progress: 50,
+                  status: 'uploading',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(Date.now() + 1000),
+        },
+        {
+          id: randomUUID(),
+          threadId,
+          resourceId,
+          role: 'assistant' as const,
+          content: {
+            format: 2 as const,
+            parts: [
+              { type: 'text' as const, text: 'File uploaded successfully!' },
+              {
+                type: 'data-file-reference' as const,
+                data: {
+                  fileId: 'file-123',
+                  fileName: 'document.pdf',
+                  fileSize: 1024,
+                },
+              },
+            ],
+          },
+          createdAt: new Date(Date.now() + 2000),
+        },
+      ];
+
+      // Save messages to storage
+      await memory.saveMessages({ messages: messagesWithDataParts });
+
+      // Recall messages from storage
+      const recallResult = await memory.recall({
+        threadId,
+        resourceId,
+      });
+
+      expect(recallResult.messages.length).toBe(3);
+
+      // Verify data-* parts are present in recalled messages (DB format)
+      const assistantMessages = recallResult.messages.filter(
+        (m: MastraDBMessage) => m.role === 'assistant',
+      ) as MastraDBMessage[];
+      expect(assistantMessages.length).toBe(2);
+
+      // Check first assistant message has data-upload-progress
+      const uploadProgressMsg = assistantMessages.find((m: MastraDBMessage) =>
+        m.content.parts.some((p: any) => p.type === 'data-upload-progress'),
+      );
+      expect(uploadProgressMsg).toBeDefined();
+      const uploadProgressPart = uploadProgressMsg!.content.parts.find((p: any) => p.type === 'data-upload-progress');
+      expect(uploadProgressPart).toBeDefined();
+      expect((uploadProgressPart as any).data.progress).toBe(50);
+
+      // Check second assistant message has data-file-reference
+      const fileRefMsg = assistantMessages.find((m: MastraDBMessage) =>
+        m.content.parts.some((p: any) => p.type === 'data-file-reference'),
+      );
+      expect(fileRefMsg).toBeDefined();
+      const fileRefPart = fileRefMsg!.content.parts.find((p: any) => p.type === 'data-file-reference');
+      expect(fileRefPart).toBeDefined();
+      expect((fileRefPart as any).data.fileId).toBe('file-123');
+
+      // Now convert to AIV5 UI format (this is what the frontend would receive)
+      const uiMessages: UIMessage[] = recallResult.messages.map((m: MastraDBMessage) =>
+        MessageList.mastraDBMessageToAIV5UIMessage(m),
+      );
+
+      expect(uiMessages.length).toBe(3);
+
+      // Verify data-* parts are preserved in UI format
+      const uiAssistantMessages = uiMessages.filter((m: UIMessage) => m.role === 'assistant');
+      expect(uiAssistantMessages.length).toBe(2);
+
+      // Check data-upload-progress is preserved in UI format
+      const uiUploadProgressMsg = uiAssistantMessages.find((m: UIMessage) =>
+        m.parts.some((p: any) => p.type === 'data-upload-progress'),
+      );
+      expect(uiUploadProgressMsg).toBeDefined();
+      const uiUploadProgressPart = uiUploadProgressMsg!.parts.find((p: any) => p.type === 'data-upload-progress');
+      expect(uiUploadProgressPart).toBeDefined();
+      expect((uiUploadProgressPart as any).data.progress).toBe(50);
+      expect((uiUploadProgressPart as any).data.fileName).toBe('document.pdf');
+
+      // Check data-file-reference is preserved in UI format
+      const uiFileRefMsg = uiAssistantMessages.find((m: UIMessage) =>
+        m.parts.some((p: any) => p.type === 'data-file-reference'),
+      );
+      expect(uiFileRefMsg).toBeDefined();
+      const uiFileRefPart = uiFileRefMsg!.parts.find((p: any) => p.type === 'data-file-reference');
+      expect(uiFileRefPart).toBeDefined();
+      expect((uiFileRefPart as any).data.fileId).toBe('file-123');
+      expect((uiFileRefPart as any).data.fileName).toBe('document.pdf');
+
+      // Clean up
+      await memory.deleteThread(threadId);
     });
   });
 });

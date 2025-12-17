@@ -1,9 +1,9 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { createStorageErrorId, StoreOperations, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from '../utils';
-import { COLUMN_TYPES, TABLE_ENGINES, transformRow } from '../utils';
+import { TABLE_ENGINES, transformRow } from '../utils';
 
 export class StoreOperationsClickhouse extends StoreOperations {
   protected ttl: ClickhouseConfig['ttl'];
@@ -26,14 +26,18 @@ export class StoreOperationsClickhouse extends StoreOperations {
   protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
+      case 'uuid':
+      case 'jsonb':
         return 'String';
       case 'timestamp':
         return 'DateTime64(3)';
       case 'integer':
       case 'bigint':
         return 'Int64';
-      case 'jsonb':
-        return 'String';
+      case 'float':
+        return 'Float64';
+      case 'boolean':
+        return 'Bool';
       default:
         return super.getSqlType(type); // fallback to base implementation
     }
@@ -56,7 +60,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
             constraints.push("DEFAULT '{}'");
           }
           const columnTtl = this.ttl?.[tableName]?.columns?.[name];
-          return `"${name}" ${COLUMN_TYPES[def.type]} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
+          return `"${name}" ${this.getSqlType(def.type)} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
         })
         .join(',\n');
 
@@ -97,7 +101,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -147,7 +151,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -172,7 +176,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -214,7 +218,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_INSERT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -249,7 +253,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -266,7 +270,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
       const conditions = keyEntries
         .map(
           ([key]) =>
-            `"${key}" = {var_${key}:${COLUMN_TYPES[TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text']}}`,
+            `"${key}" = {var_${key}:${this.getSqlType(TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text')}}`,
         )
         .join(' AND ');
       const values = keyEntries.reduce((acc, [key, value]) => {
@@ -311,7 +315,7 @@ export class StoreOperationsClickhouse extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LOAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },

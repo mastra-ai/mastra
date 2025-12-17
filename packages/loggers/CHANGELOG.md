@@ -1,5 +1,44 @@
 # @mastra/loggers
 
+## 1.0.0-beta.3
+
+### Minor Changes
+
+- Add redact option to PinoLogger for PII protection ([#10919](https://github.com/mastra-ai/mastra/pull/10919))
+
+  Exposes Pino's native `redact` option in `PinoLogger`, allowing sensitive data to be automatically redacted from logs.
+
+  ```typescript
+  import { PinoLogger } from '@mastra/loggers';
+
+  const logger = new PinoLogger({
+    name: 'MyApp',
+    redact: {
+      paths: ['*.password', '*.token', '*.apiKey', '*.email'],
+      censor: '[REDACTED]',
+    },
+  });
+
+  logger.info('User login', { username: 'john', password: 'secret123' });
+  // Output: { username: "john", password: "[REDACTED]", msg: "User login" }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
+## 1.0.0-beta.2
+
+### Minor Changes
+
+- Add child() method to PinoLogger for creating child loggers with bound context ([#10900](https://github.com/mastra-ai/mastra/pull/10900))
+
+### Patch Changes
+
+- Updated dependencies [[`3076c67`](https://github.com/mastra-ai/mastra/commit/3076c6778b18988ae7d5c4c5c466366974b2d63f), [`85d7ee1`](https://github.com/mastra-ai/mastra/commit/85d7ee18ff4e14d625a8a30ec6656bb49804989b), [`c6c1092`](https://github.com/mastra-ai/mastra/commit/c6c1092f8fbf76109303f69e000e96fd1960c4ce), [`81dc110`](https://github.com/mastra-ai/mastra/commit/81dc11008d147cf5bdc8996ead1aa61dbdebb6fc), [`7aedb74`](https://github.com/mastra-ai/mastra/commit/7aedb74883adf66af38e270e4068fd42e7a37036), [`8f02d80`](https://github.com/mastra-ai/mastra/commit/8f02d800777397e4b45d7f1ad041988a8b0c6630), [`d7aad50`](https://github.com/mastra-ai/mastra/commit/d7aad501ce61646b76b4b511e558ac4eea9884d0), [`ce0a73a`](https://github.com/mastra-ai/mastra/commit/ce0a73abeaa75b10ca38f9e40a255a645d50ebfb), [`a02e542`](https://github.com/mastra-ai/mastra/commit/a02e542d23179bad250b044b17ff023caa61739f), [`a372c64`](https://github.com/mastra-ai/mastra/commit/a372c640ad1fd12e8f0613cebdc682fc156b4d95), [`8846867`](https://github.com/mastra-ai/mastra/commit/8846867ffa9a3746767618e314bebac08eb77d87), [`42a42cf`](https://github.com/mastra-ai/mastra/commit/42a42cf3132b9786feecbb8c13c583dce5b0e198), [`ae08bf0`](https://github.com/mastra-ai/mastra/commit/ae08bf0ebc6a4e4da992b711c4a389c32ba84cf4), [`21735a7`](https://github.com/mastra-ai/mastra/commit/21735a7ef306963554a69a89b44f06c3bcd85141), [`1d877b8`](https://github.com/mastra-ai/mastra/commit/1d877b8d7b536a251c1a7a18db7ddcf4f68d6f8b)]:
+  - @mastra/core@1.0.0-beta.7
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

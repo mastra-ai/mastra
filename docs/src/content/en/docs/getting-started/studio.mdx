@@ -80,8 +80,10 @@ When running a workflow, you can also view detailed traces showing tool calls, r
 Run tools in isolation to observe their behavior. Test them before assigning them to your agent, or isolate them to debug issues should something go wrong.
 
 <VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406316/local-dev-agents-tools_100_fe1jdt.mp4" />
-### MCP List the MCP servers attached to your Mastra instance and explore their
-available tools.
+
+### MCP
+
+List the MCP servers attached to your Mastra instance and explore their available tools.
 
 ![MCP Servers Studio](/img/local-dev/local-dev-mcp-server-playground.jpg)
 
@@ -99,7 +101,7 @@ The Scorers tab displays the results of your agent's scorers as they run. When m
 
 ## REST API
 
-The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [Mastra Server](/docs/v1/server-db/mastra-server), allowing you to develop and test against it with full parity.
+The local development server exposes a complete set of REST API routes, allowing you to programmatically interact with your agents, workflows, and tools during development. This is particularly helpful if you plan to deploy the Mastra server, since the local development server uses the exact same API routes as the [Mastra Server](/docs/v1/server/mastra-server), allowing you to develop and test against it with full parity.
 
 You can explore all available endpoints in the OpenAPI specification at http://localhost:4111/openapi.json, which details every endpoint and its request and response schemas.
 
@@ -111,7 +113,7 @@ The OpenAPI and Swagger endpoints are disabled in production by default. To enab
 
 ## Configuration
 
-### Port
+### Port and Host
 
 By default, the development server runs at http://localhost:4111. You can change the `host` and `port` in the Mastra server configuration:
 
@@ -125,6 +127,29 @@ export const mastra = new Mastra({
   },
 });
 ```
+
+### Sub-path Hosting
+
+You can host the Mastra Studio on a sub-path of your existing application using the `studioBase` configuration:
+
+```typescript
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+  server: {
+    studioBase: "/my-mastra-studio",
+  },
+});
+```
+
+This is particularly useful when:
+- Integrating with existing applications
+- Using authentication tools like Cloudflare Zero Trust that benefit from shared domains
+- Managing multiple services under a single domain
+
+**Example URLs:**
+- Default: `http://localhost:4111/` (studio at root)
+- With `studioBase`: `http://localhost:4111/my-mastra-studio/` (studio at sub-path)
 
 ### Local HTTPS
 

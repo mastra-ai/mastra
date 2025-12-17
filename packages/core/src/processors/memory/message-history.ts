@@ -1,6 +1,6 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
-import { parseMemoryRuntimeContext } from '../../memory';
+import { parseMemoryRequestContext } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
@@ -42,7 +42,7 @@ export class MessageHistory implements Processor {
     const { messageList } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
+    const memoryContext = parseMemoryRequestContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
 
     if (!threadId) {
@@ -127,7 +127,7 @@ export class MessageHistory implements Processor {
     const { messageList } = args;
 
     // Get memory context from RequestContext
-    const memoryContext = parseMemoryRuntimeContext(args.requestContext);
+    const memoryContext = parseMemoryRequestContext(args.requestContext);
     const threadId = memoryContext?.thread?.id;
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 

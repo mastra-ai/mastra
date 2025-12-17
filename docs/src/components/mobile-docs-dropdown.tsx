@@ -50,7 +50,7 @@ const docsTabs = [
   },
 ];
 
-export function MobileDocsDropdown() {
+export function MobileDocsDropdown({ className }: { className?: string }) {
   const location = useLocation();
   const pathname = location.pathname;
   const [open, setOpen] = React.useState(false);
@@ -79,7 +79,10 @@ export function MobileDocsDropdown() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="secondary"
-          className="w-full shadow-none justify-between bg-(--mastra-surface-4) dark:bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium"
+          className={cn(
+            "w-full shadow-none justify-between bg-transparent dark:bg-(--ifm-background-color) border border-(--border)/50 text-(--mastra-text-secondary) hover:bg-(--mastra-surface-3) hover:text-(--mastra-text-primary) rounded-xl px-4 py-2.5 text-sm font-medium",
+            className,
+          )}
         >
           <span>{activeTab.label}</span>
           <ChevronDown
@@ -102,7 +105,7 @@ export function MobileDocsDropdown() {
               <Link
                 to={tab.href}
                 className={cn(
-                  "flex items-center justify-between w-full no-underline",
+                  "flex items-center justify-between w-full no-underline!",
                   isActive && "text-(--mastra-text-primary) font-medium",
                 )}
               >

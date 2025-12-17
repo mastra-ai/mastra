@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageColumn,
@@ -13,9 +13,10 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
@@ -205,13 +206,7 @@ export class ConvexStore extends MastraStorage {
   async updateWorkflowState(params: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: WorkflowRunStatus;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.workflows.updateWorkflowState(params);
   }
@@ -254,11 +249,15 @@ export class ConvexStore extends MastraStorage {
     return this.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.scores.saveScore(score);
   }
 

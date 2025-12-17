@@ -44,8 +44,7 @@ export default function Layout(props: Props): ReactNode {
 
       <Head>
         <link rel="canonical" href={canonicalUrl} />
-        <link rel="alternate" hrefLang="en" href={canonicalUrl} />
-        <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
+        <meta name="x-docs-origin" content="v1" />
       </Head>
 
       <SkipToContent />

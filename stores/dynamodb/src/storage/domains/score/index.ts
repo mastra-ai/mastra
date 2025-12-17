@@ -1,7 +1,13 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { SCORERS_SCHEMA, ScoresStorage, calculatePagination, normalizePerPage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  SCORERS_SCHEMA,
+  ScoresStorage,
+  calculatePagination,
+  normalizePerPage,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
 
@@ -55,7 +61,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id },
@@ -65,23 +71,30 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
 
     const now = new Date();
-    const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const scoreId = crypto.randomUUID();
 
     const scorer =
       typeof validatedScore.scorer === 'string' ? validatedScore.scorer : JSON.stringify(validatedScore.scorer);
@@ -128,18 +141,18 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     try {
       await this.service.entities.score.upsert(scoreData).go();
 
-      const savedScore: ScoreRowData = {
-        ...score,
-        id: scoreId,
-        createdAt: now,
-        updatedAt: now,
+      return {
+        score: {
+          ...validatedScore,
+          id: scoreId,
+          createdAt: now,
+          updatedAt: now,
+        } as ScoreRowData,
       };
-
-      return { score: savedScore };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId: score.scorerId, runId: score.runId },
@@ -205,7 +218,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -263,7 +276,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, page: pagination.page, perPage: pagination.perPage },
@@ -319,7 +332,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
@@ -372,7 +385,7 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },

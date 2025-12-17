@@ -15,9 +15,17 @@ import {
   TABLE_SCORERS,
   TABLE_SCHEMAS,
   TABLE_SPANS,
+  TABLE_AGENTS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
+import type {
+  AgentsStorage,
+  ScoresStorage,
+  StoreOperations,
+  WorkflowsStorage,
+  MemoryStorage,
+  ObservabilityStorage,
+} from './domains';
 import type {
   PaginationInfo,
   StorageColumn,
@@ -38,6 +46,12 @@ import type {
   StorageListWorkflowRunsInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageAgentType,
+  StorageCreateAgentInput,
+  StorageUpdateAgentInput,
+  StorageListAgentsInput,
+  StorageListAgentsOutput,
+  UpdateWorkflowStateOptions,
 } from './types';
 
 export type StorageDomains = {
@@ -46,6 +60,7 @@ export type StorageDomains = {
   scores: ScoresStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
+  agents?: AgentsStorage;
 };
 
 export function ensureDate(date: Date | string | undefined): Date | undefined {
@@ -147,6 +162,7 @@ export abstract class MastraStorage extends MastraBase {
     observabilityInstance?: boolean;
     indexManagement?: boolean;
     listScoresBySpan?: boolean;
+    agents?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -157,6 +173,7 @@ export abstract class MastraStorage extends MastraBase {
       observabilityInstance: false,
       indexManagement: false,
       listScoresBySpan: false,
+      agents: false,
     };
   }
 
@@ -166,43 +183,6 @@ export abstract class MastraStorage extends MastraBase {
 
   protected serializeDate(date: Date | string | undefined): string | undefined {
     return serializeDate(date);
-  }
-
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
-      case 'float':
-        return 'FLOAT';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'BIGINT';
-      case 'jsonb':
-        return 'JSONB';
-      default:
-        return 'TEXT';
-    }
-  }
-
-  protected getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-      case 'uuid':
-        return "DEFAULT ''";
-      case 'timestamp':
-        return "DEFAULT '1970-01-01 00:00:00'";
-      case 'integer':
-      case 'float':
-      case 'bigint':
-        return 'DEFAULT 0';
-      case 'jsonb':
-        return "DEFAULT '{}'";
-      default:
-        return "DEFAULT ''";
-    }
   }
 
   abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
@@ -392,6 +372,16 @@ export abstract class MastraStorage extends MastraBase {
       );
     }
 
+    // Create agents table for storage adapters that support dynamic agent storage
+    if (this.supports.agents) {
+      tableCreationTasks.push(
+        this.createTable({
+          tableName: TABLE_AGENTS,
+          schema: TABLE_SCHEMAS[TABLE_AGENTS],
+        }),
+      );
+    }
+
     this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
 
     await this.hasInitialized;
@@ -461,13 +451,7 @@ export abstract class MastraStorage extends MastraBase {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined>;
 
   async loadWorkflowSnapshot({
@@ -547,6 +531,8 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+
+  abstract deleteWorkflowRunById(args: { runId: string; workflowName: string }): Promise<void>;
 
   /**
    * OBSERVABILITY
@@ -749,6 +735,102 @@ export abstract class MastraStorage extends MastraBase {
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * AGENTS STORAGE
+   * These methods delegate to the agents store for agent CRUD operations.
+   * This enables dynamic creation of agents via Mastra Studio.
+   */
+
+  /**
+   * Retrieves an agent by its unique identifier.
+   * @param id - The unique identifier of the agent
+   * @returns The agent if found, null otherwise
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+    if (this.stores?.agents) {
+      return this.stores.agents.getAgentById({ id });
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_GET_AGENT_BY_ID_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Creates a new agent in storage.
+   * @param agent - The agent data to create
+   * @returns The created agent with timestamps
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    if (this.stores?.agents) {
+      return this.stores.agents.createAgent({ agent });
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_CREATE_AGENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Updates an existing agent in storage.
+   * @param id - The unique identifier of the agent to update
+   * @param updates - The fields to update
+   * @returns The updated agent
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async updateAgent(args: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    if (this.stores?.agents) {
+      return this.stores.agents.updateAgent(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_UPDATE_AGENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Deletes an agent from storage.
+   * @param id - The unique identifier of the agent to delete
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async deleteAgent({ id }: { id: string }): Promise<void> {
+    if (this.stores?.agents) {
+      return this.stores.agents.deleteAgent({ id });
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_DELETE_AGENT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Lists all agents with optional pagination.
+   * @param args - Pagination and ordering options
+   * @returns Paginated list of agents
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+    if (this.stores?.agents) {
+      return this.stores.agents.listAgents(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_AGENTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 }

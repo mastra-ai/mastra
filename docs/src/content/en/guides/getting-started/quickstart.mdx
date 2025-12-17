@@ -53,6 +53,17 @@ yarn create mastra@beta
 bun create mastra@beta
 ```
 
+:::warning
+
+Due to a [known issue with Bun](https://github.com/oven-sh/bun/issues/25314) you'll need to run these steps after creating the project:
+
+- `bun add @mastra/server@beta`
+- Delete your `node_modules` folder
+- Delete your `bun.lock` file
+- Run `bun install` to reinstall your packages
+
+:::
+
 </TabItem>
 </Tabs>
 

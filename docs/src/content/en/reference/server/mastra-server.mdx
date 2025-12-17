@@ -12,7 +12,7 @@ The `MastraServer` abstract class is the base for all server adapters. Extend th
 ## Import
 
 ```typescript copy
-import { MastraServer } from '@mastra/server';
+import { MastraServer } from '@mastra/server/server-adapter';
 ```
 
 ## Type parameters
@@ -61,6 +61,7 @@ constructor(options: MastraServerOptions<TApp>)
       type: "string",
       description: "Path to serve OpenAPI spec",
       isOptional: true,
+      defaultValue: "''",
     },
     {
       name: "bodyLimitOptions",
@@ -80,6 +81,32 @@ constructor(options: MastraServerOptions<TApp>)
       type: "Map<string, boolean>",
       description: "Per-route auth overrides",
       isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values in adapters implementing the MastraServer",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
     },
   ]}
 />
@@ -225,17 +252,6 @@ async parseBody(
 ): Promise<unknown>
 ```
 
-### mergeRequestContext()
-
-Merge request context from multiple sources (query params and body).
-
-```typescript copy
-mergeRequestContext(options: {
-  paramsRequestContext?: Record<string, any>;
-  bodyRequestContext?: Record<string, any>;
-}): RequestContext
-```
-
 ### registerOpenAPIRoute()
 
 Register an endpoint that serves the OpenAPI specification.
@@ -246,6 +262,19 @@ async registerOpenAPIRoute(
   config: OpenAPIConfig,
   options: { prefix?: string }
 ): Promise<void>
+```
+
+## Protected methods
+
+### mergeRequestContext()
+
+Merge request context from multiple sources (query params and body).
+
+```typescript copy
+protected mergeRequestContext(options: {
+  paramsRequestContext?: Record<string, any>;
+  bodyRequestContext?: Record<string, any>;
+}): RequestContext
 ```
 
 ## Types
@@ -269,8 +298,8 @@ interface StreamOptions {
 
 ## Example
 
-```typescript copy showLineNumbers
-import { MastraServer, ServerRoute } from '@mastra/server';
+```typescript copy
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 
 export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
@@ -311,6 +340,6 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 ## Related
 
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters
-- [Custom Adapters](/docs/v1/server-db/custom-adapters) - Creating custom adapters
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters
+- [Custom Adapters](/docs/v1/server/custom-adapters) - Creating custom adapters
 - [createRoute()](/reference/v1/server/create-route) - Creating custom routes

@@ -18,6 +18,7 @@ import type {
   CreateSpanOptions,
   SpanType,
   SpanIds,
+  InitExporterOptions,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
@@ -61,7 +62,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   name = 'otel';
   private otelTracer = otelTrace.getTracer('@mastra/otel-bridge', '1.0.0');
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
-  private spanConverter = new SpanConverter();
+  private spanConverter?: SpanConverter;
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
@@ -79,6 +80,17 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     if (event.type === TracingEventType.SPAN_ENDED) {
       await this.handleSpanEnded(event);
     }
+  }
+
+  /**
+   * Initialize with tracing configuration
+   */
+  init(options: InitExporterOptions) {
+    this.spanConverter = new SpanConverter({
+      packageName: '@mastra/otel-bridge',
+      serviceName: options.config?.serviceName,
+      format: 'GenAI_v1_38_0',
+    });
   }
 
   /**
@@ -104,11 +116,10 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       }
 
       // Create OTEL span with SpanKind (must be set at creation, immutable)
-      const isRootSpan = !options.parent;
       const otelSpan = this.otelTracer.startSpan(
         options.name,
         {
-          kind: getSpanKind(options.type, isRootSpan),
+          kind: getSpanKind(options.type),
         },
         parentOtelContext,
       );
@@ -159,12 +170,16 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       // Remove from map immediately to prevent memory leak
       this.otelSpanMap.delete(mastraSpan.id);
 
+      if (!this.spanConverter) {
+        return;
+      }
+
       const { otelSpan } = entry;
 
       this.logger.debug(`[OtelBridge] Ending OTEL span [mastraId=${mastraSpan.id}] [name=${mastraSpan.name}]`);
 
       // Use SpanConverter to get consistent span formatting with otel-exporter
-      const readableSpan = this.spanConverter.convertSpan(mastraSpan);
+      const readableSpan = await this.spanConverter!.convertSpan(mastraSpan);
 
       // Update span name to match the converter's formatting
       otelSpan.updateName(readableSpan.name);

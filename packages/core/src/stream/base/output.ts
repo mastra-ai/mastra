@@ -17,6 +17,7 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  StepTripwireData,
 } from '../types';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
@@ -95,8 +96,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #finishReason: LLMStepResult['finishReason'] = undefined;
   #request: LLMStepResult['request'] = {};
   #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-  #tripwire = false;
-  #tripwireReason = '';
+  #tripwire: StepTripwireData | undefined = undefined;
 
   #delayedPromises = {
     suspendPayload: new DelayedPromise<any>(),
@@ -250,6 +250,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 part: processed,
                 blocked,
                 reason,
+                tripwireOptions,
+                processorId,
               } = await processorRunner.processPart(
                 chunk,
                 processorStates,
@@ -262,7 +264,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 controller.enqueue({
                   type: 'tripwire',
                   payload: {
-                    tripwireReason: reason || 'Output processor blocked content',
+                    reason: reason || 'Output processor blocked content',
+                    retry: tripwireOptions?.retry,
+                    metadata: tripwireOptions?.metadata,
+                    processorId,
                   },
                 } as ChunkType<OUTPUT>);
                 return;
@@ -407,6 +412,15 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
 
+              // Check if this step has tripwire data (from DefaultStepResult in llm-execution-step)
+              // The current step is the last one in the steps array (MastraStepResult with tripwire field)
+              const payloadSteps = chunk.payload.output?.steps || [];
+              const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
+              const stepTripwire = currentPayloadStep?.tripwire;
+
+              // If step has tripwire, text should be empty (rejected response)
+              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
+
               const stepResult: LLMStepResult = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
                 sources: self.#bufferedByStep.sources,
@@ -415,7 +429,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                 toolResults: self.#bufferedByStep.toolResults,
 
                 content: messageList.get.response.aiV5.modelContent(-1),
-                text: self.#bufferedByStep.text,
+                text: stepText,
+                // Include tripwire data if present
+                tripwire: stepTripwire,
                 reasoningText: self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join(''),
                 reasoning: Object.values(self.#bufferedReasoningDetails),
                 get staticToolCalls() {
@@ -494,8 +510,12 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             }
             case 'tripwire':
               // Handle tripwire chunks from processors
-              self.#tripwire = true;
-              self.#tripwireReason = chunk.payload?.tripwireReason || 'Content blocked';
+              self.#tripwire = {
+                reason: chunk.payload?.reason || 'Content blocked',
+                retry: chunk.payload?.retry,
+                metadata: chunk.payload?.metadata,
+                processorId: chunk.payload?.processorId,
+              };
               self.#finishReason = 'other';
               // Mark stream as finished for EventEmitter
               self.#streamFinished = true;
@@ -532,6 +552,21 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#status = 'success';
               if (chunk.payload.stepResult.reason) {
                 self.#finishReason = chunk.payload.stepResult.reason;
+              }
+
+              // Check if this is a tripwire case - set tripwire data
+              // This can happen when max retries is exceeded or a processor triggers a tripwire
+              if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
+                // Try to get the tripwire data from the last step (MastraStepResult)
+                const outputSteps = chunk.payload.output?.steps;
+                const lastStep = outputSteps?.[outputSteps?.length - 1];
+                const stepTripwire = lastStep?.tripwire;
+                self.#tripwire = {
+                  reason: stepTripwire?.reason || 'Processor tripwire triggered',
+                  retry: stepTripwire?.retry,
+                  metadata: stepTripwire?.metadata,
+                  processorId: stepTripwire?.processorId,
+                };
               }
 
               // Add structured output to the latest assistant message metadata
@@ -573,17 +608,34 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
+                  // Run output processors when NOT in LLM execution step context
+                  // (i.e., when this is the final MastraModelOutput for the agent)
+
+                  // Capture original text before processing for comparison
+                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+                  const originalText = lastStep?.text || '';
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     options.tracingContext,
                     self.#options.requestContext,
                   );
-                  const outputText = self.messageList.get.response.aiV4
-                    .core()
-                    .map(m => MessageList.coreContentToString(m.content))
-                    .join('\n');
 
-                  self.#delayedPromises.text.resolve(outputText);
+                  // Get text from the latest response message (the last assistant message)
+                  const responseMessages = self.messageList.get.response.aiV4.core();
+                  const lastResponseMessage = responseMessages[responseMessages.length - 1];
+                  const outputText = lastResponseMessage
+                    ? MessageList.coreContentToString(lastResponseMessage.content)
+                    : '';
+
+                  // Only update the last step's text if output processors actually modified it
+                  // This preserves text from retry scenarios where step.text is already correct
+                  if (lastStep && outputText && outputText !== originalText) {
+                    lastStep.text = outputText;
+                  }
+
+                  // Use the processed text if available, otherwise keep original
+                  self.#delayedPromises.text.resolve(outputText || originalText);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
 
                   // Update response with processed messages after output processors have run
@@ -595,15 +647,21 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                       uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
-                } else {
+                } else if (!self.#options.isLLMExecutionStep) {
+                  // No processor runner, not in LLM execution step - resolve with buffered text
                   const textContent = self.#bufferedText.join('');
                   self.#delayedPromises.text.resolve(textContent);
                   self.#delayedPromises.finishReason.resolve(self.#finishReason);
                 }
+                // If isLLMExecutionStep is true, don't resolve text here - let the outer MastraModelOutput handle it
               } catch (error) {
                 if (error instanceof TripWire) {
-                  self.#tripwire = true;
-                  self.#tripwireReason = error.message;
+                  self.#tripwire = {
+                    reason: error.message,
+                    retry: error.options?.retry,
+                    metadata: error.options?.metadata,
+                    processorId: error.processorId,
+                  };
                   self.#delayedPromises.finishReason.resolve('other');
                   self.#delayedPromises.text.resolve('');
                 } else {
@@ -960,10 +1018,17 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       };
     }
 
+    const steps = await this.steps;
+
+    // Calculate text from steps, which respects tripwire (rejected steps return empty text)
+    // This ensures rejected responses are excluded from the final text output
+    const textFromSteps = steps.map((step: any) => step.text || '').join('');
+
     const fullOutput = {
-      text: await this.text,
+      // Use text calculated from steps to properly exclude rejected responses
+      text: textFromSteps,
       usage: await this.usage,
-      steps: await this.steps,
+      steps,
       finishReason: await this.finishReason,
       warnings: await this.warnings,
       providerMetadata: await this.providerMetadata,
@@ -979,7 +1044,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       object: await this.object,
       error: this.error,
       tripwire: this.#tripwire,
-      tripwireReason: this.#tripwireReason,
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
     };
@@ -988,17 +1052,11 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   }
 
   /**
-   * The tripwire flag is set when the stream is aborted due to an output processor blocking the content.
+   * Tripwire data if the stream was aborted due to an output processor blocking the content.
+   * Returns undefined if no tripwire was triggered.
    */
-  get tripwire() {
+  get tripwire(): StepTripwireData | undefined {
     return this.#tripwire;
-  }
-
-  /**
-   * The reason for the tripwire.
-   */
-  get tripwireReason() {
-    return this.#tripwireReason;
   }
 
   /**
@@ -1008,7 +1066,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#getDelayedPromise(this.#delayedPromises.totalUsage);
   }
 
-  get content() {
+  get content(): Promise<LLMStepResult['content']> {
     return this.#getDelayedPromise(this.#delayedPromises.content);
   }
 
@@ -1255,7 +1313,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       request: this.#request,
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
-      tripwireReason: this.#tripwireReason,
       messageList: this.messageList.serialize(),
     };
   }
@@ -1279,7 +1336,6 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     this.#request = state.request;
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
-    this.#tripwireReason = state.tripwireReason;
     this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

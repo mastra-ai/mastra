@@ -1,8 +1,8 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
   StorageColumn,
@@ -16,11 +16,13 @@ import type {
   TraceRecord,
   TracesPaginatedArg,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
+import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { StoreOperationsPG } from './domains/operations';
@@ -30,11 +32,10 @@ import { WorkflowsPG } from './domains/workflows';
 export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
 
 export class PostgresStore extends MastraStorage {
-  #db?: pgPromise.IDatabase<{}>;
-  #pgp?: pgPromise.IMain;
-  #config: PostgresStoreConfig;
+  #db: pgPromise.IDatabase<{}>;
+  #pgp: pgPromise.IMain;
   private schema: string;
-  private isConnected: boolean = false;
+  private isInitialized: boolean = false;
 
   stores: StorageDomains;
 
@@ -44,8 +45,10 @@ export class PostgresStore extends MastraStorage {
       validateConfig('PostgresStore', config);
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
       this.schema = config.schemaName || 'public';
+
+      let pgConfig: PostgresStoreConfig;
       if (isConnectionStringConfig(config)) {
-        this.#config = {
+        pgConfig = {
           id: config.id,
           connectionString: config.connectionString,
           max: config.max,
@@ -54,14 +57,14 @@ export class PostgresStore extends MastraStorage {
         };
       } else if (isCloudSqlConfig(config)) {
         // Cloud SQL connector config
-        this.#config = {
+        pgConfig = {
           ...config,
           id: config.id,
           max: config.max,
           idleTimeoutMillis: config.idleTimeoutMillis,
         };
       } else if (isHostConfig(config)) {
-        this.#config = {
+        pgConfig = {
           id: config.id,
           host: config.host,
           port: config.port,
@@ -78,11 +81,35 @@ export class PostgresStore extends MastraStorage {
           'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
         );
       }
-      this.stores = {} as StorageDomains;
+
+      // Initialize pg-promise and create database connection synchronously
+      // Note: pg-promise creates connections lazily when queries are executed,
+      // so this is safe to do in the constructor
+      this.#pgp = pgPromise();
+      this.#db = this.#pgp(pgConfig as any);
+
+      // Create all domain instances synchronously in the constructor
+      // This is required for Memory to work correctly, as it checks for
+      // stores.memory during getInputProcessors() before init() is called
+      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
+      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
+      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
+      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
+      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
+      const agents = new AgentsPG({ client: this.#db, schema: this.schema });
+
+      this.stores = {
+        operations,
+        scores,
+        workflows,
+        memory,
+        observability,
+        agents,
+      };
     } catch (e) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_INITIALIZATION_FAILED',
+          id: createStorageErrorId('PG', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -92,45 +119,29 @@ export class PostgresStore extends MastraStorage {
   }
 
   async init(): Promise<void> {
-    if (this.isConnected) {
+    if (this.isInitialized) {
       return;
     }
 
     try {
-      this.isConnected = true;
-      this.#pgp = pgPromise();
-      this.#db = this.#pgp(this.#config as any);
-
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
-      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
-
-      this.stores = {
-        operations,
-        scores,
-        workflows,
-        memory,
-        observability,
-      };
+      this.isInitialized = true;
 
       await super.init();
 
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
-        await operations.createAutomaticIndexes();
+        await (this.stores.operations as StoreOperationsPG).createAutomaticIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
         console.warn('Failed to create indexes:', indexError);
       }
     } catch (error) {
-      this.isConnected = false;
+      this.isInitialized = false;
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_POSTGRES_STORE_INIT_FAILED',
+          id: createStorageErrorId('PG', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -140,16 +151,10 @@ export class PostgresStore extends MastraStorage {
   }
 
   public get db() {
-    if (!this.#db) {
-      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
-    }
     return this.#db;
   }
 
   public get pgp() {
-    if (!this.#pgp) {
-      throw new Error(`PostgresStore: Store is not initialized, please call "init()" first.`);
-    }
     return this.#pgp;
   }
 
@@ -163,6 +168,7 @@ export class PostgresStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: true,
       listScoresBySpan: true,
+      agents: true,
     };
   }
 
@@ -308,13 +314,7 @@ export class PostgresStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -357,6 +357,10 @@ export class PostgresStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     this.pgp.end();
   }
@@ -367,7 +371,7 @@ export class PostgresStore extends MastraStorage {
   async createSpan(span: SpanRecord): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -387,7 +391,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -399,7 +403,7 @@ export class PostgresStore extends MastraStorage {
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -411,7 +415,7 @@ export class PostgresStore extends MastraStorage {
   async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -423,7 +427,7 @@ export class PostgresStore extends MastraStorage {
   async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -441,7 +445,7 @@ export class PostgresStore extends MastraStorage {
   }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -453,7 +457,7 @@ export class PostgresStore extends MastraStorage {
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'PG_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('PG', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -485,7 +489,7 @@ export class PostgresStore extends MastraStorage {
     return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

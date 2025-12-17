@@ -66,7 +66,7 @@ export const testWorkflow = createWorkflow({
 
 > See [Input Data Mapping](./input-data-mapping) for more information.
 
-Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
+When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
 ```json
 {
@@ -78,6 +78,46 @@ Mastra agents use a default schema that expects a `prompt` string as input and r
   }
 }
 ```
+
+### Agents with structured output
+
+When you need the agent to return structured data instead of plain text, pass the `structuredOutput` option to `createStep()`. The step's output schema will match your provided schema, enabling type-safe chaining to subsequent steps.
+
+```typescript {1-6,8-10} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+});
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+});
+
+// Next step receives typed structured data
+const processStep = createStep({
+  id: "process",
+  inputSchema: articleSchema, // Matches agent's outputSchema
+  outputSchema: z.object({ tagCount: z.number() }),
+  execute: async ({ inputData }) => ({
+    tagCount: inputData.tags.length, // Fully typed
+  }),
+});
+
+export const testWorkflow = createWorkflow({
+  // ...
+})
+  .map(async ({ inputData }) => ({
+    prompt: `Generate an article about: ${inputData.topic}`,
+  }))
+  .then(agentStep)
+  .then(processStep)
+  .commit();
+```
+
+The `structuredOutput.schema` option accepts any Zod schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
+
+> See [Structured Output](/docs/v1/agents/structured-output) for more options like error handling strategies and streaming with structured output.
 
 ## Using tools in workflows
 

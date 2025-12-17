@@ -1,7 +1,7 @@
 import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import { APICallError } from 'ai-v5';
-import type { IdGenerator, ToolChoice, ToolSet } from 'ai-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
+import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
 import type { ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
@@ -27,8 +27,8 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   inputMessages: LanguageModelV2Prompt;
   tools?: ToolSet;
   toolChoice?: ToolChoice<ToolSet>;
+  activeTools?: string[];
   options?: {
-    activeTools?: string[];
     abortSignal?: AbortSignal;
   };
   includeRawChunks?: boolean;
@@ -52,6 +52,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   inputMessages,
   tools,
   toolChoice,
+  activeTools,
   options,
   onResult,
   includeRawChunks,
@@ -71,7 +72,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
     toolChoice,
-    activeTools: options?.activeTools,
+    activeTools,
   });
 
   const structuredOutputMode = structuredOutput?.schema

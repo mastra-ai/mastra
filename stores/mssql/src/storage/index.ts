@@ -1,8 +1,8 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
 export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
@@ -22,6 +22,7 @@ import type {
   IndexInfo,
   StorageIndexStats,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -128,7 +129,7 @@ export class MSSQLStore extends MastraStorage {
     } catch (e) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INITIALIZATION_FAILED',
+          id: createStorageErrorId('MSSQL', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -158,7 +159,7 @@ export class MSSQLStore extends MastraStorage {
       this.isConnected = null;
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INIT_FAILED',
+          id: createStorageErrorId('MSSQL', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -340,13 +341,7 @@ export class MSSQLStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -389,6 +384,10 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     await this.pool.close();
   }
@@ -418,7 +417,7 @@ export class MSSQLStore extends MastraStorage {
   private getObservabilityStore(): ObservabilityMSSQL {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MSSQL', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -498,8 +497,8 @@ export class MSSQLStore extends MastraStorage {
     });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

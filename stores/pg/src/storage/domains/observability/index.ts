@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -61,7 +61,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_CREATE_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -111,7 +111,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_GET_TRACE_FAILED',
+          id: createStorageErrorId('PG', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -150,7 +150,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_UPDATE_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -191,7 +191,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         name = `agent run: '${entityId}'`;
       } else {
         const error = new MastraError({
-          id: 'PG_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('PG', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -268,7 +268,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('PG', 'GET_TRACES_PAGINATED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -300,7 +300,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_BATCH_CREATE_SPANS_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -347,7 +347,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_BATCH_UPDATE_SPANS_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -368,7 +368,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_BATCH_DELETE_TRACES_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

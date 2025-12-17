@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import EventEmitter from 'node:events';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
@@ -79,7 +79,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         executionPath: [],
         resumeSteps,
         stepResults,
-        prevResult: { status: 'failed', error: e.stack ?? e.message },
+        prevResult: { status: 'failed', error: getErrorFromUnknown(e).toJSON() },
         requestContext,
         resumeData,
         activeSteps: {},
@@ -89,27 +89,28 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId }: ProcessorArgs) {
-    const currentState = await this.mastra.getStorage()?.updateWorkflowState({
+    const storage = this.mastra.getStorage();
+    const currentState = await storage?.loadWorkflowSnapshot({
       workflowName: workflowId,
       runId,
-      opts: {
-        status: 'canceled',
-      },
     });
 
-    await this.endWorkflow({
-      workflow: undefined as any,
-      workflowId,
-      runId,
-      stepResults: currentState?.context as any,
-      prevResult: { status: 'canceled' } as any,
-      requestContext: currentState?.requestContext as any,
-      executionPath: [],
-      activeSteps: {},
-      resumeSteps: [],
-      resumeData: undefined,
-      parentWorkflow: undefined,
-    });
+    await this.endWorkflow(
+      {
+        workflow: undefined as any,
+        workflowId,
+        runId,
+        stepResults: (currentState?.context ?? {}) as any,
+        prevResult: { status: 'canceled' } as any,
+        requestContext: (currentState?.requestContext ?? {}) as any,
+        executionPath: [],
+        activeSteps: {},
+        resumeSteps: [],
+        resumeData: undefined,
+        parentWorkflow: undefined,
+      },
+      'canceled',
+    );
   }
 
   protected async processWorkflowStart({
@@ -125,9 +126,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     stepResults,
     requestContext,
   }: ProcessorArgs) {
+    // Preserve resourceId from existing snapshot if present
+    const existingRun = await this.mastra.getStorage()?.getWorkflowRunById({ runId, workflowName: workflow.id });
+    const resourceId = existingRun?.resourceId;
+
     await this.mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflow.id,
       runId,
+      resourceId,
       snapshot: {
         activePaths: [],
         suspendedPaths: {},
@@ -166,13 +172,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
-  protected async endWorkflow(args: ProcessorArgs) {
+  protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' = 'success') {
     const { workflowId, runId, prevResult } = args;
     await this.mastra.getStorage()?.updateWorkflowState({
       workflowName: workflowId,
       runId,
       opts: {
-        status: 'success',
+        status,
         result: prevResult,
       },
     });
@@ -1146,7 +1152,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId: workflowData.runId,
     });
 
-    if (currentState?.status === 'canceled' && type !== 'workflow.end') {
+    if (currentState?.status === 'canceled' && type !== 'workflow.end' && type !== 'workflow.cancel') {
       return;
     }
 

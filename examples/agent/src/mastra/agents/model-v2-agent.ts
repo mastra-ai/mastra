@@ -1,23 +1,38 @@
 import { Agent } from '@mastra/core/agent';
-import { openai, openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai } from '@ai-sdk/openai-v5';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { logDataMiddleware } from '../../model-middleware';
-import { APICallError, wrapLanguageModel } from 'ai-v5';
+import { wrapLanguageModel } from 'ai-v5';
 import { cookingTool } from '../tools';
+import {
+  advancedModerationWorkflow,
+  branchingModerationWorkflow,
+  contentModerationWorkflow,
+} from '../workflows/content-moderation';
+import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
+import { findUserWorkflow } from '../workflows/other';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
   description: 'Fetches the current weather information for a given city',
-  inputSchema: z.object({
+  suspendSchema: z.object({
+    message: z.string(),
+  }),
+  resumeSchema: z.object({
     city: z.string(),
   }),
-  execute: async inputData => {
+  execute: async (_inputData, context) => {
+    if (!context?.agent?.resumeData) {
+      return context?.agent?.suspend({
+        message: 'What city do you want to know the weather for?',
+      });
+    }
     return {
-      city: inputData.city,
+      city: context?.agent?.resumeData?.city,
       weather: 'sunny',
       temperature_celsius: 19,
       temperature_fahrenheit: 66,
@@ -49,7 +64,7 @@ export const errorAgent = new Agent({
   id: 'error-agent',
   name: 'Error Agent',
   instructions: 'You are an error agent that always errors',
-  model: openai_v5('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
 });
 
 export const moderationProcessor = new ModerationProcessor({
@@ -73,7 +88,7 @@ export const chefModelV2Agent = new Agent({
     role: 'system',
   },
   model: wrapLanguageModel({
-    model: openai_v5('gpt-4o-mini'),
+    model: openai('gpt-4o-mini'),
     middleware: logDataMiddleware,
   }),
   tools: {
@@ -83,6 +98,7 @@ export const chefModelV2Agent = new Agent({
   workflows: {
     myWorkflow,
     lessComplexWorkflow,
+    findUserWorkflow,
   },
   scorers: ({ mastra }) => {
     if (!mastra) {
@@ -96,6 +112,9 @@ export const chefModelV2Agent = new Agent({
   },
   memory,
   inputProcessors: [moderationProcessor],
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
 });
 
 const weatherAgent = new Agent({
@@ -103,7 +122,7 @@ const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: `Your goal is to execute the recipe-maker workflow with the given ingredient`,
   description: `An agent that can help you get a recipe for a given ingredient`,
-  model: openai_v5('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   tools: {
     weatherInfo,
   },
@@ -118,7 +137,7 @@ export const networkAgent = new Agent({
   description:
     'A chef agent that can help you cook great meals with whatever ingredients you have available based on your location and current weather.',
   instructions: `You are a the manager of several agent, tools, and workflows. Use the best primitives based on what the user wants to accomplish your task.`,
-  model: openai_v5('gpt-4o-mini'),
+  model: 'openai/gpt-4o-mini',
   agents: {
     weatherAgent,
   },
@@ -129,4 +148,60 @@ export const networkAgent = new Agent({
   //   weatherInfo,
   // },
   memory,
+});
+
+// =============================================================================
+// Agents with Processor Workflows
+// These demonstrate using processor workflows for content moderation
+// =============================================================================
+
+/**
+ * Agent with Advanced Moderation Workflow
+ *
+ * Uses the advanced moderation workflow that includes:
+ * - Length validation
+ * - Parallel PII, toxicity, and spam checks
+ * - Language detection
+ */
+export const agentWithAdvancedModeration = new Agent({
+  id: 'agent-with-advanced-moderation',
+  name: 'Agent with Advanced Moderation',
+  description: 'A helpful assistant with advanced content moderation using parallel processor checks.',
+  instructions: `You are a helpful assistant. Always provide detailed, thoughtful responses.`,
+  model: 'openai/gpt-4o-mini',
+  inputProcessors: [advancedModerationWorkflow],
+  outputProcessors: [responseQualityProcessor, stepLoggerProcessor],
+  maxProcessorRetries: 2,
+});
+
+/**
+ * Agent with Branching Moderation Workflow
+ *
+ * Uses conditional branching to apply different processors based on content.
+ */
+export const agentWithBranchingModeration = new Agent({
+  id: 'agent-with-branching-moderation',
+  name: 'Agent with Branching Moderation',
+  description: 'A helpful assistant with smart content moderation that branches based on message content.',
+  instructions: `You are a helpful assistant.`,
+  model: 'openai/gpt-4o-mini',
+  inputProcessors: [branchingModerationWorkflow],
+  outputProcessors: [stepLoggerProcessor],
+  maxProcessorRetries: 2,
+});
+
+/**
+ * Agent with Sequential Moderation Workflow
+ *
+ * Uses a simple sequential workflow for content moderation.
+ */
+export const agentWithSequentialModeration = new Agent({
+  id: 'agent-with-sequential-moderation',
+  name: 'Agent with Sequential Moderation',
+  description: 'A helpful assistant with sequential content moderation checks.',
+  instructions: `You are a helpful assistant.`,
+  model: 'openai/gpt-4o-mini',
+  inputProcessors: [contentModerationWorkflow],
+  outputProcessors: [responseQualityProcessor],
+  maxProcessorRetries: 2,
 });

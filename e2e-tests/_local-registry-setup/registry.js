@@ -1,8 +1,9 @@
 import { fork, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+let require = global.require;
 if (typeof require === 'undefined') {
-  global.require = createRequire(import.meta.url);
+  require = createRequire(import.meta.url);
 }
 
 /**

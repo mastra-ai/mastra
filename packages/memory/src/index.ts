@@ -1,3 +1,6 @@
+import { embedMany } from '@internal/ai-sdk-v4';
+import type { TextPart } from '@internal/ai-sdk-v4';
+import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
@@ -17,9 +20,6 @@ import type {
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import { embedMany } from 'ai';
-import type { TextPart } from 'ai';
-import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
@@ -611,7 +611,14 @@ ${workingMemory}`;
     });
 
     if (this.vector && config.semanticRecall) {
-      let indexName: Promise<string>;
+      // Collect all embeddings first (embedding is CPU-bound, doesn't use pool connections)
+      const embeddingData: Array<{
+        embeddings: number[][];
+        metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+      }> = [];
+      let dimension: number | undefined;
+
+      // Process embeddings concurrently - this doesn't use DB connections
       await Promise.all(
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
@@ -634,22 +641,12 @@ ${workingMemory}`;
 
           if (!textForEmbedding) return;
 
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
+          const result = await this.embedMessageContent(textForEmbedding);
+          dimension = result.dimension;
 
-          if (typeof indexName === `undefined`) {
-            indexName = this.createEmbeddingIndex(dimension, config).then(result => result.indexName);
-          }
-
-          if (typeof this.vector === `undefined`) {
-            throw new Error(
-              `Tried to upsert embeddings to index ${indexName} but this Memory instance doesn't have an attached vector db.`,
-            );
-          }
-
-          await this.vector.upsert({
-            indexName: await indexName,
-            vectors: embeddings,
-            metadata: chunks.map(() => ({
+          embeddingData.push({
+            embeddings: result.embeddings,
+            metadata: result.chunks.map(() => ({
               message_id: message.id,
               thread_id: message.threadId,
               resource_id: message.resourceId,
@@ -657,6 +654,34 @@ ${workingMemory}`;
           });
         }),
       );
+
+      // Batch all vectors into a single upsert call to avoid pool exhaustion
+      if (embeddingData.length > 0 && dimension !== undefined) {
+        if (typeof this.vector === `undefined`) {
+          throw new Error(`Tried to upsert embeddings but this Memory instance doesn't have an attached vector db.`);
+        }
+
+        const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+        // Flatten all embeddings and metadata into single arrays
+        const allVectors: number[][] = [];
+        const allMetadata: Array<{
+          message_id: string;
+          thread_id: string | undefined;
+          resource_id: string | undefined;
+        }> = [];
+
+        for (const data of embeddingData) {
+          allVectors.push(...data.embeddings);
+          allMetadata.push(...data.metadata);
+        }
+
+        await this.vector.upsert({
+          indexName,
+          vectors: allVectors,
+          metadata: allMetadata,
+        });
+      }
     }
 
     return result;
@@ -694,25 +719,30 @@ ${workingMemory}`;
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
-    const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
+    const newMessage = { ...message };
+    // Only spread content if it's a proper V2 object to avoid corrupting non-object content
+    if (message.content && typeof message.content === 'object' && !Array.isArray(message.content)) {
+      newMessage.content = { ...message.content };
+    }
 
-    if (newMessage.content.content && typeof newMessage.content.content === 'string') {
+    if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
       newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
     }
 
-    if (newMessage.content.parts) {
+    if (Array.isArray(newMessage.content?.parts)) {
       newMessage.content.parts = newMessage.content.parts
         .filter(part => {
-          if (part.type === 'tool-invocation') {
-            return part.toolInvocation.toolName !== 'updateWorkingMemory';
+          if (part?.type === 'tool-invocation') {
+            return part.toolInvocation?.toolName !== 'updateWorkingMemory';
           }
           return true;
         })
         .map(part => {
-          if (part.type === 'text') {
+          if (part?.type === 'text') {
+            const text = typeof part.text === 'string' ? part.text : '';
             return {
               ...part,
-              text: part.text.replace(workingMemoryRegex, '').trim(),
+              text: text.replace(workingMemoryRegex, '').trim(),
             };
           }
           return part;

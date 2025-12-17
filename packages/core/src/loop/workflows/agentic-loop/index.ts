@@ -1,10 +1,10 @@
-import type { WritableStream } from 'node:stream/web';
-import type { StepResult, ToolSet } from 'ai-v5';
+import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow } from '../../../workflows';
+import type { OutputWriter } from '../../../workflows';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
@@ -14,14 +14,24 @@ import { isControllerOpen } from '../stream';
 interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
   extends LoopRun<Tools, OUTPUT> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
-  writer: WritableStream<ChunkType<OUTPUT>>;
+  outputWriter: OutputWriter;
 }
 
 export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>(
   params: AgenticLoopParams<Tools, OUTPUT>,
 ) {
-  const { models, _internal, messageId, runId, toolChoice, messageList, modelSettings, controller, writer, ...rest } =
-    params;
+  const {
+    models,
+    _internal,
+    messageId,
+    runId,
+    toolChoice,
+    messageList,
+    modelSettings,
+    controller,
+    outputWriter,
+    ...rest
+  } = params;
 
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
@@ -35,7 +45,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     modelSettings,
     toolChoice,
     controller,
-    writer,
+    outputWriter,
     messageList,
     runId,
     ...rest,
@@ -72,7 +82,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const currentStep: StepResult<Tools> = {
         content: currentContent,
         usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        // we need to cast this because we add 'abort' for tripwires
+        // we need to cast this because we add 'tripwire' and 'retry' for processor scenarios
         finishReason: (typedInputData.stepResult?.reason || 'unknown') as StepResult<Tools>['finishReason'],
         warnings: typedInputData.stepResult?.warnings || [],
         request: typedInputData.metadata?.request || {},
@@ -115,7 +125,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         typedInputData.stepResult.isContinued = hasFinishedSteps ? false : typedInputData.stepResult.isContinued;
       }
 
-      if (typedInputData.stepResult?.reason !== 'abort') {
+      // Emit step-finish for all cases except tripwire without any steps
+      // When tripwire happens but we have steps (e.g., max retries exceeded), we still
+      // need to emit step-finish so the stream properly finishes with all step data
+      const hasSteps = (typedInputData.output?.steps?.length ?? 0) > 0;
+      const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
+
+      if (shouldEmitStepFinish) {
         // Only enqueue if controller is still open
         if (isControllerOpen(controller)) {
           controller.enqueue({

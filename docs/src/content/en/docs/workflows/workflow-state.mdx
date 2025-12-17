@@ -28,7 +28,7 @@ const step1 = createStep({
     console.log(state.sharedCounter);
 
     // Update state for subsequent steps
-    setState({ ...state, sharedCounter: state.sharedCounter + 1 });
+    await setState({ sharedCounter: state.sharedCounter + 1 });
 
     // Return output that flows to next step's inputData
     return { step1Output: "processed" };
@@ -50,8 +50,7 @@ const step1 = createStep({
     const { message } = inputData;
     const { processedItems } = state;
 
-    setState({
-      ...state,
+    await setState({
       processedItems: [...processedItems, "item-1", "item-2"],
     });
 
@@ -124,7 +123,7 @@ const step1 = createStep({
   execute: async ({ state, setState, suspend, resumeData }) => {
     if (!resumeData) {
       // First run: update state and suspend
-      setState({ ...state, count: state.count + 1, items: [...state.items, "item-1"] });
+      await setState({ count: state.count + 1, items: [...state.items, "item-1"] });
       await suspend({});
       return {};
     }
@@ -166,7 +165,7 @@ const parentStep = createStep({
   stateSchema: z.object({ sharedValue: z.string() }),
   execute: async ({ state, setState }) => {
     // Modify state before nested workflow runs
-    setState({ ...state, sharedValue: "modified-by-parent" });
+    await setState({ sharedValue: "modified-by-parent" });
     return {};
   },
 });

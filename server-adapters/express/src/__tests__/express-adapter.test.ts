@@ -28,8 +28,6 @@ describe('Express Server Adapter', () => {
         mastra: context.mastra,
         taskStore: context.taskStore,
         customRouteAuthConfig: context.customRouteAuthConfig,
-        playground: context.playground,
-        isDev: context.isDev,
       });
 
       await adapter.init();
@@ -381,6 +379,126 @@ describe('Express Server Adapter', () => {
       const textDelta = chunks.find(c => c.type === 'text-delta');
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
+    });
+  });
+
+  describe('Abort Signal', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('should not have aborted signal when route handler executes', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      // Track the abort signal state when the handler executes
+      let abortSignalAborted: boolean | undefined;
+
+      // Create a test route that checks the abort signal state
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/abort-signal',
+        responseType: 'json',
+        handler: async (params: any) => {
+          // Capture the abort signal state when handler runs
+          abortSignalAborted = params.abortSignal?.aborted;
+          return { signalAborted: abortSignalAborted };
+        },
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      // Make a POST request with a JSON body (this triggers body parsing which can cause the issue)
+      const response = await fetch(`http://localhost:${port}/test/abort-signal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // The abort signal should NOT be aborted during normal request handling
+      expect(result.signalAborted).toBe(false);
+      expect(abortSignalAborted).toBe(false);
+    });
+
+    it('should provide abort signal to route handlers', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/abort-signal-exists',
+        responseType: 'json',
+        handler: async (params: any) => {
+          receivedAbortSignal = params.abortSignal;
+          return { hasSignal: !!params.abortSignal };
+        },
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/abort-signal-exists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const result = await response.json();
+
+      // Route handler should receive an abort signal
+      expect(result.hasSignal).toBe(true);
+      expect(receivedAbortSignal).toBeDefined();
+      expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
   });
 });

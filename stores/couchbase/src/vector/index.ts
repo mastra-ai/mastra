@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -71,13 +72,12 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_INITIALIZE_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'INITIALIZE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             connectionString,
             username,
-            password,
             bucketName,
             scopeName,
             collectionName,
@@ -195,7 +195,7 @@ export class CouchbaseVector extends MastraVector {
       }
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -248,7 +248,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -298,7 +298,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -319,7 +319,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -359,7 +359,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -385,7 +385,7 @@ export class CouchbaseVector extends MastraVector {
       }
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -410,7 +410,7 @@ export class CouchbaseVector extends MastraVector {
   async updateVector({ id, update }: UpdateVectorParams): Promise<void> {
     if (!id) {
       throw new MastraError({
-        id: 'COUCHBASE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('COUCHBASE', 'UPDATE_VECTOR', 'INVALID_ARGS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'id is required for Couchbase updateVector',
@@ -445,7 +445,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_UPDATE_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -484,7 +484,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_DELETE_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -498,7 +498,7 @@ export class CouchbaseVector extends MastraVector {
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
     throw new MastraError({
-      id: 'COUCHBASE_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
       text: 'deleteVectors is not yet implemented for Couchbase vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
@@ -519,7 +519,7 @@ export class CouchbaseVector extends MastraVector {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'COUCHBASE_VECTOR_DISCONNECT_FAILED',
+          id: createVectorErrorId('COUCHBASE', 'DISCONNECT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

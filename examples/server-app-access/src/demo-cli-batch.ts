@@ -22,7 +22,7 @@ const BASE_URL = 'http://internal';
 async function main() {
   // Create and initialize server (no port binding)
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
-  const adapter = new MastraServer({ app: app as any, mastra });
+  const adapter = new MastraServer({ app, mastra });
   await adapter.init();
 
   // Get the server app - works because MastraServer auto-registers with mastra

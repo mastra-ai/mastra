@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations } from '@mastra/core/storage';
+import { createStorageErrorId, StoreOperations } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import { getKey, processRecord } from '../utils';
@@ -43,7 +43,7 @@ export class StoreOperationsUpstash extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('UPSTASH', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -67,7 +67,7 @@ export class StoreOperationsUpstash extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_INSERT_FAILED',
+          id: createStorageErrorId('UPSTASH', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -97,7 +97,7 @@ export class StoreOperationsUpstash extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('UPSTASH', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -117,7 +117,7 @@ export class StoreOperationsUpstash extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LOAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

@@ -3,7 +3,7 @@ import { Cell, EntryCell } from '@/ds/components/Table';
 
 import { ColumnDef } from '@tanstack/react-table';
 import { useLinkComponent } from '@/lib/framework';
-import { Footprints } from 'lucide-react';
+import { Footprints, Cpu } from 'lucide-react';
 import { WorkflowTableData } from './types';
 
 export const columns: ColumnDef<WorkflowTableData>[] = [
@@ -12,10 +12,20 @@ export const columns: ColumnDef<WorkflowTableData>[] = [
     header: 'Name',
     cell: ({ row }) => {
       const { Link, paths } = useLinkComponent();
+      const workflow = row.original;
 
       return (
         <EntryCell
-          name={<Link href={paths.workflowLink(row.original.id)}>{row.original.name}</Link>}
+          name={
+            <div className="flex items-center gap-2">
+              <Link href={paths.workflowLink(row.original.id)}>{row.original.name}</Link>
+              {workflow.isProcessorWorkflow && (
+                <Badge icon={<Cpu className="h-3 w-3" />} className="!h-badge-sm bg-violet-500/20 text-violet-400">
+                  Processor
+                </Badge>
+              )}
+            </div>
+          }
           description={undefined}
           meta={undefined}
         />

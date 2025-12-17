@@ -4,7 +4,6 @@ import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { MastraUIMessage } from '@mastra/react';
-import { useToolCall } from '@/services/tool-call-provider';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
@@ -31,8 +30,13 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
   const requireApprovalMetadata = metadata?.mode === 'stream' && metadata?.requireApprovalMetadata;
+  const suspendedTools = metadata?.mode === 'stream' && metadata?.suspendedTools;
 
-  const toolApprovalMetadata = requireApprovalMetadata ? requireApprovalMetadata?.[toolCallId] : undefined;
+  const toolApprovalMetadata = requireApprovalMetadata
+    ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
+    : undefined;
+
+  const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
 
   useWorkflowStream(result);
 
@@ -59,6 +63,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}
+        suspendPayload={suspendedToolMetadata?.suspendPayload}
       />
     );
   }
@@ -72,6 +77,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       metadata={metadata}
       toolCallId={toolCallId}
       toolApprovalMetadata={toolApprovalMetadata}
+      suspendPayload={suspendedToolMetadata?.suspendPayload}
     />
   );
 };

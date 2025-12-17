@@ -14,7 +14,7 @@ import {
   LIST_SCORES_BY_ENTITY_ID_ROUTE,
   SAVE_SCORE_ROUTE,
 } from './scores';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -57,7 +57,7 @@ describe('Scores Handlers', () => {
   describe('listScorersHandler', () => {
     it('should return empty object', async () => {
       const result = await LIST_SCORERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         requestContext: new RequestContext(),
       });
       expect(result).toEqual({});
@@ -73,7 +73,7 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
 
       const result = await LIST_SCORES_BY_RUN_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         runId: mockScores?.[0]?.runId,
         page: pagination.page,
         perPage: pagination.perPage as number,
@@ -98,7 +98,7 @@ describe('Scores Handlers', () => {
       });
 
       const result = await LIST_SCORES_BY_RUN_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mastraWithoutStorage }),
+        ...createTestServerContext({ mastra: mastraWithoutStorage }),
         runId: 'test-run-1',
         page: pagination.page,
         perPage: pagination.perPage as number,
@@ -123,7 +123,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         LIST_SCORES_BY_RUN_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           runId: 'test-run-1',
           page: pagination.page,
           perPage: pagination.perPage as number,
@@ -142,7 +142,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         LIST_SCORES_BY_RUN_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           runId: 'test-run-1',
           page: pagination.page,
           perPage: pagination.perPage as number,
@@ -159,7 +159,7 @@ describe('Scores Handlers', () => {
       await mockStorage.saveScore(mockScores[0]);
 
       const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         entityId: 'test-agent',
         entityType: 'AGENT',
         page: pagination.page,
@@ -185,7 +185,7 @@ describe('Scores Handlers', () => {
       });
 
       const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mastraWithoutStorage }),
+        ...createTestServerContext({ mastra: mastraWithoutStorage }),
         entityId: 'test-agent',
         entityType: 'agent',
         page: pagination.page,
@@ -211,7 +211,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           entityId: 'test-agent',
           entityType: 'agent',
           page: pagination.page,
@@ -231,7 +231,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           entityId: 'test-agent',
           entityType: 'agent',
           page: pagination.page,
@@ -249,7 +249,7 @@ describe('Scores Handlers', () => {
       await mockStorage.saveScore(mockScores[0]);
 
       const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         entityId: 'test-workflow',
         entityType: 'WORKFLOW',
         page: pagination.page,
@@ -272,7 +272,7 @@ describe('Scores Handlers', () => {
       const savedScore = { score };
 
       const result = await SAVE_SCORE_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         score,
       });
 
@@ -289,7 +289,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         SAVE_SCORE_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mastraWithoutStorage }),
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
           score,
         }),
       ).rejects.toThrow(HTTPException);
@@ -303,7 +303,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         SAVE_SCORE_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           score,
         }),
       ).rejects.toThrow(HTTPException);
@@ -320,7 +320,7 @@ describe('Scores Handlers', () => {
 
       await expect(
         SAVE_SCORE_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           score,
         }),
       ).rejects.toThrow(HTTPException);
@@ -332,7 +332,7 @@ describe('Scores Handlers', () => {
       const savedScore = { score };
 
       const result = await SAVE_SCORE_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         score,
       });
 

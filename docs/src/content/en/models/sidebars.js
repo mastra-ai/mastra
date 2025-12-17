@@ -93,11 +93,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "providers/agentrouter",
-          label: "AgentRouter",
-        },
-        {
-          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -143,6 +138,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/cloudflare-ai-gateway",
+          label: "Cloudflare AI Gateway",
+        },
+        {
+          type: "doc",
           id: "providers/cloudflare-workers-ai",
           label: "Cloudflare Workers AI",
         },
@@ -180,6 +180,11 @@ const sidebars = {
           type: "doc",
           id: "providers/google-vertex",
           label: "Google Vertex AI",
+        },
+        {
+          type: "doc",
+          id: "providers/helicone",
+          label: "Helicone",
         },
         {
           type: "doc",

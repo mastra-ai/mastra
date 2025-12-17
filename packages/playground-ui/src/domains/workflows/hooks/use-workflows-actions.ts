@@ -42,8 +42,8 @@ export const useExecuteWorkflow = () => {
         });
 
         const workflow = client.getWorkflow(workflowId);
-
-        await workflow.start({ runId, inputData: input || {}, requestContext });
+        const run = await workflow.createRun({ runId });
+        await run.start({ inputData: input || {}, requestContext });
       } catch (error) {
         console.error('Error starting workflow run:', error);
         throw error;
@@ -69,7 +69,8 @@ export const useExecuteWorkflow = () => {
           requestContext.set(key, value);
         });
         const workflow = client.getWorkflow(workflowId);
-        const result = await workflow.startAsync({ runId, inputData: input || {}, requestContext });
+        const run = await workflow.createRun({ runId });
+        const result = await run.startAsync({ inputData: input || {}, requestContext });
         return result;
       } catch (error) {
         console.error('Error starting workflow run:', error);
@@ -155,6 +156,8 @@ export const useStreamWorkflow = () => {
       if (streamStatus === 'failed') {
         throw new Error(metadata?.errorMessage || 'Workflow execution failed');
       }
+      // Tripwire status is not an error - it's handled separately in the UI
+      // Don't throw an error for tripwire status
     }
   };
 
@@ -184,8 +187,8 @@ export const useStreamWorkflow = () => {
         requestContext.set(key as keyof RequestContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({
-        runId,
+      const run = await workflow.createRun({ runId });
+      const stream = await run.streamVNext({
         inputData,
         requestContext,
         closeOnSuspend: true,
@@ -266,7 +269,8 @@ export const useStreamWorkflow = () => {
         return;
       }
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.observeStreamVNext({ runId });
+      const run = await workflow.createRun({ runId });
+      const stream = await run.observeStreamVNext();
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -344,8 +348,8 @@ export const useStreamWorkflow = () => {
       Object.entries(playgroundRequestContext).forEach(([key, value]) => {
         requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.resumeStreamVNext({
-        runId,
+      const run = await workflow.createRun({ runId });
+      const stream = await run.resumeStreamVNext({
         step,
         resumeData,
         requestContext,
@@ -405,8 +409,10 @@ export const useStreamWorkflow = () => {
     mutationFn: async ({
       workflowId,
       requestContext: playgroundRequestContext,
+      runId,
       ...params
     }: {
+      runId: string;
       workflowId: string;
       requestContext: Record<string, unknown>;
     } & Omit<TimeTravelParams, 'requestContext'>) => {
@@ -423,7 +429,8 @@ export const useStreamWorkflow = () => {
       Object.entries(playgroundRequestContext).forEach(([key, value]) => {
         requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.timeTravelStream({
+      const run = await workflow.createRun({ runId });
+      const stream = await run.timeTravelStream({
         ...params,
         requestContext,
         tracingOptions: settings?.tracingOptions,
@@ -531,7 +538,9 @@ export const useCancelWorkflowRun = () => {
   const cancelWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
       try {
-        const response = await client.getWorkflow(workflowId).cancelRun(runId);
+        const workflow = client.getWorkflow(workflowId);
+        const run = await workflow.createRun({ runId });
+        const response = await run.cancelRun();
         return response;
       } catch (error) {
         console.error('Error canceling workflow run:', error);

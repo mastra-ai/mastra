@@ -1,19 +1,23 @@
 import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
-  SharedV2ProviderMetadata,
   LanguageModelV2CallWarning,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
-import type { FinishReason, LanguageModelRequestMetadata, LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from 'ai-v5';
+
+import type {
+  FinishReason,
+  LanguageModelRequestMetadata,
+  LogProbs as LanguageModelV1LogProbs,
+} from '@internal/ai-sdk-v4';
+import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModelV2 } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
-import type { OutputProcessor } from '../processors';
+import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput } from './base/schema';
@@ -25,6 +29,29 @@ export enum ChunkFrom {
   WORKFLOW = 'WORKFLOW',
   NETWORK = 'NETWORK',
 }
+
+/**
+ * Extended finish reason that includes Mastra-specific values.
+ * 'tripwire' and 'retry' are used for processor scenarios.
+ */
+export type MastraFinishReason = LanguageModelV2FinishReason | 'tripwire' | 'retry';
+
+/**
+A JSON value can be a string, number, boolean, object, array, or null.
+JSON values can be serialized and deserialized by the JSON.stringify and JSON.parse methods.
+ */
+export type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
+export type JSONObject = {
+  [key: string]: JSONValue;
+};
+export type JSONArray = JSONValue[];
+
+/**
+ * Additional provider-specific metadata.
+ * The outer record is keyed by the provider name, and the inner
+ * record is keyed by the provider-specific metadata key.
+ */
+export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
 
 interface BaseChunkType {
   runId: string;
@@ -39,36 +66,36 @@ interface ResponseMetadataPayload {
 
 export interface TextStartPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 export interface TextDeltaPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   text: string;
 }
 
 interface TextEndPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   [key: string]: unknown;
 }
 
 export interface ReasoningStartPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   signature?: string;
 }
 
 export interface ReasoningDeltaPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   text: string;
 }
 
 interface ReasoningEndPayload {
   id: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   signature?: string;
 }
 
@@ -79,19 +106,15 @@ export interface SourcePayload {
   mimeType?: string;
   filename?: string;
   url?: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 export interface FilePayload {
   data: string | Uint8Array;
   base64?: string;
   mimeType: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
-
-type JSONValue = string | number | boolean | null | JSONObject | JSONArray;
-type JSONObject = { [key: string]: JSONValue | undefined };
-type JSONArray = JSONValue[];
 
 export type ReadonlyJSONValue = null | string | number | boolean | ReadonlyJSONObject | ReadonlyJSONArray;
 
@@ -129,7 +152,7 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
     __mastraMetadata?: MastraMetadata;
   };
   providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
 }
@@ -140,7 +163,7 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   result: TResult;
   isError?: boolean;
   providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   args?: TArgs;
   dynamic?: boolean;
 }
@@ -152,34 +175,37 @@ interface ToolCallInputStreamingStartPayload {
   toolCallId: string;
   toolName: string;
   providerExecuted?: boolean;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
 }
 
 interface ToolCallDeltaPayload {
   argsTextDelta: string;
   toolCallId: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   toolName?: string;
 }
 
 interface ToolCallInputStreamingEndPayload {
   toolCallId: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
-interface FinishPayload {
+interface FinishPayload<Tools extends ToolSet = ToolSet> {
   stepResult: {
-    reason: LanguageModelV2FinishReason;
+    /** Includes 'tripwire' and 'retry' for processor scenarios */
+    reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
     warnings?: LanguageModelV2CallWarning[];
     isContinued?: boolean;
     logprobs?: LanguageModelV1LogProbs;
   };
   output: {
     usage: LanguageModelV2Usage;
+    /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
+    steps?: MastraStepResult<Tools>[];
   };
   metadata: {
-    providerMetadata?: SharedV2ProviderMetadata;
+    providerMetadata?: ProviderMetadata;
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
@@ -216,7 +242,7 @@ export interface StepStartPayload {
 
 export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   id?: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   totalUsage?: LanguageModelV2Usage;
   response?: LanguageModelV2ResponseMetadata;
   messageId?: string;
@@ -230,12 +256,13 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
     text?: string;
     toolCalls?: TypedToolCall<Tools>[];
     usage: LanguageModelV2Usage;
-    steps?: StepResult<Tools>[];
+    /** Steps array - uses MastraStepResult which extends AI SDK StepResult with tripwire data */
+    steps?: MastraStepResult<Tools>[];
     object?: OUTPUT extends undefined ? unknown : InferSchemaOutput<OUTPUT>;
   };
   metadata: {
     request?: LanguageModelRequestMetadata;
-    providerMetadata?: SharedV2ProviderMetadata;
+    providerMetadata?: ProviderMetadata;
     [key: string]: unknown;
   };
   messages?: {
@@ -248,7 +275,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT exten
 
 interface ToolErrorPayload {
   id?: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
   toolCallId: string;
   toolName: string;
   args?: Record<string, unknown>;
@@ -263,13 +290,13 @@ interface AbortPayload {
 interface ReasoningSignaturePayload {
   id: string;
   signature: string;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 interface RedactedReasoningPayload {
   id: string;
   data: unknown;
-  providerMetadata?: SharedV2ProviderMetadata;
+  providerMetadata?: ProviderMetadata;
 }
 
 interface ToolOutputPayload<TOutput = unknown> {
@@ -302,8 +329,15 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload {
-  tripwireReason: string;
+interface TripwirePayload<TMetadata = unknown> {
+  /** The reason for the tripwire */
+  reason: string;
+  /** If true, the agent should retry with the tripwire reason as feedback */
+  retry?: boolean;
+  /** Strongly typed metadata from the processor */
+  metadata?: TMetadata;
+  /** The ID of the processor that triggered the tripwire */
+  processorId?: string;
 }
 
 // Network-specific payload interfaces
@@ -456,6 +490,7 @@ interface ToolCallSuspendedPayload {
   toolCallId: string;
   toolName: string;
   suspendPayload: any;
+  args: Record<string, any>;
 }
 
 export type DataChunkType = {
@@ -613,6 +648,8 @@ export type WorkflowStreamEvent =
         payload?: Record<string, any>;
         resumePayload?: Record<string, any>;
         suspendPayload?: Record<string, any>;
+        /** Tripwire data when step failed due to processor rejection */
+        tripwire?: StepTripwireData;
       };
     });
 
@@ -689,12 +726,36 @@ export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = 
   onStepFinish?: MastraOnStepFinishCallback;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
   tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
+};
+
+/**
+ * Tripwire data attached to a step when a processor triggers a tripwire.
+ * When a step has tripwire data, its text is excluded from the final output.
+ */
+export interface StepTripwireData {
+  /** The tripwire reason */
+  reason: string;
+  /** Whether retry was requested */
+  retry?: boolean;
+  /** Additional metadata from the tripwire */
+  metadata?: unknown;
+  /** ID of the processor that triggered the tripwire */
+  processorId?: string;
+}
+
+/**
+ * Extended StepResult that includes tripwire data.
+ * This extends the AI SDK's StepResult with our custom tripwire field.
+ */
+export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools> & {
+  /** Tripwire data if this step was rejected by a processor */
+  tripwire?: StepTripwireData;
 };
 
 export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
@@ -730,5 +791,7 @@ export type LLMStepResult<OUTPUT extends OutputSchema = undefined> = {
     [key: string]: unknown;
   };
   reasoningText: string | undefined;
-  providerMetadata: SharedV2ProviderMetadata | undefined;
+  providerMetadata: ProviderMetadata | undefined;
+  /** Tripwire data if this step was rejected by a processor */
+  tripwire?: StepTripwireData;
 };

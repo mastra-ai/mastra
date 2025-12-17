@@ -1,7 +1,17 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { StoreOperationsClickhouse } from '../operations';
 import { TABLE_ENGINES } from '../utils';
@@ -30,7 +40,12 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       requestContext: Record<string, any>;
     },
   ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_RESULTS', 'NOT_IMPLEMENTED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Method not implemented.',
+    });
   }
   updateWorkflowState(
     {
@@ -40,16 +55,15 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'NOT_IMPLEMENTED'),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Method not implemented.',
+    });
   }
 
   async persistWorkflowSnapshot({
@@ -100,7 +114,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -134,7 +148,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -258,7 +272,7 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: workflowName ?? '', resourceId: resourceId ?? '' },
@@ -317,10 +331,34 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: runId ?? '', workflowName: workflowName ?? '' },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const values: Record<string, any> = {
+        var_runId: runId,
+        var_workflow_name: workflowName,
+      };
+
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE run_id = {var_runId:String} AND workflow_name = {var_workflow_name:String}`,
+        query_params: values,
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
         },
         error,
       );

@@ -75,6 +75,63 @@ If you followed the automatic installation, you'll see a popup when you open cur
 
 [More info on using MCP servers with Cursor](https://cursor.com/de/docs/context/mcp)
 
+### Antigravity
+
+Google Antigravity is an agent-first development platform that supports MCP servers for accessing external documentation, APIs, and project context.
+
+1. Open your Antigravity MCP configuration file:
+   - Click on **Agent session** and select the **“…” dropdown** at the top of the editor’s side panel, then select **MCP Servers** to access the **MCP Store**.
+   - You can access it through the MCP Store interface in Antigravity
+
+   <img
+     src="/img/antigravity_mcp_server.png"
+     alt="Antigravity interface showing configured Mastra MCP server"
+     width={800}
+     className="rounded-lg"
+   />
+
+2. To add a custom MCP server, select **Manage MCP Servers** at the top of the MCP Store and click **View raw config** in the main tab.  
+   <img
+     src="/img/antigravity_managed_mcp.png"
+     alt="Antigravity interface showing configured Mastra MCP server"
+     width={800}
+     className="rounded-lg"
+   />
+
+3. Add the Mastra MCP server configuration:
+
+   ```json copy
+   {
+      "mcpServers": {
+          "mastra-docs": {
+              "command": "npx",
+              "args": [
+                  "-y",
+                  "@mastra/mcp-docs-server"
+              ]
+          }
+      }
+  }
+   ```
+
+4. Save the configuration and restart Antigravity
+    <img
+      src="/img/antigravity_final_interface_mcp.png"
+      alt="Antigravity interface showing configured Mastra MCP server"
+      width={800}
+      className="rounded-lg"
+   />
+
+Once configured, the Mastra MCP server exposes the following to Antigravity agents:
+- Indexed documentation and API schemas for Mastra, enabling programmatic retrieval of relevant context during code generation
+- Access to example code snippets and usage patterns stored in Mastra Docs
+- Structured data for error handling and debugging references in the editor
+- Metadata about current Mastra project patterns for code suggestion and completion
+
+The MCP server will appear in Antigravity's MCP Store, where you can manage its connection status and authentication if needed.
+
+[More info on using MCP servers with Antigravity](https://antigravity.google)
+
 ### Visual Studio Code
 
 1. Create a `.vscode/mcp.json` file in your workspace

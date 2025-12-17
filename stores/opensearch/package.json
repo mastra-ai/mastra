@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opensearch",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "description": "OpenSearch vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -37,7 +37,6 @@
     "@internal/types-builder": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

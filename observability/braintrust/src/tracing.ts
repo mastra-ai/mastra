@@ -13,7 +13,7 @@ import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
-import { normalizeUsageMetrics } from './metrics';
+import { formatUsageMetrics } from './metrics';
 
 const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
 
@@ -50,7 +50,6 @@ const DEFAULT_SPAN_TYPE = 'task';
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, string>> = {
   [SpanType.MODEL_GENERATION]: 'llm',
-  [SpanType.MODEL_CHUNK]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
@@ -249,6 +248,13 @@ export class BraintrustExporter extends BaseExporter {
 
   private initTraceMap(params: { traceId: string; isExternal: boolean; logger: Logger<true> | Span }): void {
     const { traceId, isExternal, logger } = params;
+
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(traceId)) {
+      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId });
+      return;
+    }
+
     this.traceMap.set(traceId, {
       logger,
       spans: new Map(),
@@ -261,6 +267,12 @@ export class BraintrustExporter extends BaseExporter {
    * Creates a new logger per trace using config credentials
    */
   private async initLoggerPerTrace(span: AnyExportedSpan): Promise<void> {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
+      return;
+    }
+
     const logger = await initLogger({
       projectName: this.config.projectName ?? 'mastra-tracing',
       apiKey: this.config.apiKey,
@@ -277,6 +289,12 @@ export class BraintrustExporter extends BaseExporter {
    * Otherwise, uses the provided logger instance.
    */
   private async initLoggerOrUseContext(span: AnyExportedSpan): Promise<void> {
+    // Check if trace already exists - reuse existing trace data
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
+      return;
+    }
+
     // Try to find a Braintrust span to attach to:
     // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
     // 2. Fall back to the configured logger
@@ -346,16 +364,42 @@ export class BraintrustExporter extends BaseExporter {
     });
   }
 
+  /**
+   * Transforms MODEL_GENERATION input to Braintrust Thread view format.
+   */
+  private transformInput(input: any, spanType: SpanType): any {
+    if (spanType === SpanType.MODEL_GENERATION) {
+      if (input && Array.isArray(input.messages)) {
+        return input.messages;
+      } else if (input && typeof input === 'object' && 'content' in input) {
+        return [{ role: input.role, content: input.content }];
+      }
+    }
+
+    return input;
+  }
+
+  /**
+   * Transforms MODEL_GENERATION output to Braintrust Thread view format.
+   */
+  private transformOutput(output: any, spanType: SpanType): any {
+    if (spanType === SpanType.MODEL_GENERATION) {
+      const { text, ...rest } = output;
+      return { role: 'assistant', content: text, ...rest };
+    }
+
+    return output;
+  }
+
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
     const payload: Record<string, any> = {};
 
-    // Core span data
     if (span.input !== undefined) {
-      payload.input = span.input;
+      payload.input = this.transformInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = span.output;
+      payload.output = this.transformOutput(span.output, span.type);
     }
 
     // Initialize metrics and metadata objects
@@ -381,7 +425,14 @@ export class BraintrustExporter extends BaseExporter {
       }
 
       // Usage/token info goes to metrics
-      payload.metrics = normalizeUsageMetrics(modelAttr);
+      payload.metrics = formatUsageMetrics(modelAttr.usage);
+
+      // Time to first token (TTFT) for streaming responses
+      // Braintrust expects TTFT in seconds (not milliseconds)
+      if (modelAttr.completionStartTime) {
+        payload.metrics.time_to_first_token =
+          (modelAttr.completionStartTime.getTime() - span.startTime.getTime()) / 1000;
+      }
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
@@ -389,7 +440,7 @@ export class BraintrustExporter extends BaseExporter {
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters']);
+      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

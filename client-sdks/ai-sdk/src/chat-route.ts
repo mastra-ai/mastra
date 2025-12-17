@@ -28,19 +28,26 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extend
 };
 
 /**
- * Framework-agnostic handler for streaming agent chat in AI SDK format.
- * Use this function directly when you need to handle chat streaming outside of Hono/registerApiRoute.
+ * Framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
+ * Use this function directly when you need to handle chat streaming outside of Hono or Mastra's own apiRoutes feature.
  *
  * @example
+ * ```ts
  * // Next.js App Router
+ * import { handleChatStream } from '@mastra/ai-sdk';
+ * import { createUIMessageStreamResponse } from 'ai';
+ * import { mastra } from '@/src/mastra';
+ *
  * export async function POST(req: Request) {
  *   const params = await req.json();
- *   return handleChatStream({
+ *   const stream = await handleChatStream({
  *     mastra,
- *     agentId: 'my-agent',
+ *     agentId: 'weatherAgent',
  *     params,
  *   });
+ *   return createUIMessageStreamResponse({ stream });
  * }
+ * ```
  */
 export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
   mastra,
@@ -124,9 +131,8 @@ export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
 /**
  * Creates a chat route handler for streaming agent conversations using the AI SDK format.
  *
- * This function registers an HTTP POST endpoint that accepts messages, executes an agent,
- * and streams the response back to the client in AI SDK v5 compatible format.
- * *
+ * This function registers an HTTP POST endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format.
+ *
  * @param {chatRouteOptions} options - Configuration options for the chat route
  * @param {string} [options.path='/chat/:agentId'] - The route path. Include `:agentId` for dynamic routing
  * @param {string} [options.agent] - Fixed agent ID when not using dynamic routing
@@ -146,7 +152,6 @@ export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
  * // Dynamic agent routing
  * chatRoute({
  *   path: '/chat/:agentId',
- *   sendReasoning: true,
  * });
  *
  * @example
@@ -299,10 +304,13 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (contextRequestContext && defaultOptions?.requestContext) {
+      const routeRequestContext = contextRequestContext || defaultOptions?.requestContext;
+      if (routeRequestContext && params.requestContext) {
         mastra
           .getLogger()
-          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+          ?.warn(
+            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
+          );
       }
 
       if (!agentToUse) {

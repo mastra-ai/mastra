@@ -198,6 +198,100 @@ describe('BraintrustExporter', () => {
         },
       });
     });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      firstRootSpan.traceId = sharedTraceId;
+
+      // Child span of first root
+      const firstChildSpan = createMockSpan({
+        id: 'child-span-1',
+        name: 'tool-call-1',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'calculator' },
+      });
+      firstChildSpan.traceId = sharedTraceId;
+      firstChildSpan.parentSpanId = 'root-span-1';
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+      secondRootSpan.traceId = sharedTraceId;
+
+      // Child span of second root
+      const secondChildSpan = createMockSpan({
+        id: 'child-span-2',
+        name: 'tool-call-2',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'search' },
+      });
+      secondChildSpan.traceId = sharedTraceId;
+      secondChildSpan.parentSpanId = 'root-span-2';
+
+      // Process all spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstChildSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondChildSpan,
+      });
+
+      // Should create logger only once (for the shared traceId)
+      expect(mockInitLogger).toHaveBeenCalledTimes(1);
+
+      // Access internal traceMap to verify trace data is shared
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData).toBeDefined();
+
+      // All four spans should be tracked in the same trace
+      expect(traceData.spans.has('root-span-1')).toBe(true);
+      expect(traceData.spans.has('child-span-1')).toBe(true);
+      expect(traceData.spans.has('root-span-2')).toBe(true);
+      expect(traceData.spans.has('child-span-2')).toBe(true);
+
+      // All four spans should be active
+      expect(traceData.activeIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeIds.has('child-span-1')).toBe(true);
+      expect(traceData.activeIds.has('root-span-2')).toBe(true);
+      expect(traceData.activeIds.has('child-span-2')).toBe(true);
+    });
   });
 
   describe('Span Type Mappings', () => {
@@ -222,7 +316,7 @@ describe('BraintrustExporter', () => {
       );
     });
 
-    it('should map MODEL_CHUNK to "llm" type', async () => {
+    it('should map MODEL_CHUNK to "task" type', async () => {
       const chunkSpan = createMockSpan({
         id: 'chunk-span',
         name: 'llm-chunk',
@@ -238,7 +332,7 @@ describe('BraintrustExporter', () => {
 
       expect(mockLogger.startSpan).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'llm',
+          type: 'task',
         }),
       );
     });
@@ -378,14 +472,14 @@ describe('BraintrustExporter', () => {
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
         input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        // Note: LLM output uses 'text' field, not 'content'
+        output: { text: 'Hi there!' },
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -409,8 +503,10 @@ describe('BraintrustExporter', () => {
         name: 'gpt-4-call',
         type: 'llm',
         // No parentSpanIds for root spans!
-        input: { messages: [{ role: 'user', content: 'Hello' }] },
-        output: { content: 'Hi there!' },
+        // Input is transformed: { messages: [...] } -> [...] for Braintrust Thread view
+        input: [{ role: 'user', content: 'Hello' }],
+        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+        output: { role: 'assistant', content: 'Hi there!' },
         metrics: {
           prompt_tokens: 10,
           completion_tokens: 5,
@@ -459,6 +555,57 @@ describe('BraintrustExporter', () => {
           model: 'gpt-3.5-turbo',
         },
       });
+    });
+
+    /**
+     * Test for GitHub issue #9848: Braintrust Thread view not showing data
+     *
+     * According to Braintrust documentation, the Thread view expects the `input`
+     * field for LLM spans to be a direct array of messages in OpenAI format:
+     *
+     *   input: [{ role: 'user', content: 'Hello' }]
+     *
+     * NOT wrapped in an object:
+     *
+     *   input: { messages: [{ role: 'user', content: 'Hello' }] }
+     *
+     * This test verifies that the BraintrustExporter transforms the input format
+     * correctly for LLM spans so the Thread view displays messages properly.
+     *
+     * @see https://github.com/mastra-ai/mastra/issues/9848
+     * @see https://www.braintrust.dev/docs/guides/traces/customize
+     */
+    it('should format LLM input as direct messages array for Thread view (issue #9848)', async () => {
+      // Mastra currently passes messages wrapped in an object
+      const llmSpan = createMockSpan({
+        id: 'thread-view-llm',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'What is the weather?' }] },
+        // Note: LLM output uses 'text' field, not 'content'
+        output: { text: 'The weather is sunny.' },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Braintrust Thread view expects:
+      // - input to be a direct array of messages in OpenAI format
+      // - output to be { role: 'assistant', content: '...' } format
+      expect(mockLogger.startSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // Thread view requires direct array format for messages to display
+          input: [{ role: 'user', content: 'What is the weather?' }],
+          output: { role: 'assistant', content: 'The weather is sunny.' },
+        }),
+      );
     });
   });
 
@@ -517,9 +664,10 @@ describe('BraintrustExporter', () => {
       // Update with usage info
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
-      llmSpan.output = { content: 'Updated response' };
+      // Note: LLM output uses 'text' field, not 'content'
+      llmSpan.output = { text: 'Updated response' };
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_UPDATED,
@@ -527,8 +675,9 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockSpan.log).toHaveBeenCalledWith({
-        output: { content: 'Updated response' },
-        metrics: { tokens: 150 },
+        // Output is transformed: { text: '...' } -> { role: 'assistant', content: '...' } for Braintrust Thread view
+        output: { role: 'assistant', content: 'Updated response' },
+        metrics: { prompt_tokens: 100, completion_tokens: 50, tokens: 150 },
         metadata: {
           spanType: 'model_generation',
           model: 'gpt-4',

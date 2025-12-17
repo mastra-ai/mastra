@@ -279,23 +279,35 @@ describe('PosthogExporter', () => {
       exporter = new PosthogExporter(validConfig);
     });
 
-    it('should map MODEL_GENERATION to $ai_generation', async () => {
-      const generation = createSpan({ type: SpanType.MODEL_GENERATION });
+    it('should map MODEL_GENERATION to $ai_generation (non-root)', async () => {
+      // Use non-root span since root spans only send $ai_trace
+      const generation = createSpan({ type: SpanType.MODEL_GENERATION, parentSpanId: 'parent-1' });
       await exportSpanLifecycle(exporter, generation);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }));
     });
 
-    it('should map MODEL_STEP to $ai_generation', async () => {
-      const step = createSpan({ type: SpanType.MODEL_STEP });
+    it('should map MODEL_STEP to $ai_span (non-root)', async () => {
+      // MODEL_STEP now goes through span properties path (not generation)
+      // Use non-root span since root spans only send $ai_trace
+      const step = createSpan({ type: SpanType.MODEL_STEP, parentSpanId: 'parent-1' });
       await exportSpanLifecycle(exporter, step);
 
-      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }));
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_span' }));
+    });
+
+    it('should map root spans to $ai_trace (not $ai_span or $ai_generation)', async () => {
+      const rootSpan = createSpan({ type: SpanType.AGENT_RUN, isRootSpan: true });
+      await exportSpanLifecycle(exporter, rootSpan);
+
+      expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_trace' }));
     });
 
     it('should map MODEL_CHUNK to $ai_span with chunk attributes', async () => {
+      // Use non-root span since root spans only send $ai_trace
       const chunk = createSpan({
         type: SpanType.MODEL_CHUNK,
+        parentSpanId: 'parent-1',
         attributes: { chunkType: 'text', sequenceNumber: 5 },
       });
       await exportSpanLifecycle(exporter, chunk);
@@ -312,7 +324,8 @@ describe('PosthogExporter', () => {
     });
 
     it('should map TOOL_CALL and other types to $ai_span', async () => {
-      const toolSpan = createSpan({ type: SpanType.TOOL_CALL });
+      // Use non-root span since root spans only send $ai_trace
+      const toolSpan = createSpan({ type: SpanType.TOOL_CALL, parentSpanId: 'parent-1' });
       await exportSpanLifecycle(exporter, toolSpan);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_span' }));
@@ -325,15 +338,16 @@ describe('PosthogExporter', () => {
     });
 
     it('should extract model, provider, and tokens from attributes', async () => {
+      // Use non-root span since root spans only send $ai_trace
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
         attributes: {
           model: 'gpt-4o',
           provider: 'openai',
           usage: {
             inputTokens: 100,
             outputTokens: 200,
-            totalTokens: 300,
           },
         },
       });
@@ -347,15 +361,16 @@ describe('PosthogExporter', () => {
             $ai_provider: 'openai',
             $ai_input_tokens: 100,
             $ai_output_tokens: 200,
-            $ai_total_tokens: 300,
           }),
         }),
       );
     });
 
     it('should handle minimal LLM attributes gracefully with defaults', async () => {
+      // Use non-root span since root spans only send $ai_trace
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
         attributes: { model: 'gpt-3.5-turbo' },
       });
 
@@ -418,63 +433,6 @@ describe('PosthogExporter', () => {
   });
 
   // --- Priority 2: Advanced Features ---
-  describe('Token Usage Normalization', () => {
-    beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
-    });
-
-    it('should normalize v4 format (promptTokens/completionTokens)', async () => {
-      const generation = createSpan({
-        type: SpanType.MODEL_GENERATION,
-        attributes: {
-          usage: {
-            promptTokens: 100,
-            completionTokens: 200,
-            totalTokens: 300,
-          },
-        },
-      });
-
-      await exportSpanLifecycle(exporter, generation);
-
-      expect(mockCapture).toHaveBeenCalledWith(
-        expect.objectContaining({
-          properties: expect.objectContaining({
-            $ai_input_tokens: 100,
-            $ai_output_tokens: 200,
-            $ai_total_tokens: 300,
-          }),
-        }),
-      );
-    });
-
-    it('should prefer v5 format (inputTokens/outputTokens) when both present', async () => {
-      const generation = createSpan({
-        type: SpanType.MODEL_GENERATION,
-        attributes: {
-          usage: {
-            inputTokens: 150,
-            outputTokens: 250,
-            promptTokens: 100,
-            completionTokens: 200,
-            totalTokens: 400,
-          },
-        },
-      });
-
-      await exportSpanLifecycle(exporter, generation);
-
-      expect(mockCapture).toHaveBeenCalledWith(
-        expect.objectContaining({
-          properties: expect.objectContaining({
-            $ai_input_tokens: 150,
-            $ai_output_tokens: 250,
-          }),
-        }),
-      );
-    });
-  });
-
   describe('Privacy Mode', () => {
     it('should pass privacy mode config to SDK', async () => {
       exporter = new PosthogExporter({
@@ -520,9 +478,11 @@ describe('PosthogExporter', () => {
       exporter = new PosthogExporter(validConfig);
     });
 
-    it('should include error details in properties', async () => {
+    it('should include error details in properties (non-root span)', async () => {
+      // Use non-root span since root spans only send $ai_trace with different error format
       const errorSpan = createSpan({
         type: SpanType.TOOL_CALL,
+        parentSpanId: 'parent-1',
         errorInfo: {
           message: 'Tool execution failed',
           id: 'TOOL_ERROR',
@@ -539,6 +499,34 @@ describe('PosthogExporter', () => {
             error_message: 'Tool execution failed',
             error_id: 'TOOL_ERROR',
             error_category: 'EXECUTION',
+          }),
+        }),
+      );
+    });
+
+    it('should include error details in $ai_trace for root spans', async () => {
+      const errorRootSpan = createSpan({
+        type: SpanType.AGENT_RUN,
+        isRootSpan: true,
+        errorInfo: {
+          message: 'Agent failed',
+          id: 'AGENT_ERROR',
+          category: 'EXECUTION',
+        },
+      });
+
+      await exportSpanLifecycle(exporter, errorRootSpan);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$ai_trace',
+          properties: expect.objectContaining({
+            $ai_is_error: true,
+            $ai_error: {
+              message: 'Agent failed',
+              id: 'AGENT_ERROR',
+              category: 'EXECUTION',
+            },
           }),
         }),
       );
@@ -636,8 +624,10 @@ describe('PosthogExporter', () => {
     });
 
     it('should format string input as user message array', async () => {
+      // Use non-root span since root spans only send $ai_trace with $ai_input_state
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
         input: 'Hello, world!',
       });
 
@@ -653,8 +643,10 @@ describe('PosthogExporter', () => {
     });
 
     it('should format string output as assistant message array', async () => {
+      // Use non-root span since root spans only send $ai_trace with $ai_output_state
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
         output: 'This is the response.',
       });
 
@@ -670,8 +662,10 @@ describe('PosthogExporter', () => {
     });
 
     it('should normalize message array with string content', async () => {
+      // Use non-root span since root spans only send $ai_trace with $ai_input_state
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
         input: [{ role: 'user', content: 'What is 2+2?' }],
       });
 
@@ -819,7 +813,8 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledTimes(1);
     });
 
-    it('should include tags as boolean properties for root MODEL_GENERATION spans', async () => {
+    it('should include tags as boolean properties for root MODEL_GENERATION spans ($ai_trace)', async () => {
+      // Root MODEL_GENERATION spans send $ai_trace (not $ai_generation)
       const rootGeneration = createSpan({
         id: 'root-gen',
         traceId: 'trace-gen-tags',
@@ -836,11 +831,38 @@ describe('PosthogExporter', () => {
 
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
-          event: '$ai_generation',
+          event: '$ai_trace',
           properties: expect.objectContaining({
             'llm-test': true,
             'gpt-4': true,
+          }),
+        }),
+      );
+    });
+
+    it('should include tags and model properties for non-root MODEL_GENERATION spans', async () => {
+      // Non-root MODEL_GENERATION spans send $ai_generation with tags (if somehow set)
+      // Note: In practice, tags are only set on root spans
+      const nonRootGeneration = createSpan({
+        id: 'child-gen',
+        traceId: 'trace-gen-tags',
+        parentSpanId: 'parent-1',
+        type: SpanType.MODEL_GENERATION,
+        isRootSpan: false,
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      });
+
+      await exportSpanLifecycle(exporter, nonRootGeneration);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$ai_generation',
+          properties: expect.objectContaining({
             $ai_model: 'gpt-4',
+            $ai_provider: 'openai',
           }),
         }),
       );

@@ -71,9 +71,10 @@ export function createPrepareToolsStep<
         runId,
         requestContext,
         tracingContext: { currentSpan: agentSpan },
-        writableStream: options.writableStream,
+        outputWriter: options.outputWriter,
         methodType,
         memoryConfig: options.memory?.options,
+        autoResumeSuspendedTools: options.autoResumeSuspendedTools,
       });
 
       return {

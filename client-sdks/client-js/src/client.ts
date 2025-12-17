@@ -13,6 +13,7 @@ import {
   MCPTool,
   AgentBuilder,
   Observability,
+  StoredAgent,
 } from './resources';
 import type {
   ClientOptions,
@@ -44,6 +45,10 @@ import type {
   ListAgentsModelProvidersResponse,
   ListMemoryThreadsParams,
   ListMemoryThreadsResponse,
+  ListStoredAgentsParams,
+  ListStoredAgentsResponse,
+  CreateStoredAgentParams,
+  StoredAgentResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -59,13 +64,20 @@ export class MastraClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of agent IDs to agent details
    */
-  public listAgents(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetAgentResponse>> {
+  public listAgents(
+    requestContext?: RequestContext | Record<string, any>,
+    partial?: boolean,
+  ): Promise<Record<string, GetAgentResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
 
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
     }
 
     const queryString = searchParams.toString();
@@ -243,6 +255,7 @@ export class MastraClient extends BaseResource {
    */
   public listWorkflows(
     requestContext?: RequestContext | Record<string, any>,
+    partial?: boolean,
   ): Promise<Record<string, GetWorkflowResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
@@ -250,6 +263,10 @@ export class MastraClient extends BaseResource {
 
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
+    }
+
+    if (partial) {
+      searchParams.set('partial', 'true');
     }
 
     const queryString = searchParams.toString();
@@ -663,5 +680,57 @@ export class MastraClient extends BaseResource {
     targets: Array<{ traceId: string; spanId?: string }>;
   }): Promise<{ status: string; message: string }> {
     return this.observability.score(params);
+  }
+
+  // ============================================================================
+  // Stored Agents
+  // ============================================================================
+
+  /**
+   * Lists all stored agents with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored agents
+   */
+  public listStoredAgents(params?: ListStoredAgentsParams): Promise<ListStoredAgentsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/api/stored/agents${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored agent
+   * @param params - Agent configuration including id, name, instructions, model, etc.
+   * @returns Promise containing the created stored agent
+   */
+  public createStoredAgent(params: CreateStoredAgentParams): Promise<StoredAgentResponse> {
+    return this.request('/api/stored/agents', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored agent instance by ID for further operations (details, update, delete)
+   * @param storedAgentId - ID of the stored agent to retrieve
+   * @returns StoredAgent instance
+   */
+  public getStoredAgent(storedAgentId: string): StoredAgent {
+    return new StoredAgent(this.options, storedAgentId);
   }
 }

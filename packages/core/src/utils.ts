@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
@@ -11,11 +10,11 @@ import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { TracingContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
-import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
+import type { OutputWriter } from './workflows/types';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -231,7 +230,10 @@ export interface ToolOptions {
   memory?: MastraMemory;
   agentName?: string;
   model?: MastraLanguageModel;
-  writableStream?: WritableStream<ChunkType>;
+  /**
+   * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
+   */
+  outputWriter?: OutputWriter;
   requireApproval?: boolean;
   // Workflow-specific properties
   workflow?: any;
@@ -333,16 +335,18 @@ export function makeCoreTool(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
 }
 
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
 }
 
 /**

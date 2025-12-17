@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.11",
   "description": "",
   "type": "module",
   "files": [
@@ -114,6 +114,7 @@
     "resolve.exports": "^2.0.3",
     "rollup": "~4.50.2",
     "rollup-plugin-esbuild": "^6.2.1",
+    "strip-json-comments": "^5.0.3",
     "tinyglobby": "^0.2.15",
     "typescript-paths": "^1.5.1"
   },
@@ -126,7 +127,6 @@
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.13.17",

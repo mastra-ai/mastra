@@ -1,6 +1,6 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { StoreOperations } from '@mastra/core/storage';
+import { createStorageErrorId, StoreOperations } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arrow';
 import type { DataType } from 'apache-arrow';
@@ -98,7 +98,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_CREATE_TABLE_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'CREATE_TABLE', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { tableName },
@@ -117,7 +117,7 @@ export class StoreOperationsLance extends StoreOperations {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('LANCE', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -138,7 +138,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_DROP_TABLE_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'DROP_TABLE', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -157,7 +157,7 @@ export class StoreOperationsLance extends StoreOperations {
       }
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('LANCE', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -193,7 +193,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_ALTER_TABLE_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'ALTER_TABLE', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -237,7 +237,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('LANCE', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -258,7 +258,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_CLEAR_TABLE_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'CLEAR_TABLE', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -276,7 +276,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('LANCE', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -300,7 +300,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_INSERT_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'INSERT', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -327,13 +327,12 @@ export class StoreOperationsLance extends StoreOperations {
           processedRecord[key] = JSON.stringify(processedRecord[key]);
         }
       }
-      console.info(await table.schema());
 
       await table.mergeInsert(primaryId).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([processedRecord]);
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_INSERT_FAILED',
+          id: createStorageErrorId('LANCE', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -357,7 +356,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_BATCH_INSERT_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'BATCH_INSERT', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -396,7 +395,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('LANCE', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName },
@@ -420,7 +419,7 @@ export class StoreOperationsLance extends StoreOperations {
     } catch (validationError: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_LOAD_INVALID_ARGS',
+          id: createStorageErrorId('LANCE', 'LOAD', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: validationError.message,
@@ -475,7 +474,7 @@ export class StoreOperationsLance extends StoreOperations {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_LOAD_FAILED',
+          id: createStorageErrorId('LANCE', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName, keyCount: Object.keys(keys).length, firstKey: Object.keys(keys)[0] ?? '' },

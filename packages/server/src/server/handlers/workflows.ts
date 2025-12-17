@@ -1,9 +1,11 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 import {
+  createWorkflowRunBodySchema,
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
@@ -86,15 +88,19 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   method: 'GET',
   path: '/api/workflows',
   responseType: 'json',
+  queryParamSchema: z.object({
+    partial: z.string().optional(),
+  }),
   responseSchema: listWorkflowsResponseSchema,
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, partial }) => {
     try {
       const workflows = mastra.listWorkflows({ serialized: false });
+      const isPartial = partial === 'true';
       const _workflows = Object.entries(workflows).reduce<Record<string, WorkflowInfo>>((acc, [key, workflow]) => {
-        acc[key] = getWorkflowInfo(workflow);
+        acc[key] = getWorkflowInfo(workflow, isPartial);
         return acc;
       }, {});
       return _workflows;
@@ -223,17 +229,52 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   },
 });
 
+export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
+  method: 'DELETE',
+  path: '/api/workflows/:workflowId/runs/:runId',
+  responseType: 'json',
+  pathParamSchema: workflowRunPathParams,
+  responseSchema: workflowControlResponseSchema,
+  summary: 'Delete workflow run by ID',
+  description: 'Deletes a specific workflow run by ID',
+  tags: ['Workflows'],
+  handler: async ({ mastra, workflowId, runId }) => {
+    try {
+      if (!workflowId) {
+        throw new HTTPException(400, { message: 'Workflow ID is required' });
+      }
+
+      if (!runId) {
+        throw new HTTPException(400, { message: 'Run ID is required' });
+      }
+
+      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+
+      if (!workflow) {
+        throw new HTTPException(404, { message: 'Workflow not found' });
+      }
+
+      await workflow.deleteWorkflowRunById(runId);
+
+      return { message: 'Workflow run deleted' };
+    } catch (error) {
+      return handleError(error, 'Error deleting workflow run');
+    }
+  },
+});
+
 export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/create-run',
   responseType: 'json',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: optionalRunIdSchema,
+  bodySchema: createWorkflowRunBodySchema,
   responseSchema: createWorkflowRunResponseSchema,
   summary: 'Create workflow run',
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, disableScorers }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -245,7 +286,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId, disableScorers });
 
       return { runId: run.runId };
     } catch (error) {
@@ -264,7 +305,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Stream workflow execution',
   description: 'Executes a workflow and streams the results in real-time',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, ...params }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -281,7 +322,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       }
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId });
       const result = run.stream(params);
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({

@@ -1,5 +1,5 @@
-import { TABLE_THREADS, type MastraStorage } from '@mastra/core/storage';
-import { createSampleMessageV1, createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
+import { type MastraStorage } from '@mastra/core/storage';
+import { createSampleMessageV2, createSampleThread, createSampleThreadWithParams } from './data';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { randomUUID } from 'node:crypto';
