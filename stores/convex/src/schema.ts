@@ -104,3 +104,6 @@ export const TABLE_MESSAGES = 'mastra_messages';
 export const TABLE_THREADS = 'mastra_threads';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scores';
+export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
+export const TABLE_VECTORS = 'mastra_vectors';
+export const TABLE_DOCUMENTS = 'mastra_documents';
