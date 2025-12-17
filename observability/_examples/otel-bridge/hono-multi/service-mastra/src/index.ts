@@ -30,9 +30,9 @@ app.use('*', httpInstrumentationMiddleware());
 app.use('*', cors());
 
 // Register Mastra routes via the HonoServerAdapter
-const honoServerAdapter = new MastraServer({ app, mastra });
-honoServerAdapter.registerContextMiddleware(app);
-await honoServerAdapter.registerRoutes(app, { openapiPath: '/openapi.json' });
+const honoServerAdapter = new MastraServer({ app, mastra, openapiPath: '/openapi.json' });
+honoServerAdapter.registerContextMiddleware();
+await honoServerAdapter.registerRoutes();
 
 // Custom routes
 app.get('/healthz', async c => {

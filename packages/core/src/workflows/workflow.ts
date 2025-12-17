@@ -973,6 +973,8 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: options.tracingPolicy,
+      onFinish: options.onFinish,
+      onError: options.onError,
     };
 
     if (!executionEngine) {
@@ -2607,7 +2609,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -2768,7 +2773,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -3414,7 +3422,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }

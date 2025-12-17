@@ -14,7 +14,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 
 ## EN - docs
 - [Adding Voice to Agents | Agents](https://mastra.ai/en/docs/agents/adding-voice)
-- [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals and suspend tool execution while keeping humans in control of agent workflows.
+- [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
 - [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store conversation history and maintain context across interactions.
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
@@ -25,22 +25,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Contributing Templates | Community](https://mastra.ai/en/docs/community/contributing-templates): How to contribute your own templates to the Mastra ecosystem
 - [Discord Community | Community](https://mastra.ai/en/docs/community/discord): Information about the Mastra Discord community and MCP bot.
 - [License | Community](https://mastra.ai/en/docs/community/licensing): Mastra License
-- [Building Mastra | Deployment](https://mastra.ai/en/docs/deployment/building-mastra): Learn how to build a Mastra server with build settings and deployment options.
-- [Amazon EC2 | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/amazon-ec2): Deploy your Mastra applications to Amazon EC2.
-- [AWS Lambda | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/aws-lambda): Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
-- [Azure App Services | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/azure-app-services): Deploy your Mastra applications to Azure App Services.
-- [CloudflareDeployer | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/cloudflare-deployer): Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer
-- [Digital Ocean | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/digital-ocean): Deploy your Mastra applications to Digital Ocean.
-- [Cloud Providers | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers): Deploy your Mastra applications to popular cloud providers.
-- [NetlifyDeployer | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/netlify-deployer): Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer
-- [VercelDeployer | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers/vercel-deployer): Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer
-- [Navigating the Dashboard | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/dashboard): Details of each feature available in Mastra Cloud
-- [Understanding Tracing and Logs | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/observability): Monitoring and debugging tools for Mastra Cloud deployments
-- [Mastra Cloud | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/overview): Deployment and monitoring service for Mastra applications
-- [Setting Up and Deploying | Mastra Cloud](https://mastra.ai/en/docs/deployment/mastra-cloud/setting-up): Configuration steps for Mastra Cloud projects
-- [Monorepo Deployment | Deployment](https://mastra.ai/en/docs/deployment/monorepo): Learn how to deploy Mastra applications that are part of a monorepo setup
+- [Deploy to Cloud Providers | Deployment](https://mastra.ai/en/docs/deployment/cloud-providers): Deploy your Mastra applications to cloud providers
+- [Deploy a Mastra Server | Deployment](https://mastra.ai/en/docs/deployment/mastra-server): Learn how to build a Mastra server with build settings and deployment options.
+- [Deploy in a Monorepo | Deployment](https://mastra.ai/en/docs/deployment/monorepo): Learn how to deploy Mastra applications that are part of a monorepo setup
 - [Deployment Overview | Deployment](https://mastra.ai/en/docs/deployment/overview): Learn about different deployment options for your Mastra applications
-- [Web Framework Integration | Deployment](https://mastra.ai/en/docs/deployment/web-framework): Learn how Mastra can be deployed when integrated with a Web Framework
+- [Deploy with a Web Framework | Deployment](https://mastra.ai/en/docs/deployment/web-framework): Learn how Mastra can be deployed when integrated with a Web Framework
 - [Built-in Scorers | Evals](https://mastra.ai/en/docs/evals/built-in-scorers): Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions.
 - [Custom Scorers | Evals](https://mastra.ai/en/docs/evals/custom-scorers)
 - [Scorers overview | Evals](https://mastra.ai/en/docs/evals/overview): Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
@@ -51,6 +40,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Start with Mastra | Getting Started](https://mastra.ai/en/docs/getting-started/start): Choose how to get started with Mastra - quickstart, framework integration, or agentic UI.
 - [Studio | Getting Started](https://mastra.ai/en/docs/getting-started/studio): Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 - [About Mastra](https://mastra.ai/en/docs): Mastra is an all-in-one framework for building AI-powered applications and agents with a modern TypeScript stack.
+- [Navigating the Dashboard | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/dashboard): Details of each feature available in Mastra Cloud
+- [Understanding Tracing and Logs | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/observability): Monitoring and debugging tools for Mastra Cloud deployments
+- [Mastra Cloud | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/overview): Deployment and monitoring service for Mastra applications
+- [Setting Up and Deploying | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/setting-up): Configuration steps for Mastra Cloud projects
 - [MCP Overview | MCP](https://mastra.ai/en/docs/mcp/overview): Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 - [Publishing an MCP Server | MCP](https://mastra.ai/en/docs/mcp/publishing-mcp-server): Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
 - [Conversation History | Memory](https://mastra.ai/en/docs/memory/conversation-history): Learn how to configure conversation history in Mastra to store recent messages from the current conversation.
@@ -132,12 +125,21 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Using AI SDK UI | Frameworks](https://mastra.ai/en/guides/build-your-ui/ai-sdk-ui): Learn how Mastra leverages the AI SDK UI library and how you can leverage it further with Mastra
 - [Using Assistant UI | Frameworks](https://mastra.ai/en/guides/build-your-ui/assistant-ui): Learn how to integrate Assistant UI with Mastra
 - [Using CopilotKit | Frameworks](https://mastra.ai/en/guides/build-your-ui/copilotkit): Learn how to integrate CopilotKit with Mastra
-- [Integrate Mastra in your Astro project | Frameworks](https://mastra.ai/en/guides/getting-started/astro): A step-by-step guide to integrating Mastra with Astro.
+- [Amazon EC2 | Deployment](https://mastra.ai/en/guides/deployment/amazon-ec2): Deploy your Mastra applications to Amazon EC2.
+- [AWS Lambda | Deployment](https://mastra.ai/en/guides/deployment/aws-lambda): Deploy your Mastra applications to AWS Lambda using Docker containers and the AWS Lambda Web Adapter.
+- [Azure App Services | Deployment](https://mastra.ai/en/guides/deployment/azure-app-services): Deploy your Mastra applications to Azure App Services.
+- [CloudflareDeployer | Deployment](https://mastra.ai/en/guides/deployment/cloudflare-deployer): Learn how to deploy a Mastra application to Cloudflare using the Mastra CloudflareDeployer
+- [Digital Ocean | Deployment](https://mastra.ai/en/guides/deployment/digital-ocean): Deploy your Mastra applications to Digital Ocean.
+- [Cloud Providers | Deployment](https://mastra.ai/en/guides/deployment): Deploy your Mastra applications to popular cloud providers.
+- [Inngest | Deployment](https://mastra.ai/en/guides/deployment/inngest): Deploy Mastra workflows with Inngest
+- [NetlifyDeployer | Deployment](https://mastra.ai/en/guides/deployment/netlify-deployer): Learn how to deploy a Mastra application to Netlify using the Mastra NetlifyDeployer
+- [VercelDeployer | Deployment](https://mastra.ai/en/guides/deployment/vercel-deployer): Learn how to deploy a Mastra application to Vercel using the Mastra VercelDeployer
+- [Astro | Frameworks](https://mastra.ai/en/guides/getting-started/astro): Get started with Mastra and Astro
 - [Express | Frameworks](https://mastra.ai/en/guides/getting-started/express): Get started with Mastra and Express
 - [Hono | Frameworks](https://mastra.ai/en/guides/getting-started/hono): Get started with Mastra and Hono
 - [Next.js | Frameworks](https://mastra.ai/en/guides/getting-started/next-js): Get started with Mastra and Next.js
 - [Quickstart](https://mastra.ai/en/guides/getting-started/quickstart): Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
-- [Integrate Mastra in your SvelteKit project | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): A step-by-step guide to integrating Mastra with SvelteKit.
+- [SvelteKit | Frameworks](https://mastra.ai/en/guides/getting-started/sveltekit): Get started with Mastra and SvelteKit
 - [React + Vite | Frameworks](https://mastra.ai/en/guides/getting-started/vite-react): A step-by-step guide to integrating Mastra with React and Vite.
 - [Guide: Building an AI Recruiter | Mastra Workflows | Guides](https://mastra.ai/en/guides/guide/ai-recruiter): Guide on building a recruiter workflow in Mastra to gather and process candidate information using LLMs.
 - [Guide: Building an AI Chef Assistant | Mastra Agent Guides](https://mastra.ai/en/guides/guide/chef-michel): Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
@@ -175,7 +177,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 60+ AI providers and 1368+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 61+ AI providers and 1444+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -197,7 +199,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 12 models available.
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
 - [Vertex](https://mastra.ai/en/models/providers/google-vertex): Use Vertex models via the AI SDK.
-- [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 25 models available.
+- [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 26 models available.
 - [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 17 models available.
 - [Helicone | Models | Mastra](https://mastra.ai/en/models/providers/helicone): Use Helicone models with Mastra. 91 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
@@ -222,12 +224,13 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Nvidia | Models | Mastra](https://mastra.ai/en/models/providers/nvidia): Use Nvidia models with Mastra. 24 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
 - [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 39 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 23 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 24 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 108 models available.
 - [Requesty | Models | Mastra](https://mastra.ai/en/models/providers/requesty): Use Requesty models with Mastra. 19 models available.
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 13 models available.
+- [SiliconFlow (China) | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow-cn): Use SiliconFlow (China) models with Mastra. 72 models available.
 - [SiliconFlow | Models | Mastra](https://mastra.ai/en/models/providers/siliconflow): Use SiliconFlow models with Mastra. 72 models available.
 - [submodel | Models | Mastra](https://mastra.ai/en/models/providers/submodel): Use submodel models with Mastra. 9 models available.
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 24 models available.

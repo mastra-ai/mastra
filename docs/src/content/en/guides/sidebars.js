@@ -86,6 +86,53 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Deployment",
+      collapsed: false,
+      items: [
+        {
+          type: "doc",
+          id: "deployment/amazon-ec2",
+          label: "Amazon EC2",
+        },
+        {
+          type: "doc",
+          id: "deployment/aws-lambda",
+          label: "AWS Lambda",
+        },
+        {
+          type: "doc",
+          id: "deployment/azure-app-services",
+          label: "Azure App Services",
+        },
+        {
+          type: "doc",
+          id: "deployment/cloudflare-deployer",
+          label: "Cloudflare",
+        },
+        {
+          type: "doc",
+          id: "deployment/digital-ocean",
+          label: "Digital Ocean",
+        },
+        {
+          type: "doc",
+          id: "deployment/netlify-deployer",
+          label: "Netlify",
+        },
+        {
+          type: "doc",
+          id: "deployment/vercel-deployer",
+          label: "Vercel",
+        },
+        {
+          type: "doc",
+          id: "deployment/inngest",
+          label: "Inngest",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Migrations",
       collapsed: false,
       items: [

@@ -1,5 +1,33 @@
 # create-mastra
 
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Add `Run` instance to client-js. `workflow.createRun` returns the `Run` instance which can be used for the different run methods. ([#11207](https://github.com/mastra-ai/mastra/pull/11207))
+  With this change, run methods cannot be called directly on workflow instance anymore
+
+  ```diff
+  - const result = await workflow.stream({ runId: '123', inputData: { ... } });
+  + const run = await workflow.createRun({ runId: '123' });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- fix isTopLevelSpan value definition on SpanScoring to properly recognize lack of span?.parentSpanId value (null or empty string) ([#11083](https://github.com/mastra-ai/mastra/pull/11083))
+
 ## 1.0.0-beta.9
 
 ## 1.0.0-beta.8

@@ -9,7 +9,7 @@ The `.getStoredAgentById()` method retrieves an agent configuration from storage
 
 ## Usage example
 
-```typescript copy
+```typescript
 // Get an Agent instance from storage
 const agent = await mastra.getStoredAgentById("my-stored-agent");
 
@@ -19,7 +19,7 @@ if (agent) {
 }
 ```
 
-```typescript copy
+```typescript
 // Get the raw storage data instead of an Agent instance
 const storedConfig = await mastra.getStoredAgentById("my-stored-agent", { raw: true });
 

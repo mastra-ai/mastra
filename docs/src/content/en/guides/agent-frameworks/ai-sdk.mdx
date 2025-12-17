@@ -49,7 +49,7 @@ Install `@mastra/ai-sdk` to begin using the `withMastra()` function.
 
 Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
 
-```typescript title="src/example.ts" copy
+```typescript title="src/example.ts"
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { withMastra } from '@mastra/ai-sdk';
@@ -82,7 +82,7 @@ const { text } = await generateText({
 
 Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
 
-```typescript title="src/memory-example.ts" copy
+```typescript title="src/memory-example.ts"
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { withMastra } from '@mastra/ai-sdk';
@@ -113,7 +113,7 @@ const { text } = await generateText({
 
 You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
 
-```typescript title="src/combined-example.ts" copy
+```typescript title="src/combined-example.ts"
 import { openai } from '@ai-sdk/openai';
 import { generateText } from 'ai';
 import { withMastra } from '@mastra/ai-sdk';

@@ -10104,4 +10104,305 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
   });
+
+  describe('onFinish and onError callbacks', () => {
+    it('should call onFinish callback when workflow completes successfully', async () => {
+      const onFinish = vi.fn();
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-onFinish-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'success',
+          result: { result: 'success' },
+          steps: expect.any(Object),
+        }),
+      );
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should call onFinish callback when workflow fails', async () => {
+      const onFinish = vi.fn();
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-onFinish-error-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.any(Error),
+          steps: expect.any(Object),
+        }),
+      );
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should call onError callback when workflow fails', async () => {
+      const onError = vi.fn();
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-onError-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.any(Error),
+          steps: expect.any(Object),
+        }),
+      );
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should not call onError callback when workflow succeeds', async () => {
+      const onError = vi.fn();
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onError-not-called-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onError,
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-onError-not-called-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onError).not.toHaveBeenCalled();
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should call both onFinish and onError when workflow fails and both are defined', async () => {
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-both-callbacks-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onFinish,
+          onError,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-both-callbacks-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledTimes(1);
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should support async onFinish callback', async () => {
+      let callbackCompleted = false;
+      const onFinish = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        callbackCompleted = true;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-async-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-async-onFinish-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(callbackCompleted).toBe(true);
+
+      await mastra.stopEventEngine();
+    });
+
+    it('should call onFinish with suspended status when workflow suspends', async () => {
+      const onFinish = vi.fn();
+
+      const suspendingStep = createStep({
+        id: 'suspending-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+        resumeSchema: z.object({ resumeValue: z.string() }),
+        execute: async ({ suspend }) => {
+          return await suspend({ reason: 'Need user input' });
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-suspended-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendingStep],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(suspendingStep).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-onFinish-suspended-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('suspended');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'suspended',
+          steps: expect.any(Object),
+        }),
+      );
+
+      await mastra.stopEventEngine();
+    });
+  });
 });
