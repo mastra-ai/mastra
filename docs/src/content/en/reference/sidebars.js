@@ -383,6 +383,11 @@ const sidebars = {
       items: [
         {
           type: "doc",
+          id: "storage/overview",
+          label: "Overview",
+        },
+        {
+          type: "doc",
           id: "storage/cloudflare",
           label: "Cloudflare KV Storage",
         },
@@ -394,7 +399,7 @@ const sidebars = {
         { type: "doc", id: "storage/convex", label: "Convex Storage" },
         { type: "doc", id: "storage/dynamodb", label: "DynamoDB Storage" },
         { type: "doc", id: "storage/lance", label: "LanceDB Storage" },
-        { type: "doc", id: "storage/libsql", label: "LibSQL Storage" },
+        { type: "doc", id: "storage/libsql", label: "libSQL Storage" },
         { type: "doc", id: "storage/mongodb", label: "MongoDB Storage" },
         { type: "doc", id: "storage/mssql", label: "MSSQL Storage" },
         { type: "doc", id: "storage/postgresql", label: "PostgreSQL Storage" },
@@ -435,7 +440,7 @@ const sidebars = {
           label: "ElasticSearch Vector Store",
         },
         { type: "doc", id: "vectors/lance", label: "Lance Vector Store" },
-        { type: "doc", id: "vectors/libsql", label: "LibSQL Vector Store" },
+        { type: "doc", id: "vectors/libsql", label: "libSQL Vector Store" },
         { type: "doc", id: "vectors/mongodb", label: "MongoDB Vector Store" },
         {
           type: "doc",

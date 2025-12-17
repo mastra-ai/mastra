@@ -1,13 +1,17 @@
 ---
-title: "Reference: LibSQL Storage | Storage"
-description: Documentation for the LibSQL storage implementation in Mastra.
+title: "Reference: libSQL Storage | Storage"
+description: Documentation for the libSQL storage implementation in Mastra.
 ---
 
-# LibSQL Storage
+# libSQL Storage
 
-The LibSQL storage implementation provides a SQLite-compatible storage solution that can run both in-memory and as a persistent database.
+[libSQL](https://docs.turso.tech/libsql) is an open-source, SQLite-compatible database that supports both local and remote deployments.
+
+For vector storage with libSQL, see [libSQL Vector](/reference/v1/vectors/libsql) which covers semantic recall and embeddings.
 
 ## Installation
+
+Storage providers must be installed as separate packages:
 
 ```bash copy
 npm install @mastra/libsql@beta
@@ -15,23 +19,67 @@ npm install @mastra/libsql@beta
 
 ## Usage
 
-```typescript copy showLineNumbers
+Instance-level file storage:
+
+```typescript
 import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
 
-// File database (development)
-const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: "file:./storage.db",
-});
-
-// Persistent database (production)
-const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: process.env.DATABASE_URL,
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: "file:./storage.db",
+  }),
 });
 ```
 
-## Parameters
+Agent-level file storage:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const agent = new Agent({
+  id: "example-agent",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-storage',
+      url: "file:./agent.db",
+    }),
+  }),
+});
+```
+
+:::warning
+File storage doesn't work with serverless platforms that have ephemeral file systems. For serverless deployments, use [Turso](https://turso.tech) or a different database engine.
+:::
+
+
+Production with remote database:
+
+```typescript copy
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: "libsql://your-db-name.aws-ap-northeast-1.turso.io",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+```
+
+For local development and testing, you can store data in memory:
+
+```typescript copy
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: ":memory:",
+})
+```
+
+:::warning
+In-memory storage resets when the process changes. Only suitable for development.
+:::
+
+## Options
 
 <PropertiesTable
   content={[
@@ -39,146 +87,41 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
+        "Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.",
       isOptional: false,
     },
     {
       name: "authToken",
       type: "string",
-      description: "Authentication token for remote LibSQL databases.",
+      description: "Authentication token for remote libSQL databases.",
       isOptional: true,
     },
   ]}
 />
 
-## Additional Notes
+## Initialization
 
-### In-Memory vs Persistent Storage
-
-The file configuration (`file:storage.db`) is useful for:
-
-- Development and testing
-- Temporary storage
-- Quick prototyping
-
-For production use cases, use a persistent database URL: `libsql://your-database.turso.io`
-
-### Schema Management
-
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
-
-- `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata
-- `mastra_threads`: Stores conversation threads
-- `mastra_messages`: Stores individual messages
-- `mastra_traces`: Stores telemetry and tracing data
-- `mastra_scorers`: Stores scoring and evaluation data
-- `mastra_resources`: Stores resource working memory data
-
-### Initialization
-
-When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/v1/storage/overview#core-schema):
 
 ```typescript copy
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
-
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
 const mastra = new Mastra({
-  storage, // init() is called automatically
+  storage, // init() called automatically
 });
 ```
 
-If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+If using storage directly without Mastra, call `init()` explicitly:
 
 ```typescript copy
-import { LibSQLStore } from "@mastra/libsql";
-
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
-// Required when using storage directly
 await storage.init();
-
-// Now you can use the storage
 await storage.getThread({ threadId: "..." });
-```
-
-:::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
-:::
-
-## Usage Example
-
-### Adding memory to an agent
-
-To add LibSQL memory to an agent use the `Memory` class and create a new `storage` key using `LibSQLStore`. The `url` can either by a remote location, or a local file system resource.
-
-```typescript title="src/mastra/agents/example-libsql-agent.ts" showLineNumbers copy
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const libsqlAgent = new Agent({
-  id: "libsql-agent",
-  name: "LibSQL Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'libsql-agent-storage',
-      url: "file:libsql-agent.db",
-    }),
-    options: {
-      generateTitle: true, // Explicitly enable automatic title generation
-    },
-  }),
-});
-```
-
-### Using the agent
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-libsql-agent.ts" showLineNumbers copy
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("libsqlAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
 ```

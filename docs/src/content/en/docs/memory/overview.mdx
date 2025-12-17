@@ -60,7 +60,7 @@ The memory instance has options you can configure for working memory, message hi
 
 ## Storage
 
-For memory to persist across application restarts, you need to configure a storage adapter. Mastra supports multiple database providers including PostgreSQL, MongoDB, LibSQL, and more.
+For memory to persist across application restarts, you need to configure a storage adapter. Mastra supports multiple database providers including PostgreSQL, MongoDB, libSQL, and more.
 
 Storage can be configured at the instance level (shared across all agents) or at the agent level (dedicated per agent). You can also use different databases for storage and vector operations.
 
@@ -82,6 +82,8 @@ When using `LibSQLStore` for local development, you can inspect stored memory di
 
 ## Next Steps
 
-Now that you understand the core concepts, continue to [semantic recall](./semantic-recall) to learn how to add RAG memory to your Mastra agents.
-
-Alternatively you can visit the [configuration reference](/reference/v1/memory/memory-class) for available options.
+- Learn more about [Storage](./storage) providers and configuration options
+- Add [Message History](./message-history) to control recent message recall
+- Add [Working Memory](./working-memory) to store persistent user details
+- Add [Semantic Recall](./semantic-recall) for RAG-based memory retrieval
+- Visit the [Memory configuration reference](/reference/v1/memory/memory-class) for all available options

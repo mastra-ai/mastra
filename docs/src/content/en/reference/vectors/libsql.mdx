@@ -1,11 +1,11 @@
 ---
-title: "Reference: LibSQLVector Store | Vectors"
-description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+title: "Reference: libSQL Vector Store | Vectors"
+description: Documentation for the LibSQLVector class in Mastra, which provides vector search using libSQL with vector extensions.
 ---
 
-# LibSQLVector Store
+# libSQL Vector Store
 
-The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The libSQL storage implementation provides a SQLite-compatible vector search [libSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
@@ -63,7 +63,7 @@ const results = await store.query({
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+        "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
@@ -111,7 +111,7 @@ Creates a new vector collection. The index name must start with a letter or unde
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
+        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by libSQL.",
     },
   ]}
 />
@@ -406,7 +406,7 @@ import { fastembed } from "@mastra/fastembed";
 
 export const libsqlAgent = new Agent({
   id: "libsql-agent",
-  name: "LibSQL Agent",
+  name: "libSQL Agent",
   instructions:
     "You are an AI agent with the ability to automatically recall memories from previous interactions.",
   model: "openai/gpt-5.1",

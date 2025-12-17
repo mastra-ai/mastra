@@ -43,29 +43,7 @@ const agent = new Agent({
 });
 ```
 
-## Recall configuration
-
-The three main parameters that control semantic recall behavior are:
-
-1. **topK**: How many semantically similar messages to retrieve
-2. **messageRange**: How much surrounding context to include with each match
-3. **scope**: Whether to search within the current thread or across all threads owned by a resource (the default is resource scope).
-
-```typescript {5-7}
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      semanticRecall: {
-        topK: 3, // Retrieve 3 most similar messages
-        messageRange: 2, // Include 2 messages before and after each match
-        scope: "resource", // Search across all threads for this user (default setting if omitted)
-      },
-    },
-  }),
-});
-```
-
-### Storage configuration
+## Storage configuration
 
 Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
 
@@ -100,7 +78,7 @@ Each vector store page below includes installation instructions, configuration p
 - [DuckDB](/reference/v1/vectors/duckdb)
 - [Elasticsearch](/reference/v1/vectors/elasticsearch)
 - [LanceDB](/reference/v1/vectors/lance)
-- [LibSQL](/reference/v1/vectors/libsql)
+- [libSQL](/reference/v1/vectors/libsql)
 - [MongoDB](/reference/v1/vectors/mongodb)
 - [OpenSearch](/reference/v1/vectors/opensearch)
 - [Pinecone](/reference/v1/vectors/pinecone)
@@ -110,7 +88,29 @@ Each vector store page below includes installation instructions, configuration p
 - [Turbopuffer](/reference/v1/vectors/turbopuffer)
 - [Upstash](/reference/v1/vectors/upstash)
 
-### Embedder configuration
+## Recall configuration
+
+The three main parameters that control semantic recall behavior are:
+
+1. **topK**: How many semantically similar messages to retrieve
+2. **messageRange**: How much surrounding context to include with each match
+3. **scope**: Whether to search within the current thread or across all threads owned by a resource (the default is resource scope).
+
+```typescript {5-7}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        topK: 3, // Retrieve 3 most similar messages
+        messageRange: 2, // Include 2 messages before and after each match
+        scope: "resource", // Search across all threads for this user (default setting if omitted)
+      },
+    },
+  }),
+});
+```
+
+## Embedder configuration
 
 Semantic recall relies on an [embedding model](/reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
@@ -178,7 +178,7 @@ const agent = new Agent({
 });
 ```
 
-### PostgreSQL Index Optimization
+## PostgreSQL Index Optimization
 
 When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
 
@@ -216,7 +216,7 @@ const agent = new Agent({
 
 For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/v1/vectors/pg#index-configuration-guide).
 
-### Disabling
+## Disabling
 
 There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
 
