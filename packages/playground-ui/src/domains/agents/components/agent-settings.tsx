@@ -19,7 +19,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAgent } from '../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supportedLanguageModelSpecifications } from '@mastra/core/agent';
 
 export interface AgentSettingsProps {
   agentId: string;
@@ -78,7 +77,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const hasMemory = Boolean(memory?.result);
   const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent.modelVersion;
-  const isSupportedModel = !!modelVersion && supportedLanguageModelSpecifications.includes(modelVersion);
+  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   let radioValue;
 

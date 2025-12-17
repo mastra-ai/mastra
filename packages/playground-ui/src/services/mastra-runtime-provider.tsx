@@ -8,7 +8,6 @@ import {
 } from '@assistant-ui/react';
 import { useState, ReactNode, useRef } from 'react';
 import { RequestContext } from '@mastra/core/di';
-import { supportedLanguageModelSpecifications } from '@mastra/core/agent';
 import { ChatProps, Message } from '@/types';
 import { CoreUserMessage } from '@mastra/core/llm';
 import { fileToBase64 } from '@/lib/file/toBase64';
@@ -241,7 +240,7 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
-  const isSupportedModel = !!modelVersion && supportedLanguageModelSpecifications.includes(modelVersion);
+  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
