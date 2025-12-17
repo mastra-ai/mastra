@@ -29,7 +29,7 @@ npm install @mastra/mcp@beta
 
 The `MCPClient` connects Mastra primitives to external MCP servers, which can be local packages (invoked using `npx`) or remote HTTP(S) endpoints. Each server must be configured with either a `command` or a `url`, depending on how it's hosted.
 
-```typescript title="src/mastra/mcp/test-mcp-client.ts" showLineNumbers copy
+```typescript title="src/mastra/mcp/test-mcp-client.ts"
 import { MCPClient } from "@mastra/mcp";
 
 export const testMcpClient = new MCPClient({
@@ -54,7 +54,7 @@ export const testMcpClient = new MCPClient({
 
 To use tools from an MCP server in an agent, import your `MCPClient` and call `.listTools()` in the `tools` parameter. This loads from the defined MCP servers, making them available to the agent.
 
-```typescript {3,15} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {3,15} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 import { testMcpClient } from "../mcp/test-mcp-client";
@@ -80,7 +80,7 @@ export const testAgent = new Agent({
 
 To expose agents, tools, and workflows from your Mastra application to external systems over HTTP(S) use the `MCPServer` class. This makes them accessible to any system or agent that supports the protocol.
 
-```typescript title="src/mastra/mcp/test-mcp-server.ts" showLineNumbers copy
+```typescript title="src/mastra/mcp/test-mcp-server.ts"
 import { MCPServer } from "@mastra/mcp";
 
 import { testAgent } from "../agents/test-agent";
@@ -109,7 +109,7 @@ export const testMcpServer = new MCPServer({
 
 To make an MCP server available to other systems or agents that support the protocol, register it in the main `Mastra` instance using `mcpServers`.
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 
 import { testMcpServer } from "./mcp/test-mcp-server";
@@ -143,7 +143,7 @@ Use the `.listTools()` method to fetch tools from all configured MCP servers. Th
 
 > See [listTools()](/reference/v1/tools/mcp-client#listtools) for more information.
 
-```typescript {7} title="src/mastra/agents/test-agent.ts" showLineNumbers copy
+```typescript {7} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 import { testMcpClient } from "../mcp/test-mcp-client";
@@ -158,7 +158,7 @@ export const testAgent = new Agent({
 
 Use the `.listToolsets()` method when tool configuration may vary by request or user, such as in a multi-tenant system where each user provides their own API key. This method returns toolsets that can be passed to the `toolsets` option in the agent's `.generate()` or `.stream()` calls.
 
-```typescript {5-16,21} showLineNumbers copy
+```typescript {5-16,21}
 import { MCPClient } from "@mastra/mcp";
 import { mastra } from "./mastra";
 

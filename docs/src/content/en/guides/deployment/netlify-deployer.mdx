@@ -13,13 +13,13 @@ Netlify Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore]
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/deployer-netlify@beta
 ```
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
@@ -48,7 +48,7 @@ Your project is now configured with automatic deployments which occur whenever y
 
 Manual deployments are also possible using the [Netlify CLI](https://docs.netlify.com/cli/get-started/). With the Netlify CLI installed run the following from your project root to deploy your application. You can also run `netlify dev` from your project root to test your Mastra application locally.
 
-```bash copy
+```bash
 netlify deploy --prod
 ```
 
