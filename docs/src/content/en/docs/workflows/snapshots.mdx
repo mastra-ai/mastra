@@ -127,57 +127,27 @@ console.log(snapshot);
 
 Snapshots are persisted using a `storage` instance configured on the `Mastra` class. This storage layer is shared across all workflows registered to that instance. Mastra supports multiple storage options for flexibility in different environments.
 
-### libSQL `@mastra/libsql`
-
-This example demonstrates how to use snapshots with libSQL.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
+import { approvalWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: ":memory:",
   }),
+  workflows: { approvalWorkflow },
 });
 ```
 
-### Upstash `@mastra/upstash`
-
-This example demonstrates how to use snapshots with Upstash.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { UpstashStore } from "@mastra/upstash";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new UpstashStore({
-  id: 'upstash-storage',
-    url: "<upstash-redis-rest-url>",
-    token: "<upstash-redis-rest-token>",
-  }),
-});
-```
-
-### Postgres `@mastra/pg`
-
-This example demonstrates how to use snapshots with PostgreSQL.
-
-```typescript title="src/mastra/index.ts" showLineNumbers copy
-import { Mastra } from "@mastra/core";
-import { PostgresStore } from "@mastra/pg";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: "<database-url>",
-  }),
-});
-```
+- [libSQL Storage](/reference/v1/storage/libsql)
+- [PostgreSQL Storage](/reference/v1/storage/postgresql)
+- [MongoDB Storage](/reference/v1/storage/mongodb)
+- [Upstash Storage](/reference/v1/storage/upstash)
+- [Cloudflare D1](/reference/v1/storage/cloudflare-d1)
+- [DynamoDB](/reference/v1/storage/dynamodb)
+- [More storage providers](/reference/v1/storage/overview)
 
 ## Best practices
 

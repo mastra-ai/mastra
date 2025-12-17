@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/examples/v1/memory/memory-with-mongodb",
-      "destination": "/docs/v1/memory/storage/memory-with-mongodb",
+      "destination": "/reference/v1/storage/mongodb",
       "permanent": true
     },
     {
@@ -267,7 +267,7 @@
     },
     {
       "source": "/docs/v1/server-db/storage",
-      "destination": "/docs/v1/memory/storage/overview",
+      "destination": "/reference/v1/storage/overview",
       "permanent": true
     },
     {

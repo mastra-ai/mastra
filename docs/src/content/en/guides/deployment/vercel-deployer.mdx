@@ -8,7 +8,7 @@ description: "Learn how to deploy a Mastra application to Vercel using the Mastr
 The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
 
 :::warning
-Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/v1/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Installation
