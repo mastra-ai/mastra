@@ -547,6 +547,21 @@ describe('vNext Workflow Handlers', () => {
       expect(result.payload).toBeUndefined();
       expect(result.activeStepsPath).toBeUndefined();
     });
+
+    it('should reject invalid field names in query schema', () => {
+      const { queryParamSchema } = GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE;
+
+      // Valid fields should pass
+      expect(() => queryParamSchema?.parse({ fields: 'status,result' })).not.toThrow();
+
+      // Invalid field should fail
+      expect(() => queryParamSchema?.parse({ fields: 'invalidField' })).toThrow();
+      expect(() => queryParamSchema?.parse({ fields: 'status,invalidField' })).toThrow();
+
+      // Empty/undefined should pass
+      expect(() => queryParamSchema?.parse({})).not.toThrow();
+      expect(() => queryParamSchema?.parse({ fields: undefined })).not.toThrow();
+    });
   });
 
   describe('CREATE_WORKFLOW_RUN_ROUTE', () => {

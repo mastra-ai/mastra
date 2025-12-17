@@ -1968,11 +1968,30 @@ export class Workflow<
 
     const snapshotState = snapshot as WorkflowRunState;
 
+    // Define the default result structure - this serves as the source of truth for allowed fields
+    const defaultResult = {
+      status: snapshotState.status,
+      result: snapshotState.result,
+      error: snapshotState.error,
+      payload: snapshotState.context?.input,
+      steps: null as any, // Will be populated below
+      activeStepsPath: snapshotState.activeStepsPath,
+      serializedStepGraph: snapshotState.serializedStepGraph,
+    };
+
+    // Derive allowed fields from the default result structure
+    const allowedFields = new Set(Object.keys(defaultResult));
+
     // If fields are specified, only return requested fields
     if (fields && fields.length > 0) {
       const result: Partial<WorkflowState> = {};
 
       for (const field of fields) {
+        // Skip unsupported field names
+        if (!allowedFields.has(field)) {
+          continue;
+        }
+
         // Special cases only
         if (field === 'steps') {
           // Only fetch steps if explicitly requested (expensive operation)
@@ -1998,13 +2017,8 @@ export class Workflow<
       : snapshotState.context;
 
     return {
-      status: snapshotState.status,
-      result: snapshotState.result,
-      error: snapshotState.error,
-      payload: snapshotState.context?.input,
+      ...defaultResult,
       steps: fullSteps as any,
-      activeStepsPath: snapshotState.activeStepsPath,
-      serializedStepGraph: snapshotState.serializedStepGraph,
     };
   }
 }

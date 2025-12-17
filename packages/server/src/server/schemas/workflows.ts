@@ -180,6 +180,26 @@ export const workflowExecutionResultQuerySchema = z.object({
   fields: z
     .string()
     .optional()
+    .refine(
+      value => {
+        if (!value) return true;
+        const validFields = new Set([
+          'status',
+          'result',
+          'error',
+          'payload',
+          'steps',
+          'activeStepsPath',
+          'serializedStepGraph',
+        ]);
+        const requestedFields = value.split(',').map(f => f.trim());
+        return requestedFields.every(field => validFields.has(field));
+      },
+      {
+        message:
+          'Invalid field name. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph',
+      },
+    )
     .describe(
       'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
     ),
