@@ -1995,9 +1995,14 @@ export class Workflow<
         // Special cases only
         if (field === 'steps') {
           // Only fetch steps if explicitly requested (expensive operation)
-          const fullSteps = withNestedWorkflows
-            ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
-            : snapshotState.context;
+          let fullSteps;
+          if (withNestedWorkflows) {
+            fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+          } else {
+            // Strip input from context - steps should only contain step results
+            const { input, ...stepsOnly } = snapshotState.context || {};
+            fullSteps = stepsOnly;
+          }
           result.steps = fullSteps as any;
         } else if (field === 'payload') {
           // Payload comes from context.input
@@ -2012,9 +2017,14 @@ export class Workflow<
     }
 
     // Default behavior: return all fields
-    const fullSteps = withNestedWorkflows
-      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
-      : snapshotState.context;
+    let fullSteps;
+    if (withNestedWorkflows) {
+      fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+    } else {
+      // Strip input from context - steps should only contain step results
+      const { input, ...stepsOnly } = snapshotState.context || {};
+      fullSteps = stepsOnly;
+    }
 
     return {
       ...defaultResult,
