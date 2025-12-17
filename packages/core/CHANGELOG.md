@@ -1,5 +1,148 @@
 # @mastra/core
 
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- Remove redundant toolCalls from network agent finalResult ([#11189](https://github.com/mastra-ai/mastra/pull/11189))
+
+  The network agent's `finalResult` was storing `toolCalls` separately even though all tool call information is already present in the `messages` array (as `tool-call` and `tool-result` type messages). This caused significant token waste since the routing agent reads this data from memory on every iteration.
+
+  **Before:** `finalResult: { text, toolCalls, messages }`
+  **After:** `finalResult: { text, messages }`
+
+  +**Migration:** If you were accessing `finalResult.toolCalls`, retrieve tool calls from `finalResult.messages` by filtering for messages with `type: 'tool-call'`.
+
+  Updated `@mastra/react` to extract tool calls directly from the `messages` array instead of the removed `toolCalls` field when resolving initial messages from memory.
+
+  Fixes #11059
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
+- Fix invalid state: Controller is already closed ([`932d63d`](https://github.com/mastra-ai/mastra/commit/932d63dd51be9c8bf1e00e3671fe65606c6fb9cd))
+
+  Fixes #11005
+
+- Fix HITL (Human-In-The-Loop) tool execution bug when mixing tools with and without execute functions. ([#11178](https://github.com/mastra-ai/mastra/pull/11178))
+
+  When an agent called multiple tools simultaneously where some had `execute` functions and others didn't (HITL tools expecting `addToolResult` from the frontend), the HITL tools would incorrectly receive `result: undefined` and be marked as "output-available" instead of "input-available". This caused the agent to continue instead of pausing for user input.
+
+- Add resourceId to workflow routes ([#11166](https://github.com/mastra-ai/mastra/pull/11166))
+
+- Auto resume suspended tools if `autoResumeSuspendedTools: true` ([#11157](https://github.com/mastra-ai/mastra/pull/11157))
+
+  The flag can be added to `defaultAgentOptions` when creating the agent or to options in `agent.stream` or `agent.generate`
+
+  ```typescript
+  const agent = new Agent({
+    //...agent information,
+    defaultAgentOptions: {
+      autoResumeSuspendedTools: true,
+    },
+  });
+  ```
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+  - Errors thrown in workflow steps now preserve full error details including `cause` chain and custom properties
+  - Added `SerializedError` type with proper cause chain support
+  - Added `SerializedStepResult` and `SerializedStepFailure` types for handling errors loaded from storage
+  - Enhanced `addErrorToJSON` to recursively serialize error cause chains with max depth protection
+  - Added `hydrateSerializedStepErrors` to convert serialized errors back to Error instances
+  - Fixed Inngest workflow error handling to extract original error from `NonRetriableError.cause`
+
+- Move `@ai-sdk/azure` to devDependencies ([#10218](https://github.com/mastra-ai/mastra/pull/10218))
+
+- Refactor internal event system from Emitter to PubSub abstraction for workflow event handling. This change replaces the EventEmitter-based event system with a pluggable PubSub interface, enabling support for distributed workflow execution backends like Inngest. Adds `close()` method to PubSub implementations for proper cleanup. ([#11052](https://github.com/mastra-ai/mastra/pull/11052))
+
+- Add `startAsync()` method and fix Inngest duplicate workflow execution bug ([#11093](https://github.com/mastra-ai/mastra/pull/11093))
+
+  **New Feature: `startAsync()` for fire-and-forget workflow execution**
+  - Add `Run.startAsync()` to base workflow class - starts workflow in background and returns `{ runId }` immediately
+  - Add `EventedRun.startAsync()` - publishes workflow start event without subscribing for completion
+  - Add `InngestRun.startAsync()` - sends Inngest event without polling for result
+
+  **Bug Fix: Prevent duplicate Inngest workflow executions**
+  - Fix `getRuns()` to properly handle rate limits (429), empty responses, and JSON parse errors with retry logic and exponential backoff
+  - Fix `getRunOutput()` to throw `NonRetriableError` when polling fails, preventing Inngest from retrying the parent function and re-triggering the workflow
+  - Add timeout to `getRunOutput()` polling (default 5 minutes) with `NonRetriableError` on timeout
+
+  This fixes a production issue where polling failures after successful workflow completion caused Inngest to retry the parent function, which fired a new workflow event and resulted in duplicate executions (e.g., duplicate Slack messages).
+
+- Preserve error details when thrown from workflow steps ([#10992](https://github.com/mastra-ai/mastra/pull/10992))
+
+  Workflow errors now retain custom properties like `statusCode`, `responseHeaders`, and `cause` chains. This enables error-specific recovery logic in your applications.
+
+  **Before:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom error properties were lost
+    console.log(result.error); // "Step execution failed" (just a string)
+  }
+  ```
+
+  **After:**
+
+  ```typescript
+  const result = await workflow.execute({ input });
+  if (result.status === 'failed') {
+    // Custom properties are preserved
+    console.log(result.error.message); // "Step execution failed"
+    console.log(result.error.statusCode); // 429
+    console.log(result.error.cause?.name); // "RateLimitError"
+  }
+  ```
+
+  **Type change:** `WorkflowState.error` and `WorkflowRunState.error` types changed from `string | Error` to `SerializedError`.
+
+  Other changes:
+  - Added `UpdateWorkflowStateOptions` type for workflow state updates
+
+- Fix Zod 4 compatibility issue with structuredOutput in agent.generate() ([#11133](https://github.com/mastra-ai/mastra/pull/11133))
+
+  Users with Zod 4 installed would see `TypeError: undefined is not an object (evaluating 'def.valueType._zod')` when using `structuredOutput` with agent.generate(). This happened because ProcessorStepSchema contains `z.custom()` fields that hold user-provided Zod schemas, and the workflow validation was trying to deeply validate these schemas causing version conflicts.
+
+  The fix disables input validation for processor workflows since `z.custom()` fields are meant to pass through arbitrary types without deep validation.
+
+- Truncate map config when too long ([#11175](https://github.com/mastra-ai/mastra/pull/11175))
+
+- Add helpful JSDoc comments to `BundlerConfig` properties (used with `bundler` option) ([#10218](https://github.com/mastra-ai/mastra/pull/10218))
+
+- Fixes .network() method ignores MASTRA_RESOURCE_ID_KEY from requestContext ([`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f))
+
+- fix: make getSqlType consistent across storage adapters ([#11112](https://github.com/mastra-ai/mastra/pull/11112))
+  - PostgreSQL: use `getSqlType()` in `createTable` instead of `toUpperCase()`
+  - LibSQL: use `getSqlType()` in `createTable`, return `JSONB` for jsonb type (matches SQLite 3.45+ support)
+  - ClickHouse: use `getSqlType()` in `createTable` instead of `COLUMN_TYPES` constant, add missing types (uuid, float, boolean)
+  - Remove unused `getSqlType()` and `getDefaultValue()` from `MastraStorage` base class (all stores use `StoreOperations` versions)
+
+- Fix workflow cancel not updating status when workflow is suspended ([#11139](https://github.com/mastra-ai/mastra/pull/11139))
+  - `Run.cancel()` now updates workflow status to 'canceled' in storage, resolving the issue where suspended workflows remained in 'suspended' status after cancellation
+  - Cancellation status is immediately persisted and reflected to observers
+
+- What changed: ([#10998](https://github.com/mastra-ai/mastra/pull/10998))
+
+  Support for sequential tool execution was added. Tool call concurrency is now set conditionally, defaulting to 1 when sequential execution is needed (to avoid race conditions that interfere with human-in-the-loop approval during the workflow) rather than the default of 10 when concurrency is acceptable.
+
+  How it was changed:
+
+  A `sequentialExecutionRequired` constant was set to a boolean depending on whether any of the tools involved in a returned agentic execution workflow would require approval. If any tool has a 'suspendSchema' property (used for conditionally suspending execution and waiting for human input), or if they have their `requireApproval` property set to `true`, then the concurrency property used in the toolCallStep is set to 1, causing sequential execution. The old default of 10 remains otherwise.
+
+- Fixed duplicate assistant messages appearing when using `useChat` with memory enabled. ([#11195](https://github.com/mastra-ai/mastra/pull/11195))
+
+  **What was happening:** When using `useChat` with `chatRoute` and memory, assistant messages were being duplicated in storage after multiple conversation turns. This occurred because the backend-generated message ID wasn't being sent back to `useChat`, causing ID mismatches during deduplication.
+
+  **What changed:**
+  - The backend now sends the assistant message ID in the stream's start event, so `useChat` uses the same ID as storage
+  - Custom `data-*` parts (from `writer.custom()`) are now preserved when messages contain V5 tool parts
+
+  Fixes #11091
+
+- Updated dependencies [[`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`5a632bd`](https://github.com/mastra-ai/mastra/commit/5a632bdf7b78953b664f5e038e98d4ba5f971e47)]:
+  - @mastra/schema-compat@1.0.0-beta.3
+  - @mastra/observability@1.0.0-beta.5
+
 ## 1.0.0-beta.11
 
 ### Minor Changes
