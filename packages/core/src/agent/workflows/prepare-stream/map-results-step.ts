@@ -94,7 +94,6 @@ export function createMapResultsStep<
       },
       ...(memoryData.tripwire && {
         tripwire: memoryData.tripwire,
-        tripwireReason: memoryData.tripwireReason,
       }),
     };
 
@@ -103,7 +102,7 @@ export function createMapResultsStep<
       const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
       const modelOutput = await getModelOutputForTripwire({
-        tripwireReason: result.tripwireReason!,
+        tripwire: memoryData.tripwire!,
         runId,
         tracingContext,
         options,
@@ -132,6 +131,17 @@ export function createMapResultsStep<
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
     }
+
+    // Resolve input processors from options override or agent capability
+    const effectiveInputProcessors =
+      options.inputProcessors ||
+      (capabilities.inputProcessors
+        ? typeof capabilities.inputProcessors === 'function'
+          ? await capabilities.inputProcessors({
+              requestContext: result.requestContext!,
+            })
+          : capabilities.inputProcessors
+        : []);
 
     const messageList = memoryData.messageList!;
 
@@ -203,16 +213,18 @@ export function createMapResultsStep<
         onChunk: options.onChunk,
         onError: options.onError,
         onAbort: options.onAbort,
-        activeTools: options.activeTools,
         abortSignal: options.abortSignal,
       },
+      activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
+      inputProcessors: effectiveInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       modelSettings: {
         temperature: 0,
         ...(options.modelSettings || {}),
       },
       messageList: memoryData.messageList!,
+      maxProcessorRetries: options.maxProcessorRetries,
     };
 
     return loopOptions;

@@ -9,7 +9,7 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({
@@ -36,9 +36,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
@@ -168,7 +168,7 @@ const result = await run.start({
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 import { RequestContext } from "@mastra/core/request-context";
 
 const run = await workflow.createRun();

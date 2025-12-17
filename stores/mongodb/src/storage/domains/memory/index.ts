@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -112,7 +113,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -131,7 +132,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -143,7 +144,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_LIST_MESSAGES_INVALID_PAGE',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -262,7 +263,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -340,7 +341,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -470,7 +471,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -498,7 +499,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -556,7 +557,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('MONGODB', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -581,7 +582,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -600,7 +601,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_MONGODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+            id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -656,7 +657,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MONGODB_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args.resourceId },
@@ -683,7 +684,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -705,7 +706,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
-        id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_NOT_FOUND',
+        id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         details: { threadId: id, status: 404 },
@@ -736,7 +737,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id },
@@ -759,7 +760,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('MONGODB', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },

@@ -10,6 +10,7 @@ import {
   AgentInformation,
   AgentPromptExperimentProvider,
   TracingSettingsProvider,
+  type AgentSettingsType,
 } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -19,10 +20,11 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 
 function Agent() {
   const { agentId, threadId } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const isNewThread = searchParams.get('new') === 'true';
   const {
     data: threads,
     isLoading: isThreadsLoading,
@@ -30,27 +32,45 @@ function Agent() {
   } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
 
   useEffect(() => {
-    if (memory?.result && (!threadId || threadId === 'new')) {
+    if (memory?.result && !threadId) {
       // use @lukeed/uuid because we don't need a cryptographically secure uuid (this is a debugging local uuid)
       // using crypto.randomUUID() on a domain without https (ex a local domain like local.lan:4111) will cause a TypeError
-      navigate(`/agents/${agentId}/chat/${uuid()}`);
+      navigate(`/agents/${agentId}/chat/${uuid()}?new=true`);
     }
   }, [memory?.result, threadId]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
-  const defaultSettings = useMemo(() => {
-    if (agent) {
-      let providerOptions = undefined;
-      if (typeof agent.instructions === 'object' && 'providerOptions' in agent.instructions) {
-        providerOptions = agent.instructions.providerOptions;
-      }
-      return {
-        modelSettings: {
-          providerOptions,
-        },
-      };
+  const defaultSettings = useMemo((): AgentSettingsType => {
+    if (!agent) {
+      return { modelSettings: {} };
     }
+
+    const agentDefaultOptions = agent.defaultOptions as
+      | {
+          maxSteps?: number;
+          modelSettings?: Record<string, unknown>;
+          providerOptions?: AgentSettingsType['modelSettings']['providerOptions'];
+        }
+      | undefined;
+
+    // Map AI SDK v5 names back to UI names (maxOutputTokens -> maxTokens)
+    const { maxOutputTokens, ...restModelSettings } = (agentDefaultOptions?.modelSettings ?? {}) as {
+      maxOutputTokens?: number;
+      [key: string]: unknown;
+    };
+
+    return {
+      modelSettings: {
+        ...(restModelSettings as AgentSettingsType['modelSettings']),
+        // Only include properties if they have actual values (to not override fallback defaults)
+        ...(maxOutputTokens !== undefined && { maxTokens: maxOutputTokens }),
+        ...(agentDefaultOptions?.maxSteps !== undefined && { maxSteps: agentDefaultOptions.maxSteps }),
+        ...(agentDefaultOptions?.providerOptions !== undefined && {
+          providerOptions: agentDefaultOptions.providerOptions,
+        }),
+      },
+    };
   }, [agent]);
 
   if (isAgentLoading) {
@@ -58,6 +78,12 @@ function Agent() {
   }
 
   const withSidebar = Boolean(memory?.result);
+
+  const handleRefreshThreadList = () => {
+    searchParams.delete('new');
+    setSearchParams(searchParams);
+    refreshThreads();
+  };
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
@@ -77,14 +103,16 @@ function Agent() {
 
                 <div className="grid overflow-y-auto relative bg-surface1 py-4">
                   <AgentChat
+                    key={threadId}
                     agentId={agentId!}
                     agentName={agent?.name}
                     modelVersion={agent?.modelVersion}
-                    threadId={threadId!}
+                    threadId={threadId}
                     memory={memory?.result}
-                    refreshThreadList={refreshThreads}
+                    refreshThreadList={handleRefreshThreadList}
                     modelList={agent?.modelList}
                     messageId={messageId}
+                    isNewThread={isNewThread}
                   />
                 </div>
 

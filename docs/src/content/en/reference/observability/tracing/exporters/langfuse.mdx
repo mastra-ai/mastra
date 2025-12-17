@@ -117,3 +117,46 @@ const exporter = new LangfuseExporter({
 - `MODEL_GENERATION` spans → Langfuse generations
 - All other spans → Langfuse spans
 - Event spans → Langfuse events
+
+## Prompt Linking
+
+Link LLM generations to [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management) using the `withLangfusePrompt` helper:
+
+```typescript
+import { buildTracingOptions } from "@mastra/observability";
+import { withLangfusePrompt } from "@mastra/langfuse";
+import { Langfuse } from "langfuse";
+
+const langfuse = new Langfuse({
+  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+});
+
+const prompt = await langfuse.getPrompt("customer-support");
+
+const agent = new Agent({
+  name: "support-agent",
+  instructions: prompt.prompt,
+  model: openai("gpt-4o"),
+  defaultGenerateOptions: {
+    tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
+  },
+});
+```
+
+### Helper Functions
+
+#### `withLangfusePrompt(prompt)`
+
+Adds Langfuse prompt metadata to tracing options.
+
+```typescript
+// With Langfuse SDK prompt object
+withLangfusePrompt(prompt)
+
+// With manual fields
+withLangfusePrompt({ name: "my-prompt", version: 1 })
+withLangfusePrompt({ id: "prompt-uuid" })
+```
+
+When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either `id` alone, or `name` + `version`), the exporter automatically links the generation to the prompt in Langfuse.

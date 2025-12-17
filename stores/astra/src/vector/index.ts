@@ -1,6 +1,7 @@
 import type { Db } from '@datastax/astra-db-ts';
 import { DataAPIClient, UUID } from '@datastax/astra-db-ts';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -52,7 +53,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new MastraError({
-        id: 'ASTRA_VECTOR_CREATE_INDEX_INVALID_DIMENSION',
+        id: createVectorErrorId('ASTRA', 'CREATE_INDEX', 'INVALID_DIMENSION'),
         text: 'Dimension must be a positive integer',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
@@ -69,7 +70,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
     } catch (error: any) {
       new MastraError(
         {
-          id: 'ASTRA_VECTOR_CREATE_INDEX_DB_ERROR',
+          id: createVectorErrorId('ASTRA', 'CREATE_INDEX', 'DB_ERROR'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -105,7 +106,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_UPSERT_DB_ERROR',
+          id: createVectorErrorId('ASTRA', 'UPSERT', 'DB_ERROR'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -163,7 +164,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_QUERY_DB_ERROR',
+          id: createVectorErrorId('ASTRA', 'QUERY', 'DB_ERROR'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -184,7 +185,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_LIST_INDEXES_DB_ERROR',
+          id: createVectorErrorId('ASTRA', 'LIST_INDEXES', 'DB_ERROR'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -217,7 +218,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_DESCRIBE_INDEX_DB_ERROR',
+          id: createVectorErrorId('ASTRA', 'DESCRIBE_INDEX', 'DB_ERROR'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -240,7 +241,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_DELETE_INDEX_DB_ERROR',
+          id: createVectorErrorId('ASTRA', 'DELETE_INDEX', 'DB_ERROR'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -263,7 +264,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     if (!id) {
       throw new MastraError({
-        id: 'ASTRA_VECTOR_UPDATE_NO_ID',
+        id: createVectorErrorId('ASTRA', 'UPDATE_VECTOR', 'NO_ID'),
         text: 'id is required for Astra updateVector',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
@@ -273,7 +274,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'ASTRA_VECTOR_UPDATE_NO_PAYLOAD',
+        id: createVectorErrorId('ASTRA', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         text: 'No updates provided for vector',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
@@ -301,7 +302,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_UPDATE_FAILED_UNHANDLED',
+          id: createVectorErrorId('ASTRA', 'UPDATE_VECTOR', 'FAILED_UNHANDLED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -329,7 +330,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'ASTRA_VECTOR_DELETE_FAILED',
+          id: createVectorErrorId('ASTRA', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -344,7 +345,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
     throw new MastraError({
-      id: 'ASTRA_VECTOR_DELETE_VECTORS_NOT_SUPPORTED',
+      id: createVectorErrorId('ASTRA', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
       text: 'deleteVectors is not yet implemented for Astra vector store',
       domain: ErrorDomain.MASTRA_VECTOR,
       category: ErrorCategory.SYSTEM,

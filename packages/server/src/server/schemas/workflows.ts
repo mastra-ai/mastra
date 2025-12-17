@@ -1,5 +1,5 @@
 import z from 'zod';
-import { createOffsetPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
+import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -10,6 +10,7 @@ export const workflowRunStatusSchema = z.enum([
   'canceled',
   'pending',
   'bailed',
+  'tripwire',
 ]);
 
 // Path parameter schemas
@@ -51,6 +52,7 @@ export const workflowInfoSchema = z.object({
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
   options: z.object({}).optional(),
+  isProcessorWorkflow: z.boolean().optional(),
 });
 
 /**
@@ -87,9 +89,10 @@ export const workflowRunResponseSchema = workflowRunSchema;
 
 /**
  * Schema for query parameters when listing workflow runs
- * All query params come as strings from URL
+ * Supports both page/perPage and limit/offset for backwards compatibility
+ * If page/perPage provided, use directly; otherwise convert from limit/offset
  */
-export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend({
+export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().extend({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   resourceId: z.string().optional(),
@@ -100,6 +103,7 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
  * Base schema for workflow execution with input data and tracing
  */
 const workflowExecutionBodySchema = z.object({
+  resourceId: z.string().optional(),
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
@@ -188,4 +192,13 @@ export const workflowControlResponseSchema = messageResponseSchema;
  */
 export const createWorkflowRunResponseSchema = z.object({
   runId: z.string(),
+});
+
+/**
+ * Schema for create workflow run body
+ * Used by /create-run endpoint
+ */
+export const createWorkflowRunBodySchema = z.object({
+  resourceId: z.string().optional(),
+  disableScorers: z.boolean().optional(),
 });

@@ -1,0 +1,32 @@
+{
+  "name": "examples-server-hono-adapter",
+  "type": "module",
+  "private": true,
+  "description": "Example demonstrating the @mastra/hono server adapter",
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/hono": "latest",
+    "@hono/node-server": "^1.14.3",
+    "hono": "^4.10.4",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.17",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  },
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/hono": "link:../../server-adapters/hono"
+    }
+  }
+}

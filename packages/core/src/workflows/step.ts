@@ -1,18 +1,18 @@
 import type { z } from 'zod';
 import type { MastraScorers } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType } from '../stream/types';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
-import type { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { Emitter, StepResult } from './types';
+import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import type { StepResult } from './types';
 import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
-};
+} & Record<string, any>;
 
 export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
   runId: string;
@@ -22,7 +22,7 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   requestContext: RequestContext;
   inputData: TStepInput;
   state: TState;
-  setState(state: TState): void;
+  setState(state: TState): Promise<void>;
   resumeData?: TResumeSchema;
   suspendData?: TSuspendSchema;
   retryCount: number;
@@ -43,24 +43,29 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
     resumePayload: any;
   };
   restart?: boolean;
-  [EMITTER_SYMBOL]: Emitter;
+  [PUBSUB_SYMBOL]: PubSub;
   [STREAM_FORMAT_SYMBOL]: 'legacy' | 'vnext' | undefined;
   engine: EngineType;
   abortSignal: AbortSignal;
-  writer: ToolStream<ChunkType>;
+  writer: ToolStream;
   validateSchemas?: boolean;
 };
+
+export type ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = Omit<
+  ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+  'setState' | 'suspend'
+>;
 
 export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
   params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<TStepOutput>;
 
 export type ConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
 ) => Promise<boolean>;
 
 export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
     iterationCount: number;
   },
 ) => Promise<boolean>;

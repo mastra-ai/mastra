@@ -1,3 +1,4 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
@@ -19,7 +20,6 @@ import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { MockLanguageModelV1, simulateReadableStream } from 'ai/test';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -583,7 +583,7 @@ const mockModelV2 = new MockLanguageModelV2({
           },
         ],
         finishReason: 'tool-calls' as const,
-        usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+        usage: { inputTokens: 15, outputTokens: 10 },
         warnings: [],
       };
     }
@@ -601,7 +601,7 @@ const mockModelV2 = new MockLanguageModelV2({
       return {
         content: [{ type: 'text', text: JSON.stringify(structuredData) }],
         finishReason: 'stop' as const,
-        usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
+        usage: { inputTokens: 15, outputTokens: 25 },
         warnings: [],
       };
     }
@@ -610,7 +610,7 @@ const mockModelV2 = new MockLanguageModelV2({
     return {
       content: [{ type: 'text', text: 'Mock V2 generate response' }],
       finishReason: 'stop' as const,
-      usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
+      usage: { inputTokens: 15, outputTokens: 25 },
       warnings: [],
     };
   },
@@ -643,7 +643,7 @@ const mockModelV2 = new MockLanguageModelV2({
             args: argsJson,
             input: argsJson,
           },
-          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10 } },
         ]),
       };
     }
@@ -662,7 +662,7 @@ const mockModelV2 = new MockLanguageModelV2({
       return {
         stream: convertArrayToReadableStream([
           { type: 'text-delta', id: '1', delta: structuredOutput },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25 } },
         ]),
       };
     }
@@ -673,7 +673,7 @@ const mockModelV2 = new MockLanguageModelV2({
         { type: 'text-delta', id: '1', delta: 'Mock ' },
         { type: 'text-delta', id: '2', delta: 'V2 stream ' },
         { type: 'text-delta', id: '3', delta: 'response' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25 } },
       ]),
     };
   },
@@ -1202,7 +1202,7 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         expect(llmGenerationSpan?.endTime).toBeDefined();
         expect(agentRunSpan?.endTime).toBeDefined();
@@ -1304,7 +1304,7 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         testExporter.finalExpectations();
       });
@@ -1382,7 +1382,7 @@ describe('Tracing Integration Tests', () => {
             expect(agentRunSpan?.output.text).toBe(`Mock V2 ${name} response`);
             break;
         }
-        expect(llmGenerationSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(llmGenerationSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         expect(llmGenerationSpan?.endTime).toBeDefined();
         expect(agentRunSpan?.endTime).toBeDefined();
@@ -1489,8 +1489,8 @@ describe('Tracing Integration Tests', () => {
         expect(result.object).toHaveProperty('items');
         expect((result.object as any).items).toBe('test structured output');
 
-        expect(testAgentLlmSpan!.attributes?.usage?.totalTokens).toBeGreaterThan(1);
-        expect(processorAgentLlmSpan?.attributes?.usage?.totalTokens).toBeGreaterThan(1);
+        expect(testAgentLlmSpan!.attributes?.usage?.inputTokens).toBeGreaterThan(0);
+        expect(processorAgentLlmSpan?.attributes?.usage?.inputTokens).toBeGreaterThan(0);
 
         expect(testAgentLlmSpan!.endTime).toBeDefined();
         expect(testAgentSpan?.endTime).toBeDefined();
@@ -2000,7 +2000,7 @@ describe('Tracing Integration Tests', () => {
             type: 'finish',
             id: '1',
             finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            usage: { inputTokens: 10, outputTokens: 20 },
           },
         ]),
         rawCall: { rawPrompt: null, rawSettings: {} },

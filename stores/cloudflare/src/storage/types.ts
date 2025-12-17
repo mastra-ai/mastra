@@ -11,16 +11,44 @@ import type {
   StorageResourceType,
   TABLE_SCORERS,
   TABLE_SPANS,
+  TABLE_AGENTS,
   SpanRecord,
+  StorageAgentType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 /**
- * Configuration for Cloudflare KV using REST API
+ * Base configuration options shared across Cloudflare configurations
  */
-export interface CloudflareRestConfig {
+export interface CloudflareBaseConfig {
   /** Storage instance ID */
   id: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new CloudflareStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new CloudflareStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+}
+
+/**
+ * Configuration for Cloudflare KV using REST API
+ */
+export interface CloudflareRestConfig extends CloudflareBaseConfig {
   /** Cloudflare account ID */
   accountId: string;
   /** Cloudflare API token with KV access */
@@ -36,9 +64,7 @@ export interface CloudflareRestConfig {
 /**
  * Configuration for Cloudflare KV using Workers Binding API
  */
-export interface CloudflareWorkersConfig {
-  /** Storage instance ID */
-  id: string;
+export interface CloudflareWorkersConfig extends CloudflareBaseConfig {
   /** KV namespace bindings from Workers environment */
   bindings: {
     [key in TABLE_NAMES]: KVNamespace;
@@ -81,6 +107,7 @@ export type RecordTypes = {
   [TABLE_TRACES]: any;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
+  [TABLE_AGENTS]: StorageAgentType;
 };
 
 export type ListOptions = {

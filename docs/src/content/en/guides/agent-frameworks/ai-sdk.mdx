@@ -1,0 +1,147 @@
+---
+title: "AI SDK | Agent Frameworks"
+description: "Use Mastra processors and memory with the Vercel AI SDK"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# AI SDK
+
+If you're already using the [Vercel AI SDK](https://sdk.vercel.ai) directly and want to add Mastra capabilities like [processors](/docs/v1/agents/processors) or [memory](/docs/v1/memory/memory-processors) without switching to the full Mastra agent API, [`withMastra()`](/reference/v1/ai-sdk/with-mastra) lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
+
+:::tip
+
+If you want to use Mastra together with AI SDK UI (e.g. `useChat()`), visit the [AI SDK UI guide](/guides/v1/build-your-ui/ai-sdk-ui).
+
+:::
+
+## Installation
+
+Install `@mastra/ai-sdk` to begin using the `withMastra()` function.
+
+<Tabs>
+  <TabItem value="npm" label="npm">
+    ```bash copy
+    npm install @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+  <TabItem value="pnpm" label="pnpm">
+    ```bash copy
+    pnpm add @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+  <TabItem value="yarn" label="yarn">
+    ```bash copy
+    yarn add @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+  <TabItem value="bun" label="bun">
+    ```bash copy
+    bun add @mastra/ai-sdk@beta
+    ```
+  </TabItem>
+</Tabs>
+
+## Examples
+
+### With Processors
+
+Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
+
+```typescript title="src/example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import type { Processor } from '@mastra/core/processors';
+
+const loggingProcessor: Processor<'logger'> = {
+  id: 'logger',
+  async processInput({ messages }) {
+    console.log('Input:', messages.length, 'messages');
+    return messages;
+  },
+  async processOutputResult({ messages }) {
+    console.log('Output:', messages.length, 'messages');
+    return messages;
+  },
+};
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [loggingProcessor],
+  outputProcessors: [loggingProcessor],
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 2 + 2?',
+});
+```
+
+### With Memory
+
+Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
+
+```typescript title="src/memory-example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({
+  id: 'my-app',
+  url: 'file:./data.db',
+});
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  memory: {
+    storage,
+    threadId: 'user-thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What did we talk about earlier?',
+});
+```
+
+### With Processors & Memory
+
+You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
+
+```typescript title="src/combined-example.ts"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+import { withMastra } from '@mastra/ai-sdk';
+import { LibSQLStore } from '@mastra/libsql';
+
+const storage = new LibSQLStore({ id: 'my-app', url: 'file:./data.db' });
+await storage.init();
+
+const model = withMastra(openai('gpt-4o'), {
+  inputProcessors: [myGuardProcessor],
+  outputProcessors: [myLoggingProcessor],
+  memory: {
+    storage,
+    threadId: 'thread-123',
+    resourceId: 'user-123',
+    lastMessages: 10,
+  },
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+});
+```
+
+## Related
+
+- [`withMastra()`](/reference/v1/ai-sdk/with-mastra) - API reference for `withMastra()`
+- [Processors](/docs/v1/agents/processors) - Learn about input and output processors
+- [Memory](/docs/v1/memory/overview) - Overview of Mastra's memory system
+- [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui) - Using AI SDK UI hooks with Mastra agents, workflows, and networks

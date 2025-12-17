@@ -20,6 +20,16 @@ const sidebars = {
         { type: "doc", id: "core/getAgent", label: ".getAgent()" },
         { type: "doc", id: "core/listAgents", label: ".listAgents()" },
         { type: "doc", id: "core/getAgentById", label: ".getAgentById()" },
+        {
+          type: "doc",
+          id: "core/getStoredAgentById",
+          label: ".getStoredAgentById()",
+        },
+        {
+          type: "doc",
+          id: "core/listStoredAgents",
+          label: ".listStoredAgents()",
+        },
         { type: "doc", id: "core/getWorkflow", label: ".getWorkflow()" },
         { type: "doc", id: "core/listWorkflows", label: ".listWorkflows()" },
         { type: "doc", id: "core/setStorage", label: ".setStorage()" },
@@ -60,6 +70,8 @@ const sidebars = {
         },
         { type: "doc", id: "core/listGateways", label: ".listGateways()" },
         { type: "doc", id: "core/addGateway", label: ".addGateway()" },
+        { type: "doc", id: "core/getMemory", label: ".getMemory()" },
+        { type: "doc", id: "core/listMemory", label: ".listMemory()" },
         { type: "doc", id: "core/mastra-class", label: "Mastra Class" },
         {
           type: "doc",
@@ -215,6 +227,11 @@ const sidebars = {
             },
             {
               type: "doc",
+              id: "workflows/run-methods/startAsync",
+              label: ".startAsync()",
+            },
+            {
+              type: "doc",
               id: "workflows/run-methods/resume",
               label: ".resume()",
             },
@@ -227,6 +244,11 @@ const sidebars = {
               type: "doc",
               id: "workflows/run-methods/restart",
               label: ".restart()",
+            },
+            {
+              type: "doc",
+              id: "workflows/run-methods/timeTravel",
+              label: ".timeTravel()",
             },
           ],
         },
@@ -277,6 +299,11 @@ const sidebars = {
               type: "doc",
               id: "streaming/workflows/observeStream",
               label: ".observeStream()",
+            },
+            {
+              type: "doc",
+              id: "streaming/workflows/timeTravelStream",
+              label: ".timeTravelStream()",
             },
           ],
         },
@@ -428,6 +455,22 @@ const sidebars = {
     },
     {
       type: "category",
+      label: "Server",
+      collapsed: true,
+      items: [
+        {
+          type: "doc",
+          id: "server/mastra-server",
+          label: "MastraServer",
+        },
+        { type: "doc", id: "server/hono-adapter", label: "Hono Adapter" },
+        { type: "doc", id: "server/express-adapter", label: "Express Adapter" },
+        { type: "doc", id: "server/create-route", label: "createRoute()" },
+        { type: "doc", id: "server/routes", label: "Server Routes" },
+      ],
+    },
+    {
+      type: "category",
       label: "Deployer",
       collapsed: true,
       items: [
@@ -464,6 +507,47 @@ const sidebars = {
           id: "client-js/mastra-client",
           label: "Mastra Client SDK",
         },
+      ],
+    },
+    {
+      type: "category",
+      label: "AI SDK",
+      collapsed: true,
+      items: [
+        { type: "doc", id: "ai-sdk/chat-route", label: "chatRoute()" },
+        {
+          type: "doc",
+          id: "ai-sdk/handle-chat-stream",
+          label: "handleChatStream()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/handle-network-stream",
+          label: "handleNetworkStream()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/handle-workflow-stream",
+          label: "handleWorkflowStream()",
+        },
+        { type: "doc", id: "ai-sdk/network-route", label: "networkRoute()" },
+        {
+          type: "doc",
+          id: "ai-sdk/to-ai-sdk-stream",
+          label: "toAISdkStream()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/to-ai-sdk-v4-messages",
+          label: "toAISdkV4Messages()",
+        },
+        {
+          type: "doc",
+          id: "ai-sdk/to-ai-sdk-v5-messages",
+          label: "toAISdkV5Messages()",
+        },
+        { type: "doc", id: "ai-sdk/with-mastra", label: "withMastra()" },
+        { type: "doc", id: "ai-sdk/workflow-route", label: "workflowRoute()" },
       ],
     },
     {
@@ -659,6 +743,11 @@ const sidebars = {
       label: "Processors",
       collapsed: true,
       items: [
+        {
+          type: "doc",
+          id: "processors/processor-interface",
+          label: "Processor Interface",
+        },
         {
           type: "doc",
           id: "processors/language-detector",

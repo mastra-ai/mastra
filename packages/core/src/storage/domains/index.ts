@@ -1,3 +1,4 @@
+export * from './agents';
 export * from './scores';
 export * from './observability';
 export * from './operations';

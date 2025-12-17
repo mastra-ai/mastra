@@ -855,7 +855,7 @@ export class Agent extends BaseResource {
           case 'tripwire': {
             message.parts.push({
               type: 'text',
-              text: chunk.payload.tripwireReason,
+              text: chunk.payload.reason,
             });
 
             execUpdate();

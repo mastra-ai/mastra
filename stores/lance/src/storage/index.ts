@@ -2,9 +2,9 @@ import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
   PaginationInfo,
@@ -14,12 +14,36 @@ import type {
   StorageDomains,
   StorageResourceType,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreOperationsLance } from './domains/operations';
 import { StoreScoresLance } from './domains/scores';
 import { StoreWorkflowsLance } from './domains/workflows';
+
+export interface LanceStorageOptions {
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = await LanceStorage.create('id', 'name', '/path/to/db', undefined, { disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = await LanceStorage.create('id', 'name', '/path/to/db', undefined, { disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+}
 
 export class LanceStorage extends MastraStorage {
   stores: StorageDomains;
@@ -29,7 +53,8 @@ export class LanceStorage extends MastraStorage {
    * @param id The unique identifier for this storage instance
    * @param name The name for this storage instance
    * @param uri The URI to connect to LanceDB
-   * @param options connection options
+   * @param connectionOptions connection options for LanceDB
+   * @param storageOptions storage options including disableInit
    *
    * Usage:
    *
@@ -47,16 +72,22 @@ export class LanceStorage extends MastraStorage {
    * ```ts
    * const store = await LanceStorage.create('my-storage-id', 'MyStorage', 's3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
+   *
+   * Disable auto-init for runtime (after CI/CD has run migrations)
+   * ```ts
+   * const store = await LanceStorage.create('my-storage-id', 'MyStorage', '/path/to/db', undefined, { disableInit: true });
+   * ```
    */
   public static async create(
     id: string,
     name: string,
     uri: string,
-    options?: ConnectionOptions,
+    connectionOptions?: ConnectionOptions,
+    storageOptions?: LanceStorageOptions,
   ): Promise<LanceStorage> {
-    const instance = new LanceStorage(id, name);
+    const instance = new LanceStorage(id, name, storageOptions?.disableInit);
     try {
-      instance.lanceClient = await connect(uri, options);
+      instance.lanceClient = await connect(uri, connectionOptions);
       const operations = new StoreOperationsLance({ client: instance.lanceClient });
       instance.stores = {
         operations: new StoreOperationsLance({ client: instance.lanceClient }),
@@ -68,11 +99,11 @@ export class LanceStorage extends MastraStorage {
     } catch (e: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_LANCE_STORAGE_CONNECT_FAILED',
+          id: createStorageErrorId('LANCE', 'CONNECT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to connect to LanceDB: ${e.message || e}`,
-          details: { uri, optionsProvided: !!options },
+          details: { uri, optionsProvided: !!connectionOptions },
         },
         e,
       );
@@ -83,8 +114,8 @@ export class LanceStorage extends MastraStorage {
    * @internal
    * Private constructor to enforce using the create factory method
    */
-  private constructor(id: string, name: string) {
-    super({ id, name });
+  private constructor(id: string, name: string, disableInit?: boolean) {
+    super({ id, name, disableInit });
     const operations = new StoreOperationsLance({ client: this.lanceClient });
 
     this.stores = {
@@ -305,6 +336,10 @@ export class LanceStorage extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById(args);
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -328,13 +363,7 @@ export class LanceStorage extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -383,8 +412,8 @@ export class LanceStorage extends MastraStorage {
     return this.stores.scores.listScoresByScorerId({ scorerId, source, pagination, entityId, entityType });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

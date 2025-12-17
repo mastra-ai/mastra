@@ -1,6 +1,6 @@
 import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { ScoreRowData, ScoringSource } from '../../../evals/types';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
 
 export abstract class ScoresStorage extends MastraBase {
@@ -13,7 +13,7 @@ export abstract class ScoresStorage extends MastraBase {
 
   abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;
 
-  abstract saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }>;
+  abstract saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }>;
 
   abstract listScoresByScorerId({
     scorerId,

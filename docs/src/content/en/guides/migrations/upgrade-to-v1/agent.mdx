@@ -313,3 +313,73 @@ To migrate, remove the `TMetrics` generic parameter and configure scorers using 
     // ...
   });
 ```
+
+### Tripwire response format changed
+
+The tripwire response format has changed from separate `tripwire` and `tripwireReason` fields to a single `tripwire` object containing all related data.
+
+To migrate, update your code to access tripwire data from the new object structure.
+
+```diff
+  const result = await agent.generate('Hello');
+
+- if (result.tripwire) {
+-   console.log(result.tripwireReason);
+- }
++ if (result.tripwire) {
++   console.log(result.tripwire.reason);
++   // New fields available:
++   // result.tripwire.retry - whether this step should be retried
++   // result.tripwire.metadata - additional metadata from the processor
++   // result.tripwire.processorId - which processor triggered the tripwire
++ }
+```
+
+For streaming responses:
+
+```diff
+  for await (const chunk of stream.fullStream) {
+    if (chunk.type === 'tripwire') {
+-     console.log(chunk.payload.tripwireReason);
++     console.log(chunk.payload.reason);
++     // New fields available:
++     // chunk.payload.retry
++     // chunk.payload.metadata
++     // chunk.payload.processorId
+    }
+  }
+```
+
+The step results now also include tripwire information:
+
+```diff
+  const result = await agent.generate('Hello');
+
+  for (const step of result.steps) {
+-   // No tripwire info on steps
++   if (step.tripwire) {
++     console.log('Step was blocked:', step.tripwire.reason);
++   }
+  }
+```
+
+### `prepareStep` messages format
+
+The `prepareStep` callback now receives messages in `MastraDBMessage` format instead of AI SDK v5 model message format. This change unifies `prepareStep` with the new `processInputStep` processor method, which runs at each step of the agentic loop.
+
+If you need the old AI SDK v5 format, use `messageList.get.all.aiV5.model()`:
+
+```diff
+  agent.generate({
+    prompt: 'Hello',
+    prepareStep: async ({ messages, messageList }) => {
+-     // messages was AI SDK v5 ModelMessage format
+-     console.log(messages[0].content);
++     // messages is now MastraDBMessage format
++     // Use messageList to get AI SDK v5 format if needed:
++     const aiSdkMessages = messageList.get.all.aiV5.model();
+
+      return { toolChoice: 'auto' };
+    },
+  });
+```

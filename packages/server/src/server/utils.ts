@@ -27,7 +27,22 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
   }, {});
 }
 
-export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
+export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): WorkflowInfo {
+  if (partial) {
+    // Return minimal info in partial mode
+    return {
+      name: workflow.name,
+      description: workflow.description,
+      stepCount: Object.keys(workflow.steps).length,
+      stepGraph: workflow.serializedStepGraph,
+      options: workflow.options,
+      steps: {},
+      allSteps: {},
+      inputSchema: undefined,
+      outputSchema: undefined,
+    } as WorkflowInfo;
+  }
+
   return {
     name: workflow.name,
     description: workflow.description,
@@ -48,6 +63,7 @@ export function getWorkflowInfo(workflow: Workflow): WorkflowInfo {
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     options: workflow.options,
+    isProcessorWorkflow: workflow.type === 'processor',
   };
 }
 

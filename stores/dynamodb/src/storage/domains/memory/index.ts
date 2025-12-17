@@ -2,7 +2,7 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
+import { createStorageErrorId, MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -73,7 +73,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -112,7 +112,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -182,7 +182,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id },
@@ -223,7 +223,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -258,7 +258,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -277,7 +277,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -294,7 +294,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_DYNAMODB_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -434,7 +434,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -532,7 +532,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -551,7 +551,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -600,7 +600,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DYNAMODB_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId, page, perPage },
@@ -793,7 +793,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -826,7 +826,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -863,7 +863,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -931,7 +931,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

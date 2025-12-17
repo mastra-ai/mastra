@@ -1,0 +1,32 @@
+---
+title: "Cloud Providers | Deployment"
+description: "Deploy your Mastra applications to popular cloud providers."
+---
+
+# Cloud Providers
+
+Standalone Mastra applications can be deployed to popular cloud providers, see one of the following guides for more information:
+
+- [Amazon EC2](/guides/v1/deployment/amazon-ec2)
+- [AWS Lambda](/guides/v1/deployment/aws-lambda)
+- [Azure App Services](/guides/v1/deployment/azure-app-services)
+- [Cloudflare](/guides/v1/deployment/cloudflare-deployer)
+- [Digital Ocean](/guides/v1/deployment/digital-ocean)
+- [Netlify](/guides/v1/deployment/netlify-deployer)
+- [Vercel](/guides/v1/deployment/vercel-deployer)
+
+For self-hosted Node.js server deployment, see the [Creating A Mastra Server](/docs/v1/deployment/mastra-server) guide.
+
+## Prerequisites
+
+Before deploying to a cloud provider, ensure you have:
+
+- A [Mastra application](/guides/v1/getting-started/quickstart)
+- Node.js `v22.13.0` or later
+- A GitHub repository for your application (required for most CI/CD setups)
+- Domain name management access (for SSL and HTTPS)
+- Basic familiarity with server setup (e.g. Nginx, environment variables)
+
+:::warning
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+:::

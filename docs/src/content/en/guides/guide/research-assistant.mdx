@@ -59,7 +59,7 @@ Install additional dependencies
 
 After running the [installation guide](/guides/v1/getting-started/quickstart) you'll need to install additional dependencies:
 
-```bash copy
+```bash
 npm install @mastra/rag@beta ai@^4.0.0
 ```
 </StepItem>
@@ -74,7 +74,7 @@ Now you'll create your RAG-enabled research assistant. The agent uses:
 
 Create a new file `src/mastra/agents/researchAgent.ts` and define your agent:
 
-```ts copy title="src/mastra/agents/researchAgent.ts"
+```ts title="src/mastra/agents/researchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { createVectorQueryTool } from "@mastra/rag";
@@ -114,7 +114,7 @@ In the root of your project, grab the absolute path with the `pwd` command. The 
 
 In your `src/mastra/index.ts` file, add the following to your existing file and configuration:
 
-```ts copy title="src/mastra/index.ts" {2, 4-6, 9}
+```ts title="src/mastra/index.ts" {2, 4-6, 9}
 import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 
@@ -144,7 +144,7 @@ use a remote persistent database then.
 
 In the `src/mastra/index.ts` file, add the agent to Mastra:
 
-```ts copy title="src/mastra/index.ts" {3, 10}
+```ts title="src/mastra/index.ts" {3, 10}
 import { Mastra } from "@mastra/core";
 import { LibSQLVector } from "@mastra/libsql";
 import { researchAgent } from "./agents/researchAgent";
@@ -176,7 +176,7 @@ In this step the research paper is retrieved by providing an URL, then converted
 
 Create a new file `src/store.ts` and add the following:
 
-```ts copy title="src/store.ts"
+```ts title="src/store.ts"
 import { MDocument } from "@mastra/rag";
 
 // Load the paper
@@ -198,7 +198,7 @@ console.log("Number of chunks:", chunks.length);
 
 Run the file in your terminal:
 
-```bash copy
+```bash
 npx bun src/store.ts
 ```
 
@@ -229,7 +229,7 @@ This allows the agent to efficiently search and retrieve relevant information.
 
 Open the `src/store.ts` file and add the following:
 
-```ts copy title="src/store.ts"
+```ts title="src/store.ts"
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 import { mastra } from "./mastra";
@@ -276,7 +276,7 @@ await vectorStore.upsert({
 
 Lastly, you'll now need to store the embeddings by running the script again:
 
-```bash copy
+```bash
 npx bun src/store.ts
 ```
 
@@ -292,7 +292,7 @@ Now that the vector database has all embeddings, you can test the research assis
 
 Create a new file `src/ask-agent.ts` and add different types of queries:
 
-```ts title="src/ask-agent.ts" copy
+```ts title="src/ask-agent.ts"
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -306,7 +306,7 @@ console.log("Response:", response1.text);
 
 Run the script:
 
-```bash copy
+```bash
 npx bun src/ask-agent.ts
 ```
 
@@ -323,7 +323,7 @@ Response: Sequence modeling with neural networks faces several key challenges:
 
 Try another question:
 
-```ts title="src/ask-agent.ts" copy
+```ts title="src/ask-agent.ts"
 import { mastra } from "./mastra";
 const agent = mastra.getAgent("researchAgent");
 
@@ -373,7 +373,7 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
 
 Explore these examples for more advanced RAG techniques:
 
-- [Filter RAG](/examples/v1/rag/usage/filter-rag) for filtering results using metadata
-- [Cleanup RAG](/examples/v1/rag/usage/cleanup-rag) for optimizing information density
-- [Chain of Thought RAG](/examples/v1/rag/usage/cot-rag) for complex reasoning queries using workflows
-- [Rerank RAG](/examples/v1/rag/usage/cleanup-rag) for improved result relevance
+- [Filter RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag) for filtering results using metadata
+- [Cleanup RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cleanup-rag) for optimizing information density
+- [Chain of Thought RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag) for complex reasoning queries using workflows
+- [Rerank RAG](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/rerank-rag) for improved result relevance

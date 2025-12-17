@@ -6,6 +6,7 @@
     "test": "pnpm test:streaming && pnpm test:working-memory && pnpm test:working-memory-additive && pnpm test:agent-memory && pnpm test:processors && pnpm test:fastembed",
     "test:agent-memory": "vitest run ./src/agent-memory.test.ts",
     "test:libsql": "vitest run ./src/with-libsql-storage.test.ts",
+    "test:pg": "vitest run ./src/with-pg-storage.test.ts",
     "test:streaming": "vitest run ./src/streaming-memory.test.ts",
     "test:working-memory": "vitest run ./src/working-memory.test.ts",
     "test:working-memory-additive": "vitest run ./src/working-memory-additive.test.ts",
@@ -17,9 +18,11 @@
   },
   "dependencies": {
     "@mastra/ai-sdk": "latest",
+    "@mastra/client-js": "latest",
     "@mastra/fastembed": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
+    "@mastra/pg": "latest",
     "dotenv": "^16.4.7",
     "json-schema": "^0.4.0",
     "zod": "^3.25.76"
@@ -38,20 +41,22 @@
     "ai": "latest",
     "jsdom": "^26.1.0",
     "mastra": "latest",
-    "next": "^15.5.4",
+    "next": "^15.5.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.8"
   },
   "pnpm": {
     "overrides": {
       "@mastra/ai-sdk": "link:../../../client-sdks/ai-sdk",
+      "@mastra/client-js": "link:../../../client-sdks/client-js",
       "@mastra/core": "link:../../core",
       "mastra": "link:../../cli",
       "@mastra/memory": "link:../../memory",
       "@mastra/fastembed": "link:../../fastembed",
-      "@mastra/libsql": "link:../../../stores/libsql"
+      "@mastra/libsql": "link:../../../stores/libsql",
+      "@mastra/pg": "link:../../../stores/pg"
     }
   }
 }

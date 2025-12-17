@@ -13,7 +13,7 @@
     "@assistant-ui/react-markdown": "^0.10.9",
     "@assistant-ui/react-ui": "^0.1.8",
     "@mastra/client-js": "latest",
-    "next": "^15.3.1",
+    "next": "^15.5.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "tailwindcss-animate": "^1.0.7",

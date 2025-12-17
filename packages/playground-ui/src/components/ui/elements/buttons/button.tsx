@@ -5,10 +5,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   className?: string;
   children: React.ReactNode;
   variant?: 'primary' | 'outline' | 'ghost';
+  isFaded?: boolean;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'outline', ...props }: ButtonProps, ref) => {
+  ({ className, variant = 'outline', isFaded, ...props }: ButtonProps, ref) => {
     return (
       <button
         ref={ref}
@@ -25,6 +26,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             'min-h-[2rem]': variant === 'ghost',
             'min-h-[2.5rem]': variant !== 'ghost',
             'border-[rgba(255,255,255,0.15)]': variant === 'outline',
+            'opacity-40': isFaded,
           },
         )}
         {...props}

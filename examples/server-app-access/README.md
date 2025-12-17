@@ -6,7 +6,7 @@ Demonstrates how to use `mastra.getServerApp<T>()` to call routes directly witho
 
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
-import { MastraServer } from '@mastra/hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 import type { Hono as HonoType } from 'hono';
 
@@ -15,8 +15,8 @@ const mastra = new Mastra({
   /* your config */
 });
 
-const app = new Hono();
-const adapter = new MastraServer({ app: app as any, mastra });
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const adapter = new MastraServer({ app, mastra });
 await adapter.init();
 
 // MastraServer auto-registers with mastra, so getServerApp() works

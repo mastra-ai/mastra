@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { OutputProcessor } from '../../../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../../processors';
 import type { DynamicArgument } from '../../../types';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
@@ -19,7 +19,8 @@ export type AgentCapabilities = {
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
-  outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   llm: MastraLLMVNext;
 };
 
@@ -55,8 +56,15 @@ export const prepareMemoryStepOutputSchema = z.object({
   threadExists: z.boolean(),
   thread: storageThreadSchema.optional(),
   messageList: z.instanceof(MessageList),
-  tripwire: z.boolean().optional(),
-  tripwireReason: z.string().optional(),
+  /** Tripwire data when input processor triggered abort */
+  tripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      metadata: z.unknown().optional(),
+      processorId: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type PrepareMemoryStepOutput = z.infer<typeof prepareMemoryStepOutputSchema>;

@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { MastraServer } from '@mastra/hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 
 import { mastra } from './mastra';
@@ -7,15 +7,14 @@ import { mastra } from './mastra';
 const PORT = 3001;
 
 // Create Hono app
-const app = new Hono();
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
 // Add a simple health check endpoint
 app.get('/', c => c.json({ status: 'ok', server: 'hono', message: 'Hono MCP Server is running' }));
 
 // Create Mastra server adapter
-// Note: Type assertion needed due to Hono version differences between example and @mastra/hono
 const adapter = new MastraServer({
-  app: app as any,
+  app,
   mastra,
 });
 

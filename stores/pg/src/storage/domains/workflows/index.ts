@@ -1,6 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
-import type { StorageListWorkflowRunsInput, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import {
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+  createStorageErrorId,
+} from '@mastra/core/storage';
+import type {
+  UpdateWorkflowStateOptions,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { IDatabase } from 'pg-promise';
 import type { StoreOperationsPG } from '../operations';
@@ -71,13 +81,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
@@ -106,7 +110,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -132,7 +136,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('PG', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -186,12 +190,34 @@ export class WorkflowsPG extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             runId,
             workflowName: workflowName || '',
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      await this.client.none(
+        `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} WHERE run_id = $1 AND workflow_name = $2`,
+        [runId, workflowName],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
           },
         },
         error,
@@ -284,7 +310,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('PG', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

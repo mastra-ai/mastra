@@ -2,10 +2,10 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   WorkflowRun,
   WorkflowRuns,
@@ -16,6 +16,7 @@ import type {
   StorageDomains,
   StorageResourceType,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
@@ -34,6 +35,26 @@ export interface DynamoDBStoreConfig {
     accessKeyId: string;
     secretAccessKey: string;
   };
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new DynamoDBStore({ name: 'my-store', config: { ...config, disableInit: false } });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new DynamoDBStore({ name: 'my-store', config: { ...config, disableInit: true } });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 }
 
 // Define a type for our service that allows string indexing
@@ -49,7 +70,7 @@ export class DynamoDBStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor({ name, config }: { name: string; config: DynamoDBStoreConfig }) {
-    super({ id: config.id, name });
+    super({ id: config.id, name, disableInit: config.disableInit });
 
     // Validate required config
     try {
@@ -94,7 +115,7 @@ export class DynamoDBStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CONSTRUCTOR_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CONSTRUCTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -141,7 +162,7 @@ export class DynamoDBStore extends MastraStorage {
       // For other errors (like permissions issues), we should throw
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_VALIDATE_TABLE_EXISTS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'VALIDATE_TABLE_EXISTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -176,7 +197,7 @@ export class DynamoDBStore extends MastraStorage {
       // the caller of init() is aware of the failure.
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_INIT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -307,13 +328,7 @@ export class DynamoDBStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -350,6 +365,10 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById(args);
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     return this.stores.memory.getResourceById({ resourceId });
   }
@@ -382,7 +401,7 @@ export class DynamoDBStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CLOSE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CLOSE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -397,8 +416,8 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id: _id });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

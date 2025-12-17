@@ -1,7 +1,9 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod';
+import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
+import type { PubSub } from '../events/pubsub';
 import type { Mastra } from '../mastra';
 import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -11,10 +13,19 @@ import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
+export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
 
 export type WorkflowEngineType = string;
+
+/**
+ * Type of workflow - determines how the workflow is categorized in the UI.
+ * - 'default': Standard workflow
+ * - 'processor': Workflow used as a processor for agent input/output processing
+ */
+export type WorkflowType = 'default' | 'processor';
 
 export type RestartExecutionParams = {
   activePaths: number[];
@@ -33,13 +44,6 @@ export type TimeTravelExecutionParams = {
   resumeData?: any;
 };
 
-export type Emitter = {
-  emit: (event: string, data: any) => Promise<void>;
-  on: (event: string, callback: (data: any) => void) => void;
-  off: (event: string, callback: (data: any) => void) => void;
-  once: (event: string, callback: (data: any) => void) => void;
-};
-
 export type StepMetadata = Record<string, any>;
 
 export type StepSuccess<P, R, S, T> = {
@@ -56,9 +60,17 @@ export type StepSuccess<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+/** Tripwire data attached to a failed step when triggered by a processor */
+export interface StepTripwireInfo {
+  reason: string;
+  retry?: boolean;
+  metadata?: Record<string, unknown>;
+  processorId?: string;
+}
+
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
-  error: string | Error;
+  error: Error;
   payload: P;
   resumePayload?: R;
   suspendPayload?: S;
@@ -68,6 +80,8 @@ export type StepFailure<P, R, S, T> = {
   suspendedAt?: number;
   resumedAt?: number;
   metadata?: StepMetadata;
+  /** Tripwire data when step failed due to processor rejection */
+  tripwire?: StepTripwireInfo;
 };
 
 export type StepSuspended<P, S, T> = {
@@ -104,6 +118,25 @@ export type StepWaiting<P, R, S, T> = {
 
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
+  | StepFailure<P, R, S, T>
+  | StepSuspended<P, S, T>
+  | StepRunning<P, R, S, T>
+  | StepWaiting<P, R, S, T>;
+
+/**
+ * Serialized version of StepFailure where error is a SerializedError
+ * (used when loading workflow runs from storage)
+ */
+export type SerializedStepFailure<P, R, S, T> = Omit<StepFailure<P, R, S, T>, 'error'> & {
+  error: SerializedError;
+};
+
+/**
+ * Step result type that accounts for serialized errors when loaded from storage
+ */
+export type SerializedStepResult<P, R, S, T> =
+  | StepSuccess<P, R, S, T>
+  | SerializedStepFailure<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
@@ -197,6 +230,7 @@ export type WorkflowRunStatus =
   | 'running'
   | 'success'
   | 'failed'
+  | 'tripwire'
   | 'suspended'
   | 'waiting'
   | 'pending'
@@ -228,7 +262,7 @@ export interface WorkflowState {
       output?: Record<string, any>;
       payload?: Record<string, any>;
       resumePayload?: Record<string, any>;
-      error?: string | Error;
+      error?: SerializedError;
       startedAt: number;
       endedAt: number;
       suspendedAt?: number;
@@ -237,7 +271,7 @@ export interface WorkflowState {
   >;
   result?: Record<string, any>;
   payload?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
 }
 
 export interface WorkflowRunState {
@@ -245,10 +279,10 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
-  error?: string | Error;
+  error?: SerializedError;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
-  context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
+  context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<number>;
   activeStepsPath: Record<string, number[]>;
@@ -262,6 +296,29 @@ export interface WorkflowRunState {
   >;
   waitingPaths: Record<string, number[]>;
   timestamp: number;
+  /** Tripwire data when status is 'tripwire' */
+  tripwire?: StepTripwireInfo;
+}
+
+/**
+ * Result object passed to the onFinish callback when a workflow completes.
+ */
+export interface WorkflowFinishCallbackResult {
+  status: WorkflowRunStatus;
+  result?: any;
+  error?: SerializedError;
+  steps: Record<string, StepResult<any, any, any, any>>;
+  tripwire?: StepTripwireInfo;
+}
+
+/**
+ * Error info object passed to the onError callback when a workflow fails.
+ */
+export interface WorkflowErrorCallbackInfo {
+  status: 'failed' | 'tripwire';
+  error?: SerializedError;
+  steps: Record<string, StepResult<any, any, any, any>>;
+  tripwire?: StepTripwireInfo;
 }
 
 export interface WorkflowOptions {
@@ -271,6 +328,20 @@ export interface WorkflowOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Called when workflow execution completes (success, failed, suspended, or tripwire).
+   * This callback is invoked server-side without requiring client-side .watch().
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+
+  /**
+   * Called only when workflow execution fails (failed or tripwire status).
+   * This callback is invoked server-side without requiring client-side .watch().
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
 }
 
 export type WorkflowInfo = {
@@ -282,6 +353,9 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   options?: WorkflowOptions;
+  stepCount?: number;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 };
 
 export type DefaultEngineType = {};
@@ -456,6 +530,24 @@ export type WorkflowResult<
       error: Error;
     } & TracingProperties)
   | ({
+      status: 'tripwire';
+      input: z.infer<TInput>;
+      state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
+      /** Tripwire data including reason, retry flag, metadata, and processor ID */
+      tripwire: StepTripwireInfo;
+    } & TracingProperties)
+  | ({
       status: 'suspended';
       input: z.infer<TInput>;
       state?: z.infer<TState>;
@@ -516,6 +608,8 @@ export type WorkflowConfig<
     delay?: number;
   };
   options?: WorkflowOptions;
+  /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
+  type?: WorkflowType;
 };
 
 /**
@@ -612,7 +706,7 @@ export type StepExecutionStartParams = {
   runId: string;
   step: Step<any, any, any>;
   inputData: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   executionContext: ExecutionContext;
   stepCallId: string;
   stepInfo: Record<string, any>;
@@ -635,7 +729,7 @@ export type RegularStepExecutionParams = {
   timeTravel?: TimeTravelExecutionParams;
   prevOutput: any;
   inputData: any;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
   tracingContext?: TracingContext;
@@ -707,4 +801,19 @@ export type PersistenceWrapParams = {
 export type DurableOperationWrapParams<T> = {
   operationId: string;
   operationFn: () => Promise<T>;
+};
+
+/**
+ * Base type for formatted workflow results returned by fmtReturnValue.
+ */
+export type FormattedWorkflowResult = {
+  status: WorkflowStepStatus | 'tripwire';
+  steps: Record<string, StepResult<any, any, any, any>>;
+  input: StepResult<any, any, any, any> | undefined;
+  result?: any;
+  error?: SerializedError;
+  suspended?: string[][];
+  suspendPayload?: any;
+  /** Tripwire data when status is 'tripwire' */
+  tripwire?: StepTripwireInfo;
 };

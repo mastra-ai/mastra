@@ -1,4 +1,4 @@
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   StorageColumn,
@@ -13,9 +13,10 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   TABLE_NAMES,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
@@ -27,6 +28,26 @@ import { StoreOperationsConvex } from './operations';
 export type ConvexStoreConfig = ConvexAdminClientConfig & {
   id: string;
   name?: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new ConvexStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new ConvexStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 };
 
 export class ConvexStore extends MastraStorage {
@@ -36,7 +57,7 @@ export class ConvexStore extends MastraStorage {
   private readonly scores: ScoresConvex;
 
   constructor(config: ConvexStoreConfig) {
-    super({ id: config.id, name: config.name ?? 'ConvexStore' });
+    super({ id: config.id, name: config.name ?? 'ConvexStore', disableInit: config.disableInit });
 
     const client = new ConvexAdminClient(config);
     this.operations = new StoreOperationsConvex(client);
@@ -185,13 +206,7 @@ export class ConvexStore extends MastraStorage {
   async updateWorkflowState(params: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: WorkflowRunStatus;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.workflows.updateWorkflowState(params);
   }
@@ -234,11 +249,15 @@ export class ConvexStore extends MastraStorage {
     return this.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.scores.saveScore(score);
   }
 

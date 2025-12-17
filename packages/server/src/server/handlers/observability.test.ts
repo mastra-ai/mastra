@@ -11,7 +11,7 @@ import {
   listScoresBySpan,
   scoreTracesHandler,
 } from './observability';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
 vi.mock('@mastra/core/evals/scoreTraces', () => ({
@@ -377,7 +377,7 @@ describe('Observability Handlers', () => {
         });
 
         const result = await GET_TRACES_PAGINATED_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           page: 1,
           perPage: 10,
           dateRange: dateRangeJson,

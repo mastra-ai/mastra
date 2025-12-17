@@ -5,6 +5,8 @@ import { useContext, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import type { TripwireData } from '../context/use-current-run';
 
 export interface WorkflowStepActionBarProps {
   input?: any;
@@ -12,11 +14,12 @@ export interface WorkflowStepActionBarProps {
   suspendOutput?: any;
   resumeData?: any;
   error?: any;
+  tripwire?: TripwireData;
   stepName: string;
   stepId?: string;
   mapConfig?: string;
   onShowNestedGraph?: () => void;
-  status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+  status?: 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'tripwire';
   stepKey?: string;
 }
 
@@ -26,6 +29,7 @@ export const WorkflowStepActionBar = ({
   resumeData,
   suspendOutput,
   error,
+  tripwire,
   mapConfig,
   stepName,
   stepId,
@@ -37,30 +41,58 @@ export const WorkflowStepActionBar = ({
   const [isOutputOpen, setIsOutputOpen] = useState(false);
   const [isResumeDataOpen, setIsResumeDataOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
-  const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
+  const [isTripwireOpen, setIsTripwireOpen] = useState(false);
   const [isTimeTravelOpen, setIsTimeTravelOpen] = useState(false);
 
   const { withoutTimeTravel } = useContext(WorkflowRunContext);
+  const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
   const showTimeTravel = !withoutTimeTravel && stepKey && !mapConfig;
 
+  // Check if this step's detail is currently open
+  const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
+  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail?.stepName === stepName;
+
+  const activeButtonClass = 'ring-2 ring-accent1 ring-offset-1 ring-offset-transparent';
+
+  const handleMapConfigClick = () => {
+    if (isMapConfigOpen) {
+      closeStepDetail();
+    } else {
+      showMapConfig({ stepName, stepId, mapConfig: mapConfig! });
+    }
+  };
+
+  const handleNestedGraphClick = () => {
+    if (isNestedGraphOpen) {
+      closeStepDetail();
+    } else {
+      onShowNestedGraph?.();
+    }
+  };
+
   return (
     <>
-      {(input || output || error || mapConfig || resumeData || onShowNestedGraph || showTimeTravel) && (
+      {(input || output || error || tripwire || mapConfig || resumeData || onShowNestedGraph || showTimeTravel) && (
         <div
           className={cn(
             'flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg',
             status === 'success' && 'bg-accent1Dark',
             status === 'failed' && 'bg-accent2Dark',
+            status === 'tripwire' && 'bg-amber-900/40 border-amber-500/20',
             status === 'suspended' && 'bg-accent3Dark',
             status === 'waiting' && 'bg-accent5Dark',
             status === 'running' && 'bg-accent6Dark',
           )}
         >
-          {onShowNestedGraph && <Button onClick={onShowNestedGraph}>View nested graph</Button>}
+          {onShowNestedGraph && (
+            <Button onClick={handleNestedGraphClick} className={cn(isNestedGraphOpen && activeButtonClass)}>
+              View nested graph
+            </Button>
+          )}
           {showTimeTravel && (
             <>
               <Button onClick={() => setIsTimeTravelOpen(true)}>Time travel</Button>
@@ -76,24 +108,9 @@ export const WorkflowStepActionBar = ({
             </>
           )}
           {mapConfig && (
-            <>
-              <Button onClick={() => setIsMapConfigOpen(true)}>Map config</Button>
-
-              <Dialog open={isMapConfigOpen} onOpenChange={setIsMapConfigOpen}>
-                <DialogContent className={dialogContentClass}>
-                  <DialogTitle className={dialogTitleClass}>
-                    <div className="flex flex-col gap-1">
-                      <div>{stepName} Map Config</div>
-                      {stepId && stepId !== stepName && <div className="text-xs text-icon3 font-normal">{stepId}</div>}
-                    </div>
-                  </DialogTitle>
-
-                  <div className="px-4 overflow-hidden">
-                    <CodeDialogContent data={mapConfig} />
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
+            <Button onClick={handleMapConfigClick} className={cn(isMapConfigOpen && activeButtonClass)}>
+              Map config
+            </Button>
           )}
           {input && (
             <>
@@ -152,6 +169,31 @@ export const WorkflowStepActionBar = ({
 
                   <div className="px-4 overflow-hidden">
                     <CodeDialogContent data={error} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+
+          {tripwire && (
+            <>
+              <Button onClick={() => setIsTripwireOpen(true)} className="text-amber-400 hover:text-amber-300">
+                Tripwire
+              </Button>
+
+              <Dialog open={isTripwireOpen} onOpenChange={setIsTripwireOpen}>
+                <DialogContent className={dialogContentClass}>
+                  <DialogTitle className={dialogTitleClass}>{stepName} tripwire</DialogTitle>
+
+                  <div className="px-4 overflow-hidden">
+                    <CodeDialogContent
+                      data={{
+                        reason: tripwire.reason,
+                        retry: tripwire.retry,
+                        metadata: tripwire.metadata,
+                        processorId: tripwire.processorId,
+                      }}
+                    />
                   </div>
                 </DialogContent>
               </Dialog>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { createCombinedPaginationSchema } from './common';
 
 // Path parameters
 export const mcpServerIdPathParams = z.object({
@@ -19,10 +20,8 @@ export const executeToolBodySchema = z.object({
 });
 
 // Query parameters
-export const listMcpServersQuerySchema = z.object({
-  limit: z.coerce.number().optional(),
-  offset: z.coerce.number().optional(),
-});
+// Supports both page/perPage and limit/offset for backwards compatibility
+export const listMcpServersQuerySchema = createCombinedPaginationSchema();
 
 export const getMcpServerDetailQuerySchema = z.object({
   version: z.string().optional(),

@@ -11,8 +11,9 @@
  *
  * @see https://github.com/mastra-ai/mastra/issues/4296
  */
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { MockMemory } from '../../memory/mock';
@@ -383,6 +384,116 @@ describe('RequestContext reserved keys for resourceId and threadId', () => {
 
       const attackerThread = await mockMemory.getThreadById({ threadId: 'attacker-stream-thread' });
       expect(attackerThread).toBeNull();
+    });
+  });
+
+  describe('v2 - network', () => {
+    let dummyModel: MockLanguageModelV2;
+
+    beforeEach(() => {
+      dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: {
+            type: 'text-delta',
+            id: 'text-1',
+            delta: JSON.stringify({
+              isComplete: true,
+              completionReason: 'test',
+              finalResult: 'Reserved keys test response',
+            }),
+          },
+          content: [{ type: 'text', text: 'Reserved keys test response' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            {
+              type: 'text-delta',
+              id: 'text-1',
+              delta: JSON.stringify({
+                isComplete: true,
+                completionReason: 'test',
+                finalResult: 'Reserved keys test response',
+              }),
+            },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+    });
+
+    it('should use mastra__resourceId and mastra__threadId from RequestContext', async () => {
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'stream-context-user');
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'stream-context-thread');
+
+      const streamResult = await agent.network('hello', {
+        requestContext,
+      });
+
+      for await (const _chunk of streamResult) {
+        // consume
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'stream-context-thread' });
+      expect(thread).toBeDefined();
+      expect(thread?.id).toBe('stream-context-thread');
+      expect(thread?.resourceId).toBe('stream-context-user');
+    });
+
+    it('RequestContext reserved keys should take precedence over memory option values', async () => {
+      const mockMemory = new MockMemory();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'middleware-resource');
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'middleware-thread');
+
+      const streamResult = await agent.network('hello', {
+        requestContext,
+        // Using the new memory option format - these should be overridden by RequestContext
+        memory: {
+          resource: 'body-resource-should-be-ignored',
+          thread: 'body-thread-should-be-ignored',
+        },
+      });
+
+      for await (const _chunk of streamResult) {
+        // consume
+      }
+
+      // The middleware values should win
+      const middlewareThread = await mockMemory.getThreadById({ threadId: 'middleware-thread' });
+      expect(middlewareThread).toBeDefined();
+      expect(middlewareThread?.id).toBe('middleware-thread');
+      expect(middlewareThread?.resourceId).toBe('middleware-resource');
+
+      // The body values should NOT be used
+      const bodyThread = await mockMemory.getThreadById({ threadId: 'body-thread-should-be-ignored' });
+      expect(bodyThread).toBeNull();
     });
   });
 });

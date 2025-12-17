@@ -1,6 +1,6 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -16,11 +16,9 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      tools: Record<string, Tool>;
+      tools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
-      playground?: boolean;
-      isDev?: boolean;
     }
   }
 }
@@ -74,12 +72,17 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       if (this.taskStore) {
         res.locals.taskStore = this.taskStore;
       }
-      res.locals.playground = this.playground === true;
-      res.locals.isDev = this.isDev === true;
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
-      req.on('close', () => {
-        controller.abort();
+      // Use res.on('close') instead of req.on('close') because the request's 'close' event
+      // fires when the request body is fully consumed (e.g., after express.json() parses it),
+      // NOT when the client disconnects. The response's 'close' event fires when the underlying
+      // connection is actually closed, which is the correct signal for client disconnection.
+      res.on('close', () => {
+        // Only abort if the response wasn't successfully completed
+        if (!res.writableFinished) {
+          controller.abort();
+        }
       });
       res.locals.abortSignal = controller.signal;
       next();

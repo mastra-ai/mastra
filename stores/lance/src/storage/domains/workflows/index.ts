@@ -1,7 +1,18 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, StorageListWorkflowRunsInput, WorkflowRuns } from '@mastra/core/storage';
-import { ensureDate, normalizePerPage, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  StorageListWorkflowRunsInput,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  ensureDate,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 function parseWorkflowRun(row: any): WorkflowRun {
@@ -57,13 +68,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
@@ -114,7 +119,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('LANCE', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -138,7 +143,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('LANCE', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -169,10 +174,28 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: args.runId, workflowName: args.workflowName ?? '' },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const whereClause = `run_id = '${runId.replace(/'/g, "''")}' AND workflow_name = '${workflowName.replace(/'/g, "''")}'`;
+      await table.delete(whereClause);
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
         },
         error,
       );
@@ -230,7 +253,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         if (args.page < 0 || !Number.isInteger(args.page)) {
           throw new MastraError(
             {
-              id: 'LANCE_STORE_INVALID_PAGINATION_PARAMS',
+              id: createStorageErrorId('LANCE', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGINATION'),
               domain: ErrorDomain.STORAGE,
               category: ErrorCategory.USER,
               details: { page: args.page, perPage: args.perPage },
@@ -252,7 +275,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },

@@ -1,0 +1,345 @@
+---
+title: "Reference: MastraServer | Server"
+description: "API reference for the MastraServer abstract class used to create server adapters."
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# MastraServer
+
+The `MastraServer` abstract class is the base for all server adapters. Extend this class to create adapters for frameworks other than Hono or Express.
+
+## Import
+
+```typescript
+import { MastraServer } from '@mastra/server/server-adapter';
+```
+
+## Type parameters
+
+```typescript
+MastraServer<TApp, TRequest, TResponse>
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `TApp` | Framework app type (e.g., `Hono`, `Application`) |
+| `TRequest` | Framework request type |
+| `TResponse` | Framework response/context type |
+
+## Constructor
+
+```typescript
+constructor(options: MastraServerOptions<TApp>)
+```
+
+### Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "TApp",
+      description: "Framework app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "BodyLimitOptions",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "StreamOptions",
+      description: "Stream redaction config",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+    {
+      name: "playground",
+      type: "boolean",
+      description: "Can be read to set context values in adapters implementing the MastraServer",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "isDev",
+      type: "boolean",
+      description: "Development mode flag",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Abstract methods
+
+These methods must be implemented by adapters:
+
+### registerContextMiddleware()
+
+Attach Mastra context to every request.
+
+```typescript
+abstract registerContextMiddleware(): void
+```
+
+**Context to attach:**
+- `mastra` - Mastra instance
+- `requestContext` - Request-scoped context
+- `tools` - Available tools
+- `abortSignal` - Request cancellation signal
+
+### registerAuthMiddleware()
+
+Register authentication and authorization middleware.
+
+```typescript
+abstract registerAuthMiddleware(): void
+```
+
+### registerRoute()
+
+Register a single route with the framework.
+
+```typescript
+abstract registerRoute(
+  app: TApp,
+  route: ServerRoute,
+  options: { prefix?: string }
+): Promise<void>
+```
+
+### getParams()
+
+Extract parameters from the request.
+
+```typescript
+abstract getParams(
+  route: ServerRoute,
+  request: TRequest
+): Promise<{
+  urlParams: Record<string, string>;
+  queryParams: Record<string, string>;
+  body: unknown;
+}>
+```
+
+### sendResponse()
+
+Send response based on route type.
+
+```typescript
+abstract sendResponse(
+  route: ServerRoute,
+  response: TResponse,
+  result: unknown
+): Promise<unknown>
+```
+
+### stream()
+
+Handle streaming responses.
+
+```typescript
+abstract stream(
+  route: ServerRoute,
+  response: TResponse,
+  result: unknown
+): Promise<unknown>
+```
+
+## Instance methods
+
+### init()
+
+Initialize the server by registering all middleware and routes.
+
+```typescript
+async init(): Promise<void>
+```
+
+Calls in order:
+1. `registerContextMiddleware()`
+2. `registerAuthMiddleware()`
+3. `registerRoutes()`
+
+### registerRoutes()
+
+Register all Mastra routes.
+
+```typescript
+async registerRoutes(): Promise<void>
+```
+
+### getApp()
+
+Get the framework app instance.
+
+```typescript
+getApp<T = TApp>(): T
+```
+
+### parsePathParams()
+
+Validate path parameters with the route's Zod schema.
+
+```typescript
+async parsePathParams(
+  route: ServerRoute,
+  params: Record<string, string>
+): Promise<Record<string, unknown>>
+```
+
+### parseQueryParams()
+
+Validate query parameters with the route's Zod schema.
+
+```typescript
+async parseQueryParams(
+  route: ServerRoute,
+  params: Record<string, string>
+): Promise<Record<string, unknown>>
+```
+
+### parseBody()
+
+Validate request body with the route's Zod schema.
+
+```typescript
+async parseBody(
+  route: ServerRoute,
+  body: unknown
+): Promise<unknown>
+```
+
+### registerOpenAPIRoute()
+
+Register an endpoint that serves the OpenAPI specification.
+
+```typescript
+async registerOpenAPIRoute(
+  app: TApp,
+  config: OpenAPIConfig,
+  options: { prefix?: string }
+): Promise<void>
+```
+
+## Protected methods
+
+### mergeRequestContext()
+
+Merge request context from multiple sources (query params and body).
+
+```typescript
+protected mergeRequestContext(options: {
+  paramsRequestContext?: Record<string, any>;
+  bodyRequestContext?: Record<string, any>;
+}): RequestContext
+```
+
+## Types
+
+### BodyLimitOptions
+
+```typescript
+interface BodyLimitOptions {
+  maxSize: number;
+  onError: (error: unknown) => unknown;
+}
+```
+
+### StreamOptions
+
+```typescript
+interface StreamOptions {
+  redact?: boolean;
+}
+```
+
+## Example
+
+```typescript
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
+import type { Mastra } from '@mastra/core';
+
+export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
+  registerContextMiddleware(): void {
+    this.app.use('*', (req, res, next) => {
+      res.locals.mastra = this.mastra;
+      next();
+    });
+  }
+
+  registerAuthMiddleware(): void {
+    const auth = this.mastra.getServer()?.auth;
+    if (!auth) return;
+    // Implement auth
+  }
+
+  async registerRoute(app, route, { prefix }) {
+    // Implement route registration
+  }
+
+  async getParams(route, request) {
+    return {
+      urlParams: request.params,
+      queryParams: request.query,
+      body: request.body,
+    };
+  }
+
+  async sendResponse(route, response, result) {
+    return response.json(result);
+  }
+
+  async stream(route, response, result) {
+    // Implement streaming
+  }
+}
+```
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters
+- [Custom Adapters](/docs/v1/server/custom-adapters) - Creating custom adapters
+- [createRoute()](/reference/v1/server/create-route) - Creating custom routes

@@ -1,5 +1,5 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
@@ -12,6 +12,7 @@ import type {
   StoragePagination,
   StorageDomains,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -25,6 +26,26 @@ export interface UpstashConfig {
   id: string;
   url: string;
   token: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new UpstashStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new UpstashStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 }
 
 export class UpstashStore extends MastraStorage {
@@ -32,7 +53,7 @@ export class UpstashStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: UpstashConfig) {
-    super({ id: config.id, name: 'Upstash' });
+    super({ id: config.id, name: 'Upstash', disableInit: config.disableInit });
     this.redis = new Redis({
       url: config.url,
       token: config.token,
@@ -160,13 +181,7 @@ export class UpstashStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -187,6 +202,10 @@ export class UpstashStore extends MastraStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     return this.stores.workflows.loadWorkflowSnapshot(params);
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
@@ -244,7 +263,7 @@ export class UpstashStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id: _id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

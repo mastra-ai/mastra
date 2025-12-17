@@ -18,7 +18,7 @@ Each tool typically defines:
 
 In Mastra, you create tools using the [`createTool`](/reference/v1/tools/create-tool) function from the `@mastra/core/tools` package.
 
-```typescript title="src/mastra/tools/weatherInfo.ts" copy
+```typescript title="src/mastra/tools/weatherInfo.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -56,9 +56,9 @@ To make tools available to an agent, you configure them in the agent's definitio
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server-db/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript title="src/mastra/tools/test-tool.ts" showLineNumbers
+```typescript title="src/mastra/tools/test-tool.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -81,7 +81,7 @@ export const testTool = createTool({
 });
 ```
 
-> See [Request Context](/docs/v1/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server/request-context) for more information.
 
 ## Testing with Studio
 

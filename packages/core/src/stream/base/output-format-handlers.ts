@@ -1,6 +1,6 @@
 import { TransformStream } from 'node:stream/web';
-import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
-import type { JSONSchema7, Schema } from 'ai-v5';
+import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
+import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
 import type z3 from 'zod/v3';
 import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
@@ -12,6 +12,68 @@ import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
 import { getTransformedSchema } from './schema';
 import type { InferSchemaOutput, OutputSchema, PartialSchemaOutput, ZodLikePartialSchema } from './schema';
+
+/**
+ * Escapes unescaped newlines, carriage returns, and tabs within JSON string values.
+ *
+ * LLMs often output actual newline characters inside JSON strings instead of properly
+ * escaped \n sequences, which breaks JSON parsing. This function fixes that by:
+ * 1. Tracking whether we're inside a JSON string (after an unescaped quote)
+ * 2. Replacing literal newlines/tabs with their escape sequences only inside strings
+ * 3. Preserving already-escaped sequences like \\n
+ *
+ * @param text - Raw JSON text that may contain unescaped control characters in strings
+ * @returns JSON text with control characters properly escaped inside string values
+ */
+export function escapeUnescapedControlCharsInJsonStrings(text: string): string {
+  let result = '';
+  let inString = false;
+  let i = 0;
+
+  while (i < text.length) {
+    const char = text[i];
+
+    // Check for escape sequences
+    if (char === '\\' && i + 1 < text.length) {
+      // This is an escape sequence - pass through both characters
+      result += char + text[i + 1];
+      i += 2;
+      continue;
+    }
+
+    // Track string boundaries (unescaped quotes)
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      i++;
+      continue;
+    }
+
+    // If inside a string, escape control characters
+    if (inString) {
+      if (char === '\n') {
+        result += '\\n';
+        i++;
+        continue;
+      }
+      if (char === '\r') {
+        result += '\\r';
+        i++;
+        continue;
+      }
+      if (char === '\t') {
+        result += '\\t';
+        i++;
+        continue;
+      }
+    }
+
+    result += char;
+    i++;
+  }
+
+  return result;
+}
 
 interface ProcessPartialChunkParams {
   /** Text accumulated from streaming so far */
@@ -182,7 +244,8 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
   abstract validateAndTransformFinal(finalValue: string): Promise<ValidateAndTransformFinalResult<OUTPUT>>;
 
   /**
-   * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks.
+   * Preprocesses accumulated text to handle LLMs that wrap JSON in code blocks
+   * and fix common JSON formatting issues like unescaped newlines in strings.
    * Extracts content from the first complete valid ```json...``` code block or removes opening ```json prefix if no complete code block is found (streaming chunks).
    * @param accumulatedText - Raw accumulated text from streaming
    * @returns Processed text ready for JSON parsing
@@ -211,6 +274,10 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
         processedText = processedText.replace(/^```json\s*\n?/, '');
       }
     }
+
+    // LLMs often output actual newlines/tabs inside JSON strings instead of
+    // properly escaped \n sequences. Fix this before parsing.
+    processedText = escapeUnescapedControlCharsInJsonStrings(processedText);
 
     return processedText;
   }

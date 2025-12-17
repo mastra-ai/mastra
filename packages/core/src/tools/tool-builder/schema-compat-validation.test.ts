@@ -271,4 +271,89 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     // was using the original schema with .optional() instead of the transformed
     // schema with .nullable()
   });
+
+  it('should respect structured outputs for v2 models and preserve enums/constraints', async () => {
+    const category = z.enum(['book', 'device']).describe('Inventory category');
+
+    const inputSchema = z
+      .object({
+        category: category.optional().describe('Inventory category'),
+        price: z.number().min(1).describe('Unit price'),
+        label: z
+          .string()
+          .trim()
+          .optional()
+          .transform(v => v?.toLowerCase())
+          .describe('Optional label'),
+      })
+      .describe('Inventory search filters');
+
+    const toolWithEnum: ToolAction<any, any> = {
+      id: 'v2-structured-tool',
+      description: 'Tool with enum and min constraint',
+      inputSchema,
+      execute: async (input: z.infer<typeof inputSchema>) => {
+        return { ok: true, received: input };
+      },
+    };
+
+    const v2ModelConfig = {
+      provider: 'openai',
+      modelId: 'gpt-4o-mini',
+      specificationVersion: 'v2' as const,
+      supportsStructuredOutputs: true,
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: toolWithEnum,
+      options: {
+        name: 'v2-structured-tool',
+        model: v2ModelConfig as any,
+        requestContext: new RequestContext(),
+      },
+    });
+
+    const coreTool = builder.build();
+
+    // Ensure the parameters we send to the LLM are not empty objects
+    const params = coreTool.parameters as any;
+    const schemaShape = params.jsonSchema;
+    const props = schemaShape.properties || {};
+
+    expect(Object.keys(props)).toEqual(['category', 'price', 'label']);
+    const requiredFields = schemaShape?.required || [];
+    expect(requiredFields).toEqual(['price']);
+
+    // Ensure the enum/type details survive schema compat
+    const categoryProp = props.category;
+    const priceProp = props.price;
+    const labelProp = props.label;
+
+    expect(categoryProp).toBeDefined();
+    expect(categoryProp.type).toBe('string');
+    expect(categoryProp.enum).toEqual(['book', 'device']);
+
+    expect(priceProp).toBeDefined();
+    expect(priceProp.type).toBe('number');
+    expect(priceProp.minimum).toBe(1);
+
+    expect(labelProp).toBeDefined();
+    expect(labelProp.type).toBe('string');
+
+    // Execution should accept valid enum and numeric inputs and apply transform
+    const executeResult = await coreTool.execute?.(
+      { category: 'book', price: 25, label: '  BLUE ' },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).not.toHaveProperty('error');
+    expect(executeResult).toEqual({
+      ok: true,
+      received: { category: 'book', price: 25, label: 'blue' },
+    });
+  });
 });

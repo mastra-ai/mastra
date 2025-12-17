@@ -9,6 +9,7 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  createStorageErrorId,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -92,7 +93,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -112,7 +113,7 @@ export class MemoryPG extends MemoryStorage {
     // Validate page parameter
     if (page < 0) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_PG_STORE_INVALID_PAGE',
+        id: createStorageErrorId('PG', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
@@ -166,7 +167,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('PG', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -226,7 +227,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('PG', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -252,7 +253,7 @@ export class MemoryPG extends MemoryStorage {
     const existingThread = await this.getThreadById({ threadId: id });
     if (!existingThread) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_PG_STORE_UPDATE_THREAD_FAILED',
+        id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -294,7 +295,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -339,7 +340,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('PG', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -454,7 +455,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -480,7 +481,7 @@ export class MemoryPG extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_PG_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
@@ -492,7 +493,7 @@ export class MemoryPG extends MemoryStorage {
     // Validate page parameter
     if (page < 0) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_PG_STORE_INVALID_PAGE',
+        id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
@@ -624,7 +625,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('PG', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -652,7 +653,7 @@ export class MemoryPG extends MemoryStorage {
     const threadId = messages[0]?.threadId;
     if (!threadId) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
+        id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         text: `Thread ID is required`,
@@ -663,7 +664,7 @@ export class MemoryPG extends MemoryStorage {
     const thread = await this.getThreadById({ threadId });
     if (!thread) {
       throw new MastraError({
-        id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
+        id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         text: `Thread ${threadId} not found`,
@@ -742,7 +743,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -917,7 +918,7 @@ export class MemoryPG extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_DELETE_MESSAGES_FAILED',
+          id: createStorageErrorId('PG', 'DELETE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messageIds.join(', ') },

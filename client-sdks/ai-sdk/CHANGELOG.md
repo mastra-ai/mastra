@@ -1,5 +1,101 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
+- Improve JSDoc comments for `toAISdkV5Messages, toAISdkV4Messages` functions ([#11119](https://github.com/mastra-ai/mastra/pull/11119))
+
+- Fixed duplicate assistant messages appearing when using `useChat` with memory enabled. ([#11195](https://github.com/mastra-ai/mastra/pull/11195))
+
+  **What was happening:** When using `useChat` with `chatRoute` and memory, assistant messages were being duplicated in storage after multiple conversation turns. This occurred because the backend-generated message ID wasn't being sent back to `useChat`, causing ID mismatches during deduplication.
+
+  **What changed:**
+  - The backend now sends the assistant message ID in the stream's start event, so `useChat` uses the same ID as storage
+  - Custom `data-*` parts (from `writer.custom()`) are now preserved when messages contain V5 tool parts
+
+  Fixes #11091
+
+- add requestContext support to networkRoute ([#11164](https://github.com/mastra-ai/mastra/pull/11164))
+
+- Updated dependencies [[`d5ed981`](https://github.com/mastra-ai/mastra/commit/d5ed981c8701c1b8a27a5f35a9a2f7d9244e695f), [`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808), [`932d63d`](https://github.com/mastra-ai/mastra/commit/932d63dd51be9c8bf1e00e3671fe65606c6fb9cd), [`b760b73`](https://github.com/mastra-ai/mastra/commit/b760b731aca7c8a3f041f61d57a7f125ae9cb215), [`695a621`](https://github.com/mastra-ai/mastra/commit/695a621528bdabeb87f83c2277cf2bb084c7f2b4), [`2b459f4`](https://github.com/mastra-ai/mastra/commit/2b459f466fd91688eeb2a44801dc23f7f8a887ab), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`24b76d8`](https://github.com/mastra-ai/mastra/commit/24b76d8e17656269c8ed09a0c038adb9cc2ae95a), [`243a823`](https://github.com/mastra-ai/mastra/commit/243a8239c5906f5c94e4f78b54676793f7510ae3), [`486352b`](https://github.com/mastra-ai/mastra/commit/486352b66c746602b68a95839f830de14c7fb8c0), [`c61fac3`](https://github.com/mastra-ai/mastra/commit/c61fac3add96f0dcce0208c07415279e2537eb62), [`6f14f70`](https://github.com/mastra-ai/mastra/commit/6f14f706ccaaf81b69544b6c1b75ab66a41e5317), [`09e4bae`](https://github.com/mastra-ai/mastra/commit/09e4bae18dd5357d2ae078a4a95a2af32168ab08), [`4524734`](https://github.com/mastra-ai/mastra/commit/45247343e384717a7c8404296275c56201d6470f), [`2a53598`](https://github.com/mastra-ai/mastra/commit/2a53598c6d8cfeb904a7fc74e57e526d751c8fa6), [`c7cd3c7`](https://github.com/mastra-ai/mastra/commit/c7cd3c7a187d7aaf79e2ca139de328bf609a14b4), [`847c212`](https://github.com/mastra-ai/mastra/commit/847c212caba7df0d6f2fc756b494ac3c75c3720d), [`6f941c4`](https://github.com/mastra-ai/mastra/commit/6f941c438ca5f578619788acc7608fc2e23bd176)]:
+  - @mastra/core@1.0.0-beta.12
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- Support new Workflow tripwire run status. Tripwires that are thrown from within a workflow will now bubble up and return a graceful state with information about tripwires. ([#10947](https://github.com/mastra-ai/mastra/pull/10947))
+
+  When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
+
+  ```typescript showLineNumbers copy
+  const run = await workflow.createRun();
+  const result = await run.start({ inputData: { message: 'Hello' } });
+
+  if (result.status === 'tripwire') {
+    console.log('Workflow terminated by tripwire:', result.tripwire?.reason);
+    console.log('Processor ID:', result.tripwire?.processorId);
+    console.log('Retry requested:', result.tripwire?.retry);
+  }
+  ```
+
+  Adds new UI state for tripwire in agent chat and workflow UI.
+
+  This is distinct from `status: 'failed'` which indicates an unexpected error. A tripwire status means a processor intentionally stopped execution (e.g., for content moderation).
+
+- Updated dependencies [[`38380b6`](https://github.com/mastra-ai/mastra/commit/38380b60fca905824bdf6b43df307a58efb1aa15), [`798d0c7`](https://github.com/mastra-ai/mastra/commit/798d0c740232653b1d754870e6b43a55c364ffe2), [`ffe84d5`](https://github.com/mastra-ai/mastra/commit/ffe84d54f3b0f85167fe977efd027dba027eb998), [`2c212e7`](https://github.com/mastra-ai/mastra/commit/2c212e704c90e2db83d4109e62c03f0f6ebd2667), [`4ca4306`](https://github.com/mastra-ai/mastra/commit/4ca430614daa5fa04730205a302a43bf4accfe9f), [`3bf6c5f`](https://github.com/mastra-ai/mastra/commit/3bf6c5f104c25226cd84e0c77f9dec15f2cac2db)]:
+  - @mastra/core@1.0.0-beta.11
+
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Return NetworkDataPart on each agent-execution-event and workflow-execution-event in network streams ([#10982](https://github.com/mastra-ai/mastra/pull/10982))
+
+- Fixed tool-call-suspended chunks being dropped in workflow-step-output when using AI SDK. Previously, when an agent inside a workflow step called a tool that got suspended, the tool-call-suspended chunk was not received on the frontend even though tool-input-available chunks were correctly received. ([#10987](https://github.com/mastra-ai/mastra/pull/10987))
+
+  The issue occurred because tool-call-suspended was not included in the isMastraTextStreamChunk list, causing it to be filtered out in transformWorkflow. Now tool-call-suspended, tool-call-approval, object, and tripwire chunks are properly included in the text stream chunk list and will be transformed and passed through correctly.
+
+  Fixes #10978
+
+- Adds `withMastra()` for wrapping AI SDK models with Mastra processors and memory. ([#10911](https://github.com/mastra-ai/mastra/pull/10911))
+
+  ```typescript
+  import { openai } from '@ai-sdk/openai';
+  import { generateText } from 'ai';
+  import { withMastra } from '@mastra/ai-sdk';
+
+  const model = withMastra(openai('gpt-4o'), {
+    inputProcessors: [myGuardProcessor],
+    outputProcessors: [myLoggingProcessor],
+    memory: {
+      storage,
+      threadId: 'thread-123',
+      resourceId: 'user-123',
+      lastMessages: 10,
+    },
+  });
+
+  const { text } = await generateText({ model, prompt: 'Hello!' });
+  ```
+
+  Works with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Improve JSDoc comments ([#10877](https://github.com/mastra-ai/mastra/pull/10877))
+
+- Updated dependencies [[`0d41fe2`](https://github.com/mastra-ai/mastra/commit/0d41fe245355dfc66d61a0d9c85d9400aac351ff), [`6b3ba91`](https://github.com/mastra-ai/mastra/commit/6b3ba91494cc10394df96782f349a4f7b1e152cc), [`7907fd1`](https://github.com/mastra-ai/mastra/commit/7907fd1c5059813b7b870b81ca71041dc807331b)]:
+  - @mastra/core@1.0.0-beta.8
+
 ## 1.0.0-beta.5
 
 ### Minor Changes

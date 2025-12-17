@@ -9,7 +9,7 @@ import {
   GET_MCP_SERVER_TOOL_DETAIL_ROUTE,
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
 } from './mcp';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 
 /**
  * MCP Registry Handler Tests
@@ -102,7 +102,7 @@ describe('MCP Registry Handlers', () => {
       } as unknown as Mastra;
 
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: emptyMastra }),
+        ...createTestServerContext({ mastra: emptyMastra }),
       });
 
       expect(result.servers).toEqual([]);
@@ -112,7 +112,7 @@ describe('MCP Registry Handlers', () => {
 
     it('should return all servers when no pagination params provided', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
       });
 
       expect(result.servers).toHaveLength(2);
@@ -122,42 +122,70 @@ describe('MCP Registry Handlers', () => {
       expect(result.servers[1]).toEqual(server2Info);
     });
 
-    it('should paginate servers when limit is provided', async () => {
+    it('should paginate servers when perPage is provided', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
+        perPage: 1,
+        page: 0,
+      });
+
+      expect(result.servers).toHaveLength(1);
+      expect(result.total_count).toBe(2);
+      expect(result.next).toContain('perPage=1');
+      expect(result.next).toContain('page=1');
+      expect(result.servers[0]).toEqual(server1Info);
+    });
+
+    it('should paginate servers when legacy limit/offset is provided', async () => {
+      const result = await LIST_MCP_SERVERS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
         limit: 1,
         offset: 0,
       });
 
       expect(result.servers).toHaveLength(1);
       expect(result.total_count).toBe(2);
-      expect(result.next).toContain('limit=1&offset=1');
+      // Next URL mirrors request format (legacy limit/offset)
+      expect(result.next).toContain('limit=1');
+      expect(result.next).toContain('offset=1');
       expect(result.servers[0]).toEqual(server1Info);
     });
 
     it('should calculate next URL correctly', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
-        limit: 1,
-        offset: 0,
+        ...createTestServerContext({ mastra: mockMastra }),
+        perPage: 1,
+        page: 0,
       });
 
-      expect(result.next).toBe('/api/mcp/v0/servers?limit=1&offset=1');
+      expect(result.next).toBe('/api/mcp/v0/servers?perPage=1&page=1');
     });
 
     it('should return null for next when no more results', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
-        limit: 10,
-        offset: 0,
+        ...createTestServerContext({ mastra: mockMastra }),
+        perPage: 10,
+        page: 0,
       });
 
       expect(result.next).toBeNull();
     });
 
-    it('should handle offset correctly', async () => {
+    it('should handle page correctly', async () => {
       const result = await LIST_MCP_SERVERS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
+        perPage: 1,
+        page: 1,
+      });
+
+      expect(result.servers).toHaveLength(1);
+      expect(result.servers[0]).toEqual(server2Info);
+      expect(result.next).toBeNull(); // No more results
+    });
+
+    it('should convert legacy offset to page', async () => {
+      const result = await LIST_MCP_SERVERS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
         limit: 1,
         offset: 1,
       });
@@ -172,7 +200,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         LIST_MCP_SERVERS_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: invalidMastra }),
+          ...createTestServerContext({ mastra: invalidMastra }),
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -182,14 +210,14 @@ describe('MCP Registry Handlers', () => {
     it('should throw 404 when server not found', async () => {
       await expect(
         GET_MCP_SERVER_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           id: 'non-existent',
         }),
       ).rejects.toThrow(HTTPException);
 
       await expect(
         GET_MCP_SERVER_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           id: 'non-existent',
         }),
       ).rejects.toThrow(/not found/);
@@ -197,7 +225,7 @@ describe('MCP Registry Handlers', () => {
 
     it('should return server details when found', async () => {
       const result = await GET_MCP_SERVER_DETAIL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         id: 'server1',
       });
 
@@ -207,7 +235,7 @@ describe('MCP Registry Handlers', () => {
 
     it('should validate version parameter when provided', async () => {
       const result = await GET_MCP_SERVER_DETAIL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         id: 'server1',
         version: '1.0.0',
       });
@@ -218,7 +246,7 @@ describe('MCP Registry Handlers', () => {
     it('should throw 404 when version does not match', async () => {
       await expect(
         GET_MCP_SERVER_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           id: 'server1',
           version: '2.0.0',
         }),
@@ -226,7 +254,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         GET_MCP_SERVER_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           id: 'server1',
           version: '2.0.0',
         }),
@@ -238,7 +266,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         GET_MCP_SERVER_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: invalidMastra }),
+          ...createTestServerContext({ mastra: invalidMastra }),
           id: 'server1',
         }),
       ).rejects.toThrow(HTTPException);
@@ -249,14 +277,14 @@ describe('MCP Registry Handlers', () => {
     it('should throw 404 when server not found', async () => {
       await expect(
         LIST_MCP_SERVER_TOOLS_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'non-existent',
         }),
       ).rejects.toThrow(HTTPException);
 
       await expect(
         LIST_MCP_SERVER_TOOLS_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'non-existent',
         }),
       ).rejects.toThrow(/not found/);
@@ -264,7 +292,7 @@ describe('MCP Registry Handlers', () => {
 
     it('should return tool list for server', async () => {
       const result = await LIST_MCP_SERVER_TOOLS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         serverId: 'server1',
       });
 
@@ -289,14 +317,14 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         LIST_MCP_SERVER_TOOLS_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
         }),
       ).rejects.toThrow(HTTPException);
 
       await expect(
         LIST_MCP_SERVER_TOOLS_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
         }),
       ).rejects.toThrow(/cannot list tools/);
@@ -307,7 +335,7 @@ describe('MCP Registry Handlers', () => {
     it('should throw 404 when server not found', async () => {
       await expect(
         GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'non-existent',
           toolId: 'tool1',
         }),
@@ -315,7 +343,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'non-existent',
           toolId: 'tool1',
         }),
@@ -325,7 +353,7 @@ describe('MCP Registry Handlers', () => {
     it('should throw 404 when tool not found', async () => {
       await expect(
         GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'server1',
           toolId: 'non-existent',
         }),
@@ -333,7 +361,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'server1',
           toolId: 'non-existent',
         }),
@@ -342,7 +370,7 @@ describe('MCP Registry Handlers', () => {
 
     it('should return tool details when found', async () => {
       const result = await GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         serverId: 'server1',
         toolId: 'tool1',
       });
@@ -367,7 +395,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
           toolId: 'tool1',
         }),
@@ -375,7 +403,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         GET_MCP_SERVER_TOOL_DETAIL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
           toolId: 'tool1',
         }),
@@ -387,7 +415,7 @@ describe('MCP Registry Handlers', () => {
     it('should throw 404 when server not found', async () => {
       await expect(
         EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'non-existent',
           toolId: 'tool1',
           data: {},
@@ -396,7 +424,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra: mockMastra }),
+          ...createTestServerContext({ mastra: mockMastra }),
           serverId: 'non-existent',
           toolId: 'tool1',
           data: {},
@@ -408,7 +436,7 @@ describe('MCP Registry Handlers', () => {
       const testData = { input: 'test' };
 
       const result = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         serverId: 'server1',
         toolId: 'tool1',
         data: testData,
@@ -422,7 +450,7 @@ describe('MCP Registry Handlers', () => {
 
     it('should execute tool without data', async () => {
       const result = await EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra: mockMastra }),
+        ...createTestServerContext({ mastra: mockMastra }),
         serverId: 'server1',
         toolId: 'tool1',
       });
@@ -443,7 +471,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
           toolId: 'tool1',
           data: {},
@@ -463,7 +491,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
           toolId: 'tool1',
           data: {},
@@ -472,7 +500,7 @@ describe('MCP Registry Handlers', () => {
 
       await expect(
         EXECUTE_MCP_SERVER_TOOL_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           serverId: 'server1',
           toolId: 'tool1',
           data: {},

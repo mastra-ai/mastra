@@ -11,6 +11,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -109,7 +110,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -132,7 +133,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_PAGE',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -145,7 +146,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (threadIds.length === 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
@@ -424,7 +425,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -619,7 +620,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -668,7 +669,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -705,7 +706,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -768,7 +769,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id, title },
@@ -800,7 +801,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -819,7 +820,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_CLICKHOUSE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -913,7 +914,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId, page },
@@ -1276,7 +1277,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messages.map(m => m.id).join(',') },
@@ -1321,7 +1322,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -1356,7 +1357,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -1436,7 +1437,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLICKHOUSE_STORAGE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('CLICKHOUSE', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

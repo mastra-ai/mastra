@@ -18,12 +18,13 @@ export const AgentChat = ({
   modelVersion,
   modelList,
   messageId,
-}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string }) => {
+  isNewThread,
+}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
   const { settings } = useAgentSettings();
   const { requestContext } = usePlaygroundStore();
   const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,
-    threadId: threadId ?? '',
+    threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
     memory: memory ?? false,
   });
 

@@ -215,6 +215,202 @@ describe('LangfuseExporter', () => {
       // Should not create trace for child spans
       expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
     });
+
+    it('should reuse existing trace when multiple root spans share the same traceId', async () => {
+      const sharedTraceId = 'shared-trace-123';
+
+      // First root span (e.g., first agent.stream call)
+      const firstRootSpan = createMockSpan({
+        id: 'root-span-1',
+        name: 'agent-call-1',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+
+      // Child span of first root (e.g., tool call from first agent call)
+      const firstChildSpan = createMockSpan({
+        id: 'child-span-1',
+        name: 'tool-call-1',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'root-span-1',
+        attributes: { toolId: 'calculator' },
+      });
+
+      // Second root span with same traceId (e.g., second agent.stream call after client-side tool)
+      const secondRootSpan = createMockSpan({
+        id: 'root-span-2',
+        name: 'agent-call-2',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+
+      // Child span of second root (e.g., tool call from second agent call)
+      const secondChildSpan = createMockSpan({
+        id: 'child-span-2',
+        name: 'tool-call-2',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'root-span-2',
+        attributes: { toolId: 'search' },
+      });
+
+      // Process all spans
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: firstChildSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondRootSpan,
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: secondChildSpan,
+      });
+
+      // Should create trace only once (for the shared traceId)
+      expect(mockLangfuseClient.trace).toHaveBeenCalledTimes(1);
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: sharedTraceId,
+        name: 'agent-call-1',
+        userId: 'user-456',
+        sessionId: 'session-789',
+        metadata: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+      });
+
+      // Both root spans and their children should be added to the same trace
+      // First root span creates a span under the trace
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'root-span-1',
+          name: 'agent-call-1',
+        }),
+      );
+
+      // Second root span should also create a span under the same trace (not a new trace)
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'root-span-2',
+          name: 'agent-call-2',
+        }),
+      );
+
+      // Child spans should be created
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span-1',
+        }),
+      );
+
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span-2',
+        }),
+      );
+    });
+
+    it('should handle trace that exists in Langfuse but not in local traceMap (e.g., after server restart)', async () => {
+      // Scenario: Server restarts, traceMap is cleared, but traces exist in Langfuse
+      // When new spans arrive with the same traceId, we should create a new local reference
+      // The Langfuse SDK handles this gracefully - it's idempotent and will update the existing trace
+
+      const traceId = 'persisted-trace-id';
+
+      // Simulate a span arriving after server restart
+      const rootSpan = createMockSpan({
+        id: 'new-root-span',
+        name: 'agent-call-after-restart',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: traceId,
+        attributes: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+        metadata: { userId: 'user-456', sessionId: 'session-789' },
+      });
+
+      // Process the span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Should call client.trace() to create/update the trace in Langfuse
+      // The Langfuse SDK is idempotent - if the trace exists, it will update it
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: traceId,
+        name: 'agent-call-after-restart',
+        userId: 'user-456',
+        sessionId: 'session-789',
+        metadata: {
+          agentId: 'agent-123',
+          instructions: 'Test agent',
+          spanType: 'agent_run',
+        },
+      });
+
+      // The root span itself also creates a span under the trace
+      expect(mockTrace.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'new-root-span',
+          name: 'agent-call-after-restart',
+        }),
+      );
+
+      // Add a child span to verify the trace is now in our local map
+      const childSpan = createMockSpan({
+        id: 'child-span',
+        name: 'tool-call',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        traceId: traceId,
+        parentSpanId: 'new-root-span',
+        attributes: { toolId: 'calculator' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Child span should be created under the root span
+      expect(mockSpan.span).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'child-span',
+          name: 'tool-call',
+        }),
+      );
+    });
   });
 
   describe('LLM Generation Mapping', () => {
@@ -230,9 +426,8 @@ describe('LangfuseExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           usage: {
-            promptTokens: 10,
-            completionTokens: 5,
-            totalTokens: 15,
+            inputTokens: 10,
+            outputTokens: 5,
           },
           parameters: {
             temperature: 0.7,
@@ -265,17 +460,17 @@ describe('LangfuseExporter', () => {
         },
         input: { messages: [{ role: 'user', content: 'Hello' }] },
         output: { content: 'Hi there!' },
-        usage: {
+        usageDetails: {
           input: 10,
           output: 5,
           total: 15,
         },
-        metadata: {
+        metadata: expect.objectContaining({
           provider: 'openai',
           resultType: 'response_generation',
           spanType: 'model_generation',
           streaming: false,
-        },
+        }),
       });
     });
 
@@ -467,7 +662,7 @@ describe('LangfuseExporter', () => {
       // Then update it
       llmSpan.attributes = {
         ...llmSpan.attributes,
-        usage: { totalTokens: 150 },
+        usage: { inputTokens: 100, outputTokens: 50 },
       } as ModelGenerationAttributes;
       llmSpan.output = { content: 'Updated response' };
 
@@ -482,7 +677,9 @@ describe('LangfuseExporter', () => {
         }),
         model: 'gpt-4',
         output: { content: 'Updated response' },
-        usage: {
+        usageDetails: {
+          input: 100,
+          output: 50,
           total: 150,
         },
       });
@@ -1169,256 +1366,1212 @@ describe('LangfuseExporter', () => {
     });
   });
 
-  describe('AI SDK v4 and v5 Compatibility', () => {
-    describe('Token Usage Normalization', () => {
-      it('should handle AI SDK v4 token format (promptTokens/completionTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v4-span',
-          name: 'llm-generation-v4',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              promptTokens: 100,
-              completionTokens: 50,
-              totalTokens: 150,
-            },
+  describe('Token Usage Normalization', () => {
+    it('should handle token format with inputTokens/outputTokens', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-v5-span',
+        name: 'llm-generation-v5',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4o',
+          provider: 'openai',
+          usage: {
+            inputTokens: 120,
+            outputTokens: 60,
           },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 100,
-              output: 50,
-              total: 150,
-            },
-          }),
-        );
+        },
       });
 
-      it('should handle AI SDK v5 token format (inputTokens/outputTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-span',
-          name: 'llm-generation-v5',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4o',
-            provider: 'openai',
-            usage: {
-              inputTokens: 120,
-              outputTokens: 60,
-              totalTokens: 180,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4o',
-            usage: {
-              input: 120,
-              output: 60,
-              total: 180,
-            },
-          }),
-        );
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
       });
 
-      it('should handle AI SDK v5 reasoning tokens', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-reasoning-span',
-          name: 'llm-generation-reasoning',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'o1-preview',
-            provider: 'openai',
-            usage: {
-              inputTokens: 100,
-              outputTokens: 50,
-              reasoningTokens: 1000,
-              totalTokens: 1150,
-            },
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-4o',
+          usageDetails: {
+            input: 120,
+            output: 60,
+            total: 180,
           },
-        });
+        }),
+      );
+    });
 
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'o1-preview',
-            usage: {
-              input: 100,
-              output: 50,
-              reasoning: 1000,
-              total: 1150,
-            },
-          }),
-        );
+    it('should handle reasoning tokens from outputDetails', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-v5-reasoning-span',
+        name: 'llm-generation-reasoning',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'o1-preview',
+          provider: 'openai',
+          usage: {
+            inputTokens: 100,
+            outputTokens: 1050,
+            outputDetails: { reasoning: 1000 },
+          },
+        },
       });
 
-      it('should handle AI SDK v5 cached input tokens', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-v5-cached-span',
-          name: 'llm-generation-cached',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'claude-3-5-sonnet',
-            provider: 'anthropic',
-            usage: {
-              inputTokens: 150,
-              outputTokens: 75,
-              cachedInputTokens: 100,
-              totalTokens: 225,
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'claude-3-5-sonnet',
-            usage: {
-              input: 150,
-              output: 75,
-              cachedInput: 100,
-              total: 225,
-            },
-          }),
-        );
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
       });
 
-      it('should handle legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-cache-legacy-span',
-          name: 'llm-generation-cache-legacy',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              promptTokens: 200,
-              completionTokens: 100,
-              totalTokens: 300,
-              promptCacheHitTokens: 150,
-              promptCacheMissTokens: 50,
-            },
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'o1-preview',
+          usageDetails: {
+            input: 100,
+            output: 1050,
+            reasoning: 1000,
+            total: 1150,
           },
-        });
+        }),
+      );
+    });
 
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 200,
-              output: 100,
-              total: 300,
-              promptCacheHit: 150,
-              promptCacheMiss: 50,
-            },
-          }),
-        );
+    it('should handle cached input tokens from inputDetails', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-v5-cached-span',
+        name: 'llm-generation-cached',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'claude-3-5-sonnet',
+          provider: 'anthropic',
+          usage: {
+            inputTokens: 150,
+            outputTokens: 75,
+            inputDetails: { cacheRead: 100 },
+          },
+        },
       });
 
-      it('should calculate total tokens when not provided', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-calculated-total',
-          name: 'llm-generation-calc',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              inputTokens: 80,
-              outputTokens: 40,
-              // no totalTokens provided
-            },
-          },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 80,
-              output: 40,
-              total: 120, // calculated
-            },
-          }),
-        );
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
       });
 
-      it('should handle mixed v4/v5 format gracefully (prioritizing v5)', async () => {
-        const llmSpan = createMockSpan({
-          id: 'llm-mixed-span',
-          name: 'llm-generation-mixed',
-          type: SpanType.MODEL_GENERATION,
-          isRoot: true,
-          attributes: {
-            model: 'gpt-4',
-            provider: 'openai',
-            usage: {
-              // Both formats present - v5 should take precedence
-              inputTokens: 100,
-              promptTokens: 90,
-              outputTokens: 50,
-              completionTokens: 45,
-              totalTokens: 150,
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-3-5-sonnet',
+          usageDetails: {
+            input: 150,
+            output: 75,
+            cache_read_input_tokens: 100,
+            total: 225,
+          },
+        }),
+      );
+    });
+
+    it('should calculate total tokens when not provided', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-calculated-total',
+        name: 'llm-generation-calc',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+          usage: {
+            inputTokens: 80,
+            outputTokens: 40,
+            // no totalTokens provided
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gpt-4',
+          usageDetails: {
+            input: 80,
+            output: 40,
+            total: 120, // calculated
+          },
+        }),
+      );
+    });
+  });
+
+  describe('Langfuse Prompt Linking', () => {
+    it('should link prompt to generation when metadata.langfuse.prompt is set', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-with-prompt',
+        name: 'gpt-4-call-with-prompt',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'greeting-prompt',
+              version: 3,
             },
           },
-        });
-
-        await exporter.exportTracingEvent({
-          type: TracingEventType.SPAN_STARTED,
-          exportedSpan: llmSpan,
-        });
-
-        expect(mockTrace.generation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            model: 'gpt-4',
-            usage: {
-              input: 100, // v5 value, not 90
-              output: 50, // v5 value, not 45
-              total: 150,
-            },
-          }),
-        );
+        },
       });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-with-prompt',
+          name: 'gpt-4-call-with-prompt',
+          model: 'gpt-4',
+          prompt: {
+            name: 'greeting-prompt',
+            version: 3,
+          },
+        }),
+      );
+    });
+
+    it('should link prompt with all fields when name, version, and id are set', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-with-prompt-id',
+        name: 'gpt-4-call-with-prompt-id',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'customer-support',
+              version: 5,
+              id: 'prompt-uuid-12345',
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-with-prompt-id',
+          prompt: {
+            name: 'customer-support',
+            version: 5,
+            id: 'prompt-uuid-12345',
+          },
+        }),
+      );
+    });
+
+    it('should link prompt with id alone', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-with-id-only',
+        name: 'gpt-4-call-id-only',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              id: 'prompt-uuid-only',
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      expect(mockTrace.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-with-id-only',
+          prompt: {
+            id: 'prompt-uuid-only',
+          },
+        }),
+      );
+    });
+
+    it('should not include prompt field for non-MODEL_GENERATION spans', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-with-prompt-metadata',
+        name: 'calculator-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        input: { operation: 'add', a: 2, b: 3 },
+        attributes: {
+          toolId: 'calculator',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'some-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // Should not include prompt in non-generation spans
+      const call = mockTrace.span.mock.calls[0][0];
+      expect(call.prompt).toBeUndefined();
+    });
+
+    it('should omit langfuse property from metadata after extracting prompt', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-clean-metadata',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'test-prompt',
+              version: 1,
+            },
+          },
+          customField: 'should-remain',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      const call = mockTrace.generation.mock.calls[0][0];
+      // Should have prompt at top level
+      expect(call.prompt).toEqual({
+        name: 'test-prompt',
+        version: 1,
+      });
+      // Should not have langfuse in metadata (it's been extracted)
+      expect(call.metadata.langfuse).toBeUndefined();
+      // Should preserve other metadata
+      expect(call.metadata.customField).toBe('should-remain');
+    });
+
+    it('should handle metadata.langfuse without prompt gracefully', async () => {
+      const llmSpan = createMockSpan({
+        id: 'llm-no-prompt',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            someOtherField: 'value',
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      const call = mockTrace.generation.mock.calls[0][0];
+      // Should not have prompt
+      expect(call.prompt).toBeUndefined();
+      // Should preserve langfuse metadata if no prompt was extracted
+      expect(call.metadata.langfuse).toEqual({ someOtherField: 'value' });
+    });
+
+    it('should inherit langfuse prompt from AGENT_RUN root span to child MODEL_GENERATION span', async () => {
+      // First, create a root AGENT_RUN span with langfuse prompt metadata
+      // (simulates: tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)))
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'support-agent',
+          instructions: 'Help customers',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'customer-support',
+              version: 3,
+              id: 'prompt-uuid-abc123',
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Create a child MODEL_GENERATION span WITHOUT langfuse metadata
+      // (this is what happens in practice - model.ts doesn't pass langfuse metadata)
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+        metadata: {
+          runId: 'run-123',
+          threadId: 'thread-456',
+        },
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // The MODEL_GENERATION span should inherit the prompt from the AGENT_RUN root span
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-span-id',
+          name: 'gpt-4-call',
+          model: 'gpt-4',
+          prompt: {
+            name: 'customer-support',
+            version: 3,
+            id: 'prompt-uuid-abc123',
+          },
+        }),
+      );
+    });
+
+    it('should inherit langfuse prompt to MODEL_GENERATION even when root span has other metadata', async () => {
+      // Root span with langfuse prompt and other metadata
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {
+          agentId: 'support-agent',
+        },
+        metadata: {
+          userId: 'user-123',
+          sessionId: 'session-456',
+          langfuse: {
+            prompt: {
+              name: 'greeting-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Child MODEL_GENERATION span without langfuse metadata
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          runId: 'run-123',
+        },
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should inherit prompt from root span
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: {
+            name: 'greeting-prompt',
+            version: 1,
+          },
+        }),
+      );
+    });
+
+    it('should prefer span-level langfuse prompt over inherited root span prompt', async () => {
+      // Root span with langfuse prompt
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'root-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Child MODEL_GENERATION span WITH its own langfuse metadata
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'span-specific-prompt',
+              version: 5,
+            },
+          },
+        },
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should use the span's own prompt, not the inherited one
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: {
+            name: 'span-specific-prompt',
+            version: 5,
+          },
+        }),
+      );
+    });
+
+    it('should not add prompt to MODEL_GENERATION when root span has no langfuse data', async () => {
+      // Root span WITHOUT langfuse metadata
+      const agentSpan = createMockSpan({
+        id: 'agent-span-id',
+        name: 'plain-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          userId: 'user-123',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Child MODEL_GENERATION span without langfuse metadata
+      const llmSpan = createMockSpan({
+        id: 'llm-span-id',
+        name: 'gpt-4-call',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: {
+          model: 'gpt-4',
+        },
+        metadata: {},
+      });
+      llmSpan.traceId = 'agent-span-id';
+      llmSpan.parentSpanId = 'agent-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should not have prompt field
+      const call = mockSpan.generation.mock.calls[0][0];
+      expect(call.prompt).toBeUndefined();
+    });
+  });
+
+  describe('Multiple Langfuse Prompts in Single Trace', () => {
+    it('should handle workflow calling multiple agents with different prompts', async () => {
+      // Workflow root span (no langfuse prompt)
+      const workflowSpan = createMockSpan({
+        id: 'workflow-span-id',
+        name: 'customer-journey-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: { workflowId: 'customer-journey' },
+        metadata: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpan,
+      });
+
+      // Agent 1 with its own prompt (greeting agent)
+      const agent1Span = createMockSpan({
+        id: 'agent-1-span-id',
+        name: 'greeting-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: { agentId: 'greeting-agent' },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'greeting-prompt',
+              version: 2,
+            },
+          },
+        },
+      });
+      agent1Span.traceId = 'workflow-span-id';
+      agent1Span.parentSpanId = 'workflow-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agent1Span,
+      });
+
+      // Agent 1's MODEL_GENERATION (should inherit greeting-prompt)
+      const llm1Span = createMockSpan({
+        id: 'llm-1-span-id',
+        name: 'gpt-4-greeting',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llm1Span.traceId = 'workflow-span-id';
+      llm1Span.parentSpanId = 'agent-1-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llm1Span,
+      });
+
+      // Verify first MODEL_GENERATION inherits greeting-prompt
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-1-span-id',
+          prompt: {
+            name: 'greeting-prompt',
+            version: 2,
+          },
+        }),
+      );
+
+      // Clear mock for next agent
+      mockSpan.generation.mockClear();
+
+      // Agent 2 with different prompt (support agent)
+      const agent2Span = createMockSpan({
+        id: 'agent-2-span-id',
+        name: 'support-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: { agentId: 'support-agent' },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'customer-support-prompt',
+              version: 5,
+              id: 'support-prompt-uuid',
+            },
+          },
+        },
+      });
+      agent2Span.traceId = 'workflow-span-id';
+      agent2Span.parentSpanId = 'workflow-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agent2Span,
+      });
+
+      // Agent 2's MODEL_GENERATION (should inherit customer-support-prompt)
+      const llm2Span = createMockSpan({
+        id: 'llm-2-span-id',
+        name: 'gpt-4-support',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llm2Span.traceId = 'workflow-span-id';
+      llm2Span.parentSpanId = 'agent-2-span-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llm2Span,
+      });
+
+      // Verify second MODEL_GENERATION inherits customer-support-prompt
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-2-span-id',
+          prompt: {
+            name: 'customer-support-prompt',
+            version: 5,
+            id: 'support-prompt-uuid',
+          },
+        }),
+      );
+    });
+
+    it('should handle nested agents with different prompts', async () => {
+      // Root agent with prompt A
+      const rootAgentSpan = createMockSpan({
+        id: 'root-agent-id',
+        name: 'orchestrator-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'orchestrator' },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'orchestrator-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootAgentSpan,
+      });
+
+      // Root agent's MODEL_GENERATION (inherits orchestrator-prompt)
+      const rootLlmSpan = createMockSpan({
+        id: 'root-llm-id',
+        name: 'gpt-4-orchestrate',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      rootLlmSpan.traceId = 'root-agent-id';
+      rootLlmSpan.parentSpanId = 'root-agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootLlmSpan,
+      });
+
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'root-llm-id',
+          prompt: {
+            name: 'orchestrator-prompt',
+            version: 1,
+          },
+        }),
+      );
+
+      mockSpan.generation.mockClear();
+
+      // Nested agent (child of root agent) with its own prompt B
+      const nestedAgentSpan = createMockSpan({
+        id: 'nested-agent-id',
+        name: 'specialist-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: { agentId: 'specialist' },
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'specialist-prompt',
+              version: 3,
+            },
+          },
+        },
+      });
+      nestedAgentSpan.traceId = 'root-agent-id';
+      nestedAgentSpan.parentSpanId = 'root-agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: nestedAgentSpan,
+      });
+
+      // Nested agent's MODEL_GENERATION (should inherit specialist-prompt, NOT orchestrator-prompt)
+      const nestedLlmSpan = createMockSpan({
+        id: 'nested-llm-id',
+        name: 'gpt-4-specialist',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      nestedLlmSpan.traceId = 'root-agent-id';
+      nestedLlmSpan.parentSpanId = 'nested-agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: nestedLlmSpan,
+      });
+
+      // Should inherit from immediate parent (specialist-prompt), not root (orchestrator-prompt)
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'nested-llm-id',
+          prompt: {
+            name: 'specialist-prompt',
+            version: 3,
+          },
+        }),
+      );
+    });
+
+    it('should traverse up the span tree to find prompt from grandparent', async () => {
+      // Root workflow (no prompt)
+      const workflowSpan = createMockSpan({
+        id: 'workflow-id',
+        name: 'complex-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpan,
+      });
+
+      // Agent with prompt (child of workflow)
+      const agentSpan = createMockSpan({
+        id: 'agent-id',
+        name: 'analysis-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'analysis-prompt',
+              version: 2,
+            },
+          },
+        },
+      });
+      agentSpan.traceId = 'workflow-id';
+      agentSpan.parentSpanId = 'workflow-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Tool call span (no prompt) - child of agent
+      const toolSpan = createMockSpan({
+        id: 'tool-id',
+        name: 'data-fetcher',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: { toolId: 'data-fetcher' },
+        metadata: {},
+      });
+      toolSpan.traceId = 'workflow-id';
+      toolSpan.parentSpanId = 'agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // MODEL_GENERATION as child of tool (grandchild of agent)
+      // Should traverse up to find agent's prompt
+      const llmSpan = createMockSpan({
+        id: 'llm-id',
+        name: 'gpt-4-analyze',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llmSpan.traceId = 'workflow-id';
+      llmSpan.parentSpanId = 'tool-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should find prompt from grandparent (agent)
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-id',
+          prompt: {
+            name: 'analysis-prompt',
+            version: 2,
+          },
+        }),
+      );
+    });
+
+    it('should handle mixed scenario: some agents with prompts, some without', async () => {
+      // Root workflow
+      const workflowSpan = createMockSpan({
+        id: 'workflow-id',
+        name: 'mixed-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpan,
+      });
+
+      // Agent 1 WITH prompt
+      const agent1Span = createMockSpan({
+        id: 'agent-1-id',
+        name: 'prompted-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'my-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+      agent1Span.traceId = 'workflow-id';
+      agent1Span.parentSpanId = 'workflow-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agent1Span,
+      });
+
+      // Agent 1's LLM - should have prompt
+      const llm1Span = createMockSpan({
+        id: 'llm-1-id',
+        name: 'gpt-4-prompted',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llm1Span.traceId = 'workflow-id';
+      llm1Span.parentSpanId = 'agent-1-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llm1Span,
+      });
+
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-1-id',
+          prompt: {
+            name: 'my-prompt',
+            version: 1,
+          },
+        }),
+      );
+
+      mockSpan.generation.mockClear();
+
+      // Agent 2 WITHOUT prompt
+      const agent2Span = createMockSpan({
+        id: 'agent-2-id',
+        name: 'unprompted-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: {},
+        metadata: {
+          customField: 'some-value',
+        },
+      });
+      agent2Span.traceId = 'workflow-id';
+      agent2Span.parentSpanId = 'workflow-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agent2Span,
+      });
+
+      // Agent 2's LLM - should NOT have prompt (no ancestor has one)
+      const llm2Span = createMockSpan({
+        id: 'llm-2-id',
+        name: 'gpt-4-unprompted',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llm2Span.traceId = 'workflow-id';
+      llm2Span.parentSpanId = 'agent-2-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llm2Span,
+      });
+
+      // Should NOT have prompt
+      const call = mockSpan.generation.mock.calls[0][0];
+      expect(call.prompt).toBeUndefined();
+    });
+
+    it('should handle deeply nested structure with prompt at different levels', async () => {
+      // Root workflow (no prompt)
+      const workflowSpan = createMockSpan({
+        id: 'workflow-id',
+        name: 'deep-workflow',
+        type: SpanType.WORKFLOW_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: workflowSpan,
+      });
+
+      // Step 1 (no prompt)
+      const step1Span = createMockSpan({
+        id: 'step-1-id',
+        name: 'step-1',
+        type: SpanType.WORKFLOW_STEP,
+        isRoot: false,
+        attributes: {},
+        metadata: {},
+      });
+      step1Span.traceId = 'workflow-id';
+      step1Span.parentSpanId = 'workflow-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: step1Span,
+      });
+
+      // Agent inside step 1 (WITH prompt)
+      const agentSpan = createMockSpan({
+        id: 'agent-id',
+        name: 'deep-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'deep-prompt',
+              version: 7,
+            },
+          },
+        },
+      });
+      agentSpan.traceId = 'workflow-id';
+      agentSpan.parentSpanId = 'step-1-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentSpan,
+      });
+
+      // Tool inside agent (no prompt)
+      const toolSpan = createMockSpan({
+        id: 'tool-id',
+        name: 'deep-tool',
+        type: SpanType.TOOL_CALL,
+        isRoot: false,
+        attributes: {},
+        metadata: {},
+      });
+      toolSpan.traceId = 'workflow-id';
+      toolSpan.parentSpanId = 'agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // MODEL_GENERATION at the deepest level
+      const llmSpan = createMockSpan({
+        id: 'llm-id',
+        name: 'gpt-4-deep',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llmSpan.traceId = 'workflow-id';
+      llmSpan.parentSpanId = 'tool-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should traverse: llm -> tool -> agent (found prompt!) -> stop
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-id',
+          prompt: {
+            name: 'deep-prompt',
+            version: 7,
+          },
+        }),
+      );
+    });
+
+    it('should use closest ancestor prompt when multiple ancestors have prompts', async () => {
+      // Root agent with prompt A
+      const rootAgentSpan = createMockSpan({
+        id: 'root-agent-id',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'root-prompt',
+              version: 1,
+            },
+          },
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootAgentSpan,
+      });
+
+      // Middle agent with prompt B (child of root)
+      const middleAgentSpan = createMockSpan({
+        id: 'middle-agent-id',
+        name: 'middle-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'middle-prompt',
+              version: 2,
+            },
+          },
+        },
+      });
+      middleAgentSpan.traceId = 'root-agent-id';
+      middleAgentSpan.parentSpanId = 'root-agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: middleAgentSpan,
+      });
+
+      // Leaf agent with prompt C (child of middle)
+      const leafAgentSpan = createMockSpan({
+        id: 'leaf-agent-id',
+        name: 'leaf-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: false,
+        attributes: {},
+        metadata: {
+          langfuse: {
+            prompt: {
+              name: 'leaf-prompt',
+              version: 3,
+            },
+          },
+        },
+      });
+      leafAgentSpan.traceId = 'root-agent-id';
+      leafAgentSpan.parentSpanId = 'middle-agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: leafAgentSpan,
+      });
+
+      // MODEL_GENERATION under leaf agent
+      const llmSpan = createMockSpan({
+        id: 'llm-id',
+        name: 'gpt-4-leaf',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        attributes: { model: 'gpt-4' },
+        metadata: {},
+      });
+      llmSpan.traceId = 'root-agent-id';
+      llmSpan.parentSpanId = 'leaf-agent-id';
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: llmSpan,
+      });
+
+      // Should use closest ancestor's prompt (leaf-prompt), not root or middle
+      expect(mockSpan.generation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'llm-id',
+          prompt: {
+            name: 'leaf-prompt',
+            version: 3,
+          },
+        }),
+      );
     });
   });
 
@@ -1737,6 +2890,8 @@ function createMockSpan({
   output,
   errorInfo,
   tags,
+  traceId,
+  parentSpanId,
 }: {
   id: string;
   name: string;
@@ -1748,6 +2903,8 @@ function createMockSpan({
   output?: any;
   errorInfo?: any;
   tags?: string[];
+  traceId?: string;
+  parentSpanId?: string;
 }): AnyExportedSpan {
   return {
     id,
@@ -1761,9 +2918,9 @@ function createMockSpan({
     tags,
     startTime: new Date(),
     endTime: undefined,
-    traceId: isRoot ? id : 'parent-trace-id',
+    traceId: traceId ?? (isRoot ? id : 'parent-trace-id'),
     isRootSpan: isRoot,
-    parentSpanId: isRoot ? undefined : 'parent-id',
+    parentSpanId: parentSpanId ?? (isRoot ? undefined : 'parent-id'),
     isEvent: false,
   };
 }

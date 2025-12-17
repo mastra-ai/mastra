@@ -35,11 +35,13 @@ interface CreatePrepareStreamWorkflowOptions<
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
 }
 
@@ -61,8 +63,10 @@ export function createPrepareStreamWorkflow<
   returnScorerData,
   saveQueueManager,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
   const prepareToolsStep = createPrepareToolsStep({
@@ -96,14 +100,17 @@ export function createPrepareStreamWorkflow<
     runId,
     returnScorerData,
     requireToolApproval,
+    toolCallConcurrency,
     resumeContext,
     agentId,
+    agentName,
     toolCallId,
     methodType,
     saveQueueManager,
     memoryConfig,
     memory,
     resourceId,
+    autoResumeSuspendedTools: options.autoResumeSuspendedTools,
   });
 
   const mapResultsStep = createMapResultsStep({

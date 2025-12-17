@@ -1,5 +1,5 @@
 ---
-title: "Example: Memory with MongoDB | Memory"
+title: "Example: Memory with MongoDB | Storage"
 description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
 ---
 
@@ -11,7 +11,7 @@ This example demonstrates how to use Mastra's memory system with MongoDB as the 
 
 This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 MONGODB_URI=<your-connection-string>
 MONGODB_DB_NAME=<your-db-name>
@@ -19,7 +19,7 @@ MONGODB_DB_NAME=<your-db-name>
 
 And install the following package:
 
-```bash copy
+```bash
 npm install @mastra/mongodb@beta
 ```
 
@@ -27,7 +27,7 @@ npm install @mastra/mongodb@beta
 
 To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
 
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { MongoDBStore } from "@mastra/mongodb";
@@ -61,13 +61,13 @@ Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve rel
 This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
 To use this, install `@mastra/fastembed`:
 
-```bash copy
+```bash
 npm install @mastra/fastembed@beta
 ```
 
 Add the following to your agent:
 
-```typescript title="src/mastra/agents/example-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
@@ -107,7 +107,7 @@ export const mongodbAgent = new Agent({
 
 Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
 
-```typescript title="src/test-mongodb-agent.ts" showLineNumbers copy
+```typescript title="src/test-mongodb-agent.ts"
 import "dotenv/config";
 
 import { mastra } from "./mastra";

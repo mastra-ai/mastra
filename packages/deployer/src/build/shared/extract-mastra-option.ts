@@ -8,6 +8,7 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { removeAllOptionsFromMastraExcept } from '../babel/remove-all-options-except';
 import json from '@rollup/plugin-json';
 import type { IMastraLogger } from '@mastra/core/logger';
+import { pathToFileURL } from 'node:url';
 
 type Transformer = (
   result: { hasCustomConfig: boolean },
@@ -117,7 +118,7 @@ export async function extractMastraOption<T>(
 
     return {
       bundleOutput: output,
-      getConfig: () => import(`file:${configPath}`).then(m => m[name] as T),
+      getConfig: () => import(pathToFileURL(configPath).href).then(m => m[name] as T),
     };
   }
 

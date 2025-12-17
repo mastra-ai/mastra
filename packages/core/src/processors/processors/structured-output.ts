@@ -73,14 +73,15 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   async processOutputStream(args: {
     part: ChunkType;
     streamParts: ChunkType[];
-    state: {
-      controller: TransformStreamDefaultController<ChunkType<OUTPUT>>;
+    state: Record<string, unknown> & {
+      controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
     };
-    abort: (reason?: string) => never;
+    abort: (reason?: string, options?: unknown) => never;
     tracingContext?: TracingContext;
+    retryCount: number;
   }): Promise<ChunkType | null | undefined> {
     const { part, state, streamParts, abort, tracingContext } = args;
-    const controller = state.controller;
+    const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
 
     switch (part.type) {
       case 'finish':

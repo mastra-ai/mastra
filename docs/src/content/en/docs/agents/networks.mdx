@@ -23,7 +23,7 @@ Mastra agent networks operate using these principles:
 
 An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
-```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts" showLineNumbers copy
+```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -71,7 +71,7 @@ When configuring a Mastra agent network, each primitive (agent, workflow, or too
 
 Each agent in a network should include a clear `description` that explains what the agent does.
 
-```typescript title="src/mastra/agents/research-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/research-agent.ts"
 export const researchAgent = new Agent({
   id: "research-agent",
   name: "Research Agent",
@@ -82,7 +82,7 @@ export const researchAgent = new Agent({
 });
 ```
 
-```typescript title="src/mastra/agents/writing-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/writing-agent.ts"
 export const writingAgent = new Agent({
   id: "writing-agent",
   name: "Writing Agent",
@@ -97,7 +97,7 @@ export const writingAgent = new Agent({
 
 Workflows in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
-```typescript title="src/mastra/workflows/city-workflow.ts" showLineNumbers
+```typescript title="src/mastra/workflows/city-workflow.ts"
 export const cityWorkflow = createWorkflow({
   id: "city-workflow",
   description: `This workflow handles city-specific research tasks.
@@ -118,7 +118,7 @@ export const cityWorkflow = createWorkflow({
 
 Tools in a network should include a `description` to explain their purpose, along with `inputSchema` and `outputSchema` to describe the expected data.
 
-```typescript title="src/mastra/tools/weather-tool.ts" showLineNumbers
+```typescript title="src/mastra/tools/weather-tool.ts"
 export const weatherTool = createTool({
   id: "weather-tool",
   description: ` Retrieves current weather information using the wttr.in API.
@@ -143,7 +143,7 @@ Call a Mastra agent network using `.network()` with a user message. The method r
 
 In this example, the network interprets the message and would route the request to both the `researchAgent` and `writingAgent` to generate a complete response.
 
-```typescript showLineNumbers copy
+```typescript
 const result = await routingAgent.network(
   "Tell me three cool ways to use Mastra",
 );
@@ -179,7 +179,7 @@ network-execution-event-step-finish
 
 In this example, the routing agent recognizes the city name in the message and runs the `cityWorkflow`. The workflow defines steps that call the `researchAgent` to gather facts, then the `writingAgent` to generate the final text.
 
-```typescript showLineNumbers copy
+```typescript
 const result = await routingAgent.network(
   "Tell me some historical facts about London",
 );
@@ -212,7 +212,7 @@ network-execution-event-step-finish
 
 In this example, the routing agent skips the `researchAgent`, `writingAgent`, and `cityWorkflow`, and calls the `weatherTool` directly to complete the task.
 
-```typescript showLineNumbers copy
+```typescript
 const result = await routingAgent.network("What's the weather in London?");
 
 for await (const chunk of result) {
@@ -239,5 +239,5 @@ network-execution-event-step-finish
 
 - [Agent Memory](./agent-memory)
 - [Workflows Overview](../workflows/overview)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)
 - [Supervisor example](https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent)

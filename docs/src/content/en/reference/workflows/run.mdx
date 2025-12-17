@@ -9,7 +9,7 @@ The `Run` class represents a workflow execution instance, providing methods to s
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({
@@ -63,6 +63,18 @@ if (result.status === "suspended") {
       description: "Restarts the workflow execution from last active step",
       required: true,
     },
+    {
+      name: "timeTravel",
+      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+      description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
+      required: true,
+    },
+    {
+      name: "timeTravelStream",
+      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+      description: "Time travels a workflow execution with streaming support",
+      required: true,
+    },
   ]}
 />
 
@@ -99,4 +111,6 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
 - [Run.restart()](./run-methods/restart)
+- [Run.timeTravel()](./run-methods/timeTravel)
 - [Run.stream()](/docs/v1/streaming/workflow-streaming)
+- [Run.timeTravelStream()](../streaming/workflows/timeTravelStream)

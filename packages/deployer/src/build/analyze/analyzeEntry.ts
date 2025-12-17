@@ -9,7 +9,8 @@ import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, getPackageRootPath, slash } from '../utils';
+import { getPackageName, slash } from '../utils';
+import { getPackageRootPath } from '../package-info';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
@@ -102,7 +103,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
+    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
       continue;
     }
 

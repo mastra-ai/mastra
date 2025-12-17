@@ -120,24 +120,26 @@ describe('resolveInitialMessages', () => {
         input: 'Search query',
         finalResult: {
           text: 'Search results',
-          toolCalls: [
-            {
-              type: 'tool-call',
-              runId: 'run-1',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'call-1',
-                toolName: 'web-search',
-                args: { query: 'test' },
-              },
-            },
-          ],
           messages: [
             {
               role: 'assistant',
               id: 'msg-inner-1',
               createdAt: '2024-01-01',
-              type: 'assistant',
+              type: 'tool-call',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'web-search',
+                  args: { query: 'test' },
+                },
+              ],
+            },
+            {
+              role: 'tool',
+              id: 'msg-inner-2',
+              createdAt: '2024-01-01',
+              type: 'tool-result',
               content: [
                 {
                   type: 'tool-result',
@@ -191,24 +193,26 @@ describe('resolveInitialMessages', () => {
         input: 'Run workflow',
         finalResult: {
           text: 'Workflow done',
-          toolCalls: [
-            {
-              type: 'tool-call',
-              runId: 'run-2',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'wf-call-1',
-                toolName: 'data-workflow',
-                args: { input: 'data' },
-              },
-            },
-          ],
           messages: [
             {
               role: 'assistant',
+              id: 'msg-inner-1',
+              createdAt: '2024-01-01',
+              type: 'tool-call',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'wf-call-1',
+                  toolName: 'data-workflow',
+                  args: { input: 'data' },
+                },
+              ],
+            },
+            {
+              role: 'tool',
               id: 'msg-inner-2',
               createdAt: '2024-01-01',
-              type: 'assistant',
+              type: 'tool-result',
               content: [
                 {
                   type: 'tool-result',
@@ -264,19 +268,23 @@ describe('resolveInitialMessages', () => {
         input: 'test',
         finalResult: {
           text: 'Done',
-          toolCalls: [
+          messages: [
             {
+              role: 'assistant',
+              id: 'msg-inner-1',
+              createdAt: '2024-01-01',
               type: 'tool-call',
-              runId: 'run-3',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'orphan-call',
-                toolName: 'orphan-tool',
-                args: {},
-              },
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'orphan-call',
+                  toolName: 'orphan-tool',
+                  args: {},
+                },
+              ],
             },
+            // No tool-result message - orphan tool call
           ],
-          messages: [],
         },
       };
 
@@ -305,7 +313,7 @@ describe('resolveInitialMessages', () => {
       });
     });
 
-    it('should handle empty tool calls array', () => {
+    it('should handle empty messages array', () => {
       const networkData = {
         isNetwork: true,
         primitiveType: 'agent',
@@ -313,7 +321,7 @@ describe('resolveInitialMessages', () => {
         input: 'test',
         finalResult: {
           text: 'Response',
-          toolCalls: [],
+          messages: [],
         },
       };
 
@@ -938,34 +946,32 @@ describe('resolveInitialMessages', () => {
         input: 'multi task',
         finalResult: {
           text: 'All done',
-          toolCalls: [
-            {
-              type: 'tool-call',
-              runId: 'run-6',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'call-a',
-                toolName: 'tool-a',
-                args: { param: 'a' },
-              },
-            },
-            {
-              type: 'tool-call',
-              runId: 'run-7',
-              from: 'AGENT',
-              payload: {
-                toolCallId: 'call-b',
-                toolName: 'tool-b',
-                args: { param: 'b' },
-              },
-            },
-          ],
           messages: [
             {
               role: 'assistant',
+              id: 'msg-inner-3',
+              createdAt: '2024-01-01',
+              type: 'tool-call',
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-a',
+                  toolName: 'tool-a',
+                  args: { param: 'a' },
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-b',
+                  toolName: 'tool-b',
+                  args: { param: 'b' },
+                },
+              ],
+            },
+            {
+              role: 'tool',
               id: 'msg-inner-4',
               createdAt: '2024-01-01',
-              type: 'assistant',
+              type: 'tool-result',
               content: [
                 {
                   type: 'tool-result',

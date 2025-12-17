@@ -14,10 +14,18 @@ export const agentIdQuerySchema = z.object({
 });
 
 /**
- * Storage order by configuration
+ * Storage order by configuration for threads and agents (have both createdAt and updatedAt)
  */
 const storageOrderBySchema = z.object({
   field: z.enum(['createdAt', 'updatedAt']).optional(),
+  direction: z.enum(['ASC', 'DESC']).optional(),
+});
+
+/**
+ * Storage order by configuration for messages (only have createdAt)
+ */
+const messageOrderBySchema = z.object({
+  field: z.enum(['createdAt']).optional(),
   direction: z.enum(['ASC', 'DESC']).optional(),
 });
 
@@ -145,7 +153,7 @@ export const getThreadByIdQuerySchema = agentIdQuerySchema;
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string(),
   resourceId: z.string().optional(),
-  orderBy: storageOrderBySchema.optional(),
+  orderBy: messageOrderBySchema.optional(),
   include: includeSchema,
   filter: filterSchema,
 });
@@ -188,7 +196,7 @@ export const getThreadByIdNetworkQuerySchema = agentIdQuerySchema;
 export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
   agentId: z.string(),
   resourceId: z.string().optional(),
-  orderBy: storageOrderBySchema.optional(),
+  orderBy: messageOrderBySchema.optional(),
   include: includeSchema,
   filter: filterSchema,
 });

@@ -13,6 +13,7 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 
 export async function getInputOptions(
   entryFile: string,
@@ -25,12 +26,14 @@ export async function getInputOptions(
     projectRoot,
     workspaceRoot = undefined,
     enableEsmShim = true,
+    externalsPreset = false,
   }: {
     sourcemap?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
     enableEsmShim?: boolean;
+    externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
@@ -45,8 +48,7 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
-
-  const externals = Array.from(externalsCopy);
+  const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
   return {
@@ -128,7 +130,7 @@ export async function getInputOptions(
         },
       }),
       enableEsmShim ? esmShim() : undefined,
-      nodeResolvePlugin,
+      externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
       // {
       //   name: 'logger',

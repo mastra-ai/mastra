@@ -39,7 +39,7 @@ npm install @mastra/core@beta
 
 Mastra's model router auto-detects environment variables for your chosen provider. For OpenAI, set `OPENAI_API_KEY`:
 
-```bash title=".env" copy
+```bash title=".env"
 OPENAI_API_KEY=<your-api-key>
 ```
 
@@ -55,7 +55,7 @@ Mastra supports more than 600 models. Choose from the [full list](/models/v1).
 
 Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
-```typescript title="src/mastra/agents/test-agent.ts" copy
+```typescript title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
@@ -77,7 +77,7 @@ They are system-level prompts that establish the agent's core identity and exper
 
 Instructions can be provided in multiple formats for greater flexibility. The examples below illustrate the supported shapes:
 
-```typescript copy
+```typescript
 // String (most common)
 instructions: "You are a helpful assistant.";
 
@@ -99,7 +99,7 @@ instructions: [
 
 Each model provider also enables a few different options, including prompt caching and configuring reasoning. We provide a `providerOptions` flag to manage these. You can set `providerOptions` on the instruction level to set different caching strategy per system instruction/prompt.
 
-```typescript copy
+```typescript
 // With provider-specific options (e.g., caching, reasoning)
 instructions: {
   role: "system",
@@ -118,7 +118,7 @@ instructions: {
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript {6} showLineNumbers title="src/mastra/index.ts" copy
+```typescript {6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
@@ -132,7 +132,7 @@ export const mastra = new Mastra({
 
 You can call agents from workflow steps, tools, the Mastra Client, or the command line. Get a reference by calling `.getAgent()` on your `mastra` or `mastraClient` instance, depending on your setup:
 
-```typescript showLineNumbers copy
+```typescript
 const testAgent = mastra.getAgent("testAgent");
 ```
 
@@ -152,7 +152,7 @@ Pass a single string for simple prompts, an array of strings when providing mult
 
 (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
-```typescript showLineNumbers copy
+```typescript
 const response = await testAgent.generate([
   { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
@@ -172,7 +172,7 @@ Pass a single string for simple prompts, an array of strings when providing mult
 
 (The `role` defines the speaker for each message. Typical roles are `user` for human input, `assistant` for agent responses, and `system` for instructions.)
 
-```typescript showLineNumbers copy
+```typescript
 const stream = await testAgent.stream([
   { role: "user", content: "Help me organize my day" },
   { role: "user", content: "My day starts at 9am and finishes at 5.30pm" },
@@ -193,7 +193,7 @@ for await (const chunk of stream.textStream) {
 When streaming responses, the `onFinish()` callback runs after the LLM finishes generating its response and all tool executions are complete.
 It provides the final `text`, execution `steps`, `finishReason`, token `usage` statistics, and other metadata useful for monitoring or logging.
 
-```typescript showLineNumbers copy
+```typescript
 const stream = await testAgent.stream("Help me organize my day", {
   onFinish: ({ steps, text, finishReason, usage }) => {
     console.log({ steps, text, finishReason, usage });
@@ -212,124 +212,15 @@ for await (const chunk of stream.textStream) {
 
 ## Structured output
 
-Agents can return structured, type-safe data by defining the expected output using either [Zod](https://zod.dev/) or [JSON Schema](https://json-schema.org/). We recommend Zod for better TypeScript support and developer experience. The parsed result is available on `response.object`, allowing you to work directly with validated and typed data.
+Agents can return structured, type-safe data using Zod or JSON Schema. The parsed result is available on `response.object`.
 
-### Using Zod
-
-Define the `output` shape using [Zod](https://zod.dev/):
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgent.generate(
-  [
-    {
-      role: "system",
-      content: "Provide a summary and keywords for the following text:",
-    },
-    {
-      role: "user",
-      content: "Monkey, Ice Cream, Boat",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string()),
-      }),
-    },
-  },
-);
-
-console.log(response.object);
-```
-
-### Structuring sub agent
-
-Use the `model` property to have a separate agent generate the structured output for you.
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgentWithTools.generate(
-  [
-    {
-      role: "system",
-      content: "Provide a summary and keywords for the following text:",
-    },
-    {
-      role: "user",
-      content: "Please use your test tool and let me know the results",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string()),
-      }),
-      model: "openai/gpt-5.1",
-    },
-  },
-);
-
-console.log(response.object);
-console.log(response.toolResults);
-```
-
-### Response format
-
-By default `structuredOutput` will use `response_format` to pass the schema to the model provider. If the model provider does not natively support `response_format` it's possible that this will error or not give the desired results. To keep using the same model use `jsonPromptInjection` to bypass response format and inject a system prompt message to coerce the model to return structured output.
-
-```typescript showLineNumbers copy
-import { z } from "zod";
-
-const response = await testAgentThatDoesntSupportStructuredOutput.generate(
-  [
-    {
-      role: "system",
-      content: "Provide a summary and keywords for the following text:",
-    },
-    {
-      role: "user",
-      content: "Monkey, Ice Cream, Boat",
-    },
-  ],
-  {
-    structuredOutput: {
-      schema: z.object({
-        summary: z.string(),
-        keywords: z.array(z.string()),
-      }),
-      jsonPromptInjection: true,
-    },
-  },
-);
-
-console.log(response.object);
-```
-
-:::info[Gemini 2.5 with tools]
-
-Gemini 2.5 models do not support combining `response_format` (structured output) with function calling (tools) in the same API call. If your agent has tools and you're using `structuredOutput` with a Gemini 2.5 model, you must set `jsonPromptInjection: true` to avoid the error `Function calling with a response mime type: 'application/json' is unsupported`.
-
-```typescript
-const response = await agentWithTools.generate("Your prompt", {
-  structuredOutput: {
-    schema: yourSchema,
-    jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
-  },
-});
-```
-
-:::
+> See [Structured Output](/docs/v1/agents/structured-output) for more information.
 
 ## Analyzing images
 
 Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
 
-```typescript showLineNumbers copy
+```typescript
 const response = await testAgent.generate([
   {
     role: "user",
@@ -355,7 +246,7 @@ console.log(response.text);
 
 The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
 
-```typescript showLineNumbers copy
+```typescript
 const response = await testAgent.generate("Help me organize my day", {
   maxSteps: 10,
 });
@@ -369,7 +260,7 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 
 `onStepFinish` is only available when streaming or generating text without structured output.
 
-```typescript showLineNumbers copy
+```typescript
 const response = await testAgent.generate("Help me organize my day", {
   onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
     console.log({ text, toolCalls, toolResults, finishReason, usage });
@@ -381,7 +272,7 @@ const response = await testAgent.generate("Help me organize my day", {
 
 Agents can use tools to go beyond language generation, enabling structured interactions with external APIs and services. Tools allow agents to access data and perform clearly defined operations in a reliable, repeatable way.
 
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts"
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
@@ -396,7 +287,7 @@ export const testAgent = new Agent({
 
 Use `RequestContext` to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
-```typescript title="src/mastra/agents/test-agent.ts" showLineNumbers
+```typescript title="src/mastra/agents/test-agent.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -415,7 +306,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Request Context](/docs/v1/server-db/request-context) for more information.
+> See [Request Context](/docs/v1/server/request-context) for more information.
 
 ## Testing with Studio
 
@@ -425,4 +316,4 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 
 - [Using Tools](/docs/v1/agents/using-tools)
 - [Agent Memory](/docs/v1/agents/agent-memory)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)

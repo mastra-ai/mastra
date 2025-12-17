@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  createStorageErrorId,
   StoreOperations,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
@@ -57,7 +58,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
         return 'BIT';
       default:
         throw new MastraError({
-          id: 'MASTRA_STORAGE_MSSQL_STORE_TYPE_NOT_SUPPORTED',
+          id: createStorageErrorId('MSSQL', 'TYPE', 'NOT_SUPPORTED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         });
@@ -159,7 +160,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INSERT_FAILED',
+          id: createStorageErrorId('MSSQL', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -188,7 +189,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('MSSQL', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -307,7 +308,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('MSSQL', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -374,7 +375,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('MSSQL', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -416,7 +417,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LOAD_FAILED',
+          id: createStorageErrorId('MSSQL', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -440,7 +441,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
       await transaction.rollback();
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('MSSQL', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -460,7 +461,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('MSSQL', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -563,7 +564,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     try {
       if (!data || Object.keys(data).length === 0) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_MSSQL_UPDATE_EMPTY_DATA',
+          id: createStorageErrorId('MSSQL', 'UPDATE', 'EMPTY_DATA'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: 'Cannot update with empty data payload',
@@ -571,7 +572,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
       }
       if (!keys || Object.keys(keys).length === 0) {
         throw new MastraError({
-          id: 'MASTRA_STORAGE_MSSQL_UPDATE_EMPTY_KEYS',
+          id: createStorageErrorId('MSSQL', 'UPDATE', 'EMPTY_KEYS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: 'Cannot update without keys to identify records',
@@ -621,7 +622,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_UPDATE_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -659,7 +660,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
       await transaction.rollback();
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_BATCH_UPDATE_FAILED',
+          id: createStorageErrorId('MSSQL', 'BATCH_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -715,7 +716,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
       await transaction.rollback();
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_BATCH_DELETE_FAILED',
+          id: createStorageErrorId('MSSQL', 'BATCH_DELETE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -787,7 +788,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_INDEX_CREATE_FAILED',
+          id: createStorageErrorId('MSSQL', 'INDEX_CREATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -832,7 +833,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
       if (result.recordset.length > 1) {
         const tables = result.recordset.map((r: any) => r.table_name).join(', ');
         throw new MastraError({
-          id: 'MASTRA_STORAGE_MSSQL_INDEX_AMBIGUOUS',
+          id: createStorageErrorId('MSSQL', 'INDEX', 'AMBIGUOUS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           text: `Index "${indexNameSafe}" exists on multiple tables (${tables}) in schema "${schemaName}". Please drop indexes manually or ensure unique index names.`,
@@ -850,7 +851,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_INDEX_DROP_FAILED',
+          id: createStorageErrorId('MSSQL', 'INDEX_DROP', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -942,7 +943,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_INDEX_LIST_FAILED',
+          id: createStorageErrorId('MSSQL', 'INDEX_LIST', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: tableName
@@ -1027,7 +1028,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_INDEX_DESCRIBE_FAILED',
+          id: createStorageErrorId('MSSQL', 'INDEX_DESCRIBE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1112,7 +1113,7 @@ export class StoreOperationsMSSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_CREATE_PERFORMANCE_INDEXES_FAILED',
+          id: createStorageErrorId('MSSQL', 'CREATE_PERFORMANCE_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

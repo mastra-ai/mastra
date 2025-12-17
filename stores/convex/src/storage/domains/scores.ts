@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
-import { TABLE_SCORERS, ScoresStorage } from '@mastra/core/storage';
+import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import { TABLE_SCORERS, ScoresStorage, createStorageErrorId } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 
 import type { StoreOperationsConvex } from '../operations';
@@ -25,7 +25,7 @@ export class ScoresConvex extends ScoresStorage {
     return row ? this.deserialize(row) : null;
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     const now = new Date();
     const record = {
       ...score,
@@ -99,7 +99,7 @@ export class ScoresConvex extends ScoresStorage {
     if (pagination.page < 0) {
       throw new MastraError(
         {
-          id: 'CONVEX_STORAGE_INVALID_PAGINATION',
+          id: createStorageErrorId('CONVEX', 'LIST_SCORES', 'INVALID_PAGINATION'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

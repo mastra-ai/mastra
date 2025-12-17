@@ -11,6 +11,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import {
+  createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -122,7 +123,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -141,7 +142,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_LIBSQL_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
@@ -153,7 +154,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_MESSAGES_INVALID_PAGE',
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -275,7 +276,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -372,7 +373,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('LIBSQL', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -545,7 +546,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_DELETE_MESSAGES_FAILED',
+          id: createStorageErrorId('LIBSQL', 'DELETE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messageIds.join(', ') },
@@ -671,7 +672,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -689,7 +690,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -749,7 +750,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('LIBSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -782,7 +783,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'LIBSQL_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('LIBSQL', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -807,7 +808,7 @@ export class MemoryLibSQL extends MemoryStorage {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
-        id: 'LIBSQL_STORE_UPDATE_THREAD_FAILED_THREAD_NOT_FOUND',
+        id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -837,7 +838,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to update thread ${id}`,
@@ -862,7 +863,7 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LIBSQL_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('LIBSQL', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },

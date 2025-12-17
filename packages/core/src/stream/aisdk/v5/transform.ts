@@ -4,7 +4,7 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from 'ai-v5';
+import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType } from '../../types';
@@ -15,7 +15,8 @@ export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
       type: 'finish';
-      finishReason: LanguageModelV2FinishReason;
+      /** Includes 'tripwire' and 'retry' for processor scenarios */
+      finishReason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
       usage: LanguageModelV2Usage;
       providerMetadata: SharedV2ProviderMetadata;
       messages: {
@@ -361,7 +362,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
+        // Cast needed: Mastra extends reason with 'tripwire' | 'retry' for processor scenarios
+        finishReason: chunk.payload.stepResult.reason as LanguageModelV2FinishReason,
         totalUsage: chunk.payload.output.usage,
       };
     }

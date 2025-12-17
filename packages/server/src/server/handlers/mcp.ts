@@ -13,7 +13,7 @@ import {
   mcpToolInfoSchema,
   executeToolResponseSchema,
 } from '../schemas/mcp';
-import type { RuntimeContext } from '../server-adapter';
+import type { ServerContext } from '../server-adapter';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 // ============================================================================
@@ -29,7 +29,13 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
   summary: 'List MCP servers',
   description: 'Returns a list of registered MCP servers with pagination support',
   tags: ['MCP'],
-  handler: async ({ mastra, limit, offset }: RuntimeContext & { limit?: number; offset?: number }) => {
+  handler: async ({
+    mastra,
+    page,
+    perPage,
+    limit,
+    offset,
+  }: ServerContext & { page?: number; perPage?: number; limit?: number; offset?: number }) => {
     if (!mastra || typeof mastra.listMCPServers !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or listMCPServers method not available' });
     }
@@ -43,19 +49,39 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
     const serverList = Object.values(servers) as MastraMCPServerImplementation[];
     const totalCount = serverList.length;
 
-    const actualOffset = offset ?? 0;
+    // Support both page/perPage and limit/offset for backwards compatibility
+    // Detect which format user is using - prefer page/perPage if both provided
+    const useLegacyFormat =
+      (limit !== undefined || offset !== undefined) && page === undefined && perPage === undefined;
+
+    // If perPage provided, use it; otherwise fall back to limit
+    const finalPerPage = perPage ?? limit;
+    // If page provided, use it; otherwise convert from offset
+    let finalPage = page;
+    if (finalPage === undefined && offset !== undefined && finalPerPage !== undefined && finalPerPage > 0) {
+      finalPage = Math.floor(offset / finalPerPage);
+    }
+
+    // Calculate offset from page/perPage
+    const actualOffset = finalPage !== undefined && finalPerPage !== undefined ? finalPage * finalPerPage : 0;
 
     // Apply pagination
     let paginatedServers = serverList;
     let nextUrl: string | null = null;
 
-    if (limit !== undefined) {
-      paginatedServers = serverList.slice(actualOffset, actualOffset + limit);
+    if (finalPerPage !== undefined) {
+      paginatedServers = serverList.slice(actualOffset, actualOffset + finalPerPage);
 
       // Calculate next URL if there are more results
-      if (actualOffset + limit < totalCount) {
-        // Note: Full URL construction would need request context
-        nextUrl = `/api/mcp/v0/servers?limit=${limit}&offset=${actualOffset + limit}`;
+      if (actualOffset + finalPerPage < totalCount) {
+        const nextPage = (finalPage ?? 0) + 1;
+        // Return next URL in same format as request (legacy limit/offset or page/perPage)
+        if (useLegacyFormat) {
+          const nextOffset = actualOffset + finalPerPage;
+          nextUrl = `/api/mcp/v0/servers?limit=${finalPerPage}&offset=${nextOffset}`;
+        } else {
+          nextUrl = `/api/mcp/v0/servers?perPage=${finalPerPage}&page=${nextPage}`;
+        }
       }
     }
 
@@ -80,7 +106,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server details',
   description: 'Returns detailed information about a specific MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, id, version }: RuntimeContext & { id: string; version?: string }) => {
+  handler: async ({ mastra, id, version }: ServerContext & { id: string; version?: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -113,7 +139,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   summary: 'List MCP server tools',
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }) => {
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -141,7 +167,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   summary: 'Get MCP server tool details',
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId, toolId }: RuntimeContext & { serverId: string; toolId: string }) => {
+  handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -180,7 +206,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     serverId,
     toolId,
     data,
-  }: RuntimeContext & { serverId: string; toolId: string; data?: unknown }) => {
+  }: ServerContext & { serverId: string; toolId: string; data?: unknown }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -231,7 +257,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   summary: 'MCP HTTP Transport',
   description: 'Streamable HTTP transport endpoint for MCP protocol communication',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -257,7 +283,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   summary: 'MCP SSE Transport',
   description: 'SSE transport endpoint for MCP protocol communication',
   tags: ['MCP'],
-  handler: async ({ mastra, serverId }: RuntimeContext & { serverId: string }): Promise<MCPSseTransportResult> => {
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPSseTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
