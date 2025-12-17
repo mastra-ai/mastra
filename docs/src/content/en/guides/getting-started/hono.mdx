@@ -24,28 +24,28 @@ Run the following command to [create a new Hono app](https://hono.dev/docs/getti
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm create hono@latest mastra-hono -- --template nodejs --install --pm npm
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm create hono@latest mastra-hono --template nodejs --install --pm pnpm
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn create hono@latest mastra-hono --template nodejs --install --pm yarn
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun create hono@latest mastra-hono --template nodejs --install --pm bun
 ```
 
@@ -63,7 +63,7 @@ When prompted, choose a provider (e.g. OpenAI) and enter your key:
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 cd mastra-hono
 npx mastra@beta init
 ```
@@ -71,7 +71,7 @@ npx mastra@beta init
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 cd mastra-hono
 pnpm dlx mastra@beta init
 ```
@@ -79,7 +79,7 @@ pnpm dlx mastra@beta init
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 cd mastra-hono
 yarn dlx mastra@beta init
 ```
@@ -87,7 +87,7 @@ yarn dlx mastra@beta init
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 cd mastra-hono
 bunx mastra@beta init
 ```
@@ -110,28 +110,28 @@ Install the Hono server adapter package:
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm install @mastra/hono@beta
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm add @mastra/hono@beta
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn add @mastra/hono@beta
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun add @mastra/hono@beta
 ```
 
@@ -140,7 +140,7 @@ bun add @mastra/hono@beta
 
 Open the Hono entry file at `src/index.ts` and add the required import and initialization code:
 
-```typescript copy title="src/index.ts" {3-8,10-11,13}
+```typescript title="src/index.ts" {3-8,10-11,13}
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import {
@@ -178,28 +178,28 @@ Start your Hono server:
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm run dev
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm run dev
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn run dev
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun run dev
 ```
 
@@ -208,7 +208,7 @@ bun run dev
 
 In a separate terminal window, use `curl` to ask the weather agent:
 
-```bash copy
+```bash
 curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
 ```
 

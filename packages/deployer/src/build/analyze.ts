@@ -8,7 +8,7 @@ import { validate, ValidationError } from '../validator/validate';
 import { getBundlerOptions } from './bundlerOptions';
 import { checkConfigExport } from './babel/check-config-export';
 import { getWorkspaceInformation, type WorkspacePackageInfo } from '../bundler/workspaceDependencies';
-import type { DependencyMetadata } from './types';
+import type { BundlerOptions, DependencyMetadata } from './types';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -281,15 +281,13 @@ export async function analyzeBundle(
     outputDir,
     projectRoot,
     isDev = false,
-    bundlerOptions: internalBundlerOptions,
+    bundlerOptions,
   }: {
     outputDir: string;
     projectRoot: string;
     platform: 'node' | 'browser';
     isDev?: boolean;
-    bundlerOptions?: {
-      externals?: boolean | string[];
-    } | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
   },
   logger: IMastraLogger,
 ) {
@@ -313,22 +311,18 @@ export const mastra = new Mastra({
 If you think your configuration is valid, please open an issue.`);
   }
 
-  const { externals: _bundlerExternals = [] } = internalBundlerOptions || {};
-  const userBundlerOptions = await getBundlerOptions(mastraEntry, outputDir);
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
 
   let externalsPreset = false;
 
-  if (userBundlerOptions?.externals === true) {
+  const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
+  if (bundlerOptions?.externals === true) {
     externalsPreset = true;
   }
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
-
-  const bundlerExternals = Array.isArray(_bundlerExternals) ? _bundlerExternals : [];
-  const userExternals = Array.isArray(userBundlerOptions?.externals) ? userBundlerOptions?.externals : [];
-  const allExternals = [...GLOBAL_EXTERNALS, ...bundlerExternals, ...userExternals];
+  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
 
   logger.info('Analyzing dependencies...');
 
@@ -337,7 +331,7 @@ If you think your configuration is valid, please open an issue.`);
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
       logger,
-      sourcemapEnabled: userBundlerOptions?.sourcemap ?? false,
+      sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
       workspaceMap,
       projectRoot,
       shouldCheckTransitiveDependencies: isDev || externalsPreset,
@@ -385,8 +379,8 @@ If you think your configuration is valid, please open an issue.`);
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {
-      ...userBundlerOptions,
-      externals: userBundlerOptions?.externals ?? allExternals,
+      ...bundlerOptions,
+      externals: bundlerOptions?.externals ?? allExternals,
       isDev,
     },
     projectRoot,

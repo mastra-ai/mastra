@@ -3,6 +3,7 @@ import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
@@ -12,10 +13,15 @@ import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
+import type { BundlerOptions } from '../build/types';
 import { slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
+
+export type { BundlerOptions } from '../build/types';
+
+export const IS_DEFAULT = Symbol('IS_DEFAULT');
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
@@ -86,6 +92,28 @@ export abstract class Bundler extends MastraBundler {
     return createBundlerUtil(inputOptions, outputOptions);
   }
 
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const defaultBundlerOptions: Config['bundler'] = {
+      externals: [],
+      sourcemap: false,
+      transpilePackages: [],
+      [IS_DEFAULT]: true,
+    } as const;
+
+    try {
+      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+
+      return bundlerOptions ?? defaultBundlerOptions;
+    } catch (error) {
+      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
+    }
+
+    return defaultBundlerOptions;
+  }
+
   protected async analyze(entry: string | string[], mastraFile: string, outputDirectory: string) {
     return await analyzeBundle(
       ([] as string[]).concat(entry),
@@ -141,11 +169,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
     toolsPaths: (string | string[])[],
-    {
-      enableSourcemap = false,
-      enableEsmShim = true,
-      externalsPreset = false,
-    }: { enableSourcemap?: boolean; enableEsmShim?: boolean; externalsPreset?: boolean } = {},
+    { enableSourcemap, enableEsmShim, externals }: BundlerOptions,
   ) {
     const { workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile });
     const closestPkgJson = pkg.up({ cwd: dirname(mastraEntryFile) });
@@ -158,7 +182,7 @@ export abstract class Bundler extends MastraBundler {
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
-      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset },
+      { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
     );
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 
@@ -246,22 +270,22 @@ export abstract class Bundler extends MastraBundler {
       projectRoot,
       outputDirectory,
       enableEsmShim = true,
-      externals = [],
-    }: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean; externals?: boolean | string[] },
+    }: {
+      projectRoot: string;
+      outputDirectory: string;
+      enableEsmShim?: boolean;
+    },
     toolsPaths: (string | string[])[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     const analyzeDir = join(outputDirectory, this.analyzeOutputDir);
-    let sourcemap = false;
-    let externalsPreset = false;
 
-    try {
-      const bundlerOptions = await getBundlerOptions(mastraEntryFile, analyzeDir);
-      sourcemap = !!bundlerOptions?.sourcemap;
-      externalsPreset = bundlerOptions?.externals === true;
-    } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
-    }
+    const bundlerOptions = await this.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+    const internalBundlerOptions: BundlerOptions = {
+      enableSourcemap: !!bundlerOptions.sourcemap,
+      externals: bundlerOptions.externals ?? [],
+      enableEsmShim,
+    };
 
     let analyzedBundleInfo;
     try {
@@ -273,9 +297,7 @@ export abstract class Bundler extends MastraBundler {
           outputDir: analyzeDir,
           projectRoot,
           platform: 'node',
-          bundlerOptions: {
-            externals,
-          },
+          bundlerOptions: internalBundlerOptions,
         },
         this.logger,
       );
@@ -323,7 +345,7 @@ export abstract class Bundler extends MastraBundler {
         mastraEntryFile,
         analyzedBundleInfo,
         toolsPaths,
-        { enableSourcemap: sourcemap, enableEsmShim, externalsPreset },
+        internalBundlerOptions,
       );
 
       const bundler = await this.createBundler(
@@ -346,7 +368,7 @@ export abstract class Bundler extends MastraBundler {
           manualChunks: {
             mastra: ['#mastra'],
           },
-          sourcemap,
+          sourcemap: internalBundlerOptions.enableSourcemap,
         },
       );
 

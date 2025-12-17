@@ -30,7 +30,7 @@ Mastra provides different storage providers, but you can treat them as interchan
 
 Mastra can be configured with a default storage option:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
@@ -475,7 +475,7 @@ Captures OpenTelemetry traces for monitoring and debugging.
 
 Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
-```typescript copy
+```typescript
 // Get messages for a thread with pagination
 const result = await mastra
   .getStorage()
@@ -508,7 +508,7 @@ The `threadId` parameter accepts either a single thread ID string or an array of
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
-```typescript copy
+```typescript
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 const result = await mastra

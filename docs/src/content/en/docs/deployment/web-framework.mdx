@@ -20,7 +20,7 @@ Integration guides:
 
 If you've integrated Mastra with Next.js [by following our guide](/guides/v1/getting-started/next-js) and plan to deploy to Vercel, add `serverExternalPackages: ["@mastra/*"]` to your `next.config.ts`:
 
-```typescript {4} title="next.config.ts" showLineNumbers copy
+```typescript {4} title="next.config.ts"
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
@@ -34,7 +34,7 @@ export default nextConfig;
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs" showLineNumbers copy
+```javascript {2,6,7} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import vercel from "@astrojs/vercel";
 
@@ -49,7 +49,7 @@ export default defineConfig({
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs" showLineNumbers copy
+```javascript {2,6,7} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import netlify from "@astrojs/netlify";
 
