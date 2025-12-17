@@ -1,4 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
+import semver from 'semver';
 
 export interface PackageInfo {
   name: string;
@@ -25,46 +26,9 @@ interface NpmPackageResponse {
   >;
 }
 
-/**
- * Check if a version string is a prerelease (alpha, beta, rc, etc.)
- */
-function isPrerelease(version: string): boolean {
-  return /[-](alpha|beta|rc|canary|next|dev|pre|snapshot)/i.test(version);
-}
-
-/**
- * Compare two semver versions. Returns:
- * - negative if a < b
- * - 0 if a === b
- * - positive if a > b
- */
-function compareSemver(a: string, b: string): number {
-  // Strip prerelease tags for base comparison
-  const parseVersion = (v: string) => {
-    const match = v.match(/^(\d+)\.(\d+)\.(\d+)/);
-    if (!match) return [0, 0, 0];
-    return [parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10)];
-  };
-
-  const [aMajor, aMinor, aPatch] = parseVersion(a);
-  const [bMajor, bMinor, bPatch] = parseVersion(b);
-
-  if (aMajor !== bMajor) return aMajor - bMajor;
-  if (aMinor !== bMinor) return aMinor - bMinor;
-  if (aPatch !== bPatch) return aPatch - bPatch;
-
-  // If base versions are equal, check prerelease
-  const aIsPrerelease = isPrerelease(a);
-  const bIsPrerelease = isPrerelease(b);
-
-  // Stable > prerelease for same base version
-  if (!aIsPrerelease && bIsPrerelease) return 1;
-  if (aIsPrerelease && !bIsPrerelease) return -1;
-
-  return 0;
-}
-
 async function fetchPackageInfo(packageName: string, installedVersion: string): Promise<PackageUpdateInfo> {
+  const installedIsPrerelease = semver.prerelease(installedVersion) !== null;
+
   try {
     const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
 
@@ -75,7 +39,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
         latestVersion: null,
         isOutdated: false,
         isDeprecated: false,
-        isPrerelease: isPrerelease(installedVersion),
+        isPrerelease: installedIsPrerelease,
       };
     }
 
@@ -83,20 +47,12 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
     const latestVersion = data['dist-tags']?.latest ?? null;
     const versionInfo = data.versions?.[installedVersion];
     const deprecationMessage = versionInfo?.deprecated;
-    const installedIsPrerelease = isPrerelease(installedVersion);
 
-    // Determine if outdated:
-    // - If installed is a prerelease, don't mark as outdated vs stable latest
-    // - Only mark as outdated if latest is actually newer
+    // Determine if outdated using semver.gt (greater than)
+    // Only mark as outdated if latest is actually newer than installed
     let isOutdated = false;
-    if (latestVersion !== null && installedVersion !== latestVersion) {
-      if (installedIsPrerelease) {
-        // Prerelease versions: only outdated if latest stable base is higher than installed base
-        isOutdated = compareSemver(latestVersion, installedVersion) > 0;
-      } else {
-        // Stable versions: outdated if latest is newer
-        isOutdated = compareSemver(latestVersion, installedVersion) > 0;
-      }
+    if (latestVersion !== null && semver.valid(installedVersion) && semver.valid(latestVersion)) {
+      isOutdated = semver.gt(latestVersion, installedVersion);
     }
 
     return {
@@ -115,7 +71,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
       latestVersion: null,
       isOutdated: false,
       isDeprecated: false,
-      isPrerelease: isPrerelease(installedVersion),
+      isPrerelease: installedIsPrerelease,
     };
   }
 }

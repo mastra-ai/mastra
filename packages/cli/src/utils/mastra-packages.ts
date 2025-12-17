@@ -29,8 +29,8 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
     const packageJson: PackageJson = JSON.parse(packageJsonContent);
 
     const allDependencies = {
-      ...packageJson.dependencies,
-      ...packageJson.devDependencies,
+      ...(packageJson.dependencies ?? {}),
+      ...(packageJson.devDependencies ?? {}),
     };
 
     const mastraDeps = Object.entries(allDependencies).filter(
