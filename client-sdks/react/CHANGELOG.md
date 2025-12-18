@@ -1,5 +1,12 @@
 # @mastra/react-hooks
 
+## 0.0.24-alpha.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @mastra/client-js@0.17.2-alpha.1
+
 ## 0.0.24-alpha.0
 
 ### Patch Changes

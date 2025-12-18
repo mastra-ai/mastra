@@ -1,5 +1,7 @@
 # @mastra/core
 
+## 0.24.9-alpha.1
+
 ## 0.24.9-alpha.0
 
 ### Patch Changes
