@@ -4,8 +4,6 @@
 '@mastra/core': patch
 ---
 
-feat: Add partial response support for agent and workflow list endpoints
-
 Add optional `partial` query parameter to `/api/agents` and `/api/workflows` endpoints to return minimal data without schemas, reducing payload size for list views:
 
 - When `partial=true`: tool schemas (inputSchema, outputSchema) are omitted
@@ -13,9 +11,9 @@ Add optional `partial` query parameter to `/api/agents` and `/api/workflows` end
 - When `partial=true`: workflow root schemas (inputSchema, outputSchema) are omitted
 - Maintains backward compatibility when partial parameter is not provided
 
-## Server Endpoint Usage
+**Server Endpoint Usage**
 
-```http
+```bash
 # Get partial agent data (no tool schemas)
 GET /api/agents?partial=true
 
@@ -29,7 +27,7 @@ GET /api/workflows?partial=true
 GET /api/workflows
 ```
 
-## Client SDK Usage
+**Client SDK Usage**
 
 ```typescript
 import { MastraClient } from "@mastra/client-js";

@@ -3,7 +3,8 @@ import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/obse
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
-import { getExternalParentId, deepClean } from './base';
+import { getExternalParentId } from './base';
+import { deepClean, DEFAULT_DEEP_CLEAN_OPTIONS } from './serialization';
 
 // Simple test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
@@ -522,7 +523,7 @@ describe('Span', () => {
         current = current.nested;
       }
 
-      const result = deepClean(deepObj, { maxDepth: 3 });
+      const result = deepClean(deepObj, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxDepth: 3 });
 
       expect(result.level).toBe(0);
       expect(result.nested.level).toBe(1);

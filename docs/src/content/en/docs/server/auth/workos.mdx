@@ -40,12 +40,11 @@ npm install @mastra/auth-workos@beta
 
 ### Basic usage with environment variables
 
-```typescript {2,7} title="src/mastra/index.ts"
+```typescript {2,6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos(),
   },
@@ -54,12 +53,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
@@ -94,7 +92,11 @@ const workosAuth = new MastraAuthWorkos({
 });
 ```
 
-> See the [MastraAuthWorkos](/reference/v1/auth/workos) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthWorkos](/reference/v1/auth/workos) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -152,7 +154,11 @@ export const createMastraClient = (accessToken: string) => {
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 

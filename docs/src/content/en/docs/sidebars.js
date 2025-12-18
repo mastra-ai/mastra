@@ -125,6 +125,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/snapshots",
+          label: "Snapshots",
+        },
+        {
+          type: "doc",
           id: "workflows/suspend-and-resume",
           label: "Suspend & Resume",
         },
@@ -135,11 +140,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/snapshots",
-          label: "Snapshots",
-        },
-        {
-          type: "doc",
           id: "workflows/time-travel",
           label: "Time Travel",
         },
@@ -147,11 +147,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
-        },
-        {
-          type: "doc",
-          id: "workflows/inngest-workflow",
-          label: "Inngest Workflow",
         },
       ],
     },
@@ -210,18 +205,18 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "memory/threads-and-resources",
-          label: "Threads and Resources",
+          id: "memory/storage",
+          label: "Storage",
+        },
+        {
+          type: "doc",
+          id: "memory/message-history",
+          label: "Message History",
         },
         {
           type: "doc",
           id: "memory/working-memory",
           label: "Working Memory",
-        },
-        {
-          type: "doc",
-          id: "memory/conversation-history",
-          label: "Conversation History",
         },
         {
           type: "doc",
@@ -232,37 +227,6 @@ const sidebars = {
           type: "doc",
           id: "memory/memory-processors",
           label: "Memory Processors",
-        },
-        {
-          type: "category",
-          label: "Storage",
-          items: [
-            {
-              type: "doc",
-              id: "memory/storage/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-libsql",
-              label: "Memory with LibSQL",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-mongodb",
-              label: "Memory with MongoDB",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-pg",
-              label: "Memory with PostgreSQL",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-upstash",
-              label: "Memory with Upstash",
-            },
-          ],
         },
       ],
     },
@@ -419,14 +383,14 @@ const sidebars = {
     {
       type: "category",
       label: "Mastra Cloud",
+      customProps: {
+        tags: ["beta"],
+      },
       items: [
         {
           type: "doc",
           id: "mastra-cloud/overview",
           label: "Overview",
-          customProps: {
-            tags: ["beta"],
-          },
         },
         {
           type: "doc",

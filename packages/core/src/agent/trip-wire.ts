@@ -56,7 +56,6 @@ export interface TripwireData<TMetadata = unknown> {
 
 export const getModelOutputForTripwire = async <
   OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
   TMetadata = unknown,
 >({
   tripwire,
@@ -69,7 +68,7 @@ export const getModelOutputForTripwire = async <
   tripwire: TripwireData<TMetadata>;
   runId: string;
   tracingContext: TracingContext;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   model: MastraLanguageModel;
   messageList: MessageList;
 }) => {
@@ -94,7 +93,7 @@ export const getModelOutputForTripwire = async <
     model: {
       modelId: model.modelId,
       provider: model.provider,
-      version: model.specificationVersion || 'v2',
+      version: model.specificationVersion,
     },
     stream: tripwireStream,
     messageList,

@@ -504,6 +504,64 @@ describe('vNext Workflow Handlers', () => {
         serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
     });
+
+    it('should get workflow run execution result with field filtering (status only)', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-fields',
+      });
+      await run.start({ inputData: {} });
+      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-fields',
+        fields: 'status',
+      } as any);
+
+      // Should only return status field
+      expect(result).toEqual({
+        status: 'success',
+      });
+      expect(result.steps).toBeUndefined();
+      expect(result.result).toBeUndefined();
+    });
+
+    it('should get workflow run execution result with multiple fields', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-multi-fields',
+      });
+      await run.start({ inputData: {} });
+      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-multi-fields',
+        fields: 'status,result,error',
+      } as any);
+
+      // Should only return requested fields
+      expect(result).toEqual({
+        status: 'success',
+        result: { result: 'success' },
+        error: undefined,
+      });
+      expect(result.steps).toBeUndefined();
+      expect(result.payload).toBeUndefined();
+      expect(result.activeStepsPath).toBeUndefined();
+    });
+
+    it('should reject invalid field names in query schema', () => {
+      const { queryParamSchema } = GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE;
+
+      // Valid fields should pass
+      expect(() => queryParamSchema?.parse({ fields: 'status,result' })).not.toThrow();
+
+      // Invalid field should fail
+      expect(() => queryParamSchema?.parse({ fields: 'invalidField' })).toThrow();
+      expect(() => queryParamSchema?.parse({ fields: 'status,invalidField' })).toThrow();
+
+      // Empty/undefined should pass
+      expect(() => queryParamSchema?.parse({})).not.toThrow();
+      expect(() => queryParamSchema?.parse({ fields: undefined })).not.toThrow();
+    });
   });
 
   describe('CREATE_WORKFLOW_RUN_ROUTE', () => {

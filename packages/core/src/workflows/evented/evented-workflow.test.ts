@@ -10955,6 +10955,271 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    describe('abort signal propagation to nested workflows', () => {
+      // Helper to create nested workflow test setup
+      const createNestedWorkflowSetup = () => {
+        let nestedStepStarted = false;
+        let nestedStepCompleted = false;
+
+        const nestedLongRunningStep = createStep({
+          id: 'nested-long-step',
+          inputSchema: z.object({ doubled: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData, abortSignal }) => {
+            nestedStepStarted = true;
+            // Long running operation that should be cancelled
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                nestedStepCompleted = true;
+                resolve(undefined);
+              }, 5000);
+
+              abortSignal.addEventListener('abort', () => {
+                clearTimeout(timeout);
+                reject(new Error('Aborted'));
+              });
+            });
+            return { result: `completed: ${inputData.doubled}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow',
+          inputSchema: z.object({ doubled: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(nestedLongRunningStep)
+          .commit();
+
+        const parentStep = createStep({
+          id: 'parent-step',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ doubled: z.number() }),
+          execute: async ({ inputData }) => {
+            return { doubled: inputData.value * 2 };
+          },
+        });
+
+        return {
+          nestedWorkflow,
+          parentStep,
+          getNestedStepStarted: () => nestedStepStarted,
+          getNestedStepCompleted: () => nestedStepCompleted,
+        };
+      };
+
+      it('should propagate abort signal to nested workflow when using run.cancel()', async () => {
+        const { nestedWorkflow, parentStep, getNestedStepStarted, getNestedStepCompleted } =
+          createNestedWorkflowSetup();
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const mastra = new Mastra({
+          workflows: { 'parent-workflow': parentWorkflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
+        await mastra.startEventEngine();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 5 } });
+
+        // Wait for nested step to start
+        await vi.waitFor(() => expect(getNestedStepStarted()).toBe(true), { timeout: 2000 });
+
+        // Cancel the parent workflow while nested is running
+        await run.cancel();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Nested step should NOT have completed (was cancelled)
+        expect(getNestedStepCompleted()).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        // If abort signal was NOT propagated, the nested step will still complete after 5s
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the step should still not have completed
+        // If abort signal was NOT propagated, the step will have completed in the background
+        expect(getNestedStepCompleted()).toBe(false);
+
+        await mastra.stopEventEngine();
+      });
+
+      it('should propagate abort signal to nested workflow when using run.abortController.abort() directly', async () => {
+        const { nestedWorkflow, parentStep, getNestedStepStarted, getNestedStepCompleted } =
+          createNestedWorkflowSetup();
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const mastra = new Mastra({
+          workflows: { 'parent-workflow': parentWorkflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
+        await mastra.startEventEngine();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 5 } });
+
+        // Wait for nested step to start
+        await vi.waitFor(() => expect(getNestedStepStarted()).toBe(true), { timeout: 2000 });
+
+        // Use abortController.abort() directly instead of run.cancel()
+        run.abortController.abort();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Nested step should NOT have completed (was cancelled)
+        expect(getNestedStepCompleted()).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the step should still not have completed
+        expect(getNestedStepCompleted()).toBe(false);
+
+        await mastra.stopEventEngine();
+      });
+
+      it('should propagate abort signal to agent step in nested workflow when parent is cancelled', async () => {
+        // Track if agent step was cancelled or completed
+        let agentStepStarted = false;
+        let agentStepCompleted = false;
+
+        // Create an agent with a long-running mock that respects abort signal
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'test agent instructions',
+          model: new MockLanguageModelV1({
+            doStream: async ({ abortSignal }) => {
+              agentStepStarted = true;
+              // Simulate a long-running operation that respects abort signal
+              await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  agentStepCompleted = true;
+                  resolve(undefined);
+                }, 5000);
+
+                abortSignal?.addEventListener('abort', () => {
+                  clearTimeout(timeout);
+                  reject(new Error('Aborted'));
+                });
+              });
+              return {
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'text-delta', textDelta: 'Response' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      logprobs: undefined,
+                      usage: { completionTokens: 10, promptTokens: 3 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            },
+          }),
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow',
+          inputSchema: z.object({ prompt: z.string() }),
+          outputSchema: z.object({ text: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(createStep(agent))
+          .commit();
+
+        const parentStep = createStep({
+          id: 'parent-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ prompt: z.string() }),
+          execute: async ({ inputData }) => {
+            return { prompt: `Process: ${inputData.value}` };
+          },
+        });
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ text: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const mastra = new Mastra({
+          workflows: { 'parent-workflow': parentWorkflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+          agents: { 'test-agent': agent },
+        });
+        await mastra.startEventEngine();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 'test' } });
+
+        // Wait for agent step to start
+        await vi.waitFor(() => expect(agentStepStarted).toBe(true), { timeout: 2000 });
+
+        // Cancel the parent workflow while agent is running
+        await run.cancel();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Agent step should NOT have completed (was cancelled)
+        expect(agentStepCompleted).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the agent step should still not have completed
+        expect(agentStepCompleted).toBe(false);
+
+        await mastra.stopEventEngine();
+      });
+    });
   });
 
   describe('Dependency Injection', () => {

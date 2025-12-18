@@ -142,7 +142,9 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({

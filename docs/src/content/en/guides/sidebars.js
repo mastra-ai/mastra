@@ -124,6 +124,11 @@ const sidebars = {
           id: "deployment/vercel-deployer",
           label: "Vercel",
         },
+        {
+          type: "doc",
+          id: "deployment/inngest",
+          label: "Inngest",
+        },
       ],
     },
     {
