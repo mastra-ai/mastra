@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-remove debug log that dumped large zod schemas to console
+Removed a debug log that printed large Zod schemas, resulting in cleaner console output when using agents with memory enabled.
