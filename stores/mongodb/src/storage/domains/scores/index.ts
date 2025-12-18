@@ -11,7 +11,11 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+
+export interface MongoDBScoresConfig {
+  connector: MongoDBConnector;
+}
 
 /**
  * MongoDB-specific score row transformation.
@@ -24,16 +28,36 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 }
 
 export class ScoresStorageMongoDB extends ScoresStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(config: MongoDBScoresConfig) {
     super();
-    this.operations = operations;
+    this.#connector = config.connector;
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  async init(): Promise<void> {
+    const collection = await this.getCollection(TABLE_SCORERS);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ scorerId: 1 });
+    await collection.createIndex({ runId: 1 });
+    await collection.createIndex({ entityId: 1, entityType: 1 });
+    await collection.createIndex({ traceId: 1, spanId: 1 });
+    await collection.createIndex({ createdAt: -1 });
+    await collection.createIndex({ source: 1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.getCollection(TABLE_SCORERS);
+    await collection.deleteMany({});
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const document = await collection.findOne({ id });
 
       if (!document) {
@@ -116,7 +140,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         updatedAt,
       };
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       await collection.insertOne(dataToSave);
 
       return { score: dataToSave as ScoreRowData };
@@ -165,7 +189,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         query.source = source;
       }
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
@@ -226,7 +250,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ runId });
 
       if (total === 0) {
@@ -289,7 +313,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ entityId, entityType });
 
       if (total === 0) {
@@ -353,7 +377,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const query = { traceId, spanId };
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
