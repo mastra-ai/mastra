@@ -10,8 +10,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
-import CloudflareSDK from 'cloudflare';
-import type Cloudflare from 'cloudflare';
+import Cloudflare from 'cloudflare';
 import type { CloudflareDomainConfig, ListOptions, RecordTypes } from '../types';
 
 export interface CloudflareKVDBConfig {
@@ -45,7 +44,7 @@ export function resolveCloudflareConfig(config: CloudflareDomainConfig): Cloudfl
 
   // Config to create new client (REST API)
   return {
-    client: new CloudflareSDK({ apiToken: config.apiToken }),
+    client: new Cloudflare({ apiToken: config.apiToken }),
     accountId: config.accountId,
     namespacePrefix: config.namespacePrefix,
   };

@@ -12,8 +12,8 @@ import {
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
 import { createSqlBuilder } from '../../sql-builder';
-import { D1DB } from '../../db';
-import type { D1DBConfig } from '../../db';
+import { D1DB, resolveD1Config } from '../../db';
+import type { D1DomainConfig } from '../../db';
 
 /**
  * Cloudflare D1-specific score row transformation.
@@ -31,9 +31,9 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class ScoresStorageD1 extends ScoresStorage {
   #db: D1DB;
 
-  constructor(config: D1DBConfig) {
+  constructor(config: D1DomainConfig) {
     super();
-    this.#db = new D1DB(config);
+    this.#db = new D1DB(resolveD1Config(config));
   }
 
   async init(): Promise<void> {

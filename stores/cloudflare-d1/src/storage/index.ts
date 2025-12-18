@@ -150,15 +150,21 @@ export class D1Store extends MastraStorage {
       );
     }
 
-    const domainConfig = {
-      client: this.client,
-      binding: this.binding,
-      tablePrefix: this.tablePrefix,
-    };
+    let scores: ScoresStorageD1;
+    let workflows: WorkflowsStorageD1;
+    let memory: MemoryStorageD1;
 
-    const scores = new ScoresStorageD1(domainConfig);
-    const workflows = new WorkflowsStorageD1(domainConfig);
-    const memory = new MemoryStorageD1(domainConfig);
+    if (this.binding) {
+      const domainConfig = { binding: this.binding, tablePrefix: this.tablePrefix };
+      scores = new ScoresStorageD1(domainConfig);
+      workflows = new WorkflowsStorageD1(domainConfig);
+      memory = new MemoryStorageD1(domainConfig);
+    } else {
+      const domainConfig = { client: this.client!, tablePrefix: this.tablePrefix };
+      scores = new ScoresStorageD1(domainConfig);
+      workflows = new WorkflowsStorageD1(domainConfig);
+      memory = new MemoryStorageD1(domainConfig);
+    }
 
     this.stores = {
       scores,

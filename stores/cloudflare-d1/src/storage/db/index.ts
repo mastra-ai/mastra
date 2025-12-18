@@ -3,7 +3,7 @@ import { MastraBase } from '@mastra/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
-import type Cloudflare from 'cloudflare';
+import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from '../sql-builder';
 import type { SqlParam, SqlQueryOptions } from '../sql-builder';
 import { deserializeValue } from '../domains/utils';
@@ -18,6 +18,77 @@ export interface D1DBConfig {
   client?: D1Client;
   binding?: D1Database;
   tablePrefix?: string;
+}
+
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing D1 client or binding
+ * 2. Config to create a new client internally
+ */
+export type D1DomainConfig = D1DomainClientConfig | D1DomainBindingConfig | D1DomainRestConfig;
+
+/**
+ * Pass an existing D1 client (REST API)
+ */
+export interface D1DomainClientConfig {
+  client: D1Client;
+  tablePrefix?: string;
+}
+
+/**
+ * Pass an existing D1 binding (Workers API)
+ */
+export interface D1DomainBindingConfig {
+  binding: D1Database;
+  tablePrefix?: string;
+}
+
+/**
+ * Pass config to create a new D1 client internally (REST API)
+ */
+export interface D1DomainRestConfig {
+  accountId: string;
+  apiToken: string;
+  databaseId: string;
+  tablePrefix?: string;
+}
+
+/**
+ * Resolves D1DomainConfig to D1DBConfig.
+ * Handles creating a new D1 client if apiToken is provided.
+ */
+export function resolveD1Config(config: D1DomainConfig): D1DBConfig {
+  // Existing client
+  if ('client' in config) {
+    return {
+      client: config.client,
+      tablePrefix: config.tablePrefix,
+    };
+  }
+
+  // Existing binding
+  if ('binding' in config) {
+    return {
+      binding: config.binding,
+      tablePrefix: config.tablePrefix,
+    };
+  }
+
+  // Config to create new client (REST API)
+  const cfClient = new Cloudflare({ apiToken: config.apiToken });
+  return {
+    client: {
+      query: ({ sql, params }) => {
+        return cfClient.d1.database.query(config.databaseId, {
+          account_id: config.accountId,
+          sql,
+          params,
+        });
+      },
+    },
+    tablePrefix: config.tablePrefix,
+  };
 }
 
 export class D1DB extends MastraBase {
