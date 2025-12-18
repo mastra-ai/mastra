@@ -89,6 +89,12 @@ const showcaseItems: ShowcaseCardProps[] = [
     link: "https://www.joindemeter.com/",
   },
   {
+    title: "Relater",
+    description: "Relater AI: n8n for non-technical creators – turn simple prompts into powerful scheduled web research feeds that run automatically on your timeline.",
+    image: "relater.png",
+    link: "https://www.relater.ai/",
+  },
+  {
     title: "NotebookLM-Mastra",
     description:
       "AI-powered assistant that creates podcasts from the sources you upload",
