@@ -2412,11 +2412,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resourceId?: string;
     tracingContext: TracingContext;
   }) {
-    // If overrideScorers is explicitly empty, skip scoring
-    if (overrideScorers && Object.keys(overrideScorers).length === 0) {
-      return;
-    }
-
     let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
     try {
       scorers = overrideScorers
@@ -2491,7 +2486,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    if (Object.keys(result).length === 0) {
+    // Only throw if scorers were provided but none could be resolved
+    if (Object.keys(result).length === 0 && Object.keys(overrideScorers).length > 0) {
       throw new MastraError({
         id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
         domain: ErrorDomain.AGENT,
