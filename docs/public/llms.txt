@@ -15,7 +15,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 ## EN - docs
 - [Adding Voice to Agents | Agents](https://mastra.ai/en/docs/agents/adding-voice)
 - [Agent Approval | Agents](https://mastra.ai/en/docs/agents/agent-approval): Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
-- [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store conversation history and maintain context across interactions.
+- [Agent Memory | Agents](https://mastra.ai/en/docs/agents/agent-memory): Learn how to add memory to agents to store message history and maintain context across interactions.
 - [Guardrails | Agents](https://mastra.ai/en/docs/agents/guardrails): Learn how to implement guardrails using input and output processors to secure and control AI interactions.
 - [Agent Networks | Agents](https://mastra.ai/en/docs/agents/networks): Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
 - [Using Agents | Agents](https://mastra.ai/en/docs/agents/overview): Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
@@ -46,16 +46,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Setting Up and Deploying | Mastra Cloud](https://mastra.ai/en/docs/mastra-cloud/setting-up): Configuration steps for Mastra Cloud projects
 - [MCP Overview | MCP](https://mastra.ai/en/docs/mcp/overview): Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
 - [Publishing an MCP Server | MCP](https://mastra.ai/en/docs/mcp/publishing-mcp-server): Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
-- [Conversation History | Memory](https://mastra.ai/en/docs/memory/conversation-history): Learn how to configure conversation history in Mastra to store recent messages from the current conversation.
 - [Memory Processors | Memory](https://mastra.ai/en/docs/memory/memory-processors): Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits.
-- [Memory overview | Memory](https://mastra.ai/en/docs/memory/overview): Learn how Mastra's memory system works with working memory, conversation history, and semantic recall.
+- [Message History | Memory](https://mastra.ai/en/docs/memory/message-history): Learn how to configure message history in Mastra to store recent messages from the current conversation.
+- [Memory overview | Memory](https://mastra.ai/en/docs/memory/overview): Learn how Mastra's memory system works with working memory, message history, and semantic recall.
 - [Semantic Recall | Memory](https://mastra.ai/en/docs/memory/semantic-recall): Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings.
-- [Memory with LibSQL | Storage](https://mastra.ai/en/docs/memory/storage/memory-with-libsql): Example for how to use Mastra's memory system with LibSQL storage and vector database backend.
-- [Example: Memory with MongoDB | Storage](https://mastra.ai/en/docs/memory/storage/memory-with-mongodb): Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
-- [Memory with Postgres | Storage](https://mastra.ai/en/docs/memory/storage/memory-with-pg): Example for how to use Mastra's memory system with PostgreSQL storage and vector capabilities.
-- [Memory with Upstash | Storage](https://mastra.ai/en/docs/memory/storage/memory-with-upstash): Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
-- [MastraStorage | Storage](https://mastra.ai/en/docs/memory/storage/overview): Overview of Mastra's storage system and data persistence capabilities.
-- [Memory threads and resources | Memory](https://mastra.ai/en/docs/memory/threads-and-resources): Learn how Mastra's memory system works with working memory, conversation history, and semantic recall.
+- [Storage | Memory](https://mastra.ai/en/docs/memory/storage): Configure storage for Mastra's memory system to persist conversations, workflows, and traces.
 - [Working Memory | Memory](https://mastra.ai/en/docs/memory/working-memory): Learn how to configure working memory in Mastra to store persistent user data, preferences.
 - [Logging | Observability](https://mastra.ai/en/docs/observability/logging): Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
 - [Observability Overview | Observability](https://mastra.ai/en/docs/observability/overview): Monitor and debug applications with Mastra's Observability features.
@@ -406,9 +401,10 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.
 - [Reference: DynamoDB Storage | Storage](https://mastra.ai/en/reference/storage/dynamodb): Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB.
 - [Reference: LanceDB Storage | Storage](https://mastra.ai/en/reference/storage/lance): Documentation for the LanceDB storage implementation in Mastra.
-- [Reference: LibSQL Storage | Storage](https://mastra.ai/en/reference/storage/libsql): Documentation for the LibSQL storage implementation in Mastra.
+- [Reference: libSQL Storage | Storage](https://mastra.ai/en/reference/storage/libsql): Documentation for the libSQL storage implementation in Mastra.
 - [Reference: MongoDB Storage | Storage](https://mastra.ai/en/reference/storage/mongodb): Documentation for the MongoDB storage implementation in Mastra.
 - [Reference: MSSQL Storage | Storage](https://mastra.ai/en/reference/storage/mssql): Documentation for the MSSQL storage implementation in Mastra.
+- [Reference: Storage Overview | Storage](https://mastra.ai/en/reference/storage/overview): Core data schema and table structure for Mastra's storage system.
 - [Reference: PostgreSQL Storage | Storage](https://mastra.ai/en/reference/storage/postgresql): Documentation for the PostgreSQL storage implementation in Mastra.
 - [Reference: Upstash Storage | Storage](https://mastra.ai/en/reference/storage/upstash): Documentation for the Upstash storage implementation in Mastra.
 - [Reference: ChunkType | Streaming](https://mastra.ai/en/reference/streaming/ChunkType): Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads.
@@ -434,7 +430,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: DuckDBVector Store | Vectors](https://mastra.ai/en/reference/vectors/duckdb): Documentation for the DuckDBVector class in Mastra, which provides embedded high-performance vector search using DuckDB with HNSW indexing.
 - [Reference: ElasticSearch Vector Store | Vectors](https://mastra.ai/en/reference/vectors/elasticsearch): Documentation for the ElasticSearchVector class in Mastra, which provides vector search using ElasticSearch.
 - [Reference: Lance Vector Store | Vectors](https://mastra.ai/en/reference/vectors/lance): Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format.
-- [Reference: LibSQLVector Store | Vectors](https://mastra.ai/en/reference/vectors/libsql): Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+- [Reference: libSQL Vector Store | Vectors](https://mastra.ai/en/reference/vectors/libsql): Documentation for the LibSQLVector class in Mastra, which provides vector search using libSQL with vector extensions.
 - [Reference: MongoDB Vector Store | Vectors](https://mastra.ai/en/reference/vectors/mongodb): Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
 - [Reference: OpenSearch Vector Store | Vectors](https://mastra.ai/en/reference/vectors/opensearch): Documentation for the OpenSearchVector class in Mastra, which provides vector search using OpenSearch.
 - [Reference: PG Vector Store | Vectors](https://mastra.ai/en/reference/vectors/pg): Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.

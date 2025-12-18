@@ -80,7 +80,7 @@ const { text } = await generateText({
 
 ### With Memory
 
-Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
+Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a libSQL storage backend to persist conversation history, loading the last 10 messages for context.
 
 ```typescript title="src/memory-example.ts"
 import { openai } from '@ai-sdk/openai';

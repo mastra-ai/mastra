@@ -641,6 +641,53 @@ This enables advanced usage such as running direct SQL queries, managing transac
 
 This design supports advanced use cases but requires careful resource management by the user.
 
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { fastembed } from "@mastra/fastembed";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    vector: new PgVector({
+      id: 'pg-agent-vector',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
+
 ## Related
 
 - [Metadata Filters](../rag/metadata-filters)
