@@ -13,15 +13,15 @@ import type {
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { CloudflareKVDB } from '../../db';
-import type { CloudflareKVDBConfig } from '../../db';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
 export class WorkflowsStorageCloudflare extends WorkflowsStorage {
   #db: CloudflareKVDB;
 
-  constructor(config: CloudflareKVDBConfig) {
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.#db = new CloudflareKVDB(config);
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
   }
 
   async init(): Promise<void> {

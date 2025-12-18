@@ -10,14 +10,45 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import CloudflareSDK from 'cloudflare';
 import type Cloudflare from 'cloudflare';
-import type { ListOptions, RecordTypes } from '../types';
+import type { CloudflareDomainConfig, ListOptions, RecordTypes } from '../types';
 
 export interface CloudflareKVDBConfig {
   bindings?: Record<TABLE_NAMES, KVNamespace>;
   namespacePrefix?: string;
   client?: Cloudflare;
   accountId?: string;
+}
+
+/**
+ * Resolves CloudflareDomainConfig to CloudflareKVDBConfig.
+ * Handles creating a new Cloudflare client if apiToken is provided.
+ */
+export function resolveCloudflareConfig(config: CloudflareDomainConfig): CloudflareKVDBConfig {
+  // Existing client (REST API)
+  if ('client' in config) {
+    return {
+      client: config.client,
+      accountId: config.accountId,
+      namespacePrefix: config.namespacePrefix,
+    };
+  }
+
+  // Bindings (Workers API)
+  if ('bindings' in config) {
+    return {
+      bindings: config.bindings,
+      namespacePrefix: config.keyPrefix,
+    };
+  }
+
+  // Config to create new client (REST API)
+  return {
+    client: new CloudflareSDK({ apiToken: config.apiToken }),
+    accountId: config.accountId,
+    namespacePrefix: config.namespacePrefix,
+  };
 }
 
 export class CloudflareKVDB extends MastraBase {

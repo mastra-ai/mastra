@@ -20,15 +20,15 @@ import {
   TABLE_RESOURCES,
   TABLE_THREADS,
 } from '@mastra/core/storage';
-import { CloudflareKVDB } from '../../db';
-import type { CloudflareKVDBConfig } from '../../db';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
 export class MemoryStorageCloudflare extends MemoryStorage {
   #db: CloudflareKVDB;
 
-  constructor(config: CloudflareKVDBConfig) {
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.#db = new CloudflareKVDB(config);
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
   }
 
   async init(): Promise<void> {

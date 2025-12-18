@@ -10,8 +10,8 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
-import { CloudflareKVDB } from '../../db';
-import type { CloudflareKVDBConfig } from '../../db';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
 /**
  * Cloudflare KV-specific score row transformation.
@@ -24,9 +24,9 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class ScoresStorageCloudflare extends ScoresStorage {
   #db: CloudflareKVDB;
 
-  constructor(config: CloudflareKVDBConfig) {
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.#db = new CloudflareKVDB(config);
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
   }
 
   async init(): Promise<void> {

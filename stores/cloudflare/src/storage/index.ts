@@ -80,11 +80,23 @@ export class CloudflareStore extends MastraStorage {
     super({ id: config.id, name: 'Cloudflare', disableInit: config.disableInit });
 
     try {
+      let workflows: WorkflowsStorageCloudflare;
+      let memory: MemoryStorageCloudflare;
+      let scores: ScoresStorageCloudflare;
+
       if (isWorkersConfig(config)) {
         this.validateWorkersConfig(config);
         this.bindings = config.bindings;
         this.namespacePrefix = config.keyPrefix?.trim() || '';
         this.logger.info('Using Cloudflare KV Workers Binding API');
+
+        const domainConfig = {
+          bindings: this.bindings,
+          keyPrefix: this.namespacePrefix,
+        };
+        workflows = new WorkflowsStorageCloudflare(domainConfig);
+        memory = new MemoryStorageCloudflare(domainConfig);
+        scores = new ScoresStorageCloudflare(domainConfig);
       } else {
         this.validateRestConfig(config);
         this.accountId = config.accountId.trim();
@@ -93,18 +105,16 @@ export class CloudflareStore extends MastraStorage {
           apiToken: config.apiToken.trim(),
         });
         this.logger.info('Using Cloudflare KV REST API');
+
+        const domainConfig = {
+          client: this.client,
+          accountId: this.accountId,
+          namespacePrefix: this.namespacePrefix,
+        };
+        workflows = new WorkflowsStorageCloudflare(domainConfig);
+        memory = new MemoryStorageCloudflare(domainConfig);
+        scores = new ScoresStorageCloudflare(domainConfig);
       }
-
-      const domainConfig = {
-        accountId: this.accountId,
-        client: this.client,
-        namespacePrefix: this.namespacePrefix,
-        bindings: this.bindings,
-      };
-
-      const workflows = new WorkflowsStorageCloudflare(domainConfig);
-      const memory = new MemoryStorageCloudflare(domainConfig);
-      const scores = new ScoresStorageCloudflare(domainConfig);
 
       this.stores = {
         workflows,
