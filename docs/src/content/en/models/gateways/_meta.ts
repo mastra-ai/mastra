@@ -3,6 +3,7 @@ const meta = {
   azure: "Azure OpenAI",
   netlify: "Netlify",
   openrouter: "OpenRouter",
+  portkey: "Portkey",
   vercel: "Vercel",
 };
 

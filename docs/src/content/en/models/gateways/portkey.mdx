@@ -1,0 +1,160 @@
+---
+title: "Portkey | Models | Mastra"
+description: "Use AI models through Portkey with production-grade observability, reliability, and access to 1600+ LLMs."
+---
+
+# <img src="https://mintcdn.com/portkey-docs/TEsf28na2t53tvAY/logo-black.png?fit=max&auto=format&n=TEsf28na2t53tvAY&q=85&s=11450ff4397535f65d4fd2f9154da08e" alt="Portkey logo" className="inline w-8 h-8 mr-2 align-middle" />Portkey
+
+Portkey is an AI gateway that adds production-grade features to your Mastra agents including observability, reliability, caching, guardrails, and access to 1600+ LLMs through a unified interface.
+
+Access models from OpenAI, Anthropic, Google, AWS Bedrock, Azure, Mistral, and 200+ other providers while gaining complete visibility and control over your AI infrastructure.
+
+Learn more in the [Portkey documentation for Mastra](https://portkey.ai/docs/integrations/agents/mastra).
+
+## Setup
+
+Sign up at [portkey.ai](https://portkey.ai/) and create:
+
+1. An API key from [API Keys](https://app.portkey.ai/api-keys)
+2. Provider integrations from [Integrations](https://app.portkey.ai/integrations) for your LLM providers (OpenAI, Anthropic, etc.)
+3. Note your provider slug (e.g., `openai-dev`) when creating integrations
+
+## Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "openai/@YOUR_PROVIDER_SLUG@gpt-4o",
+    url: "https://api.portkey.ai/v1",
+    apiKey: process.env.PORTKEY_API_KEY,
+    headers: {
+      "x-portkey-metadata": JSON.stringify({
+        environment: "production",
+        user: "user_123"
+      })
+    }
+  }
+});
+```
+
+:::info
+
+Mastra uses OpenAI-compatible interfaces, so the model ID format is `openai/@provider-slug@model-name`. The `@provider-slug` should match your Portkey integration slug. This works for all providers through Portkey.
+
+Check the [Portkey documentation for Mastra](https://portkey.ai/docs/integrations/agents/mastra) for complete setup instructions.
+
+:::
+
+## Configuration
+
+```bash
+# Required: Your Portkey API key
+PORTKEY_API_KEY=your-portkey-api-key
+
+# Provider API keys are configured in Portkey dashboard
+# No need to expose them in your application code
+```
+
+## Production Features
+
+Portkey adds production-ready capabilities to your Mastra agents:
+
+### Observability
+
+Complete visibility into your agent operations with detailed traces, logs, and analytics. Track token usage, costs, latency, and errors across all LLM calls. Filter and analyze by user, environment, or custom metadata.
+
+### Reliability
+
+Built-in fallbacks, automatic retries, load balancing, and timeouts keep your agents running reliably. Route requests across multiple providers and API keys to avoid rate limits and outages.
+
+### Caching
+
+Reduce costs and latency with simple (exact match) and semantic caching. Cache identical or semantically similar requests to avoid redundant LLM calls.
+
+### Guardrails
+
+Protect your agents with PII detection, content moderation, fact-checking, and format validation. Apply custom business rules and safety checks on inputs and outputs.
+
+### Prompt Management
+
+Version control your agent instructions with Portkey's Prompt Library. Update prompts without code changes, test variations, and use dynamic variables with Mustache templates.
+
+### Advanced Routing
+
+Implement conditional routing, A/B testing, canary deployments, and load balancing. Route different requests to different models based on complexity, cost, or performance requirements.
+
+### Enterprise Governance
+
+Set budget limits, rate limits, and model access controls per team or department. Track usage and costs with granular analytics and user-level attribution.
+
+For detailed implementation guides and examples, see the [Portkey documentation for Mastra](https://portkey.ai/docs/integrations/agents/mastra).
+
+## Example: Fallback Configuration
+
+Automatically switch to backup providers if your primary fails:
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const fallbackConfig = {
+  strategy: { mode: "fallback" },
+  targets: [
+    {
+      provider: "@YOUR_OPENAI_PROVIDER",
+      override_params: { model: "gpt-4o" }
+    },
+    {
+      provider: "@YOUR_ANTHROPIC_PROVIDER",
+      override_params: { model: "claude-3-5-sonnet-20241022" }
+    }
+  ]
+};
+
+const agent = new Agent({
+  id: "resilient-agent",
+  name: "Resilient Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "openai/@YOUR_OPENAI_PROVIDER@gpt-4o",
+    url: "https://api.portkey.ai/v1",
+    apiKey: process.env.PORTKEY_API_KEY,
+    headers: {
+      "x-portkey-config": JSON.stringify(fallbackConfig)
+    }
+  }
+});
+```
+
+If GPT-4o fails, Portkey automatically tries Claude 3.5 Sonnet.
+
+## Available Providers
+
+Portkey provides access to 1600+ models from 250+ providers including:
+
+- **OpenAI**
+- **Anthropic**
+- **Google** 
+- **AWS Bedrock**
+- **Azure OpenAI**
+- **Mistral AI**
+- **Cohere**
+- **Perplexity**
+- **Together AI**
+- **And 240+ other providers**
+
+See the complete list at [portkey.ai/docs/integrations/llms](https://portkey.ai/docs/integrations/llms).
+
+## Learn More
+
+- [Portkey documentation for Mastra](https://portkey.ai/docs/integrations/agents/mastra) - Complete setup and implementation guide
+- [Portkey AI Gateway](https://portkey.ai/docs/product/ai-gateway) - Learn about reliability features
+- [Observability](https://portkey.ai/docs/product/observability) - Traces, logs, and analytics
+- [Guardrails](https://portkey.ai/docs/product/guardrails) - Safety and compliance features
+- [Open Source Gateway](https://github.portkey.ai/gateway) - Self-host Portkey in your infrastructure
+- [Book a Demo](https://portkey.sh/demo) - Get personalized guidance
+
