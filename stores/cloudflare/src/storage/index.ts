@@ -239,6 +239,10 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.memory.updateMessages(args);
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.stores.scores.getScoreById({ id });
   }

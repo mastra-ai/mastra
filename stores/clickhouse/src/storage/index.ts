@@ -98,7 +98,6 @@ export class ClickhouseStore extends MastraStorage {
 
     this.ttl = config.ttl;
 
-
     const workflows = new WorkflowsStorageClickhouse({ client: this.db, ttl: this.ttl });
     const scores = new ScoresStorageClickhouse({ client: this.db, ttl: this.ttl });
     const memory = new MemoryStorageClickhouse({ client: this.db, ttl: this.ttl });
@@ -276,6 +275,10 @@ export class ClickhouseStore extends MastraStorage {
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(args);
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

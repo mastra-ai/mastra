@@ -166,6 +166,10 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     return this.stores.workflows.listWorkflowRuns(args);
   }

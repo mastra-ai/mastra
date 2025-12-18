@@ -65,12 +65,12 @@ export type LibSQLBaseConfig = {
 
 export type LibSQLConfig =
   | (LibSQLBaseConfig & {
-    url: string;
-    authToken?: string;
-  })
+      url: string;
+      authToken?: string;
+    })
   | (LibSQLBaseConfig & {
-    client: Client;
-  });
+      client: Client;
+    });
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;
@@ -146,6 +146,10 @@ export class LibSQLStore extends MastraStorage {
       listScoresBySpan: true,
       agents: true,
     };
+  }
+
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    return this.stores.memory.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {

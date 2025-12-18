@@ -282,6 +282,14 @@ export class D1Store extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     return this.stores.memory.getResourceById({ resourceId });
   }
