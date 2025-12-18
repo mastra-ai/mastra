@@ -10,7 +10,7 @@ export interface PackageUpdateInfo extends PackageInfo {
   latestVersion: string | null;
   isOutdated: boolean;
   isDeprecated: boolean;
-  isPrerelease: boolean;
+  prereleaseTag: string | null;
   deprecationMessage?: string;
 }
 
@@ -27,7 +27,9 @@ interface NpmPackageResponse {
 }
 
 async function fetchPackageInfo(packageName: string, installedVersion: string): Promise<PackageUpdateInfo> {
-  const installedIsPrerelease = semver.prerelease(installedVersion) !== null;
+  const prereleaseComponents = semver.prerelease(installedVersion);
+  // Extract the tag name (e.g., 'beta' from ['beta', 13])
+  const prereleaseTag = prereleaseComponents ? String(prereleaseComponents[0]) : null;
 
   try {
     const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
@@ -39,7 +41,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
         latestVersion: null,
         isOutdated: false,
         isDeprecated: false,
-        isPrerelease: installedIsPrerelease,
+        prereleaseTag,
       };
     }
 
@@ -61,7 +63,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
       latestVersion,
       isOutdated,
       isDeprecated: !!deprecationMessage,
-      isPrerelease: installedIsPrerelease,
+      prereleaseTag,
       deprecationMessage,
     };
   } catch {
@@ -71,7 +73,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
       latestVersion: null,
       isOutdated: false,
       isDeprecated: false,
-      isPrerelease: installedIsPrerelease,
+      prereleaseTag,
     };
   }
 }

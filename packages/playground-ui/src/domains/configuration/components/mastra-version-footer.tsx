@@ -154,8 +154,8 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   if (outdatedPackages.length === 0) return null;
 
   const command = packageManagerCommands[packageManager];
-  // Use @beta tag for prerelease versions to avoid downgrading beta users
-  const packageArgs = outdatedPackages.map(p => `${p.name}@${p.isPrerelease ? 'beta' : 'latest'}`).join(' ');
+  // Use the prerelease tag (e.g., @beta, @alpha) to avoid downgrading prerelease users
+  const packageArgs = outdatedPackages.map(p => `${p.name}@${p.prereleaseTag ?? 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
 }
