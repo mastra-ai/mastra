@@ -9,7 +9,7 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import { PgDB } from '../../db';
+import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -19,8 +19,9 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    this.#db = new PgDB(config);
-    this.#schema = this.#db.schemaName || 'public';
+    const { client, schemaName } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName });
+    this.#schema = schemaName || 'public';
   }
 
   async init(): Promise<void> {

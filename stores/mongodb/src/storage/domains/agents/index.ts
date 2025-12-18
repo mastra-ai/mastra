@@ -15,16 +15,16 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
 } from '@mastra/core/storage';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import type { MongoDBDomainConfig } from '../../types';
-import { resolveConnector } from '../utils';
 
 export class MongoDBAgentsStorage extends AgentsStorage {
   #connector: MongoDBConnector;
 
   constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = resolveConnector(config);
+    this.#connector = resolveMongoDBConfig(config);
   }
 
   async init(): Promise<void> {

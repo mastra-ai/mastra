@@ -1,9 +1,6 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
-import { createStorageErrorId, safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
-import { MongoDBConnector } from '../connectors/MongoDBConnector';
-import type { MongoDBConfig, MongoDBDomainConfig } from '../types';
 
 export function formatDateForMongoDB(date: Date | string): Date {
   return typeof date === 'string' ? new Date(date) : date;
@@ -66,52 +63,4 @@ export const transformRow = ({ row, tableName }: { row: Record<string, any>; tab
   });
 
   return result;
-};
-
-/**
- * Resolves a config to a MongoDBConnector instance.
- * Accepts both MongoDBConfig (main store) and MongoDBDomainConfig (domains).
- */
-export const resolveConnector = (config: MongoDBConfig | MongoDBDomainConfig): MongoDBConnector => {
-  // Internal: main store passes existing connector to domains
-  if ('connector' in config) {
-    return config.connector;
-  }
-
-  // User: custom connection management via handler
-  if ('connectorHandler' in config) {
-    try {
-      return MongoDBConnector.fromConnectionHandler(config.connectorHandler);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { connectionHandler: true },
-        },
-        error,
-      );
-    }
-  }
-
-  // User: standard url/dbName config
-  try {
-    return MongoDBConnector.fromDatabaseConfig({
-      id: 'id' in config ? config.id : 'domain',
-      options: config.options,
-      url: config.url,
-      dbName: config.dbName,
-    });
-  } catch (error) {
-    throw new MastraError(
-      {
-        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { url: config?.url, dbName: config?.dbName },
-      },
-      error,
-    );
-  }
 };

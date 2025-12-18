@@ -13,7 +13,7 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { PgDB } from '../../db';
+import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -50,8 +50,9 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    this.#db = new PgDB(config);
-    this.#schema = this.#db.schemaName || 'public';
+    const { client, schemaName } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName });
+    this.#schema = schemaName || 'public';
   }
 
   async init(): Promise<void> {

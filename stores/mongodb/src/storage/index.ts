@@ -20,7 +20,7 @@ import type {
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
-import { resolveConnector } from './domains/utils';
+import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
@@ -58,7 +58,7 @@ export class MongoDBStore extends MastraStorage {
 
     this.stores = {} as StorageDomains;
 
-    this.#connector = resolveConnector(config);
+    this.#connector = resolveMongoDBConfig(config);
 
     const memory = new MemoryStorageMongoDB({
       connector: this.#connector,

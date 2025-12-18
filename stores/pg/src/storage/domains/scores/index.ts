@@ -11,7 +11,7 @@ import {
   TABLE_SCHEMAS,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import { PgDB } from '../../db';
+import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -42,8 +42,9 @@ export class ScoresPG extends ScoresStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    this.#db = new PgDB(config);
-    this.#schema = this.#db.schemaName || 'public';
+    const { client, schemaName } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName });
+    this.#schema = schemaName || 'public';
   }
 
   async init(): Promise<void> {

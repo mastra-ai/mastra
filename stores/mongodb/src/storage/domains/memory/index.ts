@@ -19,16 +19,17 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import type { MongoDBDomainConfig } from '../../types';
-import { formatDateForMongoDB, resolveConnector } from '../utils';
+import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
   #connector: MongoDBConnector;
 
   constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = resolveConnector(config);
+    this.#connector = resolveMongoDBConfig(config);
   }
 
   private async getCollection(name: string) {

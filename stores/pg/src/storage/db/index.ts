@@ -96,21 +96,28 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
+/**
+ * Internal config for PgDB - accepts already-resolved client
+ */
+export interface PgDBInternalConfig {
+  client: IDatabase<{}>;
+  schemaName?: string;
+}
+
 export class PgDB extends MastraBase {
   public client: IDatabase<{}>;
   public schemaName?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  constructor(config: PgDomainConfig) {
+  constructor(config: PgDBInternalConfig) {
     super({
       component: 'STORAGE',
       name: 'PG_DB_LAYER',
     });
 
-    const { client, schemaName } = resolvePgConfig(config);
-    this.client = client;
-    this.schemaName = schemaName;
+    this.client = config.client;
+    this.schemaName = config.schemaName;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {

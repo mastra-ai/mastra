@@ -94,7 +94,8 @@ export class PostgresStore extends MastraStorage {
       const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema };
 
       // Create a PgDB instance for direct operations (createTable, clearTable, etc.)
-      this.#dbOps = new PgDB(domainConfig);
+      // PgDB expects the internal config format (already resolved client)
+      this.#dbOps = new PgDB({ client: this.#db, schemaName: this.schema });
 
       const scores = new ScoresPG(domainConfig);
       const workflows = new WorkflowsPG(domainConfig);

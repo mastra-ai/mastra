@@ -14,7 +14,7 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
 } from '@mastra/core/storage';
-import { PgDB } from '../../db';
+import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
 
@@ -24,8 +24,9 @@ export class AgentsPG extends AgentsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    this.#db = new PgDB(config);
-    this.#schema = this.#db.schemaName || 'public';
+    const { client, schemaName } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName });
+    this.#schema = schemaName || 'public';
   }
 
   async init(): Promise<void> {

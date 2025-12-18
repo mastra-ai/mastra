@@ -13,16 +13,16 @@ import type {
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import type { MongoDBDomainConfig } from '../../types';
-import { resolveConnector } from '../utils';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   #connector: MongoDBConnector;
 
   constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = resolveConnector(config);
+    this.#connector = resolveMongoDBConfig(config);
   }
 
   private async getCollection(name: string) {
