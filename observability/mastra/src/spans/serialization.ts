@@ -26,13 +26,13 @@ export interface DeepCleanOptions {
   maxObjectKeys: number;
 }
 
-export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = {
+export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
   keysToStrip: DEFAULT_KEYS_TO_STRIP,
   maxDepth: 6,
   maxStringLength: 1024,
   maxArrayLength: 50,
   maxObjectKeys: 50,
-};
+});
 
 /**
  * Hard-cap any string to prevent unbounded growth.

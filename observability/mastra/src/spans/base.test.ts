@@ -523,9 +523,7 @@ describe('Span', () => {
         current = current.nested;
       }
 
-      const cleanOptions = DEFAULT_DEEP_CLEAN_OPTIONS;
-      cleanOptions.maxDepth = 3;
-      const result = deepClean(deepObj, cleanOptions);
+      const result = deepClean(deepObj, { ...DEFAULT_DEEP_CLEAN_OPTIONS, maxDepth: 3 });
 
       expect(result.level).toBe(0);
       expect(result.nested.level).toBe(1);
