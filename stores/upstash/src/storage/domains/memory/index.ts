@@ -22,7 +22,8 @@ import type {
   ThreadSortDirection,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
-import { UpstashDB } from '../../db';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
 import { getKey, processRecord } from '../utils';
 
 function getThreadMessagesKey(threadId: string): string {
@@ -42,8 +43,9 @@ function getMessageIndexKey(messageId: string): string {
 export class StoreMemoryUpstash extends MemoryStorage {
   private client: Redis;
   #db: UpstashDB;
-  constructor({ client }: { client: Redis }) {
+  constructor(config: UpstashDomainConfig) {
     super();
+    const client = resolveUpstashConfig(config);
     this.client = client;
     this.#db = new UpstashDB({ client });
   }

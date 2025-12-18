@@ -14,7 +14,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
-import { UpstashDB } from '../../db';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
 import { getKey } from '../utils';
 
 function parseWorkflowRun(row: any): WorkflowRun {
@@ -41,8 +42,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
   #db: UpstashDB;
 
-  constructor({ client }: { client: Redis }) {
+  constructor(config: UpstashDomainConfig) {
     super();
+    const client = resolveUpstashConfig(config);
     this.client = client;
     this.#db = new UpstashDB({ client });
   }

@@ -1,8 +1,48 @@
 import { ErrorCategory, ErrorDomain, MastraError } from "@mastra/core/error";
 import { createStorageErrorId } from "@mastra/core/storage";
 import type { TABLE_NAMES } from "@mastra/core/storage";
-import type { Redis } from '@upstash/redis';
+import { Redis } from '@upstash/redis';
 import { getKey, processRecord } from "../domains/utils";
+
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing Redis client
+ * 2. Config to create a new client internally
+ */
+export type UpstashDomainConfig = UpstashDomainClientConfig | UpstashDomainRestConfig;
+
+/**
+ * Pass an existing Redis client
+ */
+export interface UpstashDomainClientConfig {
+  client: Redis;
+}
+
+/**
+ * Pass config to create a new Redis client internally
+ */
+export interface UpstashDomainRestConfig {
+  url: string;
+  token: string;
+}
+
+/**
+ * Resolves UpstashDomainConfig to a Redis client.
+ * Handles creating a new Redis client if url/token are provided.
+ */
+export function resolveUpstashConfig(config: UpstashDomainConfig): Redis {
+  // Existing client
+  if ('client' in config) {
+    return config.client;
+  }
+
+  // Config to create new client
+  return new Redis({
+    url: config.url,
+    token: config.token,
+  });
+}
 
 export class UpstashDB {
     private client: Redis;
