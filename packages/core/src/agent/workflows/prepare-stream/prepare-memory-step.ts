@@ -33,12 +33,9 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
   }
 }
 
-interface PrepareMemoryStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareMemoryStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
@@ -50,10 +47,7 @@ interface PrepareMemoryStepOptions<
   memory?: MastraMemory;
 }
 
-export function createPrepareMemoryStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareMemoryStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -63,7 +57,7 @@ export function createPrepareMemoryStep<
   instructions,
   memoryConfig,
   memory,
-}: PrepareMemoryStepOptions<OUTPUT, FORMAT>) {
+}: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
     inputSchema: z.object({}),

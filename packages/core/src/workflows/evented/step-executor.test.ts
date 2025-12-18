@@ -292,4 +292,167 @@ describe('StepExecutor', () => {
     const serialized = JSON.stringify(failedResult.error);
     expect(serialized).not.toContain('stack');
   });
+
+  describe('abort signal propagation', () => {
+    it('should propagate parent abortController to resolveSleep fn context', async () => {
+      // Arrange: Create a parent abort controller and track what abortSignal the fn receives
+      const parentAbortController = new AbortController();
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
+        type: 'sleep',
+        fn: context => {
+          receivedAbortSignal = context.abortSignal;
+          return 1000;
+        },
+      };
+
+      // Act: Call resolveSleep with parent abort controller
+      await stepExecutor.resolveSleep({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        emitter: {
+          runtime: new EventEmitterPubSub(),
+          events: new EventEmitterPubSub(),
+        },
+        abortController: parentAbortController,
+      });
+
+      // Assert: The fn should receive the parent's abort signal
+      expect(receivedAbortSignal).toBe(parentAbortController.signal);
+    });
+
+    it('should reflect parent abort in resolveSleep fn context when parent is aborted', async () => {
+      // Arrange: Create a parent abort controller
+      const parentAbortController = new AbortController();
+      let wasAbortedDuringExecution = false;
+
+      const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
+        type: 'sleep',
+        fn: context => {
+          // Abort the parent controller during fn execution
+          parentAbortController.abort();
+          wasAbortedDuringExecution = context.abortSignal.aborted;
+          return 1000;
+        },
+      };
+
+      // Act: Call resolveSleep with parent abort controller
+      await stepExecutor.resolveSleep({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        emitter: {
+          runtime: new EventEmitterPubSub(),
+          events: new EventEmitterPubSub(),
+        },
+        abortController: parentAbortController,
+      });
+
+      // Assert: The abort should be reflected in the fn's context
+      expect(wasAbortedDuringExecution).toBe(true);
+    });
+
+    it('should propagate parent abortController to resolveSleepUntil fn context', async () => {
+      // Arrange: Create a parent abort controller and track what abortSignal the fn receives
+      const parentAbortController = new AbortController();
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'sleepUntil' }> = {
+        type: 'sleepUntil',
+        fn: context => {
+          receivedAbortSignal = context.abortSignal;
+          return new Date(Date.now() + 1000);
+        },
+      };
+
+      // Act: Call resolveSleepUntil with parent abort controller
+      await stepExecutor.resolveSleepUntil({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        emitter: {
+          runtime: new EventEmitterPubSub(),
+          events: new EventEmitterPubSub(),
+        },
+        abortController: parentAbortController,
+      });
+
+      // Assert: The fn should receive the parent's abort signal
+      expect(receivedAbortSignal).toBe(parentAbortController.signal);
+    });
+
+    it('should propagate parent abortController to evaluateConditions condition fn context', async () => {
+      // Arrange: Create a parent abort controller and track what abortSignal the condition receives
+      const parentAbortController = new AbortController();
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'conditional' }> = {
+        type: 'conditional',
+        conditions: [
+          context => {
+            receivedAbortSignal = context.abortSignal;
+            return true;
+          },
+        ],
+        branches: [[{ type: 'step', step: { id: 'dummy' } as any }]],
+      };
+
+      // Act: Call evaluateConditions with parent abort controller
+      await stepExecutor.evaluateConditions({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        state: {},
+        emitter: {
+          runtime: new EventEmitterPubSub(),
+          events: new EventEmitterPubSub(),
+        },
+        abortController: parentAbortController,
+      });
+
+      // Assert: The condition fn should receive the parent's abort signal
+      expect(receivedAbortSignal).toBe(parentAbortController.signal);
+    });
+
+    it('should create a new AbortController when none is provided (backwards compatibility)', async () => {
+      // Arrange: Track that an abortSignal is still provided even without parent controller
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
+        type: 'sleep',
+        fn: context => {
+          receivedAbortSignal = context.abortSignal;
+          return 1000;
+        },
+      };
+
+      // Act: Call resolveSleep WITHOUT parent abort controller
+      await stepExecutor.resolveSleep({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        emitter: {
+          runtime: new EventEmitterPubSub(),
+          events: new EventEmitterPubSub(),
+        },
+        // No abortController provided
+      });
+
+      // Assert: An abortSignal should still be provided (from internally created controller)
+      expect(receivedAbortSignal).toBeDefined();
+      expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
+    });
+  });
 });
