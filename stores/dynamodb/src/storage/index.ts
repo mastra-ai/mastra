@@ -9,9 +9,7 @@ import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   WorkflowRun,
   WorkflowRuns,
-  TABLE_NAMES,
   PaginationInfo,
-  StorageColumn,
   StoragePagination,
   StorageDomains,
   StorageResourceType,
@@ -22,7 +20,6 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 import { MemoryStorageDynamoDB } from './domains/memory';
-import { StoreOperationsDynamoDB } from './domains/operations';
 import { ScoresStorageDynamoDB } from './domains/score';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
@@ -94,12 +91,6 @@ export class DynamoDBStore extends MastraStorage {
       this.client = DynamoDBDocumentClient.from(dynamoClient);
       this.service = getElectroDbService(this.client, this.tableName) as MastraService;
 
-      const operations = new StoreOperationsDynamoDB({
-        service: this.service,
-        tableName: this.tableName,
-        client: this.client,
-      });
-
       const workflows = new WorkflowStorageDynamoDB({ service: this.service });
 
       const memory = new MemoryStorageDynamoDB({ service: this.service });
@@ -107,11 +98,11 @@ export class DynamoDBStore extends MastraStorage {
       const scores = new ScoresStorageDynamoDB({ service: this.service });
 
       this.stores = {
-        operations,
         workflows,
         memory,
         scores,
       };
+
     } catch (error) {
       throw new MastraError(
         {
@@ -133,7 +124,7 @@ export class DynamoDBStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
     };
   }
@@ -230,38 +221,6 @@ export class DynamoDBStore extends MastraStorage {
       });
   }
 
-  async createTable({ tableName, schema }: { tableName: TABLE_NAMES; schema: Record<string, any> }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(_args);
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
   // Thread operations
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     return this.stores.memory.getThreadById({ threadId });
@@ -302,6 +261,10 @@ export class DynamoDBStore extends MastraStorage {
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(_args);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   // Workflow operations

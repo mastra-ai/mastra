@@ -7,15 +7,21 @@ import {
   ScoresStorage,
   calculatePagination,
   normalizePerPage,
+  TABLE_SCORERS,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { deleteTableData } from '../utils';
 
 export class ScoresStorageDynamoDB extends ScoresStorage {
   private service: Service<Record<string, any>>;
   constructor({ service }: { service: Service<Record<string, any>> }) {
     super();
     this.service = service;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_SCORERS);
   }
 
   /**

@@ -1,5 +1,10 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, normalizePerPage, WorkflowsStorage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
 import type {
   WorkflowRun,
   WorkflowRuns,
@@ -8,6 +13,7 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
+import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
 interface WorkflowSnapshotDBItem {
@@ -39,35 +45,106 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     this.service = service;
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_WORKFLOW_SNAPSHOT);
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      // Load existing snapshot
+      const existingSnapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+      let snapshot: WorkflowRunState;
+      if (!existingSnapshot) {
+        // Create new snapshot if none exists
+        snapshot = {
+          context: {},
+          activePaths: [],
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          activeStepsPath: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId,
+          requestContext: {},
+        } as WorkflowRunState;
+      } else {
+        snapshot = existingSnapshot;
+      }
+
+      // Merge the new step result and request context
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+      // Update the snapshot
+      await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+      return snapshot.context;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId, stepId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      // Load existing snapshot
+      const existingSnapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+      if (!existingSnapshot || !existingSnapshot.context) {
+        return undefined;
+      }
+
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...existingSnapshot, ...opts };
+
+      // Update the snapshot
+      await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
+
+      return updatedSnapshot;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
   }
 
   // Workflow operations
@@ -76,24 +153,28 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
     try {
-      const now = new Date().toISOString();
+      const now = new Date();
       // Prepare data including the 'entity' type
       const data = {
         entity: 'workflow_snapshot', // Add entity type
         workflow_name: workflowName,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
-        createdAt: now,
-        updatedAt: now,
+        createdAt: (createdAt ?? now).toISOString(),
+        updatedAt: (updatedAt ?? now).toISOString(),
         resourceId,
       };
       // Use upsert instead of create to handle both create and update cases
