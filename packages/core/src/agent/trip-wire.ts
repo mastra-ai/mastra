@@ -93,7 +93,7 @@ export const getModelOutputForTripwire = async <
     model: {
       modelId: model.modelId,
       provider: model.provider,
-      version: model.specificationVersion || 'v2',
+      version: model.specificationVersion,
     },
     stream: tripwireStream,
     messageList,
