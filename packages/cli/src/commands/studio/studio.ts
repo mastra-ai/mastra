@@ -66,7 +66,7 @@ export async function studio(
 
 const createServer = (builtStudioPath: string, options: StudioOptions) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
-  const basePath = options?.basePath !== '/' ? `${options.basePath}/` : '/';
+  const basePath = '/';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
@@ -89,9 +89,6 @@ const createServer = (builtStudioPath: string, options: StudioOptions) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       return res.end(html);
     }
-
-    const newUrl = basePath === '/' ? url : url.replace(basePath, '');
-    req.url = newUrl;
 
     return handler(req, res, {
       public: builtStudioPath,
