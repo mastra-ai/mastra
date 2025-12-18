@@ -14,7 +14,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,

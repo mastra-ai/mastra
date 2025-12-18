@@ -20,7 +20,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: "mastra-storage",
     url: ":memory:"

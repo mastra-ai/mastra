@@ -26,7 +26,6 @@ import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   observability: new Observability({
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   }),
@@ -59,7 +58,6 @@ import {
 } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   observability: new Observability({
     configs: {
       default: {

@@ -34,12 +34,11 @@ export default nextConfig;
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs"
+```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import vercel from "@astrojs/vercel";
 
 export default defineConfig({
-  // ...
   adapter: vercel(),
   output: "server",
 });
@@ -49,12 +48,11 @@ export default defineConfig({
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs"
+```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import netlify from "@astrojs/netlify";
 
 export default defineConfig({
-  // ...
   adapter: netlify(),
   output: "server",
 });
