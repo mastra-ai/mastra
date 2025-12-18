@@ -94,7 +94,6 @@ export async function executeParallel(
   });
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
-  let isStepThroughStepMadeRunning = false;
   for (const [stepIndex, step] of entry.steps.entries()) {
     let makeStepRunning = true;
     if (restart) {
@@ -104,10 +103,7 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === step.step.id;
     }
     if (!makeStepRunning) {
-      continue;
-    }
-    if (perStep && isStepThroughStepMadeRunning) {
-      continue;
+      break;
     }
     const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
@@ -120,7 +116,7 @@ export async function executeParallel(
     } as StepResult<any, any, any, any>;
     executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
     if (perStep) {
-      isStepThroughStepMadeRunning = true;
+      break;
     }
   }
 

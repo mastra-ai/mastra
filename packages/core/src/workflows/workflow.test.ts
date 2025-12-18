@@ -3845,10 +3845,8 @@ describe('Workflow', () => {
       expect(result.status).toBe('paused');
       expect(result.steps['nested-workflow']).toEqual({
         status: 'paused',
-        // output: { result: 'success', value: 'test-state!!!' },
         payload: {},
         startedAt: expect.any(Number),
-        // endedAt: expect.any(Number),
       });
     });
 
@@ -13374,7 +13372,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe.only('Time travel', () => {
+  describe('Time travel', () => {
     afterEach(async () => {
       await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });

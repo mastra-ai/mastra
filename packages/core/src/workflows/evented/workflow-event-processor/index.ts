@@ -5,7 +5,13 @@ import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context/';
-import type { StepFlowEntry, StepResult, TimeTravelExecutionParams, WorkflowRunState } from '../../../workflows/types';
+import type {
+  StepFlowEntry,
+  StepResult,
+  StepSuccess,
+  TimeTravelExecutionParams,
+  WorkflowRunState,
+} from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
 import { StepExecutor } from '../step-executor';
@@ -205,8 +211,17 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowEnd(args: ProcessorArgs) {
-    const { resumeSteps, prevResult, resumeData, parentWorkflow, activeSteps, requestContext, runId, timeTravel } =
-      args;
+    const {
+      resumeSteps,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+      activeSteps,
+      requestContext,
+      runId,
+      timeTravel,
+      perStep,
+    } = args;
 
     // handle nested workflow
     if (parentWorkflow) {
@@ -226,6 +241,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentContext: parentWorkflow,
           requestContext,
           timeTravel,
+          perStep,
         },
       });
     }
@@ -1053,19 +1069,36 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     step = workflow.stepGraph[executionPath[0]!];
     if (perStep) {
-      await this.endWorkflow({
-        workflow,
-        parentWorkflow,
-        workflowId,
-        runId,
-        executionPath,
-        resumeSteps,
-        stepResults,
-        prevResult,
-        activeSteps,
-        requestContext,
-        perStep,
-      });
+      if (parentWorkflow && executionPath[0]! < workflow.stepGraph.length - 1) {
+        const { endedAt, output, status, ...nestedPrevResult } = prevResult as StepSuccess<any, any, any, any>;
+        await this.endWorkflow({
+          workflow,
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: { ...nestedPrevResult, status: 'paused' },
+          activeSteps,
+          requestContext,
+          perStep,
+        });
+      } else {
+        await this.endWorkflow({
+          workflow,
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult,
+          activeSteps,
+          requestContext,
+          perStep,
+        });
+      }
     } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(

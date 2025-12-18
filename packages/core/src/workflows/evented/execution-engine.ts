@@ -170,6 +170,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
         status: 'suspended',
         steps: resultData.stepResults,
       };
+    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+      callbackArg = {
+        status: 'paused',
+        steps: resultData.stepResults,
+      };
     } else {
       callbackArg = {
         status: resultData.prevResult.status,
@@ -178,8 +183,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
     }
 
-    // Invoke lifecycle callbacks before returning
-    await this.invokeLifecycleCallbacks(callbackArg);
+    if (callbackArg.status !== 'paused') {
+      // Invoke lifecycle callbacks before returning
+      await this.invokeLifecycleCallbacks(callbackArg);
+    }
 
     // Build the final result with any additional fields needed for the return type
     let result: TOutput;
