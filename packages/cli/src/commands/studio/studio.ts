@@ -66,26 +66,32 @@ export async function studio(
 
 const createServer = (builtStudioPath: string, options: StudioOptions) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
+  const basePath = options?.basePath ? `${options.basePath}/` : '/';
+
   let html = readFileSync(indexHtmlPath, 'utf8')
-    .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', options.basePath || '/')
+    .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
     .replace('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
     .replace('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
     .replace('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http');
 
   const server = http.createServer((req, res) => {
-    if (req.url === '/' || req.url === '/index.html') {
+    const url = req.url || basePath;
+
+    // Let static assets be served by serve-handler
+    const isStaticAsset =
+      url.includes('/assets/') || url.includes('/dist/assets/') || url === '/mastra.svg' || url === '/favicon.ico';
+
+    // For everything that's not a static asset, serve the SPA shell (index.html)
+    if (!isStaticAsset) {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       return res.end(html);
     }
 
+    const newUrl = basePath === '/' ? url : url.replace(basePath, '');
+    req.url = newUrl;
+
     return handler(req, res, {
       public: builtStudioPath,
-      rewrites: [
-        {
-          source: '**',
-          destination: '/index.html',
-        },
-      ],
     });
   });
 
