@@ -4,9 +4,9 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
+import { deserializeValue } from '../domains/utils';
 import { createSqlBuilder } from '../sql-builder';
 import type { SqlParam, SqlQueryOptions } from '../sql-builder';
-import { deserializeValue } from '../domains/utils';
 
 export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
 

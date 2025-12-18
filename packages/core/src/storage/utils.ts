@@ -1,4 +1,3 @@
-import { type } from 'node:os';
 import type { ScoreRowData } from '../evals/types';
 import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';

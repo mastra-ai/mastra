@@ -9,8 +9,8 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {

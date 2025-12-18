@@ -11,8 +11,8 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig } from '../../types';
 
 /**

@@ -3,6 +3,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodTypeAny } from 'zod';
 import z, { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
@@ -19,7 +20,6 @@ import type {
   WorkingMemoryTemplate,
   WorkingMemory,
 } from './types';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 

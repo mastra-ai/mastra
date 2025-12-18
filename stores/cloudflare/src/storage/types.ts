@@ -16,6 +16,7 @@ import type {
   StorageAgentType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import type Cloudflare from 'cloudflare';
 
 /**
  * Base configuration options shared across Cloudflare configurations
@@ -130,7 +131,7 @@ export type CloudflareDomainConfig =
  * Pass an existing Cloudflare SDK client (REST API)
  */
 export interface CloudflareDomainClientConfig {
-  client: import('cloudflare').default;
+  client: Cloudflare;
   accountId: string;
   namespacePrefix?: string;
 }

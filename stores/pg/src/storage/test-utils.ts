@@ -3,8 +3,8 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
-import { PostgresStore } from '.';
 import { PgDB } from './db';
+import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
   id: 'test-postgres-store',

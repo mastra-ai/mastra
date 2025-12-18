@@ -9,7 +9,6 @@ import {
   TABLE_TRACES,
   TABLE_SCORERS,
   TABLE_SPANS,
-  TABLE_RESOURCES,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -59,7 +58,11 @@ export interface MssqlDomainRestConfig {
  * Resolves MssqlDomainConfig to pool, db, and schema.
  * Handles creating a new pool and db if config is provided.
  */
-export function resolveMssqlConfig(config: MssqlDomainConfig): { pool: sql.ConnectionPool; db: MssqlDB; schema?: string } {
+export function resolveMssqlConfig(config: MssqlDomainConfig): {
+  pool: sql.ConnectionPool;
+  db: MssqlDB;
+  schema?: string;
+} {
   // Existing pool and db
   if ('pool' in config && 'db' in config) {
     return { pool: config.pool, db: config.db, schema: config.schema };

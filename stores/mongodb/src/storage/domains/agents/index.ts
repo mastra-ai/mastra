@@ -12,11 +12,9 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  ThreadOrderBy,
-  ThreadSortDirection,
 } from '@mastra/core/storage';
-import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig } from '../../types';
 
 export class MongoDBAgentsStorage extends AgentsStorage {

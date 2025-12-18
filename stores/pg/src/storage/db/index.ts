@@ -19,11 +19,8 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import pgPromise from 'pg-promise';
-import type { IDatabase, IMain } from 'pg-promise';
+import type { IDatabase } from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
-
-// Re-export the types for convenience
-export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 
 /**
  * Configuration for standalone domain usage.

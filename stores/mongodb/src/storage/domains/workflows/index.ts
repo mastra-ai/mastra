@@ -13,8 +13,8 @@ import type {
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig } from '../../types';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {

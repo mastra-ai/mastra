@@ -19,7 +19,7 @@ import type {
 } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { MongoDBConnector } from './connectors/MongoDBConnector';
+import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
 import { MemoryStorageMongoDB } from './domains/memory';

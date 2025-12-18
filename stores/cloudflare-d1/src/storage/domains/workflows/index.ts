@@ -13,10 +13,10 @@ import {
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { createSqlBuilder } from '../../sql-builder';
-import type { SqlParam } from '../../sql-builder';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
+import { createSqlBuilder } from '../../sql-builder';
+import type { SqlParam } from '../../sql-builder';
 import { isArrayOfRecords } from '../utils';
 
 export class WorkflowsStorageD1 extends WorkflowsStorage {

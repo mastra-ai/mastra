@@ -1,6 +1,6 @@
 import type { MongoClientOptions } from 'mongodb';
-import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import type { ConnectorHandler } from './connectors/base';
+import type { MongoDBConnector } from './connectors/MongoDBConnector';
 
 /**
  * Base configuration options shared across MongoDB configurations

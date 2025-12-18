@@ -21,9 +21,9 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import { createSqlBuilder } from '../../sql-builder';
 import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
+import { createSqlBuilder } from '../../sql-builder';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
 export class MemoryStorageD1 extends MemoryStorage {
@@ -1015,7 +1015,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       const threadIds = threadResults.map((r: any) => r.thread_id).filter(Boolean);
 
       // Delete the messages
-      const deleteQuery = createSqlBuilder().delete(fullTableName).where(`id IN (${placeholders})`, ...messageIds);
+      const deleteQuery = createSqlBuilder()
+        .delete(fullTableName)
+        .where(`id IN (${placeholders})`, ...messageIds);
       const { sql, params } = deleteQuery.build();
       await this.#db.executeQuery({ sql, params });
 
