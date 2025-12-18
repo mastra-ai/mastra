@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../di';
+import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
@@ -194,9 +195,7 @@ export async function executeParallel(
   }
 
   if (execResults.status === 'failed') {
-    parallelSpan?.error({
-      error: new Error(execResults.error),
-    });
+    parallelSpan?.error({ error: execResults.error });
   } else {
     parallelSpan?.end({
       output: execResults.output || execResults,
@@ -335,19 +334,21 @@ export async function executeConditional(
 
           return result;
         } catch (e: unknown) {
-          const error = engine.preprocessExecutionError(
-            e,
+          const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
+          const mastraError = new MastraError(
             {
               id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
-              domain: 'MASTRA_WORKFLOW' as any,
-              category: 'USER' as any,
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.USER,
               details: { workflowId, runId },
             },
-            'Error evaluating condition: ',
+            errorInstance,
           );
+          engine.getLogger()?.trackException(mastraError);
+          engine.getLogger()?.error('Error evaluating condition: ' + errorInstance.stack);
 
           evalSpan?.error({
-            error,
+            error: mastraError,
             attributes: {
               result: false,
             },
@@ -456,9 +457,7 @@ export async function executeConditional(
   }
 
   if (execResults.status === 'failed') {
-    conditionalSpan?.error({
-      error: new Error(execResults.error),
-    });
+    conditionalSpan?.error({ error: execResults.error });
   } else {
     conditionalSpan?.end({
       output: execResults.output || execResults,

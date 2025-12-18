@@ -85,6 +85,7 @@ export class InngestWorkflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    super.__registerMastra(mastra);
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
@@ -141,7 +142,9 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -250,9 +253,15 @@ export class InngestWorkflow<
           },
         });
 
-        // Final step to check workflow status and throw NonRetriableError if failed
-        // This is needed to ensure that the Inngest workflow run is marked as failed instead of success
+        // Final step to invoke lifecycle callbacks and check workflow status
+        // Wrapped in step.run for durability - callbacks are memoized on replay
         await step.run(`workflow.${this.id}.finalize`, async () => {
+          // Invoke lifecycle callbacks (onFinish and onError)
+          // Use invokeLifecycleCallbacksInternal to call the real implementation
+          // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
+          await engine.invokeLifecycleCallbacksInternal(result as any);
+
+          // Throw NonRetriableError if failed to ensure Inngest marks the run as failed
           if (result.status === 'failed') {
             throw new NonRetriableError(`Workflow failed`, {
               cause: result,

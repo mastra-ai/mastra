@@ -973,6 +973,8 @@ export class Workflow<
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: options.tracingPolicy,
+      onFinish: options.onFinish,
+      onError: options.onError,
     };
 
     if (!executionEngine) {
@@ -1174,7 +1176,10 @@ export class Workflow<
         type: 'step',
         step: {
           id: mappingStep.id,
-          mapConfig: mappingConfig.toString(),
+          mapConfig:
+            mappingConfig.toString()?.length > 1000
+              ? mappingConfig.toString().slice(0, 1000) + '...\n}'
+              : mappingConfig.toString(),
         },
       });
       return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any>;
@@ -1260,7 +1265,10 @@ export class Workflow<
       type: 'step',
       step: {
         id: mappingStep.id,
-        mapConfig: JSON.stringify(newMappingConfig, null, 2),
+        mapConfig:
+          JSON.stringify(newMappingConfig, null, 2)?.length > 1000
+            ? JSON.stringify(newMappingConfig, null, 2).slice(0, 1000) + '...\n}'
+            : JSON.stringify(newMappingConfig, null, 2),
       },
     });
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, MappedOutputSchema>;
@@ -1562,7 +1570,9 @@ export class Workflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     // If a snapshot exists in storage, update the run's status to reflect the actual state
     // This fixes the issue where createRun checks storage but doesn't use the snapshot data
@@ -1925,8 +1935,13 @@ export class Workflow<
 
   async getWorkflowRunExecutionResult(
     runId: string,
-    withNestedWorkflows: boolean = true,
-  ): Promise<WorkflowState | null> {
+    options: {
+      withNestedWorkflows?: boolean;
+      fields?: string[];
+    } = {},
+  ): Promise<Partial<WorkflowState> | null> {
+    const { withNestedWorkflows = true, fields } = options;
+
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1951,18 +1966,69 @@ export class Workflow<
       }
     }
 
-    const fullSteps = withNestedWorkflows
-      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
-      : (snapshot as WorkflowRunState).context;
+    const snapshotState = snapshot as WorkflowRunState;
+
+    // Define the default result structure - this serves as the source of truth for allowed fields
+    const defaultResult = {
+      status: snapshotState.status,
+      result: snapshotState.result,
+      error: snapshotState.error,
+      payload: snapshotState.context?.input,
+      steps: null as any, // Will be populated below
+      activeStepsPath: snapshotState.activeStepsPath,
+      serializedStepGraph: snapshotState.serializedStepGraph,
+    };
+
+    // Derive allowed fields from the default result structure
+    const allowedFields = new Set(Object.keys(defaultResult));
+
+    // If fields are specified, only return requested fields
+    if (fields && fields.length > 0) {
+      const result: Partial<WorkflowState> = {};
+
+      for (const field of fields) {
+        // Skip unsupported field names
+        if (!allowedFields.has(field)) {
+          continue;
+        }
+
+        // Special cases only
+        if (field === 'steps') {
+          // Only fetch steps if explicitly requested (expensive operation)
+          let fullSteps;
+          if (withNestedWorkflows) {
+            fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+          } else {
+            // Strip input from context - steps should only contain step results
+            const { input, ...stepsOnly } = snapshotState.context || {};
+            fullSteps = stepsOnly;
+          }
+          result.steps = fullSteps as any;
+        } else if (field === 'payload') {
+          // Payload comes from context.input
+          result.payload = snapshotState.context?.input;
+        } else {
+          // 1:1 mapping - look up directly from snapshotState
+          result[field as keyof typeof result] = snapshotState[field as keyof WorkflowRunState] as any;
+        }
+      }
+
+      return result;
+    }
+
+    // Default behavior: return all fields
+    let fullSteps;
+    if (withNestedWorkflows) {
+      fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+    } else {
+      // Strip input from context - steps should only contain step results
+      const { input, ...stepsOnly } = snapshotState.context || {};
+      fullSteps = stepsOnly;
+    }
 
     return {
-      status: (snapshot as WorkflowRunState).status,
-      result: (snapshot as WorkflowRunState).result,
-      error: (snapshot as WorkflowRunState).error,
-      payload: (snapshot as WorkflowRunState).context?.input,
+      ...defaultResult,
       steps: fullSteps as any,
-      activeStepsPath: (snapshot as WorkflowRunState).activeStepsPath,
-      serializedStepGraph: (snapshot as WorkflowRunState).serializedStepGraph,
     };
   }
 }
@@ -2122,10 +2188,28 @@ export class Run<
   }
 
   /**
-   * Cancels the workflow execution
+   * Cancels the workflow execution.
+   * This aborts any running execution and updates the workflow status to 'canceled' in storage.
    */
   async cancel() {
-    this.abortController?.abort();
+    // Abort any running execution and update in-memory status
+    this.abortController.abort();
+    this.workflowRunStatus = 'canceled';
+
+    // Update workflow status in storage to 'canceled'
+    // This is necessary for suspended/waiting workflows where the abort signal won't be checked
+    try {
+      await this.mastra?.getStorage()?.updateWorkflowState({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        opts: {
+          status: 'canceled',
+        },
+      });
+    } catch {
+      // Storage errors should not prevent cancellation from succeeding
+      // The abort signal and in-memory status are already updated
+    }
   }
 
   protected async _validateInput(inputData: z.input<TInput>) {
@@ -2310,6 +2394,30 @@ export class Run<
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._start(args);
+  }
+
+  /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId. The workflow executes in the background.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   * @param args The input data and configuration for the workflow
+   * @returns A promise that resolves immediately with the runId
+   */
+  async startAsync(args: {
+    inputData?: z.input<TInput>;
+    initialState?: z.input<TState>;
+    requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+  }): Promise<{ runId: string }> {
+    // Fire execution in background, don't await completion
+    this._start(args).catch(err => {
+      console.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+    });
+    return { runId: this.runId };
   }
 
   /**
@@ -2559,7 +2667,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -2720,7 +2831,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }
@@ -3366,7 +3480,10 @@ export class Run<
           unwatch();
 
           try {
-            controller.close();
+            // only close when not yet closed
+            if (controller.desiredSize !== null) {
+              controller.close();
+            }
           } catch (err) {
             console.error('Error closing stream:', err);
           }

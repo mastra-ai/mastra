@@ -4,7 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { MastraLanguageModel } from './llm/model/shared.types';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
@@ -229,7 +229,7 @@ export interface ToolOptions {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
-  model?: MastraLanguageModel;
+  model?: MastraLanguageModel | MastraLegacyLanguageModel;
   /**
    * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
    */
@@ -335,16 +335,18 @@ export function makeCoreTool(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
 }
 
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
 }
 
 /**

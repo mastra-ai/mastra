@@ -72,26 +72,6 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
       });
     }
 
-    // Working Memory section
-    if (config.workingMemory) {
-      sections.push({
-        title: 'Working Memory',
-        items: [
-          {
-            label: 'Enabled',
-            value: config.workingMemory.enabled,
-            badge: config.workingMemory.enabled ? 'success' : undefined,
-          },
-          ...(config.workingMemory.enabled
-            ? [
-                { label: 'Scope', value: config.workingMemory.scope || 'resource' },
-                { label: 'Template', value: config.workingMemory.template || 'default' },
-              ]
-            : []),
-        ],
-      });
-    }
-
     return sections;
   }, [config]);
 
@@ -174,7 +154,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
                 {section.items.map(item => (
                   <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
                     <span className="text-xs text-icon3">{item.label}</span>
-                    {renderValue(item.value || '', item.badge)}
+                    {renderValue(item.value ?? '', item.badge)}
                   </div>
                 ))}
               </div>

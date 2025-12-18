@@ -7,7 +7,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # handleWorkflowStream()
 
-Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format. Use this function directly when you need to handle workflow streaming outside Hono or Mastra's own [apiRoutes](/docs/v1/server-db/custom-api-routes) feature. 
+Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format. Use this function directly when you need to handle workflow streaming outside Hono or Mastra's own [apiRoutes](/docs/v1/server/custom-api-routes) feature. 
 
 `handleWorkflowStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
@@ -25,7 +25,7 @@ See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-t
 
 Next.js App Router example:
 
-```typescript title="app/api/workflow/route.ts" copy
+```typescript title="app/api/workflow/route.ts"
 import { handleWorkflowStream } from '@mastra/ai-sdk';
 import { createUIMessageStreamResponse } from 'ai';
 import { mastra } from '@/src/mastra';

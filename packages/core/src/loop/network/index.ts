@@ -657,7 +657,7 @@ export async function createNetworkLoop({
                     primitiveType: inputData.primitiveType,
                     primitiveId: inputData.primitiveId,
                     input: inputData.prompt,
-                    finalResult: { text: await result.text, toolCalls: await result.toolCalls, messages },
+                    finalResult: { text: await result.text, messages },
                   }),
                 },
               ],
@@ -1152,10 +1152,7 @@ export async function createNetworkLoop({
   return { networkWorkflow };
 }
 
-export async function networkLoop<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   networkName,
   requestContext,
   runId,
@@ -1171,7 +1168,7 @@ export async function networkLoop<
   requestContext: RequestContext;
   runId: string;
   routingAgent: Agent;
-  routingAgentOptions?: AgentExecutionOptions<OUTPUT, FORMAT>;
+  routingAgentOptions?: AgentExecutionOptions<OUTPUT>;
   generateId: () => string;
   maxIterations: number;
   threadId?: string;

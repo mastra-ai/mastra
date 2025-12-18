@@ -1,0 +1,19 @@
+name: GitHub Issues Follow-Up Cron
+permissions:
+  contents: none
+
+on:
+  schedule:
+    # Run every 2 hours
+    - cron: '0 */2 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  github-issues-follow-up:
+    uses: ./.github/workflows/call-external-mastra-workflow.yml
+    with:
+      workflow_name: githubIssueManagerWorkflow
+      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra","batchSize":100},"requestContext":{}}'
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+    secrets:
+      MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}

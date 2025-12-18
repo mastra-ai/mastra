@@ -9,12 +9,11 @@ The `MastraJwtAuth` class provides a lightweight authentication mechanism for Ma
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraJwtAuth({
       secret: "<your-secret>",
@@ -39,4 +38,4 @@ export const mastra = new Mastra({
 
 ## Related
 
-[MastraJwtAuth](/docs/v1/auth/jwt)
+[MastraJwtAuth](/docs/v1/server/auth/jwt)

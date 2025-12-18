@@ -1,5 +1,5 @@
 import z from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -279,7 +279,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
         reason: z.string().describe('Brief explanation of why content was flagged').nullable(),
       });
       let response;
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
             schema,

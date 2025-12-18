@@ -11,13 +11,13 @@ The `MastraServer` abstract class is the base for all server adapters. Extend th
 
 ## Import
 
-```typescript copy
+```typescript
 import { MastraServer } from '@mastra/server/server-adapter';
 ```
 
 ## Type parameters
 
-```typescript copy
+```typescript
 MastraServer<TApp, TRequest, TResponse>
 ```
 
@@ -29,7 +29,7 @@ MastraServer<TApp, TRequest, TResponse>
 
 ## Constructor
 
-```typescript copy
+```typescript
 constructor(options: MastraServerOptions<TApp>)
 ```
 
@@ -119,7 +119,7 @@ These methods must be implemented by adapters:
 
 Attach Mastra context to every request.
 
-```typescript copy
+```typescript
 abstract registerContextMiddleware(): void
 ```
 
@@ -133,7 +133,7 @@ abstract registerContextMiddleware(): void
 
 Register authentication and authorization middleware.
 
-```typescript copy
+```typescript
 abstract registerAuthMiddleware(): void
 ```
 
@@ -141,7 +141,7 @@ abstract registerAuthMiddleware(): void
 
 Register a single route with the framework.
 
-```typescript copy
+```typescript
 abstract registerRoute(
   app: TApp,
   route: ServerRoute,
@@ -153,7 +153,7 @@ abstract registerRoute(
 
 Extract parameters from the request.
 
-```typescript copy
+```typescript
 abstract getParams(
   route: ServerRoute,
   request: TRequest
@@ -168,7 +168,7 @@ abstract getParams(
 
 Send response based on route type.
 
-```typescript copy
+```typescript
 abstract sendResponse(
   route: ServerRoute,
   response: TResponse,
@@ -180,7 +180,7 @@ abstract sendResponse(
 
 Handle streaming responses.
 
-```typescript copy
+```typescript
 abstract stream(
   route: ServerRoute,
   response: TResponse,
@@ -194,7 +194,7 @@ abstract stream(
 
 Initialize the server by registering all middleware and routes.
 
-```typescript copy
+```typescript
 async init(): Promise<void>
 ```
 
@@ -207,7 +207,7 @@ Calls in order:
 
 Register all Mastra routes.
 
-```typescript copy
+```typescript
 async registerRoutes(): Promise<void>
 ```
 
@@ -215,7 +215,7 @@ async registerRoutes(): Promise<void>
 
 Get the framework app instance.
 
-```typescript copy
+```typescript
 getApp<T = TApp>(): T
 ```
 
@@ -223,7 +223,7 @@ getApp<T = TApp>(): T
 
 Validate path parameters with the route's Zod schema.
 
-```typescript copy
+```typescript
 async parsePathParams(
   route: ServerRoute,
   params: Record<string, string>
@@ -234,7 +234,7 @@ async parsePathParams(
 
 Validate query parameters with the route's Zod schema.
 
-```typescript copy
+```typescript
 async parseQueryParams(
   route: ServerRoute,
   params: Record<string, string>
@@ -245,7 +245,7 @@ async parseQueryParams(
 
 Validate request body with the route's Zod schema.
 
-```typescript copy
+```typescript
 async parseBody(
   route: ServerRoute,
   body: unknown
@@ -256,7 +256,7 @@ async parseBody(
 
 Register an endpoint that serves the OpenAPI specification.
 
-```typescript copy
+```typescript
 async registerOpenAPIRoute(
   app: TApp,
   config: OpenAPIConfig,
@@ -270,7 +270,7 @@ async registerOpenAPIRoute(
 
 Merge request context from multiple sources (query params and body).
 
-```typescript copy
+```typescript
 protected mergeRequestContext(options: {
   paramsRequestContext?: Record<string, any>;
   bodyRequestContext?: Record<string, any>;
@@ -281,7 +281,7 @@ protected mergeRequestContext(options: {
 
 ### BodyLimitOptions
 
-```typescript copy
+```typescript
 interface BodyLimitOptions {
   maxSize: number;
   onError: (error: unknown) => unknown;
@@ -290,7 +290,7 @@ interface BodyLimitOptions {
 
 ### StreamOptions
 
-```typescript copy
+```typescript
 interface StreamOptions {
   redact?: boolean;
 }
@@ -298,7 +298,7 @@ interface StreamOptions {
 
 ## Example
 
-```typescript copy
+```typescript
 import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
 import type { Mastra } from '@mastra/core';
 
@@ -340,6 +340,6 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 
 ## Related
 
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters
-- [Custom Adapters](/docs/v1/server-db/custom-adapters) - Creating custom adapters
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters
+- [Custom Adapters](/docs/v1/server/custom-adapters) - Creating custom adapters
 - [createRoute()](/reference/v1/server/create-route) - Creating custom routes

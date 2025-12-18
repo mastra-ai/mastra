@@ -325,6 +325,8 @@ export function createWorkflow<
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
+      onFinish: params.options?.onFinish,
+      onError: params.options?.onError,
     },
   });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
@@ -352,7 +354,11 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -361,6 +367,7 @@ export class EventedWorkflow<
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -379,12 +386,15 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -418,6 +428,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -433,6 +444,28 @@ export class EventedRun<
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
+  }
+
+  /**
+   * Set up abort signal handler to publish workflow.cancel event when abortController.abort() is called.
+   * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
+   */
+  private setupAbortHandler(): void {
+    const abortHandler = () => {
+      this.mastra?.pubsub
+        .publish('workflows', {
+          type: 'workflow.cancel',
+          runId: this.runId,
+          data: {
+            workflowId: this.workflowId,
+            runId: this.runId,
+          },
+        })
+        .catch(err => {
+          console.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+        });
+    };
+    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
   }
 
   async start({
@@ -459,6 +492,7 @@ export class EventedRun<
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -481,6 +515,8 @@ export class EventedRun<
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
+
+    this.setupAbortHandler();
 
     const result = await this.executionEngine.execute<
       z.infer<TState>,
@@ -506,6 +542,76 @@ export class EventedRun<
     }
 
     return result;
+  }
+
+  /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId. The workflow executes in the background via pubsub.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   */
+  async startAsync({
+    inputData,
+    initialState,
+    requestContext,
+  }: {
+    inputData?: z.infer<TInput>;
+    requestContext?: RequestContext;
+    initialState?: z.infer<TState>;
+  }): Promise<{ runId: string }> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
+    requestContext = requestContext ?? new RequestContext();
+
+    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        requestContext: Object.fromEntries(requestContext.entries()),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    // Fire-and-forget: publish the workflow start event without subscribing for completion
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.start',
+      runId: this.runId,
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        prevResult: { status: 'success', output: inputDataToUse },
+        requestContext: Object.fromEntries(requestContext.entries()),
+        initialState: initialStateToUse,
+      },
+    });
+
+    // Return immediately without waiting for completion
+    return { runId: this.runId };
   }
 
   // TODO: stream
@@ -575,6 +681,8 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
+    this.setupAbortHandler();
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -640,13 +748,17 @@ export class EventedRun<
   }
 
   async cancel() {
-    await this.mastra?.pubsub.publish('workflows', {
-      type: 'workflow.cancel',
+    // Update storage directly for immediate status update (same pattern as Inngest)
+    await this.mastra?.getStorage()?.updateWorkflowState({
+      workflowName: this.workflowId,
       runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
+      opts: {
+        status: 'canceled',
       },
     });
+
+    // Trigger abort signal - the abort handler will publish the workflow.cancel event
+    // This ensures consistent behavior whether cancel() or abort() is called
+    this.abortController.abort();
   }
 }

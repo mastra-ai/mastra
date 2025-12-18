@@ -582,7 +582,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
 
 <Tabs>
   <TabItem value="OpenAI" label="OpenAI">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -594,7 +594,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="Anthropic" label="Anthropic">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -606,7 +606,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="Google Gemini" label="Google Gemini">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -618,7 +618,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="xAI" label="xAI">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -630,7 +630,7 @@ Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and 
     \`\`\`
   </TabItem>
   <TabItem value="OpenRouter" label="OpenRouter">
-    \`\`\`typescript copy showLineNumbers
+    \`\`\`typescript
     import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
@@ -728,7 +728,7 @@ In development, we auto-refresh your local model list every hour, ensuring your 
 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
@@ -749,9 +749,9 @@ const reasoningAgent = new Agent({
 \`\`\`
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server-db/request-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/v1/server/request-context), variables, or any other logic.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 const agent = new Agent({
   id: "dynamic-assistant",
   name: "Dynamic Assistant",
@@ -773,7 +773,7 @@ This enables powerful patterns:
 
 Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 // Agent level (apply to all future messages)
 const planner = new Agent({
   id: "planner",
@@ -808,7 +808,7 @@ const highEffort = await planner.generate([
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
 
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 const agent = new Agent({
   id: "custom-agent",
   name: "Custom Agent",
@@ -833,7 +833,7 @@ Configuration differs by provider. See the provider pages in the left navigation
 Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
 
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
@@ -865,7 +865,7 @@ Your users never experience the disruption - the response comes back with the sa
 Mastra supports AI SDK provider modules, should you need to use them directly.
 
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript
 import { groq } from '@ai-sdk/groq';
 import { Agent } from "@mastra/core/agent";
 

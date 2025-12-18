@@ -9,7 +9,7 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 
 ## Usage example
 
-```typescript title="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
+```typescript title="src/mastra/tools/reverse-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -61,6 +61,27 @@ export const tool = createTool({
       type: "Zod schema",
       description:
         "A Zod schema defining the expected output structure of the tool's `execute` function.",
+      isOptional: true,
+    },
+    {
+      name: "suspendSchema",
+      type: "Zod schema",
+      description:
+        "A Zod schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.",
+      isOptional: true,
+    },
+    {
+      name: "resumeSchema",
+      type: "Zod schema",
+      description:
+        "A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.",
+      isOptional: true,
+    },
+    {
+      name: "requireApproval",
+      type: "boolean",
+      description:
+        "When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.",
       isOptional: true,
     },
     {
@@ -194,7 +215,6 @@ export const tool = createTool({
   onInputStart: ({ toolCallId, messages, abortSignal }) => {
     console.log(`Tool ${toolCallId} input streaming started`);
   },
-  // ... other properties
 });
 ```
 
@@ -209,7 +229,6 @@ export const tool = createTool({
   onInputDelta: ({ inputTextDelta, toolCallId, messages, abortSignal }) => {
     console.log(`Received input chunk: ${inputTextDelta}`);
   },
-  // ... other properties
 });
 ```
 
@@ -228,7 +247,6 @@ export const tool = createTool({
     console.log(`Tool received complete input:`, input);
     // input is fully typed based on inputSchema
   },
-  // ... other properties
 });
 ```
 
@@ -284,5 +302,6 @@ Hook errors are caught and logged automatically, but do not prevent tool executi
 
 - [MCP Overview](/docs/v1/mcp/overview)
 - [Using Tools with Agents](/docs/v1/agents/using-tools)
+- [Agent Approval](/docs/v1/agents/agent-approval)
 - [Tool Streaming](/docs/v1/streaming/tool-streaming)
-- [Request Context](/docs/v1/server-db/request-context#accessing-values-with-tools)
+- [Request Context](/docs/v1/server/request-context#accessing-values-with-tools)

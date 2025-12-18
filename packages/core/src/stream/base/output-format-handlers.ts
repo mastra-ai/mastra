@@ -1,6 +1,6 @@
 import { TransformStream } from 'node:stream/web';
-import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from 'ai-v5';
-import type { JSONSchema7, Schema } from 'ai-v5';
+import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
+import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
 import type z3 from 'zod/v3';
 import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';

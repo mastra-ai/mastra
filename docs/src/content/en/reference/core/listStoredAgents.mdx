@@ -9,7 +9,7 @@ The `.listStoredAgents()` method retrieves a paginated list of agent configurati
 
 ## Usage example
 
-```typescript copy
+```typescript
 // Get Agent instances from storage
 const { agents, total, hasMore } = await mastra.listStoredAgents();
 
@@ -20,7 +20,7 @@ for (const agent of agents) {
 }
 ```
 
-```typescript copy
+```typescript
 // Get paginated results with raw storage data
 const result = await mastra.listStoredAgents({
   page: 0,
@@ -127,7 +127,7 @@ If a referenced primitive is not found, a warning is logged but the agent is sti
 
 ## Example: Iterating Through All Stored Agents
 
-```typescript copy
+```typescript
 async function getAllStoredAgents(mastra: Mastra) {
   const allAgents: Agent[] = [];
   let page = 0;
@@ -147,5 +147,5 @@ async function getAllStoredAgents(mastra: Mastra) {
 ## Related
 
 - [Mastra.getStoredAgentById()](/reference/v1/core/getStoredAgentById)
-- [Storage overview](/docs/v1/server-db/storage)
+- [Storage overview](/reference/v1/storage/overview)
 - [Agents overview](/docs/v1/agents/overview)
