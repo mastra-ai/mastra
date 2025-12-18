@@ -19,6 +19,21 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     this.operations = operations;
   }
 
+  async init(): Promise<void> {
+    const collection = await this.operations.getCollection(TABLE_SPANS);
+    await collection.createIndex({ spanId: 1, traceId: 1 }, { unique: true });
+    await collection.createIndex({ traceId: 1 });
+    await collection.createIndex({ parentSpanId: 1 });
+    await collection.createIndex({ startedAt: -1 });
+    await collection.createIndex({ spanType: 1 });
+    await collection.createIndex({ name: 1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.operations.getCollection(TABLE_SPANS);
+    await collection.deleteMany({});
+  }
+
   public get tracingStrategy(): {
     preferred: TracingStorageStrategy;
     supported: TracingStorageStrategy[];

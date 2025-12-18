@@ -23,6 +23,21 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     this.operations = operations;
   }
 
+  async init(): Promise<void> {
+    const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+    await collection.createIndex({ workflow_name: 1, run_id: 1 }, { unique: true });
+    await collection.createIndex({ run_id: 1 });
+    await collection.createIndex({ workflow_name: 1 });
+    await collection.createIndex({ resourceId: 1 });
+    await collection.createIndex({ createdAt: -1 });
+    await collection.createIndex({ 'snapshot.status': 1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+    await collection.deleteMany({});
+  }
+
   updateWorkflowResults(
     {
       // workflowName,

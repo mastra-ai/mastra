@@ -31,6 +31,22 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     this.operations = operations;
   }
 
+  async init(): Promise<void> {
+    const collection = await this.operations.getCollection(TABLE_SCORERS);
+    await collection.createIndex({ id: 1 }, { unique: true });
+    await collection.createIndex({ scorerId: 1 });
+    await collection.createIndex({ runId: 1 });
+    await collection.createIndex({ entityId: 1, entityType: 1 });
+    await collection.createIndex({ traceId: 1, spanId: 1 });
+    await collection.createIndex({ createdAt: -1 });
+    await collection.createIndex({ source: 1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.operations.getCollection(TABLE_SCORERS);
+    await collection.deleteMany({});
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
       const collection = await this.operations.getCollection(TABLE_SCORERS);

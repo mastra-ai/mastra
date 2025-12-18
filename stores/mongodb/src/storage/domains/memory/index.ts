@@ -30,6 +30,41 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     this.operations = operations;
   }
 
+  async init(): Promise<void> {
+    // Create indexes for threads collection
+    const threadsCollection = await this.operations.getCollection(TABLE_THREADS);
+    await threadsCollection.createIndex({ id: 1 }, { unique: true });
+    await threadsCollection.createIndex({ resourceId: 1 });
+    await threadsCollection.createIndex({ createdAt: -1 });
+    await threadsCollection.createIndex({ updatedAt: -1 });
+
+    // Create indexes for messages collection
+    const messagesCollection = await this.operations.getCollection(TABLE_MESSAGES);
+    await messagesCollection.createIndex({ id: 1 }, { unique: true });
+    await messagesCollection.createIndex({ thread_id: 1 });
+    await messagesCollection.createIndex({ resourceId: 1 });
+    await messagesCollection.createIndex({ createdAt: -1 });
+    await messagesCollection.createIndex({ thread_id: 1, createdAt: 1 });
+
+    // Create indexes for resources collection
+    const resourcesCollection = await this.operations.getCollection(TABLE_RESOURCES);
+    await resourcesCollection.createIndex({ id: 1 }, { unique: true });
+    await resourcesCollection.createIndex({ createdAt: -1 });
+    await resourcesCollection.createIndex({ updatedAt: -1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const threadsCollection = await this.operations.getCollection(TABLE_THREADS);
+    const messagesCollection = await this.operations.getCollection(TABLE_MESSAGES);
+    const resourcesCollection = await this.operations.getCollection(TABLE_RESOURCES);
+
+    await Promise.all([
+      threadsCollection.deleteMany({}),
+      messagesCollection.deleteMany({}),
+      resourcesCollection.deleteMany({}),
+    ]);
+  }
+
   private parseRow(row: any): MastraDBMessage {
     let content = row.content;
     if (typeof content === 'string') {
