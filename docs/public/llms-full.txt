@@ -233,7 +233,6 @@ export const unifiedVoiceAgent = new Agent({
 });
 
 export const mastra = new Mastra({
-  // ...
   agents: { hybridVoiceAgent, unifiedVoiceAgent },
 });
 
@@ -298,7 +297,7 @@ export const agent = new Agent({
   id: "aisdk-voice-agent",
   name: "AI SDK Voice Agent",
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: openai("gpt-5.1"),
+  model: "openai/gpt-5.1",
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({
@@ -376,7 +375,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: "mastra-storage",
     url: ":memory:"
@@ -717,14 +715,13 @@ Memory requires a storage provider to persist message history, including user me
 
 Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
-```typescript {6-9} title="src/mastra/agents/memory-agent.ts"
+```typescript {7-11} title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  // ...
   memory: new Memory({
     options: {
       lastMessages: 20,
@@ -733,9 +730,9 @@ export const memoryAgent = new Agent({
 });
 ```
 
-:::note
+:::info
 
-See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list of configuration options.
+Visit [Memory Class](/reference/v1/memory/memory-class) for a full list of configuration options.
 
 :::
 
@@ -745,12 +742,11 @@ See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list o
 
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
-```typescript {6-8} title="src/mastra/index.ts"
+```typescript {5-8} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  // ..
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: ":memory:",
@@ -758,9 +754,9 @@ export const mastra = new Mastra({
 });
 ```
 
-:::note
+:::info
 
-See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
+Visit [libSQL Storage](/reference/v1/storage/libsql) for a full list of configuration options.
 
 :::
 
@@ -769,7 +765,7 @@ See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of c
 
 Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
 
-```typescript {7-10} title="src/mastra/agents/memory-agent.ts"
+```typescript {9-12} title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -777,7 +773,6 @@ import { LibSQLStore } from "@mastra/libsql";
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  // ...
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'mastra-storage',
@@ -796,7 +791,7 @@ Include a `memory` object with both `resource` and `thread` to track message his
 
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
-```typescript {5-6}
+```typescript {4-7}
 const response = await memoryAgent.generate(
   "Remember my favorite color is blue.",
   {
@@ -810,7 +805,7 @@ const response = await memoryAgent.generate(
 
 To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original conversation.
 
-```typescript {3-4}
+```typescript {2-5}
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
     resource: "user-123",
@@ -830,18 +825,13 @@ export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
-const premiumMemory = new Memory({
-  // ...
-});
+const premiumMemory = new Memory();
 
-const standardMemory = new Memory({
-  // ...
-});
+const standardMemory = new Memory();
 
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -850,9 +840,9 @@ export const memoryAgent = new Agent({
 });
 ```
 
-:::note
+:::info
 
-See [Request Context](/docs/v1/server/request-context) docs for more information.
+Visit [Request Context](/docs/v1/server/request-context) for more information.
 
 :::
 
@@ -889,7 +879,7 @@ Use processors for content moderation, prompt injection prevention, response san
 
 Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
 
-```typescript {2,8-16} title="src/mastra/agents/moderated-agent.ts"
+```typescript {2,9-17} title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
@@ -918,13 +908,12 @@ Input processors are applied before user messages reach the language model. They
 
 The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
 
-```typescript {8-11} title="src/mastra/agents/normalized-agent.ts"
+```typescript {7-10} title="src/mastra/agents/normalized-agent.ts"
 import { UnicodeNormalizer } from "@mastra/core/processors";
 
 export const normalizedAgent = new Agent({
   id: "normalized-agent",
   name: "Normalized Agent",
-  // ...
   inputProcessors: [
     new UnicodeNormalizer({
       stripControlChars: true,
@@ -934,19 +923,22 @@ export const normalizedAgent = new Agent({
 });
 ```
 
-> See [UnicodeNormalizer](/reference/v1/processors/unicode-normalizer) for a full list of configuration options.
+:::info
+
+Visit [UnicodeNormalizer](/reference/v1/processors/unicode-normalizer) for a full list of configuration options.
+
+:::
 
 ### Preventing prompt injection
 
 The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
-```typescript {8-13} title="src/mastra/agents/secure-agent.ts"
+```typescript {7-12} title="src/mastra/agents/secure-agent.ts"
 import { PromptInjectionDetector } from "@mastra/core/processors";
 
 export const secureAgent = new Agent({
   id: "secure-agent",
   name: "Secure Agent",
-  // ...
   inputProcessors: [
     new PromptInjectionDetector({
       model: "openrouter/openai/gpt-oss-safeguard-20b",
@@ -958,19 +950,22 @@ export const secureAgent = new Agent({
 });
 ```
 
-> See [PromptInjectionDetector](/reference/v1/processors/prompt-injection-detector) for a full list of configuration options.
+:::info
+
+Visit [PromptInjectionDetector](/reference/v1/processors/prompt-injection-detector) for a full list of configuration options.
+
+:::
 
 ### Detecting and translating language
 
 The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
 
-```typescript {8-13} title="src/mastra/agents/multilingual-agent.ts"
+```typescript {7-12} title="src/mastra/agents/multilingual-agent.ts"
 import { LanguageDetector } from "@mastra/core/processors";
 
 export const multilingualAgent = new Agent({
   id: "multilingual-agent",
   name: "Multilingual Agent",
-  // ...
   inputProcessors: [
     new LanguageDetector({
       model: "openrouter/openai/gpt-oss-safeguard-20b",
@@ -982,7 +977,11 @@ export const multilingualAgent = new Agent({
 });
 ```
 
-> See [LanguageDetector](/reference/v1/processors/language-detector) for a full list of configuration options.
+:::info
+
+Visit [LanguageDetector](/reference/v1/processors/language-detector) for a full list of configuration options.
+
+:::
 
 ## Output processors
 
@@ -992,13 +991,12 @@ Output processors are applied after the language model generates a response, but
 
 The `BatchPartsProcessor` is an output processor that combines multiple stream parts before emitting them to the client. This reduces network overhead and improves the user experience by consolidating small chunks into larger batches.
 
-```typescript {8-12} title="src/mastra/agents/batched-agent.ts"
+```typescript {7-11} title="src/mastra/agents/batched-agent.ts"
 import { BatchPartsProcessor } from "@mastra/core/processors";
 
 export const batchedAgent = new Agent({
   id: "batched-agent",
   name: "Batched Agent",
-  // ...
   outputProcessors: [
     new BatchPartsProcessor({
       batchSize: 5,
@@ -1009,19 +1007,22 @@ export const batchedAgent = new Agent({
 });
 ```
 
-> See [BatchPartsProcessor](/reference/v1/processors/batch-parts-processor) for a full list of configuration options.
+:::info
+
+Visit [BatchPartsProcessor](/reference/v1/processors/batch-parts-processor) for a full list of configuration options.
+
+:::
 
 ### Limiting token usage
 
 The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
 
-```typescript {8-12} title="src/mastra/agents/limited-agent.ts"
+```typescript {7-11} title="src/mastra/agents/limited-agent.ts"
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const limitedAgent = new Agent({
   id: "limited-agent",
   name: "Limited Agent",
-  // ...
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
@@ -1032,7 +1033,11 @@ export const limitedAgent = new Agent({
 });
 ```
 
-> See [TokenLimiterProcessor](/reference/v1/processors/token-limiter-processor) for a full list of configuration options.
+:::info
+
+Visit [TokenLimiterProcessor](/reference/v1/processors/token-limiter-processor) for a full list of configuration options.
+
+:::
 
 ### Scrubbing system prompts
 
@@ -1059,7 +1064,11 @@ const scrubbedAgent = new Agent({
 });
 ```
 
-> See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
+:::info
+
+Visit [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
+
+:::
 
 :::note
 When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server/mastra-server#stream-data-redaction) for details.
@@ -1073,13 +1082,12 @@ Hybrid processors can be applied either before messages are sent to the language
 
 The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
 
-```typescript {8-13,16-18} title="src/mastra/agents/moderated-agent.ts"
+```typescript {7-12,15} title="src/mastra/agents/moderated-agent.ts"
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
   id: "moderated-agent",
   name: "Moderated Agent",
-  // ...
   inputProcessors: [
     new ModerationProcessor({
       model: "openrouter/openai/gpt-oss-safeguard-20b",
@@ -1089,26 +1097,27 @@ export const moderatedAgent = new Agent({
     }),
   ],
   outputProcessors: [
-    new ModerationProcessor({
-      // ...
-    }),
+    new ModerationProcessor(),
   ],
 });
 ```
 
-> See [ModerationProcessor](/reference/v1/processors/moderation-processor) for a full list of configuration options.
+:::info
+
+Visit [ModerationProcessor](/reference/v1/processors/moderation-processor) for a full list of configuration options.
+
+:::
 
 ### Detecting and redacting PII
 
 The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
 
-```typescript {8-15,18-20} title="src/mastra/agents/private-agent.ts"
+```typescript {7-14,17} title="src/mastra/agents/private-agent.ts"
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
   id: "private-agent",
   name: "Private Agent",
-  // ...
   inputProcessors: [
     new PIIDetector({
       model: "openrouter/openai/gpt-oss-safeguard-20b",
@@ -1120,14 +1129,16 @@ export const privateAgent = new Agent({
     }),
   ],
   outputProcessors: [
-    new PIIDetector({
-      // ...
-    }),
+    new PIIDetector(),
   ],
 });
 ```
 
-> See [PIIDetector](/reference/v1/processors/pii-detector) for a full list of configuration options.
+:::info
+
+Visit [PIIDetector](/reference/v1/processors/pii-detector) for a full list of configuration options.
+
+:::
 
 ## Applying multiple processors
 
@@ -1152,20 +1163,11 @@ import {
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   inputProcessors: [
-    new UnicodeNormalizer({
-      //...
-    }),
-    new PromptInjectionDetector({
-      // ...
-    }),
-    new PIIDetector({
-      // ...
-    }),
-    new ModerationProcessor({
-      // ...
-    }),
+    new UnicodeNormalizer(),
+    new PromptInjectionDetector(),
+    new PIIDetector(),
+    new ModerationProcessor(),
   ],
 });
 ```
@@ -1176,16 +1178,14 @@ Many of the built-in processors support a `strategy` parameter that controls how
 
 Most strategies allow the request to continue without interruption. When `block` is used, the processor calls its internal `abort()` function, which immediately stops the request and prevents any subsequent processors from running.
 
-```typescript {10} title="src/mastra/agents/private-agent.ts"
+```typescript {8} title="src/mastra/agents/private-agent.ts"
 import { PIIDetector } from "@mastra/core/processors";
 
 export const privateAgent = new Agent({
   id: "private-agent",
   name: "Private Agent",
-  // ...
   inputProcessors: [
     new PIIDetector({
-      // ...
       strategy: "block",
     }),
   ],
@@ -1358,7 +1358,6 @@ export const researchAgent = new Agent({
   description: `This agent gathers concise research insights in bullet-point form.
     It's designed to extract key facts without generating full
     responses or narrative content.`,
-  // ...
 });
 ```
 
@@ -1369,7 +1368,6 @@ export const writingAgent = new Agent({
   description: `This agent turns researched material into well-structured
     written content. It produces full-paragraph reports with no bullet points,
     suitable for use in articles, summaries, or blog posts.`,
-  // ...
 });
 ```
 
@@ -1390,7 +1388,6 @@ export const cityWorkflow = createWorkflow({
   outputSchema: z.object({
     text: z.string(),
   }),
-  //...
 });
 ```
 
@@ -1411,7 +1408,6 @@ export const weatherTool = createTool({
   outputSchema: z.object({
     weather: z.string(),
   }),
-  // ...
 });
 ```
 
@@ -1638,18 +1634,21 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/v1/agents/agent) for more information.
+:::info
+
+Visit [Agent reference](/reference/v1/agents/agent) for more information.
+
+:::
 
 ### Registering an agent
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript {6} title="src/mastra/index.ts"
+```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
 export const mastra = new Mastra({
-  // ...
   agents: { testAgent },
 });
 ```
@@ -1734,13 +1733,21 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ## Structured output
 
 Agents can return structured, type-safe data using Zod or JSON Schema. The parsed result is available on `response.object`.
 
-> See [Structured Output](/docs/v1/agents/structured-output) for more information.
+:::info
+
+Visit [Structured Output](/docs/v1/agents/structured-output) for more information.
+
+:::
 
 ## Analyzing images
 
@@ -1766,7 +1773,6 @@ const response = await testAgent.generate([
 
 console.log(response.text);
 ```
-
 
 ## Using `maxSteps`
 
@@ -1802,12 +1808,15 @@ Agents can use tools to go beyond language generation, enabling structured inter
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   tools: { testTool },
 });
 ```
 
-> See [Using Tools](/docs/v1/agents/using-tools) for more information.
+:::info
+
+Visit [Using Tools](/docs/v1/agents/using-tools) for more information.
+
+:::
 
 ## Using `RequestContext`
 
@@ -1821,7 +1830,6 @@ export type UserTier = {
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   model: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -1832,7 +1840,11 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Request Context](/docs/v1/server/request-context) for more information.
+:::info
+
+See [Request Context](/docs/v1/server/request-context) for more information.
+
+:::
 
 ## Testing with Studio
 
@@ -1883,18 +1895,17 @@ Mastra includes several processors for common use cases. You can also create cus
 
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
-```typescript {3,9-15} title="src/mastra/agents/moderated-agent.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -2140,14 +2151,13 @@ Mastra provides utility processors for common tasks:
 
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
 
-```typescript {9-12}
+```typescript {7-10}
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiter } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "my-agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   inputProcessors: [
     // Ensure the total tokens don't exceed ~127k
     new TokenLimiter(127000),
@@ -2175,14 +2185,13 @@ const agent = new Agent({
 
 Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
 
-```typescript {5-14}
+```typescript {7-16}
 import { Agent } from "@mastra/core/agent";
 import { ToolCallFilter, TokenLimiter } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "my-agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   inputProcessors: [
     // Example 1: Remove all tool calls/results
     new ToolCallFilter(),
@@ -2196,7 +2205,11 @@ const agent = new Agent({
 });
 ```
 
-> **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+:::note
+
+The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+
+:::
 
 ## Using workflows as processors
 
@@ -2353,7 +2366,11 @@ console.log(response.object);
 </Tabs>
 
 
-> See [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+:::info
+
+Visit [.generate()](/reference/v1/agents/generate#structuredoutput) for a full list of configuration options.
+
+:::
 
 ### Example output
 
@@ -2525,7 +2542,7 @@ When creating tools, keep descriptions simple and focused on what the tool does,
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
-```typescript {14} title="src/mastra/tools/weather-tool.ts"
+```typescript title="src/mastra/tools/weather-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -2555,7 +2572,7 @@ To make a tool available to an agent, add it to `tools`. Mentioning available to
 
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
 
-```typescript {8,10} title="src/mastra/agents/weather-agent.ts"
+```typescript {11} title="src/mastra/agents/weather-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
@@ -2586,14 +2603,13 @@ const result = await agent.generate("What's the weather in London?");
 
 When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
 
-```typescript {8} title="src/mastra/agents/weather-agent.ts"
+```typescript {7} title="src/mastra/agents/weather-agent.ts"
 import { weatherTool } from "../tools/weather-tool";
 import { activitiesTool } from "../tools/activities-tool";
 
 export const weatherAgent = new Agent({
   id: "weather-agent",
   name: "Weather Agent",
-  // ..
   tools: { weatherTool, activitiesTool },
 });
 ```
@@ -3172,12 +3188,11 @@ export default nextConfig;
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs"
+```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import vercel from "@astrojs/vercel";
 
 export default defineConfig({
-  // ...
   adapter: vercel(),
   output: "server",
 });
@@ -3187,12 +3202,11 @@ export default defineConfig({
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs"
+```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import netlify from "@astrojs/netlify";
 
 export default defineConfig({
-  // ...
   adapter: netlify(),
   output: "server",
 });
@@ -3322,7 +3336,6 @@ For type safety and compatibility with both live agent scoring and trace scoring
 
 ```typescript
 const myScorer = createScorer({
-  // ...
   type: "agent", // Automatically handles agent input/output types
 }).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
@@ -3498,7 +3511,11 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 
 Together, these components allow you to define custom evaluation logic using LLMs as judges.
 
-> See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+:::info
+
+Visit [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+
+:::
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from "@mastra/core/evals";
@@ -3784,7 +3801,6 @@ import {
 } from "@mastra/evals/scorers/prebuilt";
 
 export const evaluatedAgent = new Agent({
-  // ...
   scorers: {
     relevancy: {
       scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
@@ -3808,7 +3824,6 @@ import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
 
 const contentStep = createStep({
-  // ...
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
@@ -3856,7 +3871,6 @@ To score traces, you first need to register your scorers with your Mastra instan
 
 ```typescript
 const mastra = new Mastra({
-  // ...
   scorers: {
     answerRelevancy: myAnswerRelevancyScorer,
     responseQuality: myResponseQualityScorer,
@@ -5136,7 +5150,11 @@ This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/c
 - A [Mastra Cloud](https://mastra.ai/cloud) account
 - A GitHub account / repository containing a Mastra application
 
-> See our [Getting started](/guides/v1/getting-started/quickstart) guide to scaffold out a new Mastra project with sensible defaults.
+:::info
+
+Visit our [Getting started](/guides/v1/getting-started/quickstart) guide to scaffold out a new Mastra project with sensible defaults.
+
+:::
 
 ## Setup and Deploy process
 
@@ -5274,7 +5292,11 @@ export const testMcpClient = new MCPClient({
 });
 ```
 
-> See [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+:::info
+
+Visit [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+
+:::
 
 ## Using `MCPClient` with an agent
 
@@ -5299,7 +5321,11 @@ export const testAgent = new Agent({
 });
 ```
 
-> See the [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+:::info
+
+Visit [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+
+:::
 
 ## Configuring `MCPServer`
 
@@ -5322,7 +5348,11 @@ export const testMcpServer = new MCPServer({
 });
 ```
 
-> See [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+:::info
+
+Visit [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+
+:::
 
 ## Registering an `MCPServer`
 
@@ -5334,7 +5364,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
-  // ...
   mcpServers: { testMcpServer },
 });
 ```
@@ -5354,15 +5383,18 @@ export const mastra = new Mastra({
 
 Use the `.getTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
-> See [getTools()](/reference/v1/tools/mcp-client#gettools) for more information.
+:::info
 
-```typescript {7} title="src/mastra/agents/test-agent.ts"
+Visit [getTools()](/reference/v1/tools/mcp-client#gettools) for more information.
+
+:::
+
+```typescript {6} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
-  // ...
   tools: await testMcpClient.getTools(),
 });
 ```
@@ -5403,7 +5435,11 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-> See [getToolsets()](/reference/v1/tools/mcp-client#gettoolsets) for more information.
+:::info
+
+Visit [getToolsets()](/reference/v1/tools/mcp-client#gettoolsets) for more information.
+
+:::
 
 ## Connecting to an MCP registry
 
@@ -6202,7 +6238,7 @@ For more details on enabling and configuring tracing, see [Tracing](/docs/v1/obs
 
 - Learn more about [Storage](/docs/v1/memory/storage) providers and configuration options
 - Add [Message History](/docs/v1/memory/message-history), [Working Memory](/docs/v1/memory/working-memory), or [Semantic Recall](/docs/v1/memory/semantic-recall)
-- Visit the [Memory configuration reference](/reference/v1/memory/memory-class) for all available options
+- Visit [Memory configuration reference](/reference/v1/memory/memory-class) for all available options
 
 
 ---
@@ -7054,7 +7090,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
-  // ...
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
@@ -7062,7 +7097,11 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [PinoLogger](/reference/v1/logging/pino-logger) API reference for all available configuration options.
+:::info
+
+Visit [PinoLogger](/reference/v1/logging/pino-logger) for all available configuration options.
+
+:::
 
 ## Customizing logs
 
@@ -7072,14 +7111,12 @@ Mastra provides access to a logger instance via the `mastra.getLogger()` method,
 
 Within a workflow step, access the logger via the `mastra` parameter inside the `execute` function. This allows you to log messages relevant to the step’s execution.
 
-```typescript {8-9} title="src/mastra/workflows/test-workflow.ts"
+```typescript {6-7} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({
-  //...
   execute: async ({ mastra }) => {
-
     const logger = mastra.getLogger();
     logger.info("workflow info log");
 
@@ -7098,12 +7135,11 @@ export const testWorkflow = createWorkflow({...})
 
 Similarly, tools have access to the logger instance via the `mastra` parameter. Use this to log tool specific activity during execution.
 
-```typescript {8-9} title="src/mastra/tools/test-tool.ts"
+```typescript {6-7} title="src/mastra/tools/test-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
 export const testTool = createTool({
-  // ...
   execute: async ({ mastra }) => {
     const logger = mastra?.getLogger();
     logger?.info("tool info log");
@@ -7121,12 +7157,11 @@ Logger methods accept an optional second argument for additional data. This can 
 
 In this example, the log message includes an object with a key of `agent` and a value of the `testAgent` instance.
 
-```typescript {11} title="src/mastra/workflows/test-workflow.ts"
+```typescript {10} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({
-  //...
   execute: async ({ mastra }) => {
 
     const testAgent = mastra.getAgent("testAgent");
@@ -7178,7 +7213,6 @@ import { LibSqlStorage } from "@mastra/libsql";
 import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   logger: new PinoLogger(),
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -8134,7 +8168,6 @@ Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
 
 ```typescript title="src/agents/support-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { buildTracingOptions } from "@mastra/observability";
 import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
@@ -8150,7 +8183,7 @@ const prompt = await langfuse.getPrompt("customer-support");
 export const supportAgent = new Agent({
   name: "support-agent",
   instructions: prompt.prompt, // Use the prompt text from Langfuse
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
 ## Using Tags
@@ -8820,7 +8853,6 @@ import { Mastra } from "@mastra/core";
 import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   observability: new Observability({
     default: { enabled: true }, // Enables DefaultExporter and CloudExporter
   }),
@@ -8853,7 +8885,6 @@ import {
 } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   observability: new Observability({
     configs: {
       default: {
@@ -10513,7 +10544,6 @@ Results include both the text content and a similarity score:
     score: 0.82,
     metadata: { source: "article1.txt" },
   },
-  // ... more results
 ];
 ```
 
@@ -11692,12 +11722,11 @@ npm install @mastra/auth-auth0@beta
 
 ### Basic usage with environment variables
 
-```typescript {2,7} title="src/mastra/index.ts"
+```typescript {2,6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0(),
   },
@@ -11706,12 +11735,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
@@ -11745,7 +11773,11 @@ const auth0Provider = new MastraAuthAuth0({
 });
 ```
 
-> See the [MastraAuthAuth0](/reference/v1/auth/auth0) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthAuth0](/reference/v1/auth/auth0) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -11822,7 +11854,11 @@ export const createMastraClient = (accessToken: string) => {
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -11923,12 +11959,11 @@ npm install @mastra/auth-clerk@beta
 
 ## Usage example
 
-```typescript {2,7-11} title="src/mastra/index.ts"
+```typescript {2,6-10} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
@@ -11941,7 +11976,11 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthClerk](/reference/v1/auth/clerk) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthClerk](/reference/v1/auth/clerk) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -11984,7 +12023,11 @@ export const mastraClient = new MastraClient({
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -12086,7 +12129,6 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -12095,12 +12137,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account.json",
@@ -12144,7 +12185,11 @@ const firebaseAuth = new MastraAuthFirebase({
 });
 ```
 
-> See the [MastraAuthFirebase](/reference/v1/auth/firebase) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthFirebase](/reference/v1/auth/firebase) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -12228,7 +12273,11 @@ export const createMastraClient = (idToken: string) => {
 
 > **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -12371,12 +12420,11 @@ npm install @mastra/auth@beta
 
 ## Usage example
 
-```typescript {2,7-9} title="src/mastra/index.ts"
+```typescript {2,6-8} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
@@ -12385,7 +12433,11 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [MastraJwtAuth](/reference/v1/auth/jwt) API reference for all available configuration options.
+:::info
+
+Visit [MastraJwtAuth](/reference/v1/auth/jwt) for all available configuration options.
+
+:::
 
 ## Configuring `MastraClient`
 
@@ -12402,7 +12454,11 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -12488,12 +12544,11 @@ npm install @mastra/auth-supabase@beta
 
 ## Usage example
 
-```typescript {2,7-9} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
@@ -12505,7 +12560,11 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method checks the `isAdmin` column in the `users` table in the `public` schema. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthSupabase](/reference/v1/auth/supabase) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthSupabase](/reference/v1/auth/supabase) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -12547,7 +12606,11 @@ export const mastraClient = new MastraClient({
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -12630,12 +12693,11 @@ npm install @mastra/auth-workos@beta
 
 ### Basic usage with environment variables
 
-```typescript {2,7} title="src/mastra/index.ts"
+```typescript {2,6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos(),
   },
@@ -12644,12 +12706,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
@@ -12684,7 +12745,11 @@ const workosAuth = new MastraAuthWorkos({
 });
 ```
 
-> See the [MastraAuthWorkos](/reference/v1/auth/workos) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthWorkos](/reference/v1/auth/workos) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -12742,7 +12807,11 @@ export const createMastraClient = (accessToken: string) => {
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -13200,7 +13269,6 @@ import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     apiRoutes: [
       registerApiRoute("/my-custom-route", {
@@ -13232,7 +13300,6 @@ import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     apiRoutes: [
       registerApiRoute("/my-custom-route", {
@@ -13364,7 +13431,11 @@ const testAgent = async () => {
 };
 ```
 
-> See [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+:::info
+
+Visit [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+
+:::
 
 ## Streaming responses
 
@@ -13397,7 +13468,11 @@ const testAgent = async () => {
 };
 ```
 
-> See [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+:::info
+
+Visit [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+
+:::
 
 ## Configuration options
 
@@ -13407,7 +13482,6 @@ const testAgent = async () => {
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  // ...
   retries: 3,
   backoffMs: 300,
   maxBackoffMs: 5000,
@@ -13417,7 +13491,11 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+:::info
+
+Visit [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+
+:::
 
 ## Adding request cancelling
 
@@ -13916,13 +13994,17 @@ export const mastra = new Mastra({
 });
 ```
 
-> See [Middleware](/docs/v1/server/middleware) for how to use server middleware.
+:::info
+
+Visit [Middleware](/docs/v1/server/middleware) for how to use server middleware.
+
+:::
 
 ## Accessing values with agents
 
 You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts"
+```typescript title="src/mastra/agents/weather-agent.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -13933,32 +14015,27 @@ export const weatherAgent = new Agent({
   instructions: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === "enterprise") {
-      // ...
-    }
-    // ...
+    if (userTier === "enterprise") {}
   },
-  model: ({ requestContext }) => {
-    // ...
-  },
-  tools: ({ requestContext }) => {
-    // ...
-  },
-  memory: ({ requestContext }) => {
-    // ...
-  },
+  model: ({ requestContext }) => {},
+  tools: ({ requestContext }) => {},
+  memory: ({ requestContext }) => {},
 });
 ```
 
 You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
+:::info
+
+Visit [Agent](/reference/v1/agents/agent) for a full list of configuration options.
+
+:::
 
 ## Accessing values from workflow steps
 
 You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts"
+```typescript title="src/mastra/workflows/weather-workflow.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -13968,21 +14045,22 @@ const stepOne = createStep({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === "enterprise") {
-      // ...
-    }
-    // ...
+    if (userTier === "enterprise") {}
   },
 });
 ```
 
-> See [createStep()](/reference/v1/workflows/step) for a full list of configuration options.
+:::info
+
+Visit [createStep()](/reference/v1/workflows/step) for a full list of configuration options.
+
+:::
 
 ## Accessing values with tools
 
 You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/tools/weather-tool.ts"
+```typescript title="src/mastra/tools/weather-tool.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -13992,15 +14070,16 @@ export const weatherTool = createTool({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === "enterprise") {
-      // ...
-    }
-    // ...
+    if (userTier === "enterprise") {}
   },
 });
 ```
 
-> See [createTool()](/reference/v1/tools/create-tool) for a full list of configuration options.
+:::info
+
+Visit [createTool()](/reference/v1/tools/create-tool) for a full list of configuration options.
+
+:::
 
 ## Related
 
@@ -14372,7 +14451,7 @@ When using `agent.network()` for multi-agent collaboration, additional event typ
 
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
-```typescript {3,7}
+```typescript
 const testAgent = mastra.getAgent("testAgent");
 
 const stream = await testAgent.stream([
@@ -14384,7 +14463,11 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ### Example agent output
 
@@ -14476,7 +14559,11 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](/reference/v1/agents/network) for more information.
+:::info
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+:::
 
 ### Example network output
 
@@ -14523,7 +14610,6 @@ Network streams emit events that track the orchestration flow. Each iteration be
     }
   }
 }
-// ...more events
 ```
 
 ### Filtering network events
@@ -14596,7 +14682,11 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-> See [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ### Output from `Agent.stream()`
 
@@ -14664,7 +14754,11 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](/reference/v1/agents/network) for more information.
+:::info
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+:::
 
 #### Network stream properties
 
@@ -14712,14 +14806,17 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.stream()](/reference/v1/streaming/workflows/stream) method documentation for more information.
+:::info
+
+Visit [Run.stream()](/reference/v1/streaming/workflows/stream) for more information.
+
+:::
 
 ### Output from `Run.stream()`
 
 The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
 ```typescript
-// ...
 {
   type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
@@ -14961,13 +15058,12 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,8,15}
+```typescript {5,7,14}
 import { createStep } from "@mastra/core/workflows";
 
 export const testStep = createStep({
-  // ...
   execute: async ({ inputData, writer }) => {
-     const { value } = inputData;
+    const { value } = inputData;
 
     await writer?.write({
       type: "custom-event",
@@ -14976,7 +15072,7 @@ export const testStep = createStep({
 
     const response = await fetch(...);
 
-   await writer?.write({
+    await writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -15040,7 +15136,6 @@ import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 export const testStep = createStep({
-  // ...
   execute: async ({ inputData, mastra, writer }) => {
     const { city } = inputData;
 
@@ -15239,7 +15334,11 @@ export const testMcpClient = new MCPClient({
 });
 ```
 
-> See [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+:::info
+
+Visit [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+
+:::
 
 ## Using `MCPClient` with an agent
 
@@ -15265,7 +15364,11 @@ export const testAgent = new Agent({
 });
 ```
 
-> See the [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+:::info
+
+Visit [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+
+:::
 
 ## Configuring `MCPServer`
 
@@ -15288,7 +15391,11 @@ export const testMcpServer = new MCPServer({
 });
 ```
 
-> See [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+:::info
+
+Visit [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+
+:::
 
 ### Serverless deployments
 
@@ -15306,7 +15413,6 @@ import { Mastra } from "@mastra/core";
 import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
-  // ...
   mcpServers: {
     testMcpServer,  // Registry key: 'testMcpServer'
   },
@@ -15332,7 +15438,11 @@ mastra.getMCPServerById('test-mcp-server');    // By intrinsic ID
 
 Use the `.listTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
-> See [listTools()](/reference/v1/tools/mcp-client#listtools) for more information.
+:::info
+
+Visit [listTools()](/reference/v1/tools/mcp-client#listtools) for more information.
+
+:::
 
 ```typescript {7} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -15381,7 +15491,11 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-> See [listToolsets()](/reference/v1/tools/mcp-client#listtoolsets) for more information.
+:::info
+
+Visit [listToolsets()](/reference/v1/tools/mcp-client#listtoolsets) for more information.
+
+:::
 
 ## Connecting to an MCP registry
 
@@ -15628,16 +15742,11 @@ export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
-const advancedTools = () => {
-  // ...
-};
+const advancedTools = () => {};
 
-const baseTools = () => {
-  // ...
-};
+const baseTools = () => {};
 
 export const testTool = createTool({
-  // ...
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -15646,7 +15755,11 @@ export const testTool = createTool({
 });
 ```
 
-> See [Request Context](/docs/v1/server/request-context) for more information.
+:::info
+
+Visit [Request Context](/docs/v1/server/request-context) for more information.
+
+:::
 
 ## Testing with Studio
 
@@ -16573,7 +16686,7 @@ const voiceAgent = new Agent({
   id: "aisdk-voice-agent",
   name: "AI SDK Voice Agent",
   instructions: "You are a helpful assistant with voice capabilities.",
-  model: openai("gpt-5.1"),
+  model: "openai/gpt-5.1",
   voice,
 });
 ```
@@ -17002,9 +17115,8 @@ Use agents in workflow steps when you need reasoning, language generation, or ot
 
 Call agents inside a step's `execute` function using `.generate()` or `.stream()`. This lets you modify the agent call and handle the response before passing it to the next step.
 
-```typescript {7-12} title="src/mastra/workflows/test-workflow.ts"
+```typescript {6-14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   execute: async ({ inputData, mastra }) => {
     const { message } = inputData;
 
@@ -17032,13 +17144,12 @@ Compose an agent as a step using `createStep()` when you don't need to modify th
 
 ![Agent as step](/img/workflows/workflows-agent-tools-agent-step.jpg)
 
-```typescript {1,3,8-13} title="src/mastra/workflows/test-workflow.ts"
+```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from "../agents/test-agent";
 
 const step1 = createStep(testAgent);
 
 export const testWorkflow = createWorkflow({
-  // ...
 })
   .map(async ({ inputData }) => {
     const { message } = inputData;
@@ -17051,7 +17162,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [Input Data Mapping](./input-data-mapping) for more information.
+:::info
+
+Visit [Input Data Mapping](./input-data-mapping) for more information.
+
+:::
 
 When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
@@ -17091,9 +17206,7 @@ const processStep = createStep({
   }),
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .map(async ({ inputData }) => ({
     prompt: `Generate an article about: ${inputData.topic}`,
   }))
@@ -17104,7 +17217,11 @@ export const testWorkflow = createWorkflow({
 
 The `structuredOutput.schema` option accepts any Zod schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
 
-> See [Structured Output](/docs/v1/agents/structured-output) for more options like error handling strategies and streaming with structured output.
+:::info
+
+Visit [Structured Output](/docs/v1/agents/structured-output) for more options like error handling strategies and streaming with structured output.
+
+:::
 
 ## Using tools in workflows
 
@@ -17114,11 +17231,10 @@ Use tools in workflow steps to leverage existing tool logic. Call from a step's 
 
 Call tools inside a step's `execute` function using `.execute()`. This gives you more control over the tool's input context, or process its response before passing it to the next step.
 
-```typescript {8-13,16} title="src/mastra/workflows/test-workflow.ts"
+```typescript {7-12} title="src/mastra/workflows/test-workflow.ts"
 import { testTool } from "../tools/test-tool";
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData, requestContext }) => {
     const { formatted } = inputData;
 
@@ -17136,7 +17252,11 @@ const step2 = createStep({
 });
 ```
 
-> See [Calling Tools](/docs/v1/workflows/agents-and-tools#calling-tools) for more examples.
+:::info
+
+Visit [Calling Tools](/docs/v1/workflows/agents-and-tools#calling-tools) for more examples.
+
+:::
 
 ### Tools as steps
 
@@ -17144,14 +17264,12 @@ Compose a tool as a step using `createStep()` when the previous step's output ma
 
 ![Tool as step](/img/workflows/workflows-agent-tools-tool-step.jpg)
 
-```typescript {1,3,9-14} title="src/mastra/workflows/test-workflow.ts"
+```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
 import { testTool } from "../tools/test-tool";
 
 const step2 = createStep(testTool);
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .map(async ({ inputData }) => {
     const { formatted } = inputData;
@@ -17163,7 +17281,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See [Input Data Mapping](./input-data-mapping) for more information.
+:::info
+
+Visit [Input Data Mapping](./input-data-mapping) for more information.
+
+:::
 
 ## Related
 
@@ -17196,9 +17318,8 @@ Use `.then()` to run steps in order, allowing each step to access the result of 
 
 ![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {30-31} title="src/mastra/workflows/test-workflow.ts"
+```typescript {27-28} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  //...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -17208,7 +17329,6 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  // ...
   inputSchema: z.object({
     formatted: z.string()
   }),
@@ -17218,7 +17338,6 @@ const step2 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -17237,15 +17356,13 @@ Use `.parallel()` to run steps at the same time. All parallel steps must complet
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {42} title="src/mastra/workflows/test-workflow.ts"
+```typescript {39} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
-  // ...
 });
 
 const step2 = createStep({
   id: "step-2",
-  // ...
 });
 
 const step3 = createStep({
@@ -17271,7 +17388,6 @@ const step3 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -17350,7 +17466,11 @@ export const testWorkflow = createWorkflow({
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
 
-> See [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+:::info
+
+Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+
+:::
 
 ## Conditional logic with `.branch()`
 
@@ -17358,11 +17478,10 @@ Use `.branch()` to choose which step to run based on a condition. All steps in a
 
 ![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {33-36} title="src/mastra/workflows/test-workflow.ts"
+```typescript {30-33} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
 
 const stepA = createStep({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -17372,7 +17491,6 @@ const stepA = createStep({
 });
 
 const stepB = createStep({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -17382,7 +17500,6 @@ const stepB = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -17554,11 +17671,10 @@ Use `.dountil()` to run a step repeatedly until a condition becomes true.
 
 ![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData }) => {
     const { number } = inputData;
     return {
@@ -17567,9 +17683,7 @@ const step2 = createStep({
   }
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .dountil(step2, async ({ inputData: { number } }) => number > 10)
   .commit();
@@ -17581,11 +17695,10 @@ Use `.dowhile()` to run a step repeatedly while a condition remains true.
 
 ![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData }) => {
     const { number } = inputData;
     return {
@@ -17594,9 +17707,7 @@ const step2 = createStep({
   }
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
@@ -17608,9 +17719,8 @@ Use `.foreach()` to run the same step for each item in an array. The input must 
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {15} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   inputSchema: z.string(),
   outputSchema: z.string(),
   execute: async ({ inputData }) => {
@@ -17621,7 +17731,6 @@ const step1 = createStep({
 const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.array(z.string()),
   outputSchema: z.array(z.string())
 })
@@ -18029,7 +18138,7 @@ When you run a workflow, the result object contains the status and any errors th
 
 ### Checking the result status
 
-```typescript title="src/run-workflow.ts" showLineNumbers copy
+```typescript title="src/run-workflow.ts"
 import { mastra } from "./mastra";
 
 const workflow = mastra.getWorkflow("myWorkflow");
@@ -18062,7 +18171,7 @@ The result object contains:
 
 You can inspect individual step results to understand where a failure occurred:
 
-```typescript title="src/run-workflow.ts" showLineNumbers copy
+```typescript title="src/run-workflow.ts"
 const result = await run.start({ inputData: { value: "test" } });
 
 if (result.status === 'failed') {
@@ -18083,7 +18192,7 @@ For scenarios where you need to handle workflow completion without awaiting the 
 
 Called when a workflow completes with any status (success, failed, suspended, or tripwire):
 
-```typescript {8-15} title="src/mastra/workflows/order-workflow.ts" showLineNumbers copy
+```typescript {8-15} title="src/mastra/workflows/order-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -18115,7 +18224,7 @@ The `onFinish` callback receives:
 
 Called only when a workflow fails (status is `'failed'` or `'tripwire'`):
 
-```typescript {8-14} title="src/mastra/workflows/payment-workflow.ts" showLineNumbers copy
+```typescript {8-14} title="src/mastra/workflows/payment-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -18146,7 +18255,7 @@ The `onError` callback receives:
 
 You can use both callbacks together:
 
-```typescript {8-16} title="src/mastra/workflows/pipeline-workflow.ts" showLineNumbers copy
+```typescript {8-16} title="src/mastra/workflows/pipeline-workflow.ts"
 import { createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -18188,14 +18297,13 @@ Mastra has a retry mechanism for workflows or steps that fail due to transient e
 
 You can configure retries at the workflow level, which applies to all steps in the workflow:
 
-```typescript {8-11} title="src/mastra/workflows/test-workflow.ts"
+```typescript {7-10} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({
-  // ...
   retryConfig: {
     attempts: 5,
     delay: 2000
@@ -18209,14 +18317,13 @@ export const testWorkflow = createWorkflow({
 
 You can configure retries for individual steps using the `retries` property. This overrides the workflow-level retry configuration for that specific step:
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {16} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({
-  // ...
   execute: async () => {
-    const response = await // ...
+    const response = await fetch('example-url');
 
     if (!response.ok) {
       throw new Error('Error');
@@ -18234,15 +18341,14 @@ const step1 = createStep({
 
 You can create alternative workflow paths based on the success or failure of previous steps using conditional logic:
 
-```typescript {15,19,33-34} title="src/mastra/workflows/test-workflow.ts"
+```typescript {14,18,29-32} title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({
-  // ...
   execute: async () => {
     try {
-      const response = await // ...
+      const response = await fetch('example-url');
 
       if (!response.ok) {
         throw new Error('error');
@@ -18262,9 +18368,7 @@ const step1 = createStep({
 const step2 = createStep({...});
 const fallback = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .branch([
     [async ({ inputData: { status } }) => status === "ok", step2],
@@ -18277,16 +18381,14 @@ export const testWorkflow = createWorkflow({
 
 Use `getStepResult()` to inspect a previous step’s results.
 
-```typescript {10} title="src/mastra/workflows/test-workflow.ts"
+```typescript {8} title="src/mastra/workflows/test-workflow.ts"
 import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ getStepResult }) => {
-
     const step1Result = getStepResult(step1);
 
     return {
@@ -18490,9 +18592,8 @@ const handleResume = async () => {
 
 Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `success` status, and any logic after the call to `bail()` is skipped.
 
-```typescript {7-11}
+```typescript {6-10}
 const step1 = createStep({
-  // ...
   execute: async ({ inputData, resumeData, suspend, bail }) => {
     const { userEmail } = inputData;
     const { approved } = resumeData ?? {};
@@ -18814,7 +18915,6 @@ docker run --rm -p 8288:8288 \
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...other config
   deployer: new VercelDeployer({
     teamSlug: "your_team_slug",
     projectName: "your_project_name",
@@ -19123,7 +19223,11 @@ const step1 = createStep({
 });
 ```
 
-> See the [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+:::info
+
+Visit [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+
+:::
 
 ### Using agents and tools
 
@@ -19152,7 +19256,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See the [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+:::info
+
+Visit [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+
+:::
 
 ### Understanding control flow
 
@@ -19180,7 +19288,11 @@ const step1 = createStep({
 });
 ```
 
-> See [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+:::info
+
+Visit [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+
+:::
 
 ## Workflows as steps
 
@@ -19238,12 +19350,11 @@ export const testWorkflow = createWorkflow({...})
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
-```typescript {6} title="src/mastra/index.ts"
+```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
-  // ...
   workflows: { testWorkflow },
 });
 ```
@@ -19311,7 +19422,6 @@ The workflow output includes the full execution lifecycle, showing the input and
 {
   "status": "success",
   "steps": {
-    // ...
     "step-1": {
       "status": "success",
       "payload": {
@@ -19361,8 +19471,6 @@ const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
 
-//.. server connection lost,
-
 const restartedResult = await run.restart();
 ```
 
@@ -19393,7 +19501,6 @@ export type UserTier = {
 };
 
 const step1 = createStep({
-  // ...
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -19406,7 +19513,11 @@ const step1 = createStep({
 });
 ```
 
-> See [Request Context](/docs/v1/server/request-context) for more information.
+:::info
+
+Visit [Request Context](/docs/v1/server/request-context) for more information.
+
+:::
 
 ## Testing with Studio
 
@@ -20241,7 +20352,6 @@ Define a `stateSchema` on both the workflow and individual steps. The workflow's
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   stateSchema: z.object({
     processedItems: z.array(z.string()),
   }),
@@ -20260,7 +20370,6 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  // ...
   stateSchema: z.object({
     metadata: z.object({
       processedBy: z.string(),
@@ -20277,7 +20386,6 @@ const step2 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   stateSchema: z.object({
     processedItems: z.array(z.string()),
     metadata: z.object({
@@ -24672,7 +24780,6 @@ import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new CloudflareDeployer({
     projectName: "hello-mastra",
     env: {
@@ -25247,7 +25354,6 @@ export const mastra = new Mastra({
     import { VercelDeployer } from "@mastra/deployer-vercel";
 
     export const mastra = new Mastra({
-      // ...other config
       deployer: new VercelDeployer({
         teamSlug: "your_team_slug",
         projectName: "your_project_name",
@@ -25550,7 +25656,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer(),
 });
 ```
@@ -28151,12 +28256,10 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
   ingredients: [
     { name: "Lasagna noodles", amount: "12 sheets" },
     { name: "Ground beef", amount: "1 pound" },
-    // ...
   ],
   steps: [
     "Preheat oven to 375°F (190°C).",
     "Cook the lasagna noodles according to package instructions.",
-    // ...
   ]
 }
 ```
@@ -30484,7 +30587,7 @@ To migrate, add an `id` field to all Agent configurations.
 +   id: 'my-agent',
     name: 'My Agent',
     instructions: 'You are a helpful assistant',
-    model: openai('gpt-4'),
+    model: 'openai/gpt-4',
   });
 ```
 
@@ -33016,7 +33119,6 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
 -       return suspend({ reason: "Suspension reason" }); // Missing otherReason
 +       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
       }
-      //... continue execution logic
     },
   });
 ```
@@ -33197,7 +33299,6 @@ createStep({
 +   if (!context.resumeData) {
 +     return context.suspend({})
 +   }
-+   //..continue execution logic
 + }
 });
 +
@@ -33544,9 +33645,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
   ```typescript copy
   const result = await agent.generate(messages, {
-    memory: {
-      // ...
-    },
+    memory: {},
   });
   ```
 
@@ -34082,8 +34181,7 @@ When running in development mode (`MASTRA_DEV=true`), Mastra automatically gener
 4. **Autocomplete now works**:
    ```typescript
    const agent = new Agent({
-     model: 'my-gateway-id/my-provider/model-1', // ✅ Full autocomplete!
-
+     model: 'my-gateway-id/my-provider/model-1', // Full autocomplete!
    });
    ```
 
@@ -34224,7 +34322,6 @@ Understanding the distinction:
 class VersionedGateway extends MastraModelGateway {
   readonly id = 'my-gateway-v2';     // Unique ID for versioning and prefixing
   readonly name = 'My Gateway';       // Display name
-\  // ... implementation
 }
 
 const mastra = new Mastra({
@@ -34925,7 +35022,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 61+ AI providers and 1447+ models through Mastra's model router."
+description: "Access 61+ AI providers and 1450+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34938,7 +35035,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1447 models from 61 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1450 models from 61 providers through a single API.
 
 ## Features
 
@@ -44135,7 +44232,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/groq.svg"
     />    <CardGridItem
       title="Mistral"
-      description="25 models"
+      description="26 models"
       href="/models/v1/providers/mistral"
       logo="https://models.dev/logos/mistral.svg"
     />    <CardGridItem
@@ -44315,7 +44412,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/poe.svg"
     />    <CardGridItem
       title="Requesty"
-      description="19 models"
+      description="20 models"
       href="/models/v1/providers/requesty"
       logo="https://models.dev/logos/requesty.svg"
     />    <CardGridItem
@@ -44380,7 +44477,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
       title="ZenMux"
-      description="21 models"
+      description="22 models"
       href="/models/v1/providers/zenmux"
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
@@ -45935,7 +46032,7 @@ For detailed provider-specific documentation, see the [AI SDK MiniMax provider d
 
 ---
 title: "Mistral | Models | Mastra"
-description: "Use Mistral models with Mastra. 25 models available."
+description: "Use Mistral models with Mastra. 26 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -45946,7 +46043,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/mistral.svg" alt="Mistral logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Mistral
 [EN] Source: https://mastra.ai/en/models/providers/mistral
 
-Access 25 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
+Access 26 Mistral models through Mastra's model router. Authentication is handled automatically using the `MISTRAL_API_KEY` environment variable.
 
 Learn more in the [Mistral documentation](https://docs.mistral.ai/getting-started/models/).
 
@@ -45989,6 +46086,18 @@ for await (const chunk of stream) {
     "maxOutput": 4096,
     "inputCost": 0.3,
     "outputCost": 0.9
+  },
+  {
+    "model": "mistral/devstral-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "mistral/devstral-medium-2507",
@@ -46047,8 +46156,8 @@ for await (const chunk of stream) {
     "reasoning": false,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.1,
-    "outputCost": 0.3
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "mistral/magistral-medium-latest",
@@ -50474,7 +50583,7 @@ const agent = new Agent({
 
 ---
 title: "Requesty | Models | Mastra"
-description: "Use Requesty models with Mastra. 19 models available."
+description: "Use Requesty models with Mastra. 20 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -50484,7 +50593,7 @@ description: "Use Requesty models with Mastra. 19 models available."
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 [EN] Source: https://mastra.ai/en/models/providers/requesty
 
-Access 19 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
+Access 20 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
 
 Learn more in the [Requesty documentation](https://requesty.ai/solution/llm-routing/models).
 
@@ -50629,6 +50738,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 1.25,
     "outputCost": 10
+  },
+  {
+    "model": "requesty/google/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.5,
+    "outputCost": 3
   },
   {
     "model": "requesty/google/gemini-3-pro-preview",
@@ -55280,7 +55401,7 @@ const agent = new Agent({
 
 ---
 title: "ZenMux | Models | Mastra"
-description: "Use ZenMux models with Mastra. 21 models available."
+description: "Use ZenMux models with Mastra. 22 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55290,7 +55411,7 @@ description: "Use ZenMux models with Mastra. 21 models available."
 # <img src="https://models.dev/logos/zenmux.svg" alt="ZenMux logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ZenMux
 [EN] Source: https://mastra.ai/en/models/providers/zenmux
 
-Access 21 ZenMux models through Mastra's model router. Authentication is handled automatically using the `ZENMUX_API_KEY` environment variable.
+Access 22 ZenMux models through Mastra's model router. Authentication is handled automatically using the `ZENMUX_API_KEY` environment variable.
 
 Learn more in the [ZenMux documentation](https://docs.zenmux.ai).
 
@@ -55555,6 +55676,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 10000,
     "inputCost": 0.2,
     "outputCost": 1.5
+  },
+  {
+    "model": "zenmux/xiaomi/mimo-v2-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": 0.07,
+    "outputCost": 0.21
   },
   {
     "model": "zenmux/z-ai/glm-4.5-air",
@@ -60110,7 +60243,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,
@@ -60234,7 +60366,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthClerk({
       jwksUri: process.env.CLERK_JWKS_URI,
@@ -60314,7 +60445,6 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -60328,7 +60458,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account-key.json",
@@ -60449,7 +60578,6 @@ import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraJwtAuth({
       secret: "<your-secret>",
@@ -60494,7 +60622,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,
@@ -60562,7 +60689,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
@@ -61178,7 +61304,6 @@ Get an instance of a specific agent by its ID:
 ```typescript title="src/mastra/agents/my-agent.ts"
 export const myAgent = new Agent({
   id: "my-agent",
-  // ...
 });
 ```
 
@@ -64837,7 +64962,6 @@ import { Mastra } from "@mastra/core";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new CloudflareDeployer({
     projectName: "hello-mastra",
     routes: [
@@ -64949,7 +65073,6 @@ class CustomDeployer extends Deployer {
     await this._bundle("server.ts", "mastra.ts", outputDirectory);
 
     // Custom deployment logic
-    // ...
   }
 }
 ```
@@ -65120,7 +65243,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer(),
 });
 ```
@@ -65142,7 +65264,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer({
     maxDuration: 600,
     memory: 1536,
@@ -71222,7 +71343,6 @@ import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
-  // ...
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
@@ -73760,7 +73880,7 @@ const prompt = await langfuse.getPrompt("customer-support");
 const agent = new Agent({
   name: "support-agent",
   instructions: prompt.prompt,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
   },
@@ -81544,7 +81664,6 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use((req, res, next) => {
   const mastra = res.locals.mastra;
-  // ...
   next();
 });
 ```
@@ -81789,7 +81908,6 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use('*', async (c, next) => {
   const mastra = c.get('mastra');
-  // ...
   await next();
 });
 ```
@@ -82715,7 +82833,7 @@ import {
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
-} from '@mastra/convex/server';
+} from '@mastra/convex/schema';
 
 export default defineSchema({
   mastra_threads: mastraThreadsTable,
@@ -88694,7 +88812,6 @@ const agent = new Agent({
   name: "example-agent",
   model: "openai/gpt-5.1", // or other provider strings
   instructions: "Your agent instructions here",
-  // ... other configuration
 });
 ```
 
@@ -89329,7 +89446,6 @@ export const tool = createTool({
   onInputStart: ({ toolCallId, messages, abortSignal }) => {
     console.log(`Tool ${toolCallId} input streaming started`);
   },
-  // ... other properties
 });
 ```
 
@@ -89344,7 +89460,6 @@ export const tool = createTool({
   onInputDelta: ({ inputTextDelta, toolCallId, messages, abortSignal }) => {
     console.log(`Received input chunk: ${inputTextDelta}`);
   },
-  // ... other properties
 });
 ```
 
@@ -89363,7 +89478,6 @@ export const tool = createTool({
     console.log(`Tool received complete input:`, input);
     // input is fully typed based on inputSchema
   },
-  // ... other properties
 });
 ```
 
@@ -104775,8 +104889,6 @@ The `.restart()` method restarts an active workflow run that lost connection to 
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
-
-//.. server connection lost,
 
 const restartedResult = await run.restart();
 ```
