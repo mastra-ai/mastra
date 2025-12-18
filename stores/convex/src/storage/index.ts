@@ -56,9 +56,10 @@ export class ConvexStore extends MastraStorage {
     super({ id: config.id, name: config.name ?? 'ConvexStore', disableInit: config.disableInit });
 
     const client = new ConvexAdminClient(config);
-    this.memory = new MemoryConvex(client);
-    this.workflows = new WorkflowsConvex(client);
-    this.scores = new ScoresConvex(client);
+    const domainConfig = { client };
+    this.memory = new MemoryConvex(domainConfig);
+    this.workflows = new WorkflowsConvex(domainConfig);
+    this.scores = new ScoresConvex(domainConfig);
 
     this.stores = {
       memory: this.memory,

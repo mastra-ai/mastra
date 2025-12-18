@@ -4,8 +4,46 @@ import { MastraBase } from '@mastra/core/base';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
-import type { ConvexAdminClient } from '../client';
+import { ConvexAdminClient } from '../client';
 import type { EqualityFilter } from '../types';
+
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing ConvexAdminClient
+ * 2. Config to create a new client internally
+ */
+export type ConvexDomainConfig = ConvexDomainClientConfig | ConvexDomainRestConfig;
+
+/**
+ * Pass an existing ConvexAdminClient
+ */
+export interface ConvexDomainClientConfig {
+  client: ConvexAdminClient;
+}
+
+/**
+ * Pass config to create a new ConvexAdminClient internally
+ */
+export interface ConvexDomainRestConfig {
+  deploymentUrl: string;
+  adminAuthToken: string;
+  storageFunction?: string;
+}
+
+/**
+ * Resolves ConvexDomainConfig to a ConvexAdminClient.
+ * Handles creating a new client if config is provided.
+ */
+export function resolveConvexConfig(config: ConvexDomainConfig): ConvexAdminClient {
+  // Existing client
+  if ('client' in config) {
+    return config.client;
+  }
+
+  // Config to create new client
+  return new ConvexAdminClient(config);
+}
 
 export class ConvexDB extends MastraBase {
     constructor(private readonly client: ConvexAdminClient) {

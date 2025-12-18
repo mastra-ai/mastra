@@ -20,8 +20,8 @@ import type {
   StorageResourceType,
 } from '@mastra/core/storage';
 
-import type { ConvexAdminClient } from '../../client';
-import { ConvexDB } from '../../db';
+import { ConvexDB, resolveConvexConfig } from '../../db';
+import type { ConvexDomainConfig } from '../../db';
 
 type StoredMessage = {
   id: string;
@@ -35,8 +35,9 @@ type StoredMessage = {
 
 export class MemoryConvex extends MemoryStorage {
   #db: ConvexDB;
-  constructor(client: ConvexAdminClient) {
+  constructor(config: ConvexDomainConfig) {
     super();
+    const client = resolveConvexConfig(config);
     this.#db = new ConvexDB(client);
   }
 
