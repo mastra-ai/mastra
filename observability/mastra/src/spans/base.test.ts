@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
 import { getExternalParentId } from './base';
-import { deepClean } from './serialization';
+import { deepClean, DEFAULT_DEEP_CLEAN_OPTIONS } from './serialization';
 
 // Simple test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
@@ -523,7 +523,9 @@ describe('Span', () => {
         current = current.nested;
       }
 
-      const result = deepClean(deepObj, { maxDepth: 3 });
+      const cleanOptions = DEFAULT_DEEP_CLEAN_OPTIONS;
+      cleanOptions.maxDepth = 3;
+      const result = deepClean(deepObj, cleanOptions);
 
       expect(result.level).toBe(0);
       expect(result.nested.level).toBe(1);
