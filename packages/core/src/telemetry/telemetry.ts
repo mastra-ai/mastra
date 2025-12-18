@@ -9,7 +9,6 @@ import { getBaggageValues, hasActiveTelemetry } from './utility';
 // Add type declaration for global namespace
 declare global {
   var __TELEMETRY__: Telemetry | undefined;
-  var __TELEMETRY_ENABLED__: boolean | undefined;
 }
 
 export class Telemetry {
@@ -22,9 +21,6 @@ export class Telemetry {
     this.enabled = config.enabled !== false;
 
     this.tracer = trace.getTracer(this.name);
-
-    // Store enabled state globally for hasActiveTelemetry to check
-    globalThis.__TELEMETRY_ENABLED__ = this.enabled;
   }
 
   /**
@@ -84,7 +80,8 @@ export class Telemetry {
    * Check if telemetry is enabled
    */
   static isEnabled(): boolean {
-    return globalThis.__TELEMETRY_ENABLED__ === true;
+    // If telemetry not initialized, default to true for backward compatibility
+    return globalThis.__TELEMETRY__?.isEnabled() ?? true;
   }
 
   /**
@@ -92,9 +89,8 @@ export class Telemetry {
    * This allows runtime control of span creation
    */
   static setEnabled(enabled: boolean): void {
-    globalThis.__TELEMETRY_ENABLED__ = enabled;
     if (globalThis.__TELEMETRY__) {
-      globalThis.__TELEMETRY__.enabled = enabled;
+      globalThis.__TELEMETRY__.setEnabled(enabled);
     }
   }
 
@@ -110,7 +106,6 @@ export class Telemetry {
    */
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-    globalThis.__TELEMETRY_ENABLED__ = enabled;
   }
 
   /**
