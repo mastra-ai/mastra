@@ -14,7 +14,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer(),
 });
 ```
@@ -36,7 +35,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer({
     maxDuration: 600,
     memory: 1536,

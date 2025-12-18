@@ -22,9 +22,8 @@ Use `.then()` to run steps in order, allowing each step to access the result of 
 
 ![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {30-31} title="src/mastra/workflows/test-workflow.ts"
+```typescript {27-28} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  //...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -34,7 +33,6 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  // ...
   inputSchema: z.object({
     formatted: z.string()
   }),
@@ -44,7 +42,6 @@ const step2 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -63,15 +60,13 @@ Use `.parallel()` to run steps at the same time. All parallel steps must complet
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {42} title="src/mastra/workflows/test-workflow.ts"
+```typescript {39} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
-  // ...
 });
 
 const step2 = createStep({
   id: "step-2",
-  // ...
 });
 
 const step3 = createStep({
@@ -97,7 +92,6 @@ const step3 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -176,7 +170,11 @@ export const testWorkflow = createWorkflow({
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
 
-> See [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+:::info
+
+Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+
+:::
 
 ## Conditional logic with `.branch()`
 
@@ -184,11 +182,10 @@ Use `.branch()` to choose which step to run based on a condition. All steps in a
 
 ![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {33-36} title="src/mastra/workflows/test-workflow.ts"
+```typescript {30-33} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
 
 const stepA = createStep({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -198,7 +195,6 @@ const stepA = createStep({
 });
 
 const stepB = createStep({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -208,7 +204,6 @@ const stepB = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -380,11 +375,10 @@ Use `.dountil()` to run a step repeatedly until a condition becomes true.
 
 ![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData }) => {
     const { number } = inputData;
     return {
@@ -393,9 +387,7 @@ const step2 = createStep({
   }
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .dountil(step2, async ({ inputData: { number } }) => number > 10)
   .commit();
@@ -407,11 +399,10 @@ Use `.dowhile()` to run a step repeatedly while a condition remains true.
 
 ![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData }) => {
     const { number } = inputData;
     return {
@@ -420,9 +411,7 @@ const step2 = createStep({
   }
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
@@ -434,9 +423,8 @@ Use `.foreach()` to run the same step for each item in an array. The input must 
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts"
+```typescript {15} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   inputSchema: z.string(),
   outputSchema: z.string(),
   execute: async ({ inputData }) => {
@@ -447,7 +435,6 @@ const step1 = createStep({
 const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.array(z.string()),
   outputSchema: z.array(z.string())
 })

@@ -239,7 +239,6 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use((req, res, next) => {
   const mastra = res.locals.mastra;
-  // ...
   next();
 });
 ```

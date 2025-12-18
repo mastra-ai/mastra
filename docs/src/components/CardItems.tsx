@@ -42,9 +42,9 @@ export function CardItems({ titles, items }: CardItemsProps) {
             onClick={() => handleTabChange(title)}
             key={title}
             className={cn(
-              "capitalize w-fit text-[var(--mastra-text-quaternary)] rounded-full text-sm bg-(--mastra-surface-3) px-3 py-1 transition-colors",
+              "capitalize w-fit text-(--mastra-text-quaternary) rounded-full text-sm bg-(--mastra-surface-3) px-3 py-1 transition-colors",
               activeTab === sluggify(title) &&
-                "dark:bg-gray-100 text-white bg-[var(--mastra-text-primary)] dark:text-black",
+                "dark:bg-gray-100 text-white bg-(--mastra-text-primary) dark:text-black",
             )}
           >
             {title}
@@ -59,7 +59,7 @@ export function CardItems({ titles, items }: CardItemsProps) {
             style={{
               textDecoration: "none",
             }}
-            className="flex-1 flex text-center bg-(--mastra-surface-3) mb-0 border-[0.5px] rounded-[10px] dark:border-[#343434] border-(--border) items-center group justify-center p-2 px-4 text-sm hover:opacity-80 transition-opacity"
+            className="min-w-0 text-center bg-(--mastra-surface-3) mb-0 border-[0.5px] rounded-[10px] dark:border-[#343434] border-(--border) group p-2 px-4 text-sm hover:opacity-80 transition-opacity wrap-break-word"
           >
             {item.title}
           </Link>
