@@ -2412,6 +2412,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resourceId?: string;
     tracingContext: TracingContext;
   }) {
+    // If overrideScorers is explicitly empty, skip scoring
+    if (overrideScorers && Object.keys(overrideScorers).length === 0) {
+      return;
+    }
+
     let scorers: Record<string, { scorer: MastraScorer; sampling?: ScoringSamplingConfig }> = {};
     try {
       scorers = overrideScorers
