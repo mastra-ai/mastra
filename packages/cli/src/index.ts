@@ -141,6 +141,10 @@ program
   .description('Start the Mastra studio')
   .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the studio')
+  .option('-b, --base-path <basePath>', 'Base path to run the studio on (default: /)')
+  .option('-h, --server-host <serverHost>', 'Host of the running API server on (default: localhost)')
+  .option('-s, --server-port <serverPort>', 'Port of the running API server on (default: 4111)')
+  .option('-x, --server-protocol <serverProtocol>', 'Protocol of the running API server on (default: http)')
   .action(studio);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
