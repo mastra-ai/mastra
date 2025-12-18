@@ -2084,3 +2084,53 @@ describe('AI Tracing Integration Tests', () => {
     testExporter.finalExpectations();
   });
 });
+
+describe('Telemetry disabled integration tests', () => {
+  beforeEach(() => {
+    // Clear global telemetry instance before each test
+    globalThis.__TELEMETRY__ = undefined;
+  });
+
+  it('should respect enabled: false configuration via hasActiveTelemetry', async () => {
+    const { hasActiveTelemetry } = await import('../telemetry/utility');
+    const { Telemetry } = await import('../telemetry/telemetry');
+
+    // Initialize telemetry with enabled: false
+    Telemetry.init({ enabled: false });
+
+    // Verify hasActiveTelemetry returns false due to short-circuit on isEnabled check
+    expect(hasActiveTelemetry()).toBe(false);
+    expect(Telemetry.isEnabled()).toBe(false);
+  });
+
+  it('should respect enabled: true configuration via hasActiveTelemetry', async () => {
+    const { hasActiveTelemetry } = await import('../telemetry/utility');
+    const { Telemetry } = await import('../telemetry/telemetry');
+
+    // Initialize telemetry with enabled: true
+    Telemetry.init({ enabled: true });
+
+    // Verify hasActiveTelemetry returns true (tracer always exists from OpenTelemetry)
+    expect(hasActiveTelemetry()).toBe(true);
+    expect(Telemetry.isEnabled()).toBe(true);
+  });
+
+  it('should allow runtime control of telemetry', async () => {
+    const { hasActiveTelemetry } = await import('../telemetry/utility');
+    const { Telemetry } = await import('../telemetry/telemetry');
+
+    // Initialize with enabled: true
+    Telemetry.init({ enabled: true });
+    expect(hasActiveTelemetry()).toBe(true);
+
+    // Disable at runtime - should short-circuit and return false
+    Telemetry.setEnabled(false);
+    expect(hasActiveTelemetry()).toBe(false);
+    expect(Telemetry.isEnabled()).toBe(false);
+
+    // Re-enable at runtime
+    Telemetry.setEnabled(true);
+    expect(hasActiveTelemetry()).toBe(true);
+    expect(Telemetry.isEnabled()).toBe(true);
+  });
+});
