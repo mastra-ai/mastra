@@ -5,8 +5,8 @@ import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource }
 import { TABLE_SCORERS, ScoresStorage, createStorageErrorId } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 
-import type { ConvexAdminClient } from '../client';
-import { ConvexDB } from '../db';
+import type { ConvexAdminClient } from '../../client';
+import { ConvexDB } from '../../db';
 
 type StoredScore = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;

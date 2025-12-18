@@ -20,8 +20,8 @@ import type {
   StorageResourceType,
 } from '@mastra/core/storage';
 
-import type { ConvexAdminClient } from '../client';
-import { ConvexDB } from '../db';
+import type { ConvexAdminClient } from '../../client';
+import { ConvexDB } from '../../db';
 
 type StoredMessage = {
   id: string;
@@ -187,9 +187,7 @@ export class MemoryConvex extends MemoryStorage {
     // Fetch messages from all threads
     let rows: StoredMessage[] = [];
     for (const tid of threadIds) {
-      const threadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
-        { field: 'thread_id', value: tid },
-      ]);
+      const threadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [{ field: 'thread_id', value: tid }]);
       rows.push(...threadRows);
     }
 

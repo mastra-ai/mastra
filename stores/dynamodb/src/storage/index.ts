@@ -20,7 +20,7 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 import { MemoryStorageDynamoDB } from './domains/memory';
-import { ScoresStorageDynamoDB } from './domains/score';
+import { ScoresStorageDynamoDB } from './domains/scores';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
 export interface DynamoDBStoreConfig {
@@ -102,7 +102,6 @@ export class DynamoDBStore extends MastraStorage {
         memory,
         scores,
       };
-
     } catch (error) {
       throw new MastraError(
         {

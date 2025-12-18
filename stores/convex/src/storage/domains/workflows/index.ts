@@ -8,8 +8,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
-import type { ConvexAdminClient } from '../client';
-import { ConvexDB } from '../db';
+import type { ConvexAdminClient } from '../../client';
+import { ConvexDB } from '../../db';
 
 type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snapshot'> & {
   createdAt: string;
