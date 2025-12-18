@@ -65,7 +65,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
   const mockIndexHtml = `<!DOCTYPE html>
 <html>
 <head>
-  <base href="%%MASTRA_STUDIO_BASE_PATH%%/" />
+  <base href="%%MASTRA_STUDIO_BASE_PATH%%" />
   <link rel="icon" href="./mastra.svg">
   <script type="module" crossorigin src="./assets/index-abc123.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/style-xyz789.css">
