@@ -170,10 +170,10 @@ describe('BraintrustExporter', () => {
       });
 
       expect(mockInitLogger).toHaveBeenCalled();
-      expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Braintrust exporter: Failed to initialize logger',
-        { error, traceId: rootSpan.traceId },
-      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Braintrust exporter: Failed to initialize logger', {
+        error,
+        traceId: rootSpan.traceId,
+      });
 
       // Should be disabled after failure
       expect((exporter as any).isDisabled).toBe(true);
