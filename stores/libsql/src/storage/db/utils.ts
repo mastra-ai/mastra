@@ -4,6 +4,20 @@ import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
+/**
+ * Checks if an error is a SQLite lock/busy error that should be retried
+ */
+export function isLockError(error: any): boolean {
+  return (
+    error.code === 'SQLITE_BUSY' ||
+    error.code === 'SQLITE_LOCKED' ||
+    error.message?.toLowerCase().includes('database is locked') ||
+    error.message?.toLowerCase().includes('database table is locked') ||
+    error.message?.toLowerCase().includes('table is locked') ||
+    (error.constructor.name === 'SqliteError' && error.message?.toLowerCase().includes('locked'))
+  );
+}
+
 export function createExecuteWriteOperationWithRetry({
   logger,
   maxRetries,
@@ -17,29 +31,43 @@ export function createExecuteWriteOperationWithRetry({
     operationFn: () => Promise<T>,
     operationDescription: string,
   ): Promise<T> {
-    let retries = 0;
+    let attempts = 0;
+    let backoff = initialBackoffMs;
 
-    while (true) {
+    while (attempts < maxRetries) {
       try {
         return await operationFn();
       } catch (error: any) {
-        if (
-          error.message &&
-          (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked')) &&
-          retries < maxRetries
-        ) {
-          retries++;
-          const backoffTime = initialBackoffMs * Math.pow(2, retries - 1);
+        logger.debug(`LibSQLStore: Error caught in retry loop for ${operationDescription}`, {
+          errorType: error.constructor.name,
+          errorCode: error.code,
+          errorMessage: error.message,
+          attempts,
+          maxRetries,
+        });
+
+        if (isLockError(error)) {
+          attempts++;
+          if (attempts >= maxRetries) {
+            logger.error(
+              `LibSQLStore: Operation failed after ${maxRetries} attempts due to database lock: ${error.message}`,
+              { error, attempts, maxRetries },
+            );
+            throw error;
+          }
           logger.warn(
-            `LibSQLStore: Encountered SQLITE_BUSY during ${operationDescription}. Retrying (${retries}/${maxRetries}) in ${backoffTime}ms...`,
+            `LibSQLStore: Attempt ${attempts} failed due to database lock during ${operationDescription}. Retrying in ${backoff}ms...`,
+            { errorMessage: error.message, attempts, backoff, maxRetries },
           );
-          await new Promise(resolve => setTimeout(resolve, backoffTime));
+          await new Promise(resolve => setTimeout(resolve, backoff));
+          backoff *= 2;
         } else {
-          logger.error(`LibSQLStore: Error during ${operationDescription} after ${retries} retries: ${error}`);
+          logger.error(`LibSQLStore: Non-lock error during ${operationDescription}, not retrying`, { error });
           throw error;
         }
       }
     }
+    throw new Error(`LibSQLStore: Max retries reached for ${operationDescription}, but no error was re-thrown from the loop.`);
   };
 }
 

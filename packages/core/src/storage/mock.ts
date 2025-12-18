@@ -135,10 +135,6 @@ export class InMemoryStore extends MastraStorage {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     return this.stores.memory.saveThread({ thread });
   }

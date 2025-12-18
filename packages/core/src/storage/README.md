@@ -77,20 +77,22 @@ await storage.init();
 ### Working with Threads
 
 ```typescript
+const memoryStorage = await storage.getStore('memory');
+
 // Create a new thread
-const thread = await storage.createThread({
+const thread = await memoryStorage.createThread({
   resourceId: 'resource-123',
   title: 'My Thread',
   metadata: { key: 'value' },
 });
 
 // Get thread by ID
-const retrievedThread = await storage.getThreadById({
+const retrievedThread = await memoryStorage.getThreadById({
   threadId: thread.id,
 });
 
 // Update thread
-await storage.updateThread({
+await memoryStorage.updateThread({
   id: thread.id,
   title: 'Updated Title',
   metadata: { newKey: 'newValue' },

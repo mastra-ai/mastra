@@ -6,10 +6,8 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
-  StorageColumn,
   StoragePagination,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StorageDomains,
@@ -24,7 +22,6 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { AgentsLibSQL } from './domains/agents';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
-import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
 
@@ -68,12 +65,12 @@ export type LibSQLBaseConfig = {
 
 export type LibSQLConfig =
   | (LibSQLBaseConfig & {
-      url: string;
-      authToken?: string;
-    })
+    url: string;
+    authToken?: string;
+  })
   | (LibSQLBaseConfig & {
-      client: Client;
-    });
+    client: Client;
+  });
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;
@@ -117,20 +114,19 @@ export class LibSQLStore extends MastraStorage {
       this.client = config.client;
     }
 
-    const operations = new StoreOperationsLibSQL({
+    const domainConfig = {
       client: this.client,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
-    });
+    };
 
-    const scores = new ScoresLibSQL({ client: this.client, operations });
-    const workflows = new WorkflowsLibSQL({ client: this.client, operations });
-    const memory = new MemoryLibSQL({ client: this.client, operations });
-    const observability = new ObservabilityLibSQL({ operations });
-    const agents = new AgentsLibSQL({ client: this.client, operations });
+    const scores = new ScoresLibSQL(domainConfig);
+    const workflows = new WorkflowsLibSQL(domainConfig);
+    const memory = new MemoryLibSQL(domainConfig);
+    const observability = new ObservabilityLibSQL(domainConfig);
+    const agents = new AgentsLibSQL(domainConfig);
 
     this.stores = {
-      operations,
       scores,
       workflows,
       memory,
@@ -150,58 +146,6 @@ export class LibSQLStore extends MastraStorage {
       listScoresBySpan: true,
       agents: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    await this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    await this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.dropTable({ tableName });
-  }
-
-  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert(args);
-  }
-
-  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert(args);
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
