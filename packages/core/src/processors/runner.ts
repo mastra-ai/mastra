@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
+import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
@@ -1222,12 +1223,13 @@ export class ProcessorRunner {
       const { model: _model, ...rest } = result;
       if (result.model) {
         const resolvedModel = await resolveModelConfig(result.model);
-        if (resolvedModel.specificationVersion === 'v1') {
+        const isSupported = isSupportedLanguageModel(resolvedModel);
+        if (!isSupported) {
           throw new MastraError({
             category: 'USER',
             domain: 'AGENT',
-            id: 'PROCESSOR_RETURNED_V1_MODEL',
-            text: `Processor ${processor.id} returned a v1 model in step ${stepNumber}. v1 models are not supported in processInputStep.`,
+            id: 'PROCESSOR_RETURNED_UNSUPPORTED_MODEL',
+            text: `Processor ${processor.id} returned an unsupported model version ${resolvedModel.specificationVersion} in step ${stepNumber}. Only ${supportedLanguageModelSpecifications.join(', ')} models are supported in processInputStep.`,
           });
         }
 
