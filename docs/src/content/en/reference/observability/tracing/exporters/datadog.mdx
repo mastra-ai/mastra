@@ -1,0 +1,234 @@
+---
+title: "Reference: DatadogExporter | Observability"
+description: Datadog LLM Observability exporter for Tracing
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# DatadogExporter
+
+Sends Tracing data to Datadog's LLM Observability product for monitoring and analytics.
+
+## Constructor
+
+```typescript
+new DatadogExporter(config: DatadogExporterConfig)
+```
+
+## DatadogExporterConfig
+
+```typescript
+interface DatadogExporterConfig extends BaseExporterConfig {
+  apiKey?: string;
+  mlApp?: string;
+  site?: string;
+  service?: string;
+  env?: string;
+  agentless?: boolean;
+  integrationsEnabled?: boolean;
+  defaultUserId?: string;
+  defaultSessionId?: string;
+}
+```
+
+Extends `BaseExporterConfig`, which includes:
+- `logger?: IMastraLogger` - Logger instance
+- `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
+
+<PropertiesTable
+  props={[
+    {
+      name: "apiKey",
+      type: "string",
+      description: "Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "mlApp",
+      type: "string",
+      description: "ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.",
+      required: false,
+    },
+    {
+      name: "site",
+      type: "string",
+      description: "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
+      required: false,
+    },
+    {
+      name: "service",
+      type: "string",
+      description: "Service name for the application. Defaults to mlApp value.",
+      required: false,
+    },
+    {
+      name: "env",
+      type: "string",
+      description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
+      required: false,
+    },
+    {
+      name: "agentless",
+      type: "boolean",
+      description: "Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.",
+      required: false,
+    },
+    {
+      name: "integrationsEnabled",
+      type: "boolean",
+      description: "Enable dd-trace automatic integrations. Default: false.",
+      required: false,
+    },
+    {
+      name: "defaultUserId",
+      type: "string",
+      description: "Default user ID applied to all spans if not specified in metadata.",
+      required: false,
+    },
+    {
+      name: "defaultSessionId",
+      type: "string",
+      description: "Default session ID applied to all spans if not specified in metadata.",
+      required: false,
+    },
+  ]}
+/>
+
+## Methods
+
+### exportTracingEvent
+
+```typescript
+async exportTracingEvent(event: TracingEvent): Promise<void>
+```
+
+Exports a tracing event to Datadog LLM Observability.
+
+### addScoreToTrace
+
+```typescript
+async addScoreToTrace(options: {
+  traceId: string;
+  spanId?: string;
+  score: number;
+  reason?: string;
+  scorerName: string;
+  metadata?: Record<string, any>;
+}): Promise<void>
+```
+
+Submits an evaluation score to Datadog for a specific trace/span. Scores must be submitted within 60 seconds of trace completion.
+
+<PropertiesTable
+  props={[
+    {
+      name: "traceId",
+      type: "string",
+      description: "The trace ID to attach the score to.",
+      required: true,
+    },
+    {
+      name: "spanId",
+      type: "string",
+      description: "The span ID to attach the score to. If omitted and only one span exists, uses that span.",
+      required: false,
+    },
+    {
+      name: "score",
+      type: "number",
+      description: "Numeric score value.",
+      required: true,
+    },
+    {
+      name: "reason",
+      type: "string",
+      description: "Explanation for the score.",
+      required: false,
+    },
+    {
+      name: "scorerName",
+      type: "string",
+      description: "Name of the scorer/evaluator.",
+      required: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>",
+      description: "Additional metadata tags for the evaluation.",
+      required: false,
+    },
+  ]}
+/>
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Flushes pending data and shuts down the exporter. Cancels any pending cleanup timers and disables LLM Observability.
+
+## Usage
+
+```typescript
+import { DatadogExporter } from "@mastra/datadog";
+
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  apiKey: process.env.DD_API_KEY,
+  site: "datadoghq.com",
+  env: "production",
+});
+```
+
+### With Local Datadog Agent
+
+```typescript
+const exporter = new DatadogExporter({
+  mlApp: "my-llm-app",
+  agentless: false, // Use local Datadog Agent
+  env: "production",
+});
+```
+
+## Span Mapping
+
+Mastra span types are mapped to Datadog LLMObs span kinds:
+
+| Mastra SpanType | Datadog Kind |
+|-----------------|--------------|
+| `AGENT_RUN` | `agent` |
+| `MODEL_GENERATION` | `llm` |
+| `MODEL_STEP` | `llm` |
+| `MODEL_CHUNK` | `task` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_RUN` | `workflow` |
+| `WORKFLOW_STEP` | `task` |
+| Other workflow types | `task` |
+| `GENERIC` | `task` |
+
+## Evaluation Scoring
+
+```typescript
+await exporter.addScoreToTrace({
+  traceId: "trace-123",
+  spanId: "span-456",
+  score: 0.95,
+  reason: "Response was accurate and helpful",
+  scorerName: "quality_scorer",
+  metadata: { category: "helpfulness" },
+});
+```
+
+## Environment Variables
+
+The exporter reads configuration from these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `DD_API_KEY` | Datadog API key |
+| `DD_LLMOBS_ML_APP` | ML application name |
+| `DD_SITE` | Datadog site |
+| `DD_ENV` | Environment name |
+| `DD_LLMOBS_AGENTLESS_ENABLED` | Set to 'false' or '0' to use local agent |

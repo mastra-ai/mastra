@@ -69,6 +69,11 @@ interface SpanNode {
 const MAX_TRACE_LIFETIME_MS = 30 * 60 * 1000;
 
 /**
+ * Regular cleanup interval for trace state entries (1 minute).
+ */
+const REGULAR_CLEANUP_INTERVAL_MS = 1 * 60 * 1000;
+
+/**
  * Configuration options for the Datadog LLM Observability exporter.
  */
 export interface DatadogExporterConfig extends BaseExporterConfig {
@@ -551,7 +556,7 @@ export class DatadogExporter extends BaseExporter {
         }
         this.traceState.delete(traceId);
         this.traceContext.delete(traceId);
-      }, 60_000);
+      }, REGULAR_CLEANUP_INTERVAL_MS);
       // Prevent the timer from keeping the process alive
       (timer as any).unref?.();
       state.cleanupTimer = timer;

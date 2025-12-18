@@ -64,6 +64,8 @@ const datadog = new DatadogExporter({
 | `defaultUserId`       | Default user ID for all spans                        | (none)                         |
 | `defaultSessionId`    | Default session ID for all spans                     | (none)                         |
 
+Note that the `site` is also used to specify non-default regions, e.g. `us3.datadoghq.com` instead of `us1.datadoghq.com`.
+
 ### Environment Variables
 
 The exporter reads configuration from environment variables:
@@ -94,7 +96,6 @@ Mastra span types are mapped to Datadog LLMObs span kinds:
 ## Features
 
 - **Completion-only pattern**: Spans are emitted at completion for efficient tracing
-- **AI SDK v4/v5 compatibility**: Normalizes token usage from both formats
 - **Message formatting**: LLM inputs/outputs formatted as message arrays
 - **Metadata as tags**: Span metadata is flattened into searchable Datadog tags
 - **Error tracking**: Error spans include error tags with message, ID, and category
