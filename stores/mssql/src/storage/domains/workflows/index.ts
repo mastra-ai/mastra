@@ -13,27 +13,31 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import type { MssqlDB } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
   private schema: string;
 
   constructor({
     pool,
-    operations,
+    db,
     schema,
   }: {
     pool: sql.ConnectionPool;
-    operations: StoreOperationsMSSQL;
+    db: MssqlDB;
     schema: string;
   }) {
     super();
     this.pool = pool;
-    this.operations = operations;
+    this.db = db;
     this.schema = schema;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -293,7 +297,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load({
+      const result = await this.db.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -424,7 +428,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;

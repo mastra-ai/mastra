@@ -7,9 +7,7 @@ import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
@@ -26,9 +24,9 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
+import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
-import { StoreOperationsMSSQL } from './domains/operations';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
@@ -75,6 +73,7 @@ export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
+  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -113,14 +112,13 @@ export class MSSQLStore extends MastraStorage {
               options: config.options || { encrypt: true, trustServerCertificate: true },
             });
 
-      const operations = new StoreOperationsMSSQL({ pool: this.pool, schemaName: this.schema });
-      const scores = new ScoresMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const workflows = new WorkflowsMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const memory = new MemoryMSSQL({ pool: this.pool, schema: this.schema, operations });
-      const observability = new ObservabilityMSSQL({ pool: this.pool, operations, schema: this.schema });
+      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
+      const scores = new ScoresMSSQL({ pool: this.pool, db: this.#db, schema: this.schema });
+      const workflows = new WorkflowsMSSQL({ pool: this.pool, db: this.#db, schema: this.schema });
+      const memory = new MemoryMSSQL({ pool: this.pool, schema: this.schema, db: this.#db });
+      const observability = new ObservabilityMSSQL({ pool: this.pool, db: this.#db, schema: this.schema });
 
       this.stores = {
-        operations,
         scores,
         workflows,
         memory,
@@ -149,7 +147,7 @@ export class MSSQLStore extends MastraStorage {
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
-        await (this.stores.operations as StoreOperationsMSSQL).createAutomaticIndexes();
+        await this.#db.createAutomaticIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
@@ -177,16 +175,7 @@ export class MSSQLStore extends MastraStorage {
     }
   }
 
-  public get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    listScoresBySpan: boolean;
-    observabilityInstance: boolean;
-    indexManagement: boolean;
-  } {
+  public get supports() {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
@@ -197,48 +186,6 @@ export class MSSQLStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   /**
@@ -396,19 +343,19 @@ export class MSSQLStore extends MastraStorage {
    * Index Management
    */
   async createIndex(options: CreateIndexOptions): Promise<void> {
-    return (this.stores.operations as StoreOperationsMSSQL).createIndex(options);
+    return this.#db.createIndex(options);
   }
 
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return (this.stores.operations as StoreOperationsMSSQL).listIndexes(tableName);
+    return this.#db.listIndexes(tableName);
   }
 
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    return (this.stores.operations as StoreOperationsMSSQL).describeIndex(indexName);
+    return this.#db.describeIndex(indexName);
   }
 
   async dropIndex(indexName: string): Promise<void> {
-    return (this.stores.operations as StoreOperationsMSSQL).dropIndex(indexName);
+    return this.#db.dropIndex(indexName);
   }
 
   /**

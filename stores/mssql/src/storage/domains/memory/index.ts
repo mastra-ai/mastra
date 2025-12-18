@@ -20,13 +20,13 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import type { MssqlDB } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
 export class MemoryMSSQL extends MemoryStorage {
   private pool: sql.ConnectionPool;
   private schema: string;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
 
   private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
     // Parse content back to objects if they were stringified during storage
@@ -53,16 +53,22 @@ export class MemoryMSSQL extends MemoryStorage {
   constructor({
     pool,
     schema,
-    operations,
+    db,
   }: {
     pool: sql.ConnectionPool;
     schema: string;
-    operations: StoreOperationsMSSQL;
+    db: MssqlDB;
   }) {
     super();
     this.pool = pool;
     this.schema = schema;
-    this.operations = operations;
+    this.db = db;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.db.clearTable({ tableName: TABLE_THREADS });
+    await this.db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -982,7 +988,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    await this.operations.insert({
+    await this.db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,

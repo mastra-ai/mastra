@@ -12,7 +12,7 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import type { MssqlDB } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 /**
@@ -27,22 +27,26 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class ScoresMSSQL extends ScoresStorage {
   public pool: ConnectionPool;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
   private schema?: string;
 
   constructor({
     pool,
-    operations,
+    db,
     schema,
   }: {
     pool: ConnectionPool;
-    operations: StoreOperationsMSSQL;
+    db: MssqlDB;
     schema?: string;
   }) {
     super();
     this.pool = pool;
-    this.operations = operations;
+    this.db = db;
     this.schema = schema;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -111,7 +115,7 @@ export class ScoresMSSQL extends ScoresStorage {
         ...rest
       } = validatedScore;
 
-      await this.operations.insert({
+      await this.db.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
