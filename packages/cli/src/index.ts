@@ -141,7 +141,6 @@ program
   .description('Start the Mastra studio')
   .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the studio')
-  .option('-b, --base-path <basePath>', 'Base URL path to serve the studio from (default: /)')
   .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')

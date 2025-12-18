@@ -9,7 +9,6 @@ import { logger } from '../../utils/logger';
 interface StudioOptions {
   env?: string;
   port?: string | number;
-  basePath?: string;
   serverHost?: string;
   serverPort?: string | number;
   serverProtocol?: string;
@@ -20,7 +19,6 @@ const __dirname = dirname(__filename);
 
 export async function studio(
   options: StudioOptions = {
-    basePath: '/',
     serverHost: 'localhost',
     serverPort: 4111,
     serverProtocol: 'http',
