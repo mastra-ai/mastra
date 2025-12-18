@@ -35,14 +35,13 @@ Memory requires a storage provider to persist message history, including user me
 
 Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
-```typescript {6-9} title="src/mastra/agents/memory-agent.ts"
+```typescript {7-11} title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  // ...
   memory: new Memory({
     options: {
       lastMessages: 20,
@@ -51,9 +50,9 @@ export const memoryAgent = new Agent({
 });
 ```
 
-:::note
+:::info
 
-See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list of configuration options.
+Visit the [Memory Class](/reference/v1/memory/memory-class) docs for a full list of configuration options.
 
 :::
 
@@ -63,12 +62,11 @@ See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list o
 
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
-```typescript {6-8} title="src/mastra/index.ts"
+```typescript {5-8} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  // ..
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: ":memory:",
@@ -76,9 +74,9 @@ export const mastra = new Mastra({
 });
 ```
 
-:::note
+:::info
 
-See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
+Visit the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
 
 :::
 
@@ -87,7 +85,7 @@ See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of c
 
 Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
 
-```typescript {7-10} title="src/mastra/agents/memory-agent.ts"
+```typescript {9-12} title="src/mastra/agents/memory-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
@@ -95,7 +93,6 @@ import { LibSQLStore } from "@mastra/libsql";
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  // ...
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'mastra-storage',
@@ -114,7 +111,7 @@ Include a `memory` object with both `resource` and `thread` to track message his
 
 These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
 
-```typescript {5-6}
+```typescript {4-7}
 const response = await memoryAgent.generate(
   "Remember my favorite color is blue.",
   {
@@ -128,7 +125,7 @@ const response = await memoryAgent.generate(
 
 To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original conversation.
 
-```typescript {3-4}
+```typescript {2-5}
 const response = await memoryAgent.generate("What's my favorite color?", {
   memory: {
     resource: "user-123",
@@ -168,9 +165,9 @@ export const memoryAgent = new Agent({
 });
 ```
 
-:::note
+:::info
 
-See [Request Context](/docs/v1/server/request-context) docs for more information.
+Visit the [Request Context](/docs/v1/server/request-context) docs for more information.
 
 :::
 
