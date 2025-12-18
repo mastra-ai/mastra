@@ -109,7 +109,7 @@ export async function generateSystemPromptHandler(c: Context) {
 
     const result = await systemPromptAgent.generate(
       `
-            We need sto improve the system prompt. 
+            We need to improve the system prompt. 
             Current: ${instructions}
             ${comment ? `User feedback: ${comment}` : ''}
             ${evalSummary ? `\nEvaluation Results:\n${evalSummary}` : ''}
