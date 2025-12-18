@@ -1,18 +1,6 @@
 import type { ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import type tracer from 'dd-trace';
 
-/**
- * Normalizes AI SDK v4/v5 token usage to Datadog format.
- */
-// type DatadogUsage = ModelGenerationAttributes['usage'] & {
-//   promptTokens?: number;
-//   completionTokens?: number;
-//   totalTokens?: number;
-//   reasoningTokens?: number;
-//   cachedInputTokens?: number;
-//   promptCacheHitTokens?: number;
-// };
-
 type DatadogAnnotationMetrics = tracer.llmobs.AnnotationOptions['metrics'];
 
 export function formatUsageMetrics(usage?: UsageStats): DatadogAnnotationMetrics | undefined {

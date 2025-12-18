@@ -114,6 +114,13 @@ export function safeStringify(data: unknown): string {
 }
 
 /**
+ * Checks if data is already in message array format ({role, content}[]).
+ */
+function isMessageArray(data: any): data is Array<{ role: string; content: any }> {
+  return Array.isArray(data) && data.every(m => m?.role && m?.content !== undefined);
+}
+
+/**
  * Formats input data for Datadog annotations.
  * LLM spans use message array format; others use raw or stringified data.
  */
@@ -121,7 +128,7 @@ export function formatInput(input: any, spanType: SpanType): any {
   // LLM spans expect {role, content}[] format
   if (spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP) {
     // Already in message format
-    if (Array.isArray(input) && input.every(m => m?.role && m?.content !== undefined)) {
+    if (isMessageArray(input)) {
       return input.map(m => ({
         role: m.role,
         content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
@@ -148,7 +155,7 @@ export function formatOutput(output: any, spanType: SpanType): any {
   // LLM spans expect {role, content}[] format
   if (spanType === SpanType.MODEL_GENERATION || spanType === SpanType.MODEL_STEP) {
     // Already in message format
-    if (Array.isArray(output) && output.every(m => m?.role && m?.content !== undefined)) {
+    if (isMessageArray(output)) {
       return output.map(m => ({
         role: m.role,
         content: typeof m.content === 'string' ? m.content : safeStringify(m.content),
