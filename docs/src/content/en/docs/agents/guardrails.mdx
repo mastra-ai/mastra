@@ -67,7 +67,7 @@ export const normalizedAgent = new Agent({
 });
 ```
 
-> See [UnicodeNormalizer](/reference/v1/processors/unicode-normalizer) for a full list of configuration options.
+> See [UnicodeNormalizer](../../../reference/v1/processors/unicode-normalizer) for a full list of configuration options.
 
 ### Preventing prompt injection
 
@@ -91,7 +91,7 @@ export const secureAgent = new Agent({
 });
 ```
 
-> See [PromptInjectionDetector](/reference/v1/processors/prompt-injection-detector) for a full list of configuration options.
+> See [PromptInjectionDetector](../../../reference/v1/processors/prompt-injection-detector) for a full list of configuration options.
 
 ### Detecting and translating language
 
@@ -115,7 +115,7 @@ export const multilingualAgent = new Agent({
 });
 ```
 
-> See [LanguageDetector](/reference/v1/processors/language-detector) for a full list of configuration options.
+> See [LanguageDetector](../../../reference/v1/processors/language-detector) for a full list of configuration options.
 
 ## Output processors
 
@@ -142,7 +142,7 @@ export const batchedAgent = new Agent({
 });
 ```
 
-> See [BatchPartsProcessor](/reference/v1/processors/batch-parts-processor) for a full list of configuration options.
+> See [BatchPartsProcessor](../../../reference/v1/processors/batch-parts-processor) for a full list of configuration options.
 
 ### Limiting token usage
 
@@ -165,7 +165,7 @@ export const limitedAgent = new Agent({
 });
 ```
 
-> See [TokenLimiterProcessor](/reference/v1/processors/token-limiter-processor) for a full list of configuration options.
+> See [TokenLimiterProcessor](../../../reference/v1/processors/token-limiter-processor) for a full list of configuration options.
 
 ### Scrubbing system prompts
 
@@ -192,10 +192,10 @@ const scrubbedAgent = new Agent({
 });
 ```
 
-> See [SystemPromptScrubber](/reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
+> See [SystemPromptScrubber](../../../reference/v1/processors/system-prompt-scrubber) for a full list of configuration options.
 
 :::note
-When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/v1/server/mastra-server#stream-data-redaction) for details.
+When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](../server/mastra-server#stream-data-redaction) for details.
 :::
 
 ## Hybrid processors
@@ -229,7 +229,7 @@ export const moderatedAgent = new Agent({
 });
 ```
 
-> See [ModerationProcessor](/reference/v1/processors/moderation-processor) for a full list of configuration options.
+> See [ModerationProcessor](../../../reference/v1/processors/moderation-processor) for a full list of configuration options.
 
 ### Detecting and redacting PII
 
@@ -260,7 +260,7 @@ export const privateAgent = new Agent({
 });
 ```
 
-> See [PIIDetector](/reference/v1/processors/pii-detector) for a full list of configuration options.
+> See [PIIDetector](../../../reference/v1/processors/pii-detector) for a full list of configuration options.
 
 ## Applying multiple processors
 

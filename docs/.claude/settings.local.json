@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(done)",
+      "Bash(git -C /Users/booker/Code/mastra/docs diff --stat)",
+      "Bash(git -C /Users/booker/Code/mastra/docs diff --name-only)",
+      "Bash(git -C /Users/booker/Code/mastra/docs diff docs/src/content/en/reference/workflows/workflow.mdx)",
+      "Bash(grep:*)",
+      "Bash(npm run docusaurus:*)",
+      "Bash(for f in *.mdx)",
+      "Bash(do sed -i '' 's|\\(../../docs/|\\(../../../docs/v1/|g' \"$f\")"
+    ]
+  }
+}

@@ -48,7 +48,7 @@ export const testMcpClient = new MCPClient({
 });
 ```
 
-> See [MCPClient](/reference/v1/tools/mcp-client) for a full list of configuration options.
+> See [MCPClient](../../../reference/v1/tools/mcp-client) for a full list of configuration options.
 
 ## Using `MCPClient` with an agent
 
@@ -73,7 +73,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See the [Agent Class](/reference/v1/agents/agent) for a full list of configuration options.
+> See the [Agent Class](../../../reference/v1/agents/agent) for a full list of configuration options.
 
 ## Configuring `MCPServer`
 
@@ -96,7 +96,7 @@ export const testMcpServer = new MCPServer({
 });
 ```
 
-> See [MCPServer](/reference/v1/tools/mcp-server) for a full list of configuration options.
+> See [MCPServer](../../../reference/v1/tools/mcp-server) for a full list of configuration options.
 
 ## Registering an `MCPServer`
 
@@ -128,7 +128,7 @@ export const mastra = new Mastra({
 
 Use the `.getTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
 
-> See [getTools()](/reference/v1/tools/mcp-client#gettools) for more information.
+> See [getTools()](../../../reference/v1/tools/mcp-client#gettools) for more information.
 
 ```typescript {7} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -177,7 +177,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-> See [getToolsets()](/reference/v1/tools/mcp-client#gettoolsets) for more information.
+> See [getToolsets()](../../../reference/v1/tools/mcp-client#gettoolsets) for more information.
 
 ## Connecting to an MCP registry
 
@@ -353,6 +353,6 @@ As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so 
 
 ## Related
 
-- [Using Tools](/docs/v1/agents/using-tools)
-- [MCPClient](/reference/v1/tools/mcp-client)
-- [MCPServer](/reference/v1/tools/mcp-server)
+- [Using Tools](../agents/using-tools)
+- [MCPClient](../../../reference/v1/tools/mcp-client)
+- [MCPServer](../../../reference/v1/tools/mcp-server)

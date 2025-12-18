@@ -99,7 +99,7 @@ export const mastra = new Mastra({
 });
 ```
 
-> See [Middleware](/docs/v1/server/middleware) for how to use server middleware.
+> See [Middleware](./middleware) for how to use server middleware.
 
 ## Accessing values with agents
 
@@ -135,7 +135,7 @@ export const weatherAgent = new Agent({
 
 You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
-> See [Agent](/reference/v1/agents/agent) for a full list of configuration options.
+> See [Agent](../../../reference/v1/agents/agent) for a full list of configuration options.
 
 ## Accessing values from workflow steps
 
@@ -159,7 +159,7 @@ const stepOne = createStep({
 });
 ```
 
-> See [createStep()](/reference/v1/workflows/step) for a full list of configuration options.
+> See [createStep()](../../../reference/v1/workflows/step) for a full list of configuration options.
 
 ## Accessing values with tools
 
@@ -183,11 +183,11 @@ export const weatherTool = createTool({
 });
 ```
 
-> See [createTool()](/reference/v1/tools/create-tool) for a full list of configuration options.
+> See [createTool()](../../../reference/v1/tools/create-tool) for a full list of configuration options.
 
 ## Related
 
-- [Agent Request Context](/docs/v1/agents/overview#using-requestcontext)
+- [Agent Request Context](../agents/overview#using-requestcontext)
 - [Workflow Request Context](../workflows/overview#using-requestcontext)
 - [Tool Request Context](../mcp/overview#using-requestcontext)
-- [Server Middleware](/docs/v1/server/middleware)
+- [Server Middleware](./middleware)

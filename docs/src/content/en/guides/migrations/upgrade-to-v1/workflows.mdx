@@ -126,7 +126,7 @@ npx @mastra/codemod@beta v1/workflow-list-runs .
 
 ### Inputs are validated by default
 
-Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+Previously, inputs weren't validated by default. The [`validateInputs`](../../../../reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
 
 ```diff
 createWorkflow({
@@ -241,7 +241,7 @@ The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext
 
 To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
-See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+See [`Run.stream()`](../../../../reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](../../../../reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](../../../../reference/v1/streaming/workflows/observeStream) for details.
 
 :::tip[Codemod]
 

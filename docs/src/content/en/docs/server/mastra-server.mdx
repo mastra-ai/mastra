@@ -9,7 +9,7 @@ When deploying your Mastra application to production, it runs as an HTTP server 
 
 :::info
 
-This page covers the `server` configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+This page covers the `server` configuration options passed to the `Mastra` constructor. For running Mastra with your own HTTP server (Hono, Express, etc.), see [Server Adapters](./server-adapters).
 
 :::
 
@@ -27,8 +27,8 @@ The server provides:
 - Configuration of port
 - Configuration of body limit
 
-See the [Middleware](/docs/v1/server/middleware) and
-[Custom API Routes](/docs/v1/server/custom-api-routes) pages for details on
+See the [Middleware](./middleware) and
+[Custom API Routes](./custom-api-routes) pages for details on
 adding additional server behaviour.
 
 ## Server configuration
@@ -96,4 +96,4 @@ export const mastra = new Mastra({
 
 When streaming agent responses, the HTTP streaming layer redacts system prompts, tool definitions, API keys, and similar data from each chunk before sending it to clients. This is enabled by default.
 
-If you're using server adapters directly, you can configure redaction behavior. See [Stream data redaction](/docs/v1/server/server-adapters#stream-data-redaction) in the Server Adapters docs.
+If you're using server adapters directly, you can configure redaction behavior. See [Stream data redaction](./server-adapters#stream-data-redaction) in the Server Adapters docs.

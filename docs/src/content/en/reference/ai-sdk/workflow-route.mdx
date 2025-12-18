@@ -7,15 +7,15 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # workflowRoute()
 
-Creates a workflow route handler for streaming workflow execution using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts input data, executes a workflow, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/docs/v1/server/custom-api-routes).
+Creates a workflow route handler for streaming workflow execution using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts input data, executes a workflow, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](../../../docs/v1/server/custom-api-routes).
 
-Use [`handleWorkflowStream()`](/reference/v1/ai-sdk/handle-workflow-stream) if you need a framework-agnostic handler.
+Use [`handleWorkflowStream()`](./handle-workflow-stream) if you need a framework-agnostic handler.
 
 :::tip Agent streaming in workflows
 
 When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
+See [Workflow Streaming](../../../docs/v1/streaming/workflow-streaming#streaming-agent-text-chunks-to-ui) for more details.
 
 :::
 

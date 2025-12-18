@@ -18,7 +18,7 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 :::tip
 
-For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/v1/server/mastra-server).
+For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](./mastra-server).
 
 :::
 
@@ -26,10 +26,10 @@ For deployments without custom server requirements, use `mastra build` instead. 
 
 Mastra currently provides two official server adapters:
 
-- [@mastra/express](/reference/v1/server/express-adapter): Express framework adapter
-- [@mastra/hono](/reference/v1/server/hono-adapter): Hono framework adapter
+- [@mastra/express](../../../reference/v1/server/express-adapter): Express framework adapter
+- [@mastra/hono](../../../reference/v1/server/hono-adapter): Hono framework adapter
 
-You can build your own adapter, read [Custom Adapters](/docs/v1/server/custom-adapters) for details.
+You can build your own adapter, read [Custom Adapters](./custom-adapters) for details.
 
 ## Installation
 
@@ -99,7 +99,7 @@ serve({ fetch: app.fetch, port: 4111 }, () => {
 
 :::info
 
-See the [Express Adapter](/reference/v1/server/express-adapter) or [Hono Adapter](/reference/v1/server/hono-adapter) docs for full configuration options.
+See the [Express Adapter](../../../reference/v1/server/express-adapter) or [Hono Adapter](../../../reference/v1/server/hono-adapter) docs for full configuration options.
 
 :::
 
@@ -148,7 +148,7 @@ You can add your own routes to the app alongside Mastra's routes.
 
 :::info
 
-Visit "Adding custom routes" for [Express](/reference/v1/server/express-adapter#adding-custom-routes) and [Hono](/reference/v1/server/hono-adapter#adding-custom-routes) for more information.
+Visit "Adding custom routes" for [Express](../../../reference/v1/server/express-adapter#adding-custom-routes) and [Hono](../../../reference/v1/server/hono-adapter#adding-custom-routes) for more information.
 
 :::
 
@@ -205,7 +205,7 @@ const server = new MastraServer({
 
 :::info
 
-See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+See [MastraServer](../../../reference/v1/server/mastra-server) for full configuration options.
 
 :::
 
@@ -236,7 +236,7 @@ const server = new MastraServer({
 
 :::info
 
-See [MastraServer](/reference/v1/server/mastra-server) for full configuration options.
+See [MastraServer](../../../reference/v1/server/mastra-server) for full configuration options.
 
 :::
 
@@ -299,14 +299,14 @@ Server adapters register MCP (Model Context Protocol) routes during `registerRou
 
 The adapter registers routes for both HTTP and SSE (Server-Sent Events) transports, enabling different client connection patterns.
 
-See [MCP](/docs/v1/mcp/overview) for configuration details and how to set up MCP servers.
+See [MCP](../mcp/overview) for configuration details and how to set up MCP servers.
 
 ## Related
 
-- [Hono Adapter](/reference/v1/server/hono-adapter) - Hono-specific setup
-- [Express Adapter](/reference/v1/server/express-adapter) - Express-specific setup
-- [Custom Adapters](/docs/v1/server/custom-adapters) - Building adapters for other frameworks
-- [Server Configuration](/docs/v1/server/mastra-server) - Using `mastra build` instead
-- [Authentication](/docs/v1/server/auth) - Configuring auth for your server
-- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
-- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes
+- [Hono Adapter](../../../reference/v1/server/hono-adapter) - Hono-specific setup
+- [Express Adapter](../../../reference/v1/server/express-adapter) - Express-specific setup
+- [Custom Adapters](./custom-adapters) - Building adapters for other frameworks
+- [Server Configuration](./mastra-server) - Using `mastra build` instead
+- [Authentication](./auth) - Configuring auth for your server
+- [MastraServer Reference](../../../reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](../../../reference/v1/server/create-route) - Creating type-safe custom routes

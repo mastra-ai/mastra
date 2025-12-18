@@ -7,7 +7,7 @@ description: Documentation for the libSQL storage implementation in Mastra.
 
 [libSQL](https://docs.turso.tech/libsql) is an open-source, SQLite-compatible database that supports both local and remote deployments. It can be used to store message history, workflow snapshots, traces, and eval scores.
 
-For vectors like semantic recall or traditional RAG, use [libSQL Vector](/reference/v1/vectors/libsql) which covers embeddings and vector search.
+For vectors like semantic recall or traditional RAG, use [libSQL Vector](../vectors/libsql) which covers embeddings and vector search.
 
 ## Installation
 
@@ -97,7 +97,7 @@ In-memory storage resets when the process changes. Only suitable for development
 
 ## Initialization
 
-When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/v1/storage/overview#core-schema):
+When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](./overview#core-schema):
 
 ```typescript 
 import { Mastra } from "@mastra/core";

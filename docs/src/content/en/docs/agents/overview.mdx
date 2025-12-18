@@ -112,7 +112,7 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/v1/agents/agent) for more information.
+> See the [Agent reference doc](../../../reference/v1/agents/agent) for more information.
 
 ### Registering an agent
 
@@ -208,13 +208,13 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
+> See [.generate()](../../../reference/v1/agents/generate) or [.stream()](../../../reference/v1/streaming/agents/stream) for more information.
 
 ## Structured output
 
 Agents can return structured, type-safe data using Zod or JSON Schema. The parsed result is available on `response.object`.
 
-> See [Structured Output](/docs/v1/agents/structured-output) for more information.
+> See [Structured Output](./structured-output) for more information.
 
 ## Analyzing images
 
@@ -281,7 +281,7 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Using Tools](/docs/v1/agents/using-tools) for more information.
+> See [Using Tools](./using-tools) for more information.
 
 ## Using `RequestContext`
 
@@ -306,14 +306,14 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Request Context](/docs/v1/server/request-context) for more information.
+> See [Request Context](../server/request-context) for more information.
 
 ## Testing with Studio
 
-Use [Studio](/docs/v1/getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
+Use [Studio](../getting-started/studio) to test agents with different messages, inspect tool calls and responses, and debug agent behavior.
 
 ## Related
 
-- [Using Tools](/docs/v1/agents/using-tools)
-- [Agent Memory](/docs/v1/agents/agent-memory)
-- [Request Context](/docs/v1/server/request-context)
+- [Using Tools](./using-tools)
+- [Agent Memory](./agent-memory)
+- [Request Context](../server/request-context)

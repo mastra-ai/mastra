@@ -8,17 +8,17 @@ description: "Learn how Mastra can be deployed when integrated with a Web Framew
 When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. Follow the instructions below to ensure your Mastra integration deploys correctly.
 
 :::warning
-If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/reference/v1/storage/libsql) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
+If you're deploying to a cloud provider, remove any usage of [LibSQLStore](../../../reference/v1/storage/libsql) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
 :::
 
 Integration guides:
 
-- [With Next.js](/guides/v1/getting-started/next-js)
-- [With Astro](/guides/v1/getting-started/astro)
+- [With Next.js](../../../guides/v1/getting-started/next-js)
+- [With Astro](../../../guides/v1/getting-started/astro)
 
 ## With Next.js on Vercel
 
-If you've integrated Mastra with Next.js [by following our guide](/guides/v1/getting-started/next-js) and plan to deploy to Vercel, add `serverExternalPackages: ["@mastra/*"]` to your `next.config.ts`:
+If you've integrated Mastra with Next.js [by following our guide](../../../guides/v1/getting-started/next-js) and plan to deploy to Vercel, add `serverExternalPackages: ["@mastra/*"]` to your `next.config.ts`:
 
 ```typescript {4} title="next.config.ts"
 import type { NextConfig } from "next";
@@ -32,7 +32,7 @@ export default nextConfig;
 
 ## With Astro on Vercel
 
-If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
+If you've integrated Mastra with Astro [by following our guide](../../../guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
 ```javascript {2,6,7} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
@@ -47,7 +47,7 @@ export default defineConfig({
 
 ## With Astro on Netlify
 
-If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
+If you've integrated Mastra with Astro [by following our guide](../../../guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
 ```javascript {2,6,7} title="astro.config.mjs"
 import { defineConfig } from "astro/config";

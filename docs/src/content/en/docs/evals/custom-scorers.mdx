@@ -186,7 +186,7 @@ const glutenCheckerScorer = createScorer({...})
 })
 ```
 
-**Prompt Objects:** See the [`createScorer`](/reference/v1/evals/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
+**Prompt Objects:** See the [`createScorer`](../../../reference/v1/evals/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
@@ -241,7 +241,7 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 
 Together, these components allow you to define custom evaluation logic using LLMs as judges.
 
-> See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+> See [createScorer](../../../reference/v1/evals/create-scorer) for the full API and configuration options.
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from "@mastra/core/evals";
@@ -477,5 +477,5 @@ console.log("Reason:", result.reason);
 
 **Examples and Resources:**
 
-- [createScorer API Reference](/reference/v1/evals/create-scorer) - Complete technical documentation
+- [createScorer API Reference](../../../reference/v1/evals/create-scorer) - Complete technical documentation
 - [Built-in Scorers Source Code](https://github.com/mastra-ai/mastra/tree/main/packages/evals/src/scorers) - Real implementations for reference

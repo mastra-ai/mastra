@@ -44,7 +44,7 @@ const agent = new Agent({
 
 ## Storage configuration
 
-Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
+Semantic recall relies on a [storage and vector db](../../../reference/v1/memory/memory-class) to store messages and their embeddings.
 
 ```ts {8-16}
 import { Memory } from "@mastra/memory";
@@ -69,23 +69,23 @@ const agent = new Agent({
 
 Each vector store page below includes installation instructions, configuration parameters, and usage examples:
 
-- [Astra](/reference/v1/vectors/astra)
-- [Chroma](/reference/v1/vectors/chroma)
-- [Cloudflare Vectorize](/reference/v1/vectors/vectorize)
-- [Convex](/reference/v1/vectors/convex)
-- [Couchbase](/reference/v1/vectors/couchbase)
-- [DuckDB](/reference/v1/vectors/duckdb)
-- [Elasticsearch](/reference/v1/vectors/elasticsearch)
-- [LanceDB](/reference/v1/vectors/lance)
-- [libSQL](/reference/v1/vectors/libsql)
-- [MongoDB](/reference/v1/vectors/mongodb)
-- [OpenSearch](/reference/v1/vectors/opensearch)
-- [Pinecone](/reference/v1/vectors/pinecone)
-- [PostgreSQL](/reference/v1/vectors/pg)
-- [Qdrant](/reference/v1/vectors/qdrant)
-- [S3 Vectors](/reference/v1/vectors/s3vectors)
-- [Turbopuffer](/reference/v1/vectors/turbopuffer)
-- [Upstash](/reference/v1/vectors/upstash)
+- [Astra](../../../reference/v1/vectors/astra)
+- [Chroma](../../../reference/v1/vectors/chroma)
+- [Cloudflare Vectorize](../../../reference/v1/vectors/vectorize)
+- [Convex](../../../reference/v1/vectors/convex)
+- [Couchbase](../../../reference/v1/vectors/couchbase)
+- [DuckDB](../../../reference/v1/vectors/duckdb)
+- [Elasticsearch](../../../reference/v1/vectors/elasticsearch)
+- [LanceDB](../../../reference/v1/vectors/lance)
+- [libSQL](../../../reference/v1/vectors/libsql)
+- [MongoDB](../../../reference/v1/vectors/mongodb)
+- [OpenSearch](../../../reference/v1/vectors/opensearch)
+- [Pinecone](../../../reference/v1/vectors/pinecone)
+- [PostgreSQL](../../../reference/v1/vectors/pg)
+- [Qdrant](../../../reference/v1/vectors/qdrant)
+- [S3 Vectors](../../../reference/v1/vectors/s3vectors)
+- [Turbopuffer](../../../reference/v1/vectors/turbopuffer)
+- [Upstash](../../../reference/v1/vectors/upstash)
 
 ## Recall configuration
 
@@ -111,7 +111,7 @@ const agent = new Agent({
 
 ## Embedder configuration
 
-Semantic recall relies on an [embedding model](/reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+Semantic recall relies on an [embedding model](../../../reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
 #### Using the Model Router (Recommended)
 
@@ -210,7 +210,7 @@ const agent = new Agent({
 });
 ```
 
-For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/v1/vectors/pg#index-configuration-guide).
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](../../../reference/v1/vectors/pg#index-configuration-guide).
 
 ## Disabling
 

@@ -15,8 +15,8 @@ You'll use the foundational Transformer paper ["Attention Is All You Need"](http
 ## Prerequisites
 
 - Node.js `v22.13.0` or later installed
-- An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
+- An API key from a supported [Model Provider](../../../models/v1)
+- An existing Mastra project (Follow the [installation guide](../getting-started/quickstart) to set up a new project)
 
 ## How RAG works
 
@@ -57,7 +57,7 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
 
 Install additional dependencies
 
-After running the [installation guide](/guides/v1/getting-started/quickstart) you'll need to install additional dependencies:
+After running the [installation guide](../getting-started/quickstart) you'll need to install additional dependencies:
 
 ```bash
 npm install @mastra/rag@beta ai@^4.0.0
@@ -68,7 +68,7 @@ npm install @mastra/rag@beta ai@^4.0.0
 
 Now you'll create your RAG-enabled research assistant. The agent uses:
 
-- A [Vector Query Tool](/reference/v1/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
+- A [Vector Query Tool](../../../reference/v1/tools/vector-query-tool) for performing semantic search over the vector store to find relevant content in papers
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 

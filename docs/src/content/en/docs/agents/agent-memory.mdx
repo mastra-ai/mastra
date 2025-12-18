@@ -26,7 +26,7 @@ npm install @mastra/memory@beta @mastra/libsql@beta
 
 ## Storage providers
 
-Memory requires a storage provider to persist message history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v1/memory/storage) documentation.
+Memory requires a storage provider to persist message history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](../memory/storage) documentation.
 
 ## Configuring memory
 
@@ -53,7 +53,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See the [Memory Class](/reference/v1/memory/memory-class) docs for a full list of configuration options.
+See the [Memory Class](../../../reference/v1/memory/memory-class) docs for a full list of configuration options.
 
 :::
 
@@ -78,7 +78,7 @@ export const mastra = new Mastra({
 
 :::note
 
-See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
+See the [libSQL Storage](../../../reference/v1/storage/libsql) docs for a full list of configuration options.
 
 :::
 
@@ -141,7 +141,7 @@ To learn more about memory see the [Memory](../memory/overview) documentation.
 
 ## Using `RequestContext`
 
-Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+Use [RequestContext](../server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
 
 ```typescript title="src/mastra/agents/memory-agent.ts"
 export type UserTier = {
@@ -170,7 +170,7 @@ export const memoryAgent = new Agent({
 
 :::note
 
-See [Request Context](/docs/v1/server/request-context) docs for more information.
+See [Request Context](../server/request-context) docs for more information.
 
 :::
 
@@ -179,4 +179,4 @@ See [Request Context](/docs/v1/server/request-context) docs for more information
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
 - [Storage](../memory/storage)
-- [Request Context](/docs/v1/server/request-context)
+- [Request Context](../server/request-context)

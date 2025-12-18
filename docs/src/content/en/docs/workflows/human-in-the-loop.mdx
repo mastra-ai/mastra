@@ -5,11 +5,11 @@ description: "Human-in-the-loop workflows in Mastra allow you to pause execution
 
 # Human-in-the-loop (HITL)
 
-Some workflows need to pause for human input before continuing. When a workflow is [suspended](/docs/v1/workflows/suspend-and-resume#pausing-a-workflow-with-suspend), it can return a message explaining why it paused and what’s needed to proceed. The workflow can then either [resume](#resuming-workflows-with-human-input) or [bail](#handling-human-rejection-with-bail) based on the input received. This approach works well for manual approvals, rejections, gated decisions, or any step that requires human oversight.
+Some workflows need to pause for human input before continuing. When a workflow is [suspended](./suspend-and-resume#pausing-a-workflow-with-suspend), it can return a message explaining why it paused and what's needed to proceed. The workflow can then either [resume](#resuming-workflows-with-human-input) or [bail](#handling-human-rejection-with-bail) based on the input received. This approach works well for manual approvals, rejections, gated decisions, or any step that requires human oversight.
 
 ## Pausing workflows for human input
 
-Human-in-the-loop input works much like [pausing a workflow](/docs/v1/workflows/suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
+Human-in-the-loop input works much like [pausing a workflow](./suspend-and-resume) using `suspend()`. The key difference is that when human input is required, you can return `suspend()` with a payload that provides context or guidance to the user on how to continue.
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
@@ -91,7 +91,7 @@ The data returned by the step can include a reason and help the user understand 
 
 ## Resuming workflows with human input
 
-As with [restarting a workflow](/docs/v1/workflows/suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
+As with [restarting a workflow](./suspend-and-resume#restarting-a-workflow-with-resume), use `resume()` with `resumeData` to continue a workflow after receiving input from a human. The workflow resumes from the step where it was paused.
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
@@ -214,5 +214,5 @@ const handleDelete = async () => {
 
 ## Related
 
-- [Control Flow](/docs/v1/workflows/control-flow)
-- [Suspend & Resume](/docs/v1/workflows/suspend-and-resume)
+- [Control Flow](./control-flow)
+- [Suspend & Resume](./suspend-and-resume)
