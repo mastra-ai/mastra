@@ -28,3 +28,4 @@ import {
   mastraThreadsTable,
   mastraMessagesTable,
 } from "@mastra/convex/schema";
+```
