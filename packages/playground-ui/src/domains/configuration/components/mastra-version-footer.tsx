@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Copy, Check, Package, MoveRight, Info, ExternalLink } from 'lucide-react';
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import Spinner from '@/components/ui/spinner';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { useMastraPackages } from '../hooks/use-mastra-packages';
@@ -37,7 +38,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   const hasUpdates = outdatedCount > 0 || deprecatedCount > 0;
 
-  const [copied, setCopied] = useState(false);
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
 
   if (isLoadingPackages) {
@@ -58,22 +58,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   const updateCommand = generateUpdateCommand(packageUpdates, packageManager);
 
-  const handleCopyCommand = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!updateCommand) return;
-    await navigator.clipboard.writeText(updateCommand);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleCopyAll = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const packagesText = installedPackages.map(pkg => `${pkg.name}@${pkg.version}`).join('\n');
-    await navigator.clipboard.writeText(packagesText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   if (collapsed) {
     return (
       <Dialog>
@@ -90,9 +74,9 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
           <TooltipContent side="right" align="center" className="bg-border1 text-icon6 ml-[1rem]">
             <span>Mastra Packages</span>
             <span className="block text-xs mt-0.5">
-              {outdatedCount > 0 && <span className="text-yellow-500">{outdatedCount} outdated</span>}
+              {outdatedCount > 0 && <span className="text-accent6">{outdatedCount} outdated</span>}
               {outdatedCount > 0 && deprecatedCount > 0 && ', '}
-              {deprecatedCount > 0 && <span className="text-red-400">{deprecatedCount} deprecated</span>}
+              {deprecatedCount > 0 && <span className="text-accent2">{deprecatedCount} deprecated</span>}
             </span>
           </TooltipContent>
         </Tooltip>
@@ -104,9 +88,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
           updateCommand={updateCommand}
           packageManager={packageManager}
           onPackageManagerChange={setPackageManager}
-          copied={copied}
-          onCopyCommand={handleCopyCommand}
-          onCopyAll={handleCopyAll}
         />
       </Dialog>
     );
@@ -141,9 +122,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
         updateCommand={updateCommand}
         packageManager={packageManager}
         onPackageManagerChange={setPackageManager}
-        copied={copied}
-        onCopyCommand={handleCopyCommand}
-        onCopyAll={handleCopyAll}
       />
     </Dialog>
   );
@@ -154,8 +132,8 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   if (outdatedPackages.length === 0) return null;
 
   const command = packageManagerCommands[packageManager];
-  // Use the prerelease tag (e.g., @beta, @alpha) to avoid downgrading prerelease users
-  const packageArgs = outdatedPackages.map(p => `${p.name}@${p.prereleaseTag ?? 'latest'}`).join(' ');
+  // Use the target's prerelease tag to ensure the command installs the version shown in the UI
+  const packageArgs = outdatedPackages.map(p => `${p.name}@${p.targetPrereleaseTag ?? 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
 }
@@ -171,10 +149,7 @@ function LoadingSpinner() {
 function StatusDot({ variant }: { variant: 'warning' | 'error' }) {
   return (
     <span
-      className={cn(
-        'absolute top-0 right-0 w-2 h-2 rounded-full',
-        variant === 'error' ? 'bg-red-500' : 'bg-yellow-500',
-      )}
+      className={cn('absolute top-0 right-0 w-2 h-2 rounded-full', variant === 'error' ? 'bg-accent2' : 'bg-accent6')}
     />
   );
 }
@@ -183,8 +158,8 @@ function CountBadge({ count, variant }: { count: number; variant: 'warning' | 'e
   return (
     <span
       className={cn(
-        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold text-black',
-        variant === 'error' ? 'bg-red-500' : 'bg-yellow-500',
+        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold text-surface1',
+        variant === 'error' ? 'bg-accent2' : 'bg-accent6',
       )}
     >
       {count}
@@ -196,8 +171,8 @@ function StatusBadge({ value, variant }: { value: string | number; variant: 'war
   return (
     <span
       className={cn(
-        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-[1.25rem]',
-        variant === 'error' ? 'bg-red-500' : 'bg-yellow-500',
+        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-surface1 text-xs min-w-[1.25rem]',
+        variant === 'error' ? 'bg-accent2' : 'bg-accent6',
       )}
     >
       {value}
@@ -213,9 +188,6 @@ export interface PackagesModalContentProps {
   updateCommand: string | null;
   packageManager: PackageManager;
   onPackageManagerChange: (pm: PackageManager) => void;
-  copied: boolean;
-  onCopyCommand: (e: React.MouseEvent) => void;
-  onCopyAll: (e: React.MouseEvent) => void;
 }
 
 const PackagesModalContent = ({
@@ -226,11 +198,18 @@ const PackagesModalContent = ({
   updateCommand,
   packageManager,
   onPackageManagerChange,
-  copied,
-  onCopyCommand,
-  onCopyAll,
 }: PackagesModalContentProps) => {
   const hasUpdates = outdatedCount > 0 || deprecatedCount > 0;
+
+  const packagesText = packages.map(pkg => `${pkg.name}@${pkg.version}`).join('\n');
+  const { isCopied: isCopiedAll, handleCopy: handleCopyAll } = useCopyToClipboard({
+    text: packagesText,
+    copyMessage: 'Copied package versions!',
+  });
+  const { isCopied: isCopiedCommand, handleCopy: handleCopyCommand } = useCopyToClipboard({
+    text: updateCommand ?? '',
+    copyMessage: 'Copied update command!',
+  });
 
   return (
     <DialogContent className="bg-surface1 border-border1 max-w-2xl">
@@ -285,7 +264,7 @@ const PackagesModalContent = ({
                       <span
                         className={cn(
                           'cursor-help',
-                          pkg.isDeprecated ? 'text-red-400' : pkg.isOutdated ? 'text-yellow-400' : '',
+                          pkg.isDeprecated ? 'text-accent2' : pkg.isOutdated ? 'text-accent6' : '',
                         )}
                       >
                         {pkg.version}
@@ -316,12 +295,12 @@ const PackagesModalContent = ({
 
       {/* Copy current versions button - always visible */}
       <button
-        onClick={onCopyAll}
+        onClick={handleCopyAll}
         className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-icon3 hover:text-icon1 transition-colors"
       >
-        {copied ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
+        {isCopiedAll ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
         <Txt as="span" variant="ui-sm">
-          {copied ? 'Copied!' : 'Copy current versions'}
+          {isCopiedAll ? 'Copied!' : 'Copy current versions'}
         </Txt>
       </button>
 
@@ -351,12 +330,12 @@ const PackagesModalContent = ({
           </div>
 
           <button
-            onClick={onCopyCommand}
+            onClick={handleCopyCommand}
             className="flex items-center justify-center gap-2 w-full py-2 px-3 rounded bg-surface2 hover:bg-surface3 text-icon3 hover:text-icon1 transition-colors"
           >
-            {copied ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
+            {isCopiedCommand ? <Check className="w-4 h-4 text-accent1" /> : <Copy className="w-4 h-4" />}
             <Txt as="span" variant="ui-sm">
-              {copied ? 'Copied!' : 'Copy command'}
+              {isCopiedCommand ? 'Copied!' : 'Copy command'}
             </Txt>
           </button>
         </div>

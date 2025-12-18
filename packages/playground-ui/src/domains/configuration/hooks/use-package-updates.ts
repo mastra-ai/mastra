@@ -11,6 +11,7 @@ export interface PackageUpdateInfo extends PackageInfo {
   isOutdated: boolean;
   isDeprecated: boolean;
   prereleaseTag: string | null;
+  targetPrereleaseTag: string | null;
   deprecationMessage?: string;
 }
 
@@ -42,6 +43,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
         isOutdated: false,
         isDeprecated: false,
         prereleaseTag,
+        targetPrereleaseTag: null,
       };
     }
 
@@ -49,6 +51,10 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
     const latestVersion = data['dist-tags']?.latest ?? null;
     const versionInfo = data.versions?.[installedVersion];
     const deprecationMessage = versionInfo?.deprecated;
+
+    // Extract the prerelease tag from the target version (e.g., 'beta' from '1.0.0-beta.13')
+    const targetPrereleaseComponents = latestVersion ? semver.prerelease(latestVersion) : null;
+    const targetPrereleaseTag = targetPrereleaseComponents ? String(targetPrereleaseComponents[0]) : null;
 
     // Determine if outdated using semver.gt (greater than)
     // Only mark as outdated if latest is actually newer than installed
@@ -64,6 +70,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
       isOutdated,
       isDeprecated: !!deprecationMessage,
       prereleaseTag,
+      targetPrereleaseTag,
       deprecationMessage,
     };
   } catch {
@@ -74,6 +81,7 @@ async function fetchPackageInfo(packageName: string, installedVersion: string): 
       isOutdated: false,
       isDeprecated: false,
       prereleaseTag,
+      targetPrereleaseTag: null,
     };
   }
 }
