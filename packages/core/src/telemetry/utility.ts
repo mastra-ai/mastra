@@ -1,4 +1,4 @@
-import { propagation } from '@opentelemetry/api';
+import { propagation, trace } from '@opentelemetry/api';
 import type { Context } from '@opentelemetry/api';
 
 declare global {
@@ -9,14 +9,14 @@ declare global {
  * Check if telemetry is active and enabled.
  * This function checks both if a tracer exists AND if telemetry is enabled in the configuration.
  *
- * @param _tracerName - Optional tracer name to check (currently unused, kept for backwards compatibility)
+ * @param tracerName - Optional tracer name to check (currently unused, kept for backwards compatibility)
  * @returns true if telemetry is both initialized and enabled, false otherwise
  */
-export function hasActiveTelemetry(_tracerName: string = 'default-tracer'): boolean {
+export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boolean {
   try {
     // Check if telemetry is explicitly enabled via the global flag
     // This flag is set by Telemetry.init() based on the enabled config option
-    return globalThis.__TELEMETRY_ENABLED__ === true;
+    return globalThis.__TELEMETRY_ENABLED__ === true && !!trace.getTracer(tracerName);
   } catch {
     return false;
   }
