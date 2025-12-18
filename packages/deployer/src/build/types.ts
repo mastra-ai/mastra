@@ -15,3 +15,9 @@ export interface DependencyMetadata {
    */
   isWorkspace: boolean;
 }
+
+export interface BundlerOptions {
+  enableSourcemap: boolean;
+  enableEsmShim: boolean;
+  externals: boolean | string[];
+}

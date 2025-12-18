@@ -17525,6 +17525,252 @@ describe('Workflow', () => {
         });
       }
     });
+
+    describe('abort signal propagation to nested workflows', () => {
+      // Helper to create nested workflow test setup
+      const createNestedWorkflowSetup = () => {
+        let nestedStepStarted = false;
+        let nestedStepCompleted = false;
+
+        const nestedLongRunningStep = createStep({
+          id: 'nested-long-step',
+          inputSchema: z.object({ doubled: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData, abortSignal }) => {
+            nestedStepStarted = true;
+            // Long running operation that should be cancelled
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                nestedStepCompleted = true;
+                resolve(undefined);
+              }, 5000);
+
+              abortSignal.addEventListener('abort', () => {
+                clearTimeout(timeout);
+                reject(new Error('Aborted'));
+              });
+            });
+            return { result: `completed: ${inputData.doubled}` };
+          },
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow',
+          inputSchema: z.object({ doubled: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(nestedLongRunningStep)
+          .commit();
+
+        const parentStep = createStep({
+          id: 'parent-step',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ doubled: z.number() }),
+          execute: async ({ inputData }) => {
+            return { doubled: inputData.value * 2 };
+          },
+        });
+
+        return {
+          nestedWorkflow,
+          parentStep,
+          getNestedStepStarted: () => nestedStepStarted,
+          getNestedStepCompleted: () => nestedStepCompleted,
+        };
+      };
+
+      it('should propagate abort signal to nested workflow when using run.cancel()', async () => {
+        const { nestedWorkflow, parentStep, getNestedStepStarted, getNestedStepCompleted } =
+          createNestedWorkflowSetup();
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+          mastra: new Mastra({ logger: false, storage: testStorage }),
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 5 } });
+
+        // Wait for nested step to start
+        await vi.waitFor(() => expect(getNestedStepStarted()).toBe(true), { timeout: 2000 });
+
+        // Cancel the parent workflow while nested is running
+        await run.cancel();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Nested step should NOT have completed (was cancelled)
+        expect(getNestedStepCompleted()).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        // If abort signal was NOT propagated, the nested step will still complete after 5s
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the step should still not have completed
+        // If abort signal was NOT propagated, the step will have completed in the background
+        expect(getNestedStepCompleted()).toBe(false);
+      });
+
+      it('should propagate abort signal to nested workflow when using run.abortController.abort() directly', async () => {
+        const { nestedWorkflow, parentStep, getNestedStepStarted, getNestedStepCompleted } =
+          createNestedWorkflowSetup();
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.number() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { validateInputs: false },
+          mastra: new Mastra({ logger: false, storage: testStorage }),
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 5 } });
+
+        // Wait for nested step to start
+        await vi.waitFor(() => expect(getNestedStepStarted()).toBe(true), { timeout: 2000 });
+
+        // Use abortController.abort() directly instead of run.cancel()
+        run.abortController.abort();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Nested step should NOT have completed (was cancelled)
+        expect(getNestedStepCompleted()).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the step should still not have completed
+        expect(getNestedStepCompleted()).toBe(false);
+      });
+
+      it('should propagate abort signal to agent step in nested workflow when parent is cancelled', async () => {
+        // Track if agent step was cancelled or completed
+        let agentStepStarted = false;
+        let agentStepCompleted = false;
+
+        // Create an agent with a long-running mock that respects abort signal
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'test-agent',
+          instructions: 'test agent instructions',
+          model: new MockLanguageModelV1({
+            doStream: async ({ abortSignal }) => {
+              agentStepStarted = true;
+              // Simulate a long-running operation that respects abort signal
+              await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  agentStepCompleted = true;
+                  resolve(undefined);
+                }, 5000);
+
+                abortSignal?.addEventListener('abort', () => {
+                  clearTimeout(timeout);
+                  reject(new Error('Aborted'));
+                });
+              });
+              return {
+                stream: simulateReadableStream({
+                  chunks: [
+                    { type: 'text-delta', textDelta: 'Response' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      logprobs: undefined,
+                      usage: { completionTokens: 10, promptTokens: 3 },
+                    },
+                  ],
+                }),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            },
+          }),
+        });
+
+        const nestedWorkflow = createWorkflow({
+          id: 'nested-workflow',
+          inputSchema: z.object({ prompt: z.string() }),
+          outputSchema: z.object({ text: z.string() }),
+          options: { validateInputs: false },
+        })
+          .then(createStep(agent))
+          .commit();
+
+        const parentStep = createStep({
+          id: 'parent-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ prompt: z.string() }),
+          execute: async ({ inputData }) => {
+            return { prompt: `Process: ${inputData.value}` };
+          },
+        });
+
+        const mastra = new Mastra({
+          logger: false,
+          storage: testStorage,
+          agents: { 'test-agent': agent },
+        });
+
+        const parentWorkflow = createWorkflow({
+          id: 'parent-workflow',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ text: z.string() }),
+          options: { validateInputs: false },
+          mastra,
+        })
+          .then(parentStep)
+          .then(nestedWorkflow)
+          .commit();
+
+        const run = await parentWorkflow.createRun();
+
+        // Start the workflow
+        const resultPromise = run.start({ inputData: { value: 'test' } });
+
+        // Wait for agent step to start
+        await vi.waitFor(() => expect(agentStepStarted).toBe(true), { timeout: 2000 });
+
+        // Cancel the parent workflow while agent is running
+        await run.cancel();
+
+        // Wait for the result
+        const result = await resultPromise;
+
+        // Parent should be cancelled
+        expect(result.status).toBe('canceled');
+
+        // Agent step should NOT have completed (was cancelled)
+        expect(agentStepCompleted).toBe(false);
+
+        // Wait a bit to ensure the abort signal was properly propagated
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // If abort signal was properly propagated, the agent step should still not have completed
+        expect(agentStepCompleted).toBe(false);
+      });
+    });
   });
 
   describe('Dependency Injection', () => {
@@ -18764,6 +19010,277 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+    });
+  });
+
+  describe('onFinish and onError callbacks', () => {
+    it('should call onFinish callback when workflow completes successfully', async () => {
+      const onFinish = vi.fn();
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'success',
+          result: { result: 'success' },
+          steps: expect.any(Object),
+        }),
+      );
+    });
+
+    it('should call onFinish callback when workflow fails', async () => {
+      const onFinish = vi.fn();
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-error-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failed',
+          error: expect.any(Object),
+          steps: expect.any(Object),
+        }),
+      );
+    });
+
+    it('should call onError callback when workflow fails', async () => {
+      const onError = vi.fn();
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.any(Object),
+          steps: expect.any(Object),
+        }),
+      );
+    });
+
+    it('should not call onError callback when workflow succeeds', async () => {
+      const onError = vi.fn();
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onError-not-called-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onError,
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('success');
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('should call both onFinish and onError when workflow fails and both are defined', async () => {
+      const onFinish = vi.fn();
+      const onError = vi.fn();
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-both-callbacks-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onFinish,
+          onError,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
+    it('should support async onFinish callback', async () => {
+      let callbackCompleted = false;
+      const onFinish = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        callbackCompleted = true;
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-async-onFinish-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(step1).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(callbackCompleted).toBe(true);
+    });
+
+    it('should support async onError callback', async () => {
+      let callbackCompleted = false;
+      const onError = vi.fn().mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        callbackCompleted = true;
+      });
+      const error = new Error('Step execution failed');
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: vi.fn().mockRejectedValue(error),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-async-onError-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [failingStep],
+        options: {
+          onError,
+        },
+      });
+      workflow.then(failingStep).commit();
+
+      const run = await workflow.createRun();
+      await run.start({ inputData: {} });
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(callbackCompleted).toBe(true);
+    });
+
+    it('should call onFinish with suspended status when workflow suspends', async () => {
+      const onFinish = vi.fn();
+
+      const suspendingStep = createStep({
+        id: 'suspending-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ reason: z.string() }),
+        resumeSchema: z.object({ resumeValue: z.string() }),
+        execute: async ({ suspend }) => {
+          return await suspend({ reason: 'Need user input' });
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-onFinish-suspended-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendingStep],
+        options: {
+          onFinish,
+        },
+      });
+      workflow.then(suspendingStep).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('suspended');
+      expect(onFinish).toHaveBeenCalledTimes(1);
+      expect(onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'suspended',
+          steps: expect.any(Object),
+        }),
+      );
     });
   });
 });

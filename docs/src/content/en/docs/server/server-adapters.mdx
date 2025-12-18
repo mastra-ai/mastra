@@ -115,7 +115,7 @@ Calling `init()` runs three steps in order. Understanding this flow helps when y
 
 For custom middleware ordering, call each method separately instead of `init()`. This is useful when you need middleware that runs before Mastra's context is set up, or when you need to insert logic between the initialization steps.
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 const server = new MastraServer({ app, mastra });
 
 // Your middleware first
@@ -156,7 +156,7 @@ Visit "Adding custom routes" for [Express](/reference/v1/server/express-adapter#
 
 By default, Mastra routes are registered at `/api/agents`, `/api/workflows`, etc. Use the `prefix` option to change this. This is useful for API versioning or when integrating with an existing app that has its own `/api` routes.
 
-```typescript copy
+```typescript
 const server = new MastraServer({
   app,
   mastra,
@@ -170,7 +170,7 @@ With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, et
 
 Mastra can generate an OpenAPI specification for all registered routes. This is useful for documentation, client generation, or integration with API tools. Enable it by setting the `openapiPath` option:
 
-```typescript copy
+```typescript
 const server = new MastraServer({
   app,
   mastra,
@@ -193,7 +193,7 @@ This redaction happens at the HTTP boundary, so internal callbacks like `onStepF
 
 By default, redaction is enabled. Configure this behavior via `streamOptions`. Set `redact: false` only for internal services or debugging scenarios where you need access to the full request data in stream responses.
 
-```typescript copy
+```typescript
 const server = new MastraServer({
   app,
   mastra,
@@ -215,7 +215,7 @@ When authentication is configured on your Mastra instance, all routes require au
 
 Use `customRouteAuthConfig` to override authentication behavior for specific routes. Keys follow the format `METHOD:PATH` where method is `GET`, `POST`, `PUT`, `DELETE`, or `ALL`. Paths support wildcards (`*`) for matching multiple routes. Setting a value to `false` makes the route public, while `true` requires authentication.
 
-```typescript copy
+```typescript
 const server = new MastraServer({
   app,
   mastra,
@@ -244,7 +244,7 @@ See [MastraServer](/reference/v1/server/mastra-server) for full configuration op
 
 After creating the adapter, you may still need access to the underlying framework app. This is useful when passing it to a platform’s `serve` function or when adding routes from another module.
 
-```typescript copy
+```typescript
 // Via the MastraServer instance
 const app = server.getApp();
 
