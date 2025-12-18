@@ -9,6 +9,8 @@ import {
   TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_SCHEMAS,
+  getSqlType,
+  getDefaultValue,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -234,22 +236,12 @@ export class PgDB extends MastraBase {
 
   protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
       case 'uuid':
         return 'UUID';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'BIGINT';
-      case 'jsonb':
-        return 'JSONB';
       case 'boolean':
         return 'BOOLEAN';
       default:
-        return 'TEXT';
+        return getSqlType(type);
     }
   }
 
@@ -260,7 +252,7 @@ export class PgDB extends MastraBase {
       case 'jsonb':
         return "DEFAULT '{}'::jsonb";
       default:
-        return '';
+        return getDefaultValue(type);
     }
   }
 

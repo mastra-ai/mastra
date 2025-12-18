@@ -9,6 +9,7 @@ import {
   TABLE_TRACES,
   TABLE_SCORERS,
   TABLE_SPANS,
+  getDefaultValue,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -268,7 +269,7 @@ export class MssqlDB extends MastraBase {
       case 'boolean':
         return 'DEFAULT 0';
       default:
-        return '';
+        return getDefaultValue(type);
     }
   }
 

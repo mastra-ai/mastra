@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraBase } from '@mastra/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { createStorageErrorId, getDefaultValue, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { deserializeValue } from '../domains/utils';
@@ -250,43 +250,19 @@ export class D1DB extends MastraBase {
     return value;
   }
 
-  private getSqlType(type: StorageColumn['type']): string {
+  protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TEXT'; // Store timestamps as ISO strings in SQLite
-      case 'float':
-        return 'REAL';
-      case 'integer':
-        return 'INTEGER';
       case 'bigint':
         return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
       case 'jsonb':
         return 'TEXT'; // Store JSON as TEXT in SQLite
-      case 'uuid':
-        return 'TEXT';
       default:
-        return 'TEXT';
+        return getSqlType(type);
     }
   }
 
-  private getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-      case 'uuid':
-        return "DEFAULT ''";
-      case 'timestamp':
-        return "DEFAULT '1970-01-01T00:00:00.000Z'";
-      case 'integer':
-      case 'bigint':
-      case 'float':
-        return 'DEFAULT 0';
-      case 'jsonb':
-        return "DEFAULT '{}'";
-      default:
-        return "DEFAULT ''";
-    }
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    return getDefaultValue(type);
   }
 
   async createTable({
