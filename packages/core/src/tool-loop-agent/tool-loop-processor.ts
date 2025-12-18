@@ -35,8 +35,8 @@ type PrepareCallInput = AgentCallParameters<never> &
     | 'experimental_download'
   >;
 
-export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-agent'> {
-  readonly id = 'tool-loop-to-mastra-agent';
+export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-processor'> {
+  readonly id = 'tool-loop-agent-processor';
   readonly name = 'ToolLoop to Mastra Agent Processor';
 
   private agent: ToolLoopAgentLike;
