@@ -11,14 +11,16 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { LanceDB } from '../../db';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreScoresLance extends ScoresStorage {
   private client: Connection;
   #db: LanceDB;
-  constructor({ client }: { client: Connection }) {
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
     this.#db = new LanceDB({ client });
   }

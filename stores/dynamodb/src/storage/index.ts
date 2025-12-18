@@ -91,11 +91,10 @@ export class DynamoDBStore extends MastraStorage {
       this.client = DynamoDBDocumentClient.from(dynamoClient);
       this.service = getElectroDbService(this.client, this.tableName) as MastraService;
 
-      const workflows = new WorkflowStorageDynamoDB({ service: this.service });
-
-      const memory = new MemoryStorageDynamoDB({ service: this.service });
-
-      const scores = new ScoresStorageDynamoDB({ service: this.service });
+      const domainConfig = { service: this.service };
+      const workflows = new WorkflowStorageDynamoDB(domainConfig);
+      const memory = new MemoryStorageDynamoDB(domainConfig);
+      const scores = new ScoresStorageDynamoDB(domainConfig);
 
       this.stores = {
         workflows,

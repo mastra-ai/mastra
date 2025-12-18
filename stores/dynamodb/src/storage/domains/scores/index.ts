@@ -11,13 +11,15 @@ import {
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
 import { deleteTableData } from '../utils';
 
 export class ScoresStorageDynamoDB extends ScoresStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.service = resolveDynamoDBConfig(config);
   }
 
   async dangerouslyClearAll(): Promise<void> {

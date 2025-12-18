@@ -15,7 +15,8 @@ import {
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { LanceDB } from '../../db';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
 
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
@@ -41,8 +42,9 @@ function parseWorkflowRun(row: any): WorkflowRun {
 export class StoreWorkflowsLance extends WorkflowsStorage {
   client: Connection;
   #db: LanceDB;
-  constructor({ client }: { client: Connection }) {
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
     this.#db = new LanceDB({ client });
   }

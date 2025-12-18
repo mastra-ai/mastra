@@ -7,6 +7,30 @@ import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arr
 import type { DataType } from 'apache-arrow';
 import { getPrimaryKeys, getTableSchema, processResultWithTypeConversion, validateKeyTypes } from './utils';
 
+/**
+ * Configuration for standalone domain usage.
+ * Accepts an existing LanceDB Connection.
+ *
+ * Note: Creating a new LanceDB connection requires async `connect()`,
+ * so for standalone domain usage, you must create the connection first
+ * and pass it to the domain constructor.
+ */
+export type LanceDomainConfig = LanceDomainClientConfig;
+
+/**
+ * Pass an existing LanceDB connection
+ */
+export interface LanceDomainClientConfig {
+  client: Connection;
+}
+
+/**
+ * Resolves LanceDomainConfig to a LanceDB Connection.
+ */
+export function resolveLanceConfig(config: LanceDomainConfig): Connection {
+  return config.client;
+}
+
 export class LanceDB extends MastraBase {
     client: Connection;
     constructor({ client }: { client: Connection }) {

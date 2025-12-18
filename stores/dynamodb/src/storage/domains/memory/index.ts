@@ -19,13 +19,15 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
 import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.service = resolveDynamoDBConfig(config);
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -13,6 +13,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
 import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
@@ -39,10 +41,9 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
 
 export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  constructor(config: DynamoDBDomainConfig) {
     super();
-
-    this.service = service;
+    this.service = resolveDynamoDBConfig(config);
   }
 
   async dangerouslyClearAll(): Promise<void> {
