@@ -20,12 +20,13 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
-import type { MssqlDB } from '../../db';
+import { resolveMssqlConfig } from '../../db';
+import type { MssqlDB, MssqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
 export class MemoryMSSQL extends MemoryStorage {
   private pool: sql.ConnectionPool;
-  private schema: string;
+  private schema?: string;
   private db: MssqlDB;
 
   private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
@@ -50,8 +51,9 @@ export class MemoryMSSQL extends MemoryStorage {
     return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
-  constructor({ pool, schema, db }: { pool: sql.ConnectionPool; schema: string; db: MssqlDB }) {
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, db, schema } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schema;
     this.db = db;

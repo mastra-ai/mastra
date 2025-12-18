@@ -1,10 +1,63 @@
 import type { ClickHouseClient } from '@clickhouse/client';
+import { createClient } from '@clickhouse/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, getSqlType, TABLE_WORKFLOW_SNAPSHOT, TABLE_SPANS, TABLE_SCHEMAS, getDefaultValue } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
+
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing ClickHouse client with optional ttl config
+ * 2. Config to create a new client internally
+ */
+export type ClickhouseDomainConfig = ClickhouseDomainClientConfig | ClickhouseDomainRestConfig;
+
+/**
+ * Pass an existing ClickHouse client
+ */
+export interface ClickhouseDomainClientConfig {
+  client: ClickHouseClient;
+  ttl?: ClickhouseConfig['ttl'];
+}
+
+/**
+ * Pass config to create a new ClickHouse client internally
+ */
+export interface ClickhouseDomainRestConfig {
+  url: string;
+  username: string;
+  password: string;
+  ttl?: ClickhouseConfig['ttl'];
+}
+
+/**
+ * Resolves ClickhouseDomainConfig to a ClickHouse client and ttl config.
+ * Handles creating a new client if config is provided.
+ */
+export function resolveClickhouseConfig(config: ClickhouseDomainConfig): { client: ClickHouseClient; ttl?: ClickhouseConfig['ttl'] } {
+  // Existing client
+  if ('client' in config) {
+    return { client: config.client, ttl: config.ttl };
+  }
+
+  // Config to create new client
+  const client = createClient({
+    url: config.url,
+    username: config.username,
+    password: config.password,
+    clickhouse_settings: {
+      date_time_input_format: 'best_effort',
+      date_time_output_format: 'iso',
+      use_client_time_zone: 1,
+      output_format_json_quote_64bit_integers: 0,
+    },
+  });
+
+  return { client, ttl: config.ttl };
+}
 
 export class ClickhouseDB extends MastraBase {
     protected ttl: ClickhouseConfig['ttl'];

@@ -20,9 +20,9 @@ import {
   TABLE_THREADS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import { ClickhouseDB } from '../../db';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
 import { transformRow, transformRows } from '../../db/utils';
-import type { ClickhouseConfig } from '../../db/utils';
 
 /**
  * Serialize metadata object to JSON string for storage in ClickHouse.
@@ -57,8 +57,9 @@ function parseMetadata(metadata: unknown): Record<string, unknown> {
 export class MemoryStorageClickhouse extends MemoryStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
-  constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
     this.#db = new ClickhouseDB({ client, ttl });
   }

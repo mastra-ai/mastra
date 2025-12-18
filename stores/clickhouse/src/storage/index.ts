@@ -102,10 +102,11 @@ export class ClickhouseStore extends MastraStorage {
 
     this.ttl = config.ttl;
 
-    const workflows = new WorkflowsStorageClickhouse({ client: this.db, ttl: this.ttl });
-    const scores = new ScoresStorageClickhouse({ client: this.db, ttl: this.ttl });
-    const memory = new MemoryStorageClickhouse({ client: this.db, ttl: this.ttl });
-    const observability = new ObservabilityStorageClickhouse({ client: this.db, ttl: this.ttl });
+    const domainConfig = { client: this.db, ttl: this.ttl };
+    const workflows = new WorkflowsStorageClickhouse(domainConfig);
+    const scores = new ScoresStorageClickhouse(domainConfig);
+    const memory = new MemoryStorageClickhouse(domainConfig);
+    const observability = new ObservabilityStorageClickhouse(domainConfig);
 
     this.stores = {
       workflows,

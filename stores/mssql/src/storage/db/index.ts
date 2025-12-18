@@ -25,6 +25,60 @@ import { getSchemaName, getTableName } from './utils';
 // Re-export the types for convenience
 export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing pool, db, and schema
+ * 2. Config to create a new pool internally
+ */
+export type MssqlDomainConfig = MssqlDomainPoolConfig | MssqlDomainRestConfig;
+
+/**
+ * Pass an existing pool, db, and schema
+ */
+export interface MssqlDomainPoolConfig {
+  pool: sql.ConnectionPool;
+  db: MssqlDB;
+  schema?: string;
+}
+
+/**
+ * Pass config to create a new pool internally
+ */
+export interface MssqlDomainRestConfig {
+  server: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  schemaName?: string;
+  options?: sql.IOptions;
+}
+
+/**
+ * Resolves MssqlDomainConfig to pool, db, and schema.
+ * Handles creating a new pool and db if config is provided.
+ */
+export function resolveMssqlConfig(config: MssqlDomainConfig): { pool: sql.ConnectionPool; db: MssqlDB; schema?: string } {
+  // Existing pool and db
+  if ('pool' in config && 'db' in config) {
+    return { pool: config.pool, db: config.db, schema: config.schema };
+  }
+
+  // Config to create new pool
+  const pool = new sql.ConnectionPool({
+    server: config.server,
+    database: config.database,
+    user: config.user,
+    password: config.password,
+    port: config.port,
+    options: config.options || { encrypt: true, trustServerCertificate: true },
+  });
+
+  const db = new MssqlDB({ pool, schemaName: config.schemaName });
+  return { pool, db, schema: config.schemaName };
+}
+
 export class MssqlDB extends MastraBase {
   public pool: sql.ConnectionPool;
   public schemaName?: string;

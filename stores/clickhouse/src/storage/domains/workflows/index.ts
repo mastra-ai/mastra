@@ -14,15 +14,16 @@ import type {
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { ClickhouseDB } from '../../db';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
 import { TABLE_ENGINES } from '../../db/utils';
-import type { ClickhouseConfig } from '../../db/utils';
 
 export class WorkflowsStorageClickhouse extends WorkflowsStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
-  constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
     this.#db = new ClickhouseDB({ client, ttl });
   }

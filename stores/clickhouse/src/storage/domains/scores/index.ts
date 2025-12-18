@@ -13,14 +13,15 @@ import {
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { ClickhouseDB } from '../../db';
-import type { ClickhouseConfig } from '../../db/utils';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
 
 export class ScoresStorageClickhouse extends ScoresStorage {
   protected client: ClickHouseClient;
   #db: ClickhouseDB;
-  constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
     this.#db = new ClickhouseDB({ client, ttl });
   }
