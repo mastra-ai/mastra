@@ -95,7 +95,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @returns true if the step is a nested workflow, false otherwise
    */
   isNestedWorkflowStep(_step: Step<any, any, any>): boolean {
-    return _step instanceof Workflow;
+    return false;
   }
 
   /**

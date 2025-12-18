@@ -171,10 +171,8 @@ export async function executeStep(
     requestContext,
   });
 
-  const isNestedWorkflowStep = engine.isNestedWorkflowStep(step);
-
   // Check if this is a nested workflow that requires special handling
-  if (isNestedWorkflowStep) {
+  if (engine.isNestedWorkflowStep(step)) {
     const workflowResult = await engine.executeWorkflowStep({
       step,
       stepResults,
@@ -366,6 +364,7 @@ export async function executeStep(
         contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
       }
 
+      const isNestedWorkflowStep = step.component === 'WORKFLOW';
       const output = isNestedWorkflowStep
         ? runResult?.status === 'success'
           ? runResult?.result

@@ -221,6 +221,92 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
+    it('should execute a single step in a workflow when perStep is true', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
+      });
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const runId = 'test-run-id';
+      const run = await workflow.createRun({
+        runId,
+      });
+
+      const executionResult = await run.start({ inputData: {}, perStep: true });
+
+      srv.close();
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(executionResult.steps.step2).toBeUndefined();
+      expect((executionResult as any).result).toBeUndefined();
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).not.toHaveBeenCalled();
+      expect(executionResult.status).toBe('paused');
+    });
+
     it('should throw error when restart is called on inngest workflow', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
