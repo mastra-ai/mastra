@@ -23,7 +23,6 @@ import { MongoDBConnector } from './connectors/MongoDBConnector';
 import { MongoDBAgentsStorage } from './domains/agents';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
-import { StoreOperationsMongoDB } from './domains/operations';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
@@ -84,7 +83,7 @@ export class MongoDBStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
       agents: true,
     };
@@ -97,24 +96,20 @@ export class MongoDBStore extends MastraStorage {
 
     this.#connector = loadConnector(config);
 
-    const operations = new StoreOperationsMongoDB({
+    const memory = new MemoryStorageMongoDB({
       connector: this.#connector,
     });
 
-    const memory = new MemoryStorageMongoDB({
-      operations,
-    });
-
     const scores = new ScoresStorageMongoDB({
-      operations,
+      connector: this.#connector,
     });
 
     const workflows = new WorkflowsStorageMongoDB({
-      operations,
+      connector: this.#connector,
     });
 
     const observability = new ObservabilityMongoDB({
-      operations,
+      connector: this.#connector,
     });
 
     const agents = new MongoDBAgentsStorage({
