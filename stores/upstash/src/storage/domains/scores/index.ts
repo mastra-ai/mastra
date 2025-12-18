@@ -11,7 +11,7 @@ import {
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
+import { UpstashDB } from '../../db';
 import { processRecord } from '../utils';
 
 /**
@@ -24,17 +24,21 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class ScoresUpstash extends ScoresStorage {
   private client: Redis;
-  private operations: StoreOperationsUpstash;
+  #db: UpstashDB;
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  constructor({ client }: { client: Redis }) {
     super();
     this.client = client;
-    this.operations = operations;
+    this.#db = new UpstashDB({ client });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const data = await this.operations.load<ScoreRowData>({
+      const data = await this.#db.get<ScoreRowData>({
         tableName: TABLE_SCORERS,
         keys: { id },
       });
@@ -72,7 +76,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -183,7 +187,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -238,7 +242,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -298,7 +302,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {

@@ -3,8 +3,6 @@ import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  TABLE_NAMES,
-  StorageColumn,
   StorageResourceType,
   WorkflowRuns,
   WorkflowRun,
@@ -18,7 +16,6 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { StoreMemoryUpstash } from './domains/memory';
-import { StoreOperationsUpstash } from './domains/operations';
 import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
@@ -59,12 +56,11 @@ export class UpstashStore extends MastraStorage {
       token: config.token,
     });
 
-    const operations = new StoreOperationsUpstash({ client: this.redis });
-    const scores = new ScoresUpstash({ client: this.redis, operations });
-    const workflows = new WorkflowsUpstash({ client: this.redis, operations });
-    const memory = new StoreMemoryUpstash({ client: this.redis, operations });
+    const scores = new ScoresUpstash({ client: this.redis });
+    const workflows = new WorkflowsUpstash({ client: this.redis });
+    const memory = new StoreMemoryUpstash({ client: this.redis });
+
     this.stores = {
-      operations,
       scores,
       workflows,
       memory,
@@ -80,50 +76,6 @@ export class UpstashStore extends MastraStorage {
       deleteMessages: true,
       listScoresBySpan: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * No-op: This backend is schemaless and does not require schema changes.
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable(args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(args);
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert(input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert(input);
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load<R>({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
