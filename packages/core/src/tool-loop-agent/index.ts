@@ -220,6 +220,9 @@ function createMastraAgentFromToolLoopAgent({
   // Create the Mastra Agent
   // Cast model and instructions to work around AI SDK v6 / Mastra type differences
   const id = settings.id ?? options.name ?? `tool-loop-agent-${generateId()}`;
+  const processor = new ToolLoopToMastraAgent({
+    settings,
+  });
   const mastraAgent = new Agent({
     id,
     name: id,
@@ -227,16 +230,8 @@ function createMastraAgentFromToolLoopAgent({
     model: settings.model,
     tools: settings.tools,
     maxRetries: settings.maxRetries,
-    inputProcessors: [
-      new ToolLoopToMastraAgent({
-        settings,
-      }),
-    ],
-    outputProcessors: [
-      new ToolLoopToMastraAgent({
-        settings,
-      }),
-    ],
+    inputProcessors: [processor],
+    outputProcessors: [processor],
     // Default options from ToolLoopAgent config
     defaultOptions: Object.keys(defaultOptions).length > 0 ? defaultOptions : undefined,
 
