@@ -412,7 +412,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
@@ -437,7 +437,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
@@ -1868,11 +1868,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
+                      memory: {
+                        resource: subAgentResourceId,
+                        thread: subAgentThreadId,
+                      },
+                    }
                     : {}),
                 });
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
@@ -1894,11 +1894,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   ...(inputData.maxSteps && { maxSteps: inputData.maxSteps }),
                   ...(resourceId && threadId
                     ? {
-                        memory: {
-                          resource: subAgentResourceId,
-                          thread: subAgentThreadId,
-                        },
-                      }
+                      memory: {
+                        resource: subAgentResourceId,
+                        thread: subAgentThreadId,
+                      },
+                    }
                     : {}),
                 });
 
@@ -2098,16 +2098,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else if (methodType === 'stream') {
                 const streamResult = resumeData
                   ? run.resumeStream({
-                      resumeData,
-                      requestContext,
-                      tracingContext: context?.tracingContext,
-                    })
+                    resumeData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                  })
                   : run.stream({
-                      inputData: workflowInputData,
-                      requestContext,
-                      tracingContext: context?.tracingContext,
-                      ...(initialState && { initialState }),
-                    });
+                    inputData: workflowInputData,
+                    requestContext,
+                    tracingContext: context?.tracingContext,
+                    ...(initialState && { initialState }),
+                  });
 
                 if (context?.writer) {
                   await streamResult.fullStream.pipeTo(context.writer);
@@ -2401,8 +2401,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-      | MastraScorers
-      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+    | MastraScorers
+    | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
     tracingContext: TracingContext;
@@ -2610,9 +2610,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const threadFromArgs = threadIdFromContext
       ? { id: threadIdFromContext }
       : resolveThreadIdFromArgs({
-          threadId: options.threadId || snapshotMemoryInfo?.threadId,
-          memory: options.memory,
-        });
+        threadId: options.threadId || snapshotMemoryInfo?.threadId,
+        memory: options.memory,
+      });
 
     const resourceId =
       resourceIdFromContext || options.memory?.resource || options.resourceId || snapshotMemoryInfo?.resourceId;
@@ -3326,10 +3326,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       partialObjectStream: StreamTextResult<
         any,
         OUTPUT extends ZodSchema
-          ? z.infer<OUTPUT>
-          : EXPERIMENTAL_OUTPUT extends ZodSchema
-            ? z.infer<EXPERIMENTAL_OUTPUT>
-            : unknown
+        ? z.infer<OUTPUT>
+        : EXPERIMENTAL_OUTPUT extends ZodSchema
+        ? z.infer<EXPERIMENTAL_OUTPUT>
+        : unknown
       >['experimental_partialOutputStream'];
     }
   >;

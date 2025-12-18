@@ -19,6 +19,7 @@ import type {
   WorkingMemoryTemplate,
   WorkingMemory,
 } from './types';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
@@ -48,7 +49,18 @@ export class MockMemory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    const memoryStorage = await this.storage.getStore('memory');
+
+    if (!memoryStorage) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_GET_THREAD_BY_ID_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory storage is not supported by this storage adapter',
+      });
+    }
+
+    return memoryStorage.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {

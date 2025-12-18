@@ -1,4 +1,4 @@
-import type { MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage, AgentsStorage } from '@mastra/core/storage';
 import { createSampleAgent, createFullSampleAgent, createSampleAgents } from './data';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -7,11 +7,19 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
   // Skip tests if storage doesn't support agents
   const describeAgents = storage.supports.agents ? describe : describe.skip;
 
+  let agentsStorage: AgentsStorage;
+
   describeAgents('Agents Storage', () => {
     beforeAll(async () => {
+      const store = await storage.getStore('agents');
+      if (!store) {
+        throw new Error('Agents storage not found');
+      }
+      agentsStorage = store;
+
       const start = Date.now();
       console.log('Clearing agents domain data before tests');
-      await storage.stores.agents.dangerouslyClearAll();
+      await agentsStorage.dangerouslyClearAll();
       const end = Date.now();
       console.log(`Agents domain cleared in ${end - start}ms`);
     });
@@ -20,7 +28,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should create and retrieve an agent', async () => {
         const agent = createSampleAgent();
 
-        const savedAgent = await storage.createAgent({ agent });
+        const savedAgent = await agentsStorage.createAgent({ agent });
 
         expect(savedAgent.id).toBe(agent.id);
         expect(savedAgent.name).toBe(agent.name);
@@ -30,7 +38,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(savedAgent.updatedAt).toBeInstanceOf(Date);
 
         // Retrieve and verify
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
         expect(retrievedAgent).toBeDefined();
         expect(retrievedAgent?.name).toBe(agent.name);
       });
@@ -38,7 +46,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should create agent with all optional fields', async () => {
         const agent = createFullSampleAgent();
 
-        const savedAgent = await storage.createAgent({ agent });
+        const savedAgent = await agentsStorage.createAgent({ agent });
 
         expect(savedAgent.id).toBe(agent.id);
         expect(savedAgent.name).toBe(agent.name);
@@ -64,7 +72,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           model: { provider: 'openai' },
         };
 
-        const savedAgent = await storage.createAgent({ agent: minimalAgent });
+        const savedAgent = await agentsStorage.createAgent({ agent: minimalAgent });
 
         expect(savedAgent.id).toBe(minimalAgent.id);
         expect(savedAgent.name).toBe(minimalAgent.name);
@@ -75,15 +83,15 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
     describe('getAgentById', () => {
       it('should return null for non-existent agent', async () => {
-        const result = await storage.getAgentById({ id: 'non-existent-agent' });
+        const result = await agentsStorage.getAgentById({ id: 'non-existent-agent' });
         expect(result).toBeNull();
       });
 
       it('should retrieve an existing agent by ID', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
 
         expect(retrievedAgent).toBeDefined();
         expect(retrievedAgent?.id).toBe(agent.id);
@@ -95,9 +103,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
     describe('updateAgent', () => {
       it('should update agent name', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
-        const updatedAgent = await storage.updateAgent({
+        const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           name: 'Updated Agent Name',
         });
@@ -106,16 +114,16 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(updatedAgent.instructions).toBe(agent.instructions); // Unchanged
 
         // Verify persistence
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
         expect(retrievedAgent?.name).toBe('Updated Agent Name');
       });
 
       it('should update agent instructions', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
         const newInstructions = 'You are an updated expert assistant';
-        const updatedAgent = await storage.updateAgent({
+        const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           instructions: newInstructions,
         });
@@ -125,10 +133,10 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
       it('should update agent model', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
         const newModel = { provider: 'anthropic', name: 'claude-3-opus' };
-        const updatedAgent = await storage.updateAgent({
+        const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           model: newModel,
         });
@@ -140,9 +148,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         const agent = createSampleAgent({
           metadata: { key1: 'value1', key2: 'value2' },
         });
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
-        const updatedAgent = await storage.updateAgent({
+        const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           metadata: { key2: 'updated', key3: 'value3' },
         });
@@ -156,9 +164,9 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
       it('should update multiple fields at once', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
-        const updatedAgent = await storage.updateAgent({
+        const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           name: 'Completely Updated Agent',
           description: 'New description',
@@ -174,13 +182,13 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
       it('should update updatedAt timestamp', async () => {
         const agent = createSampleAgent();
-        const createdAgent = await storage.createAgent({ agent });
+        const createdAgent = await agentsStorage.createAgent({ agent });
         const originalUpdatedAt = createdAgent.updatedAt;
 
         // Wait a small amount to ensure different timestamp
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        const updatedAgent = await storage.updateAgent({
+        const updatedAgent = await agentsStorage.updateAgent({
           id: agent.id,
           name: 'Updated Name',
         });
@@ -200,17 +208,17 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
     describe('deleteAgent', () => {
       it('should delete an existing agent', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
         // Verify it exists
-        const beforeDelete = await storage.getAgentById({ id: agent.id });
+        const beforeDelete = await agentsStorage.getAgentById({ id: agent.id });
         expect(beforeDelete).toBeDefined();
 
         // Delete
-        await storage.deleteAgent({ id: agent.id });
+        await agentsStorage.deleteAgent({ id: agent.id });
 
         // Verify it's gone
-        const afterDelete = await storage.getAgentById({ id: agent.id });
+        const afterDelete = await agentsStorage.getAgentById({ id: agent.id });
         expect(afterDelete).toBeNull();
       });
 
@@ -221,10 +229,10 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
       it('should be idempotent when deleting same agent twice', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
         // First delete
-        await storage.deleteAgent({ id: agent.id });
+        await agentsStorage.deleteAgent({ id: agent.id });
 
         // Second delete should not throw
         await expect(storage.deleteAgent({ id: agent.id })).resolves.toBeUndefined();
@@ -233,11 +241,11 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
     describe('listAgents', () => {
       beforeEach(async () => {
-        await storage.stores.agents.dangerouslyClearAll();
+        await agentsStorage.dangerouslyClearAll();
       });
 
       it('should return empty list when no agents exist', async () => {
-        const result = await storage.listAgents();
+        const result = await agentsStorage.listAgents();
 
         expect(result.agents).toHaveLength(0);
         expect(result.total).toBe(0);
@@ -247,10 +255,10 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should list all agents with default pagination', async () => {
         const agents = createSampleAgents(5);
         for (const agent of agents) {
-          await storage.createAgent({ agent });
+          await agentsStorage.createAgent({ agent });
         }
 
-        const result = await storage.listAgents();
+        const result = await agentsStorage.listAgents();
 
         expect(result.agents.length).toBe(5);
         expect(result.total).toBe(5);
@@ -260,22 +268,22 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should paginate results correctly', async () => {
         const agents = createSampleAgents(15);
         for (const agent of agents) {
-          await storage.createAgent({ agent });
+          await agentsStorage.createAgent({ agent });
         }
 
-        const page1 = await storage.listAgents({ page: 0, perPage: 5 });
+        const page1 = await agentsStorage.listAgents({ page: 0, perPage: 5 });
         expect(page1.agents.length).toBe(5);
         expect(page1.total).toBe(15);
         expect(page1.page).toBe(0);
         expect(page1.perPage).toBe(5);
         expect(page1.hasMore).toBe(true);
 
-        const page2 = await storage.listAgents({ page: 1, perPage: 5 });
+        const page2 = await agentsStorage.listAgents({ page: 1, perPage: 5 });
         expect(page2.agents.length).toBe(5);
         expect(page2.page).toBe(1);
         expect(page2.hasMore).toBe(true);
 
-        const page3 = await storage.listAgents({ page: 2, perPage: 5 });
+        const page3 = await agentsStorage.listAgents({ page: 2, perPage: 5 });
         expect(page3.agents.length).toBe(5);
         expect(page3.hasMore).toBe(false);
       });
@@ -283,10 +291,10 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should return all agents when perPage is false', async () => {
         const agents = createSampleAgents(10);
         for (const agent of agents) {
-          await storage.createAgent({ agent });
+          await agentsStorage.createAgent({ agent });
         }
 
-        const result = await storage.listAgents({ perPage: false });
+        const result = await agentsStorage.listAgents({ perPage: false });
 
         expect(result.agents.length).toBe(10);
         expect(result.perPage).toBe(false);
@@ -296,17 +304,17 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should sort agents by createdAt DESC by default', async () => {
         // Create agents with small delays to ensure different timestamps
         const agent1 = createSampleAgent({ name: 'First Agent' });
-        await storage.createAgent({ agent: agent1 });
+        await agentsStorage.createAgent({ agent: agent1 });
         await new Promise(resolve => setTimeout(resolve, 10));
 
         const agent2 = createSampleAgent({ name: 'Second Agent' });
-        await storage.createAgent({ agent: agent2 });
+        await agentsStorage.createAgent({ agent: agent2 });
         await new Promise(resolve => setTimeout(resolve, 10));
 
         const agent3 = createSampleAgent({ name: 'Third Agent' });
-        await storage.createAgent({ agent: agent3 });
+        await agentsStorage.createAgent({ agent: agent3 });
 
-        const result = await storage.listAgents();
+        const result = await agentsStorage.listAgents();
 
         // Default sort is DESC, so newest first
         expect(result.agents[0]?.name).toBe('Third Agent');
@@ -316,17 +324,17 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
       it('should sort agents by createdAt ASC when specified', async () => {
         // Create agents with small delays
         const agent1 = createSampleAgent({ name: 'First Agent' });
-        await storage.createAgent({ agent: agent1 });
+        await agentsStorage.createAgent({ agent: agent1 });
         await new Promise(resolve => setTimeout(resolve, 10));
 
         const agent2 = createSampleAgent({ name: 'Second Agent' });
-        await storage.createAgent({ agent: agent2 });
+        await agentsStorage.createAgent({ agent: agent2 });
         await new Promise(resolve => setTimeout(resolve, 10));
 
         const agent3 = createSampleAgent({ name: 'Third Agent' });
-        await storage.createAgent({ agent: agent3 });
+        await agentsStorage.createAgent({ agent: agent3 });
 
-        const result = await storage.listAgents({
+        const result = await agentsStorage.listAgents({
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
 
@@ -357,8 +365,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           },
         });
 
-        await storage.createAgent({ agent });
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        await agentsStorage.createAgent({ agent });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
 
         expect(retrievedAgent?.model).toEqual(agent.model);
       });
@@ -373,8 +381,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           instructions: specialInstructions,
         });
 
-        await storage.createAgent({ agent });
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        await agentsStorage.createAgent({ agent });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
 
         expect(retrievedAgent?.instructions).toBe(specialInstructions);
       });
@@ -393,19 +401,19 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
           metadata: largeMetadata,
         });
 
-        await storage.createAgent({ agent });
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        await agentsStorage.createAgent({ agent });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
 
         expect(retrievedAgent?.metadata).toEqual(largeMetadata);
       });
 
       it('should handle concurrent agent updates', async () => {
         const agent = createSampleAgent();
-        await storage.createAgent({ agent });
+        await agentsStorage.createAgent({ agent });
 
         // Perform multiple updates concurrently
         const updates = Array.from({ length: 5 }, (_, i) =>
-          storage.updateAgent({
+          agentsStorage.updateAgent({
             id: agent.id,
             name: `Update ${i}`,
             metadata: { update: i },
@@ -415,7 +423,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         await expect(Promise.all(updates)).resolves.toBeDefined();
 
         // Verify final state exists
-        const finalAgent = await storage.getAgentById({ id: agent.id });
+        const finalAgent = await agentsStorage.getAgentById({ id: agent.id });
         expect(finalAgent).toBeDefined();
       });
 
@@ -424,8 +432,8 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
         const agent = createSampleAgent({ tools });
 
-        await storage.createAgent({ agent });
-        const retrievedAgent = await storage.getAgentById({ id: agent.id });
+        await agentsStorage.createAgent({ agent });
+        const retrievedAgent = await agentsStorage.getAgentById({ id: agent.id });
 
         expect(retrievedAgent?.tools).toEqual(tools);
       });
