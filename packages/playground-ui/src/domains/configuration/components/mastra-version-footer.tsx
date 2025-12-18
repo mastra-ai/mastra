@@ -48,7 +48,7 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
     );
   }
 
-  const mastraCorePackage = installedPackages.find(pkg => pkg.name === '@mastra/core');
+  const mastraCorePackage = installedPackages.find((pkg: { name: string }) => pkg.name === '@mastra/core');
 
   if (!mastraCorePackage && installedPackages.length === 0) {
     return null;
