@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { writeErrorLog, setLogLevel, type LogLevel } from './logger';
+import { writeErrorLog, setLogLevel } from './logger';
+import type { LogLevel } from './logger';
 import { runServer } from './index';
 
 // Parse --log-level argument
