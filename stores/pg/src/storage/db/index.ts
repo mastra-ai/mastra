@@ -18,20 +18,72 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import pgPromise from 'pg-promise';
 import type { IDatabase, IMain } from 'pg-promise';
+import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 // Re-export the types for convenience
 export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 
 /**
- * Configuration for PgDB - accepts either credentials or an existing client
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing pg-promise database instance
+ * 2. Config to create a new client internally
  */
-export type PgDBConfig = {
+export type PgDomainConfig = PgDomainClientConfig | PgDomainRestConfig;
+
+/**
+ * Pass an existing pg-promise database instance
+ */
+export interface PgDomainClientConfig {
   /** The pg-promise database instance */
   client: IDatabase<{}>;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
-};
+}
+
+/**
+ * Pass config to create a new pg-promise client internally
+ */
+export type PgDomainRestConfig = {
+  /** Optional schema name (defaults to 'public') */
+  schemaName?: string;
+} & (
+  | {
+      host: string;
+      port: number;
+      database: string;
+      user: string;
+      password: string;
+      ssl?: boolean | ISSLConfig;
+    }
+  | {
+      connectionString: string;
+      ssl?: boolean | ISSLConfig;
+    }
+);
+
+/**
+ * Resolves PgDomainConfig to a pg-promise database instance and schema.
+ * Handles creating a new client if config is provided.
+ */
+export function resolvePgConfig(config: PgDomainConfig): { client: IDatabase<{}>; schemaName?: string } {
+  // Existing client
+  if ('client' in config) {
+    return { client: config.client, schemaName: config.schemaName };
+  }
+
+  // Config to create new client
+  const pgp = pgPromise();
+  const client = pgp(config as any);
+  return { client, schemaName: config.schemaName };
+}
+
+/**
+ * @deprecated Use PgDomainConfig instead. This type is kept for backwards compatibility.
+ */
+export type PgDBConfig = PgDomainClientConfig;
 
 function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
@@ -50,14 +102,15 @@ export class PgDB extends MastraBase {
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  constructor(config: PgDBConfig) {
+  constructor(config: PgDomainConfig) {
     super({
       component: 'STORAGE',
       name: 'PG_DB_LAYER',
     });
 
-    this.client = config.client;
-    this.schemaName = config.schemaName;
+    const { client, schemaName } = resolvePgConfig(config);
+    this.client = client;
+    this.schemaName = schemaName;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {

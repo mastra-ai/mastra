@@ -10,17 +10,17 @@ import type {
   UpdateSpanRecord,
 } from '@mastra/core/storage';
 import { PgDB } from '../../db';
-import type { PgDBConfig } from '../../db';
+import type { PgDomainConfig } from '../../db';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
   #db: PgDB;
   #schema: string;
 
-  constructor(config: PgDBConfig) {
+  constructor(config: PgDomainConfig) {
     super();
     this.#db = new PgDB(config);
-    this.#schema = config.schemaName || 'public';
+    this.#schema = this.#db.schemaName || 'public';
   }
 
   async init(): Promise<void> {

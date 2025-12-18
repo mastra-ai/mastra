@@ -21,14 +21,14 @@ import pgPromise from 'pg-promise';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { PgDB } from './db';
-import type { PgDBConfig } from './db';
+import type { PgDomainConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { PgDBConfig } from './db';
+export type { PgDomainConfig, PgDBConfig } from './db';
 
 export class PostgresStore extends MastraStorage {
   #db: pgPromise.IDatabase<{}>;
@@ -91,7 +91,7 @@ export class PostgresStore extends MastraStorage {
       // Create all domain instances synchronously in the constructor
       // This is required for Memory to work correctly, as it checks for
       // stores.memory during getInputProcessors() before init() is called
-      const domainConfig: PgDBConfig = { client: this.#db, schemaName: this.schema };
+      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema };
 
       // Create a PgDB instance for direct operations (createTable, clearTable, etc.)
       this.#dbOps = new PgDB(domainConfig);

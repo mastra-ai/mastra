@@ -20,7 +20,7 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import { PgDB } from '../../db';
-import type { PgDBConfig } from '../../db';
+import type { PgDomainConfig } from '../../db';
 
 // Database row type that includes timezone-aware columns
 type MessageRowFromDB = {
@@ -47,10 +47,10 @@ export class MemoryPG extends MemoryStorage {
   #db: PgDB;
   #schema: string;
 
-  constructor(config: PgDBConfig) {
+  constructor(config: PgDomainConfig) {
     super();
     this.#db = new PgDB(config);
-    this.#schema = config.schemaName || 'public';
+    this.#schema = this.#db.schemaName || 'public';
   }
 
   async init(): Promise<void> {
