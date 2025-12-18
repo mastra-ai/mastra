@@ -3,7 +3,8 @@ import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/obse
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
-import { getExternalParentId, deepClean } from './base';
+import { getExternalParentId } from './base';
+import { deepClean } from './serialization';
 
 // Simple test exporter for capturing events
 class TestExporter implements ObservabilityExporter {

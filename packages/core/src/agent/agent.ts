@@ -19,9 +19,13 @@ import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
-import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
+import type {
+  MastraLanguageModel,
+  MastraLanguageModelV2,
+  MastraLegacyLanguageModel,
+  MastraModelConfig,
+} from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -43,7 +47,7 @@ import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
-import type { OutputWriter, Workflow, WorkflowResult } from '../workflows';
+import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
 import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
 import { MessageList } from './message-list';
@@ -63,7 +67,7 @@ import type {
   DynamicAgentInstructions,
   AgentMethodType,
 } from './types';
-import { resolveThreadIdFromArgs } from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -965,7 +969,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         const modelsPromise =
           Array.isArray(this.model) && !model
             ? this.prepareModels(requestContext)
@@ -1009,7 +1013,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
     requestContext: RequestContext,
-  ): Promise<MastraLanguageModel> {
+  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     try {
       return await resolveModelConfig(modelConfig, requestContext, this.#mastra);
     } catch (error) {
@@ -1047,7 +1051,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     modelConfig = this.model,
   }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
     | MastraLanguageModel
-    | Promise<MastraLanguageModel> {
+    | MastraLegacyLanguageModel
+    | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, requestContext);
 
     if (modelConfig.length === 0 || !modelConfig[0]) {
@@ -1292,7 +1297,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     let text = '';
 
-    if (llm.getModel().specificationVersion === 'v2') {
+    if (isSupportedLanguageModel(llm.getModel())) {
       const messageList = new MessageList()
         .add(
           [
@@ -1396,6 +1401,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     memoryConfig,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1404,6 +1410,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let convertedMemoryTools: Record<string, CoreTool> = {};
 
@@ -1440,10 +1447,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(toolObj, options);
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedMemoryTools[toolName] = convertedToCoreTool;
       }
     }
+
     return convertedMemoryTools;
   }
 
@@ -1610,6 +1618,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     outputWriter,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     resourceId?: string;
@@ -1618,6 +1627,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1653,7 +1663,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        return [k, makeCoreTool(tool, options)];
+        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools)];
       }),
     );
 
@@ -1680,6 +1690,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     mastraProxy,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1688,6 +1699,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
 
@@ -1716,7 +1728,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset', autoResumeSuspendedTools);
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -1737,6 +1749,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext,
     mastraProxy,
     clientTools,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1745,6 +1758,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     tracingContext?: TracingContext;
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
+    autoResumeSuspendedTools?: boolean;
   }) {
     let toolsForRequest: Record<string, CoreTool> = {};
     const memory = await this.getMemory({ requestContext });
@@ -1771,7 +1785,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool', autoResumeSuspendedTools);
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -1790,6 +1804,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     methodType,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -1797,6 +1812,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
+    autoResumeSuspendedTools?: boolean;
   }) {
     const convertedAgentTools: Record<string, CoreTool> = {};
     const agents = await this.listAgents({ requestContext });
@@ -1976,7 +1992,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         };
 
         // TODO; fix recursion type
-        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(toolObj as any, options);
+        convertedAgentTools[`agent-${agentName}`] = makeCoreTool(
+          toolObj as any,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 
@@ -1994,6 +2015,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext,
     tracingContext,
     methodType,
+    autoResumeSuspendedTools,
   }: {
     runId?: string;
     threadId?: string;
@@ -2001,6 +2023,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     requestContext: RequestContext;
     tracingContext?: TracingContext;
     methodType: AgentMethodType;
+    autoResumeSuspendedTools?: boolean;
   }) {
     const convertedWorkflowTools: Record<string, CoreTool> = {};
     const workflows = await this.listWorkflows({ requestContext });
@@ -2030,18 +2053,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
             try {
+              const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
+              const runIdToUse = suspendedToolRunId ?? runId;
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
                 args: inputData,
-                runId,
+                runId: runIdToUse,
                 threadId,
                 resourceId,
               });
 
-              const run = await workflow.createRun({ runId });
-
-              const { initialState, inputData: workflowInputData } = inputData;
+              const run = await workflow.createRun({ runId: runIdToUse });
               const { resumeData, suspend } = context?.agent ?? {};
 
               let result: WorkflowResult<any, any, any, any> | undefined = undefined;
@@ -2110,11 +2133,24 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               } else if (result?.status === 'suspended') {
                 const suspendedStep = result?.suspended?.[0]?.[0]!;
                 const suspendPayload = result?.steps?.[suspendedStep]?.suspendPayload;
-
+                const suspendedStepIds = result?.suspended?.map(stepPath => stepPath.join('.'));
+                const firstSuspendedStepPath = [...(result?.suspended?.[0] ?? [])];
+                let wflowStep = workflow;
+                while (firstSuspendedStepPath.length > 0) {
+                  const key = firstSuspendedStepPath.shift();
+                  if (key) {
+                    if (!workflow.steps[key]) {
+                      this.logger.warn(`Suspended step '${key}' not found in workflow '${workflowName}'`);
+                      break;
+                    }
+                    wflowStep = workflow.steps[key] as any;
+                  }
+                }
+                const resumeSchema = (wflowStep as Step<any, any, any, any, any, any>)?.resumeSchema;
                 if (suspendPayload?.__workflow_meta) {
                   delete suspendPayload.__workflow_meta;
                 }
-                return suspend?.(suspendPayload);
+                return suspend?.(suspendPayload, { resumeLabel: suspendedStepIds, resumeSchema });
               } else {
                 // This is to satisfy the execute fn's return value for typescript
                 return {
@@ -2130,7 +2166,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   category: ErrorCategory.USER,
                   details: {
                     agentName: this.name,
-                    runId: runId || '',
+                    runId: (inputData as any).suspendedToolRunId || runId || '',
                     threadId: threadId || '',
                     resourceId: resourceId || '',
                   },
@@ -2160,7 +2196,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           tracingPolicy: this.#options?.tracingPolicy,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(toolObj, options);
+        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
+          toolObj,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+        );
       }
     }
 
@@ -2182,6 +2223,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputWriter,
     methodType,
     memoryConfig,
+    autoResumeSuspendedTools,
   }: {
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
@@ -2193,6 +2235,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     outputWriter?: OutputWriter;
     methodType: AgentMethodType;
     memoryConfig?: MemoryConfig;
+    autoResumeSuspendedTools?: boolean;
   }): Promise<Record<string, CoreTool>> {
     let mastraProxy = undefined;
     const logger = this.logger;
@@ -2209,6 +2252,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       outputWriter,
+      autoResumeSuspendedTools,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -2219,6 +2263,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       memoryConfig,
+      autoResumeSuspendedTools,
     });
 
     const toolsetTools = await this.listToolsets({
@@ -2229,6 +2274,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       toolsets: toolsets!,
+      autoResumeSuspendedTools,
     });
 
     const clientSideTools = await this.listClientTools({
@@ -2239,6 +2285,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       tracingContext,
       mastraProxy,
       clientTools: clientTools!,
+      autoResumeSuspendedTools,
     });
 
     const agentTools = await this.listAgentTools({
@@ -2248,6 +2295,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       methodType,
       tracingContext,
+      autoResumeSuspendedTools,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -2257,6 +2305,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext,
       methodType,
       tracingContext,
+      autoResumeSuspendedTools,
     });
 
     return this.formatTools({
@@ -2459,10 +2508,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
-      const resolvedModel =
-        typeof modelToUse === 'function' ? await modelToUse({ requestContext, mastra: this.#mastra }) : modelToUse;
+      const resolvedModel = await this.resolveModelConfig(
+        modelToUse as DynamicArgument<MastraModelConfig>,
+        requestContext,
+      );
 
-      if ((resolvedModel as MastraLanguageModel)?.specificationVersion !== 'v2') {
+      if (!isSupportedLanguageModel(resolvedModel)) {
         const mastraError = new MastraError({
           id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
           domain: ErrorDomain.AGENT,
@@ -2470,7 +2521,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           details: {
             agentName: this.name,
           },
-          text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
@@ -2480,8 +2531,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       return [
         {
           id: 'main',
-          // TODO fix type check
-          model: resolvedModel as MastraLanguageModelV2,
+          model: resolvedModel,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
         },
@@ -2492,7 +2542,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.model.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
-        if (!isV2Model(model)) {
+        if (!isSupportedLanguageModel(model)) {
           const mastraError = new MastraError({
             id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
             domain: ErrorDomain.AGENT,
@@ -2500,7 +2550,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             details: {
               agentName: this.name,
             },
-            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+            text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
@@ -2539,10 +2589,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<OUTPUT extends OutputSchema | undefined = undefined>({
+    methodType,
+    resumeContext,
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -2957,7 +3008,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const modelInfo = llm.getModel();
 
-    if (modelInfo.specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
@@ -2965,7 +3016,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5 models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
         details: {
           agentName: this.name,
           modelId,
@@ -3036,7 +3087,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const modelInfo = llm.getModel();
 
-    if (modelInfo.specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
@@ -3044,7 +3095,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5 models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
         details: {
           agentName: this.name,
           modelId,
@@ -3117,7 +3168,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext: mergedStreamOptions.requestContext,
     });
 
-    if (llm.getModel().specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(llm.getModel())) {
       throw new MastraError({
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,

@@ -1,10 +1,10 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
-import type { CallSettings, StepResult, ToolChoice } from 'ai-v5';
+import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
+import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
@@ -95,13 +95,13 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
    * Current model for this step.
    * Can be a resolved MastraLanguageModelV2 or an unresolved config (string, OpenAI-compatible config).
    */
-  model: MastraLanguageModelV2;
+  model: MastraLanguageModel;
   /** Current tools available for this step */
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
   activeTools?: string[];
 
-  providerOptions?: SharedV2ProviderOptions;
+  providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
@@ -124,7 +124,7 @@ export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 's
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
 export type ProcessInputStepResult = {
-  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
+  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
@@ -134,7 +134,7 @@ export type ProcessInputStepResult = {
   messageList?: MessageList;
   /** Replace all system messages with these */
   systemMessages?: CoreMessageV4[];
-  providerOptions?: SharedV2ProviderOptions;
+  providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
    * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
@@ -148,7 +148,7 @@ export type ProcessInputStepResult = {
   retryCount?: number;
 };
 
-export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModelV2 };
+export type RunProcessInputStepResult = Omit<ProcessInputStepResult, 'model'> & { model?: MastraLanguageModel };
 
 /**
  * Arguments for processOutputStream method

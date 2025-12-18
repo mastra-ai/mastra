@@ -12,7 +12,7 @@ Mastra organizes memory into threads, which are records that group related inter
 
 The `resource` is especially important for [resource-scoped memory](./working-memory#resource-scoped-memory-default), which allows memory to persist across all threads associated with the same user or entity.
 
-```typescript {4} showLineNumbers
+```typescript {4}
 const stream = await agent.stream("message for agent", {
   memory: {
     thread: "conversation-123",
@@ -33,7 +33,7 @@ Even with memory configured, agents won’t store or recall information unless b
 
 Mastra can automatically generate descriptive thread titles based on the user's first message. This feature is disabled by default. Enable it by setting `generateTitle` to `true`. This improves organization and makes it easier to display conversations in your UI.
 
-```typescript {3-7} showLineNumbers
+```typescript {3-7}
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
@@ -49,7 +49,7 @@ export const testAgent = new Agent({
 
 Titles are generated using your agent's model by default. To optimize cost or behavior, provide a smaller `model` and custom `instructions`. This keeps title generation separate from main conversation logic.
 
-```typescript {5-9} showLineNumbers
+```typescript {5-9}
 export const testAgent = new Agent({
   // ...
   memory: new Memory({
@@ -70,7 +70,7 @@ export const testAgent = new Agent({
 
 You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `requestContext` object, allowing you to adapt title generation based on user-specific values.
 
-```typescript {7-16} showLineNumbers
+```typescript {7-16}
 export const testAgent = new Agent({
   // ...
   memory: new Memory({

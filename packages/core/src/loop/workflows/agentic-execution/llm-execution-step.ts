@@ -1,12 +1,13 @@
 import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { CallSettings, ToolChoice, ToolSet } from 'ai-v5';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
+import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
-import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -472,6 +473,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   requestContext,
   methodType,
   modelSpanTracker,
+  autoResumeSuspendedTools,
   maxProcessorRetries,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
@@ -506,11 +508,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         }
 
         const currentStep: {
-          model: MastraLanguageModelV2;
+          model: MastraLanguageModel;
           tools?: TOOLS | undefined;
           toolChoice?: ToolChoice<TOOLS> | undefined;
           activeTools?: (keyof TOOLS)[] | undefined;
-          providerOptions?: SharedV2ProviderOptions | undefined;
+          providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
         } = {
@@ -567,62 +569,92 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           downloadConcurrency,
           supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
         };
-        const inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+        let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
-        switch (currentStep.model.specificationVersion) {
-          case 'v2': {
-            modelResult = executeWithContextSync({
-              span: modelSpanTracker?.getTracingContext()?.currentSpan,
-              fn: () =>
-                execute({
-                  runId,
-                  model: currentStep.model,
-                  providerOptions: currentStep.providerOptions,
-                  inputMessages,
-                  tools: currentStep.tools,
-                  toolChoice: currentStep.toolChoice,
-                  activeTools: currentStep.activeTools as string[] | undefined,
-                  options,
-                  modelSettings: currentStep.modelSettings,
-                  includeRawChunks,
-                  structuredOutput: currentStep.structuredOutput,
-                  headers,
-                  methodType,
-                  generateId: _internal?.generateId,
-                  onResult: ({
-                    warnings: warningsFromStream,
-                    request: requestFromStream,
-                    rawResponse: rawResponseFromStream,
-                  }) => {
-                    warnings = warningsFromStream;
-                    request = requestFromStream || {};
-                    rawResponse = rawResponseFromStream;
+        if (autoResumeSuspendedTools) {
+          const messages = messageList.get.all.db();
+          const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
+          const suspendedToolsMessage = assistantMessages.find(
+            message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
+          );
 
-                    if (!isControllerOpen(controller)) {
-                      // Controller is closed or errored, skip enqueueing
-                      // This can happen when downstream errors (like in onStepFinish) close the controller
-                      return;
-                    }
+          if (suspendedToolsMessage) {
+            const metadata = suspendedToolsMessage.content.metadata;
+            const suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
+              string,
+              any
+            >;
+            const suspendedTools = Object.values(suspendedToolObj);
+            if (suspendedTools.length > 0) {
+              inputMessages = inputMessages.map((message, index) => {
+                if (message.role === 'system' && index === 0) {
+                  message.content =
+                    message.content +
+                    `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
+                      resumeData can not be an empty object nor null/undefined.
+                      When you find that and call that tool, add the resumeData to the tool call arguments/input.
+                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
+                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message.`;
+                }
 
-                    controller.enqueue({
-                      runId,
-                      from: ChunkFrom.AGENT,
-                      type: 'step-start',
-                      payload: {
-                        request: request || {},
-                        warnings: warnings || [],
-                        messageId: messageId,
-                      },
-                    });
-                  },
-                  shouldThrowError: !isLastModel,
-                }),
-            });
-            break;
+                return message;
+              });
+            }
           }
-          default: {
-            throw new Error(`Unsupported model version: ${model.specificationVersion}`);
-          }
+        }
+
+        if (isSupportedLanguageModel(currentStep.model)) {
+          modelResult = executeWithContextSync({
+            span: modelSpanTracker?.getTracingContext()?.currentSpan,
+            fn: () =>
+              execute({
+                runId,
+                model: currentStep.model,
+                providerOptions: currentStep.providerOptions,
+                inputMessages,
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                options,
+                modelSettings: currentStep.modelSettings,
+                includeRawChunks,
+                structuredOutput: currentStep.structuredOutput,
+                headers,
+                methodType,
+                generateId: _internal?.generateId,
+                onResult: ({
+                  warnings: warningsFromStream,
+                  request: requestFromStream,
+                  rawResponse: rawResponseFromStream,
+                }) => {
+                  warnings = warningsFromStream;
+                  request = requestFromStream || {};
+                  rawResponse = rawResponseFromStream;
+
+                  if (!isControllerOpen(controller)) {
+                    // Controller is closed or errored, skip enqueueing
+                    // This can happen when downstream errors (like in onStepFinish) close the controller
+                    return;
+                  }
+
+                  controller.enqueue({
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    type: 'step-start',
+                    payload: {
+                      request: request || {},
+                      warnings: warnings || [],
+                      messageId: messageId,
+                    },
+                  });
+                },
+                shouldThrowError: !isLastModel,
+              }),
+          });
+        } else {
+          throw new Error(
+            `Unsupported model version: ${(currentStep.model as { specificationVersion?: string }).specificationVersion}. Supported versions: ${supportedLanguageModelSpecifications.join(', ')}`,
+          );
         }
 
         const outputStream = new MastraModelOutput({

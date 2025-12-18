@@ -1,10 +1,9 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { CallSettings, StepResult, ToolChoice, ToolSet } from 'ai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { CallSettings, StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
-
 import type { MastraMessageContentV2, MessageList } from '../agent/message-list';
 import type { ModelRouterModelId } from '../llm/model';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
+import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { OutputSchema } from '../stream';
 import type { StructuredOutputOptions } from './processors';
 
@@ -328,7 +327,7 @@ export type ProcessorStepModelConfig =
   | LanguageModelV2
   | ModelRouterModelId
   | OpenAICompatibleConfig
-  | MastraLanguageModelV2;
+  | MastraLanguageModel;
 
 /**
  * Tools type for processor step schema.
@@ -353,7 +352,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
   tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Current tools available for this step'),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Current tool choice setting'),
   activeTools: z.array(z.string()).optional().describe('Currently active tools'),
-  providerOptions: z.custom<SharedV2ProviderOptions>().optional().describe('Provider-specific options'),
+  providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
   modelSettings: z
     .custom<Omit<CallSettings, 'abortSignal'>>()
     .optional()
@@ -461,11 +460,11 @@ export const ProcessorStepOutputSchema = z.object({
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<MastraLanguageModelV2>().optional(),
+  model: z.custom<MastraLanguageModel>().optional(),
   tools: z.custom<ProcessorStepToolsConfig>().optional(),
   toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
   activeTools: z.array(z.string()).optional(),
-  providerOptions: z.custom<SharedV2ProviderOptions>().optional(),
+  providerOptions: z.custom<SharedProviderOptions>().optional(),
   modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
   structuredOutput: z.custom<StructuredOutputOptions<OutputSchema>>().optional(),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional(),

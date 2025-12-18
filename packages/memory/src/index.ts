@@ -1,3 +1,6 @@
+import { embedMany } from '@internal/ai-sdk-v4';
+import type { TextPart } from '@internal/ai-sdk-v4';
+import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
@@ -17,9 +20,6 @@ import type {
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import { embedMany } from 'ai';
-import type { TextPart } from 'ai';
-import { embedMany as embedManyV5 } from 'ai-v5';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
@@ -33,6 +33,7 @@ import {
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
+export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -41,6 +42,8 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
+
+import { extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -687,12 +690,10 @@ ${workingMemory}`;
     return result;
   }
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
-    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-
     if (typeof message?.content === `string`) {
       return {
         ...message,
-        content: message.content.replace(workingMemoryRegex, ``).trim(),
+        content: removeWorkingMemoryTags(message.content).trim(),
       };
     } else if (Array.isArray(message?.content)) {
       // Filter out updateWorkingMemory tool-call/result content items
@@ -705,7 +706,7 @@ ${workingMemory}`;
         if (content.type === 'text') {
           return {
             ...content,
-            text: content.text.replace(workingMemoryRegex, '').trim(),
+            text: removeWorkingMemoryTags(content.text).trim(),
           };
         }
         return { ...content };
@@ -717,27 +718,30 @@ ${workingMemory}`;
     }
   }
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
-    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-
-    const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
-
-    if (newMessage.content.content && typeof newMessage.content.content === 'string') {
-      newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
+    const newMessage = { ...message };
+    // Only spread content if it's a proper V2 object to avoid corrupting non-object content
+    if (message.content && typeof message.content === 'object' && !Array.isArray(message.content)) {
+      newMessage.content = { ...message.content };
     }
 
-    if (newMessage.content.parts) {
+    if (typeof newMessage.content?.content === 'string' && newMessage.content.content.length > 0) {
+      newMessage.content.content = removeWorkingMemoryTags(newMessage.content.content).trim();
+    }
+
+    if (Array.isArray(newMessage.content?.parts)) {
       newMessage.content.parts = newMessage.content.parts
         .filter(part => {
-          if (part.type === 'tool-invocation') {
-            return part.toolInvocation.toolName !== 'updateWorkingMemory';
+          if (part?.type === 'tool-invocation') {
+            return part.toolInvocation?.toolName !== 'updateWorkingMemory';
           }
           return true;
         })
         .map(part => {
-          if (part.type === 'text') {
+          if (part?.type === 'text') {
+            const text = typeof part.text === 'string' ? part.text : '';
             return {
               ...part,
-              text: part.text.replace(workingMemoryRegex, '').trim(),
+              text: removeWorkingMemoryTags(text).trim(),
             };
           }
           return part;
@@ -755,15 +759,8 @@ ${workingMemory}`;
   protected parseWorkingMemory(text: string): string | null {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
-    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-    const matches = text.match(workingMemoryRegex);
-    const match = matches?.[0];
-
-    if (match) {
-      return match.replace(/<\/?working_memory>/g, '').trim();
-    }
-
-    return null;
+    const content = extractWorkingMemoryContent(text);
+    return content?.trim() ?? null;
   }
 
   public async getWorkingMemory({

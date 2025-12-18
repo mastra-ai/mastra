@@ -126,7 +126,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v1' | 'v2';
+    version: 'v2' | 'v3';
   };
 
   /**
@@ -159,7 +159,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     model: {
       modelId: string | undefined;
       provider: string | undefined;
-      version: 'v1' | 'v2';
+      version: 'v2' | 'v3';
     };
     stream: ReadableStream<ChunkType<OUTPUT>>;
     messageList: MessageList;
@@ -1066,7 +1066,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#getDelayedPromise(this.#delayedPromises.totalUsage);
   }
 
-  get content() {
+  get content(): Promise<LLMStepResult['content']> {
     return this.#getDelayedPromise(this.#delayedPromises.content);
   }
 

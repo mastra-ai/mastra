@@ -28,7 +28,7 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
 
 Create a new file `src/mastra/workflows/candidate-workflow.ts` and define your workflow:
 
-```ts copy title="src/mastra/workflows/candidate-workflow.ts"
+```ts title="src/mastra/workflows/candidate-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -56,7 +56,7 @@ You want to extract candidate details from the resume text and classify the pers
 
 To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
 
-```ts copy title="src/mastra/workflows/candidate-workflow.ts"
+```ts title="src/mastra/workflows/candidate-workflow.ts"
 import { Agent } from "@mastra/core/agent";
 
 const recruiter = new Agent({
@@ -109,7 +109,7 @@ This step prompts a candidate who is identified as "technical" for more informat
 
 To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
 
-```ts copy title="src/mastra/workflows/candidate-workflow.ts"
+```ts title="src/mastra/workflows/candidate-workflow.ts"
 const askAboutSpecialty = createStep({
   id: "askAboutSpecialty",
   inputSchema: z.object({
@@ -140,7 +140,7 @@ If the candidate is "non-technical", you want a different follow-up question. Th
 
 To the existing `src/mastra/workflows/candidate-workflow.ts` file add the following:
 
-```ts title="src/mastra/workflows/candidate-workflow.ts" copy
+```ts title="src/mastra/workflows/candidate-workflow.ts"
 const askAboutRole = createStep({
   id: "askAboutRole",
   inputSchema: z.object({
@@ -170,7 +170,7 @@ You now combine the steps to implement branching logic based on the candidate's 
 
 To the existing `src/mastra/workflows/candidate-workflow.ts` file change the `candidateWorkflow` like so:
 
-```ts title="src/mastra/workflows/candidate-workflow.ts" copy {10-14}
+```ts title="src/mastra/workflows/candidate-workflow.ts" {10-14}
 export const candidateWorkflow = createWorkflow({
   id: "candidate-workflow",
   inputSchema: z.object({
@@ -199,7 +199,7 @@ export const candidateWorkflow = createWorkflow({
 
 In your `src/mastra/index.ts` file, register the workflow:
 
-```ts copy title="src/mastra/index.ts" {2, 5}
+```ts title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { candidateWorkflow } from "./workflows/candidate-workflow";
 
@@ -216,13 +216,13 @@ export const mastra = new Mastra({
 
 You can test your workflow inside [Studio](/docs/v1/getting-started/studio) by starting the development server:
 
-```bash copy
+```bash
 mastra dev
 ```
 
 In the sidebar, navigate to **Workflows** and select **candidate-workflow**. In the middle you'll see a graph view of your workflow and on the right sidebar the **Run** tab is selected by default. Inside this tab you can enter a resume text, for example:
 
-```text copy
+```text
 Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.
 ```
 
@@ -230,7 +230,7 @@ After entering the resume text, press the **Run** button. You should now see two
 
 You can also test the workflow programmatically by calling [`.createRun()`](/reference/v1/workflows/workflow-methods/create-run) and [`.start()`](/reference/v1/workflows/run-methods/start). Create a new file `src/test-workflow.ts` and add the following:
 
-```ts copy title="src/test-workflow.ts"
+```ts title="src/test-workflow.ts"
 import { mastra } from "./mastra";
 
 const run = await mastra.getWorkflow("candidateWorkflow").createRun();
@@ -256,7 +256,7 @@ if (res.status === "success") {
 
 Now, run the workflow and get output in your terminal:
 
-```bash copy
+```bash
 npx tsx src/test-workflow.ts
 ```
 

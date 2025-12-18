@@ -1,16 +1,14 @@
 import type { AgentExecutionOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<
-  OUTPUT,
-  'mastra'
-> & {
+export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
   messages: MessageListInput;
 };
 
@@ -18,7 +16,7 @@ export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined>
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
 /**
@@ -72,8 +70,8 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
 }
 
 export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> };
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
+  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
@@ -164,6 +162,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
     handler: async c => {
       const params = (await c.req.json()) as NetworkStreamHandlerParams<OUTPUT>;
       const mastra = c.get('mastra');
+      const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let agentToUse: string | undefined = agent;
       if (!agent) {
@@ -179,6 +178,19 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
+      // Prioritize requestContext from middleware/route options over body
+      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
+        mastra
+          .getLogger()
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
+      }
+
       if (!agentToUse) {
         throw new Error('Agent ID is required');
       }
@@ -186,7 +198,10 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
       const uiMessageStream = await handleNetworkStream<UIMessage, OUTPUT>({
         mastra,
         agentId: agentToUse,
-        params,
+        params: {
+          ...params,
+          requestContext: effectiveRequestContext,
+        },
         defaultOptions,
       });
 

@@ -379,15 +379,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         base.error = this.formatResultError(error, lastOutput);
       }
     } else if (lastOutput.status === 'suspended') {
+      const suspendPayload: Record<string, any> = {};
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
-          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
+          const { __workflow_meta, ...rest } = stepResult?.suspendPayload ?? {};
+          suspendPayload[stepId] = rest;
+          const nestedPath = __workflow_meta?.path;
           return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
         }
 
         return [];
       });
       base.suspended = suspendedStepIds;
+      base.suspendPayload = suspendPayload;
     }
 
     return base as TOutput;
@@ -621,6 +625,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
           });
         }
+
+        // Invoke lifecycle callbacks before returning
+        await this.invokeLifecycleCallbacks(result);
+
         return {
           ...result,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
@@ -652,6 +660,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         status: result.status,
       },
     });
+
+    // Invoke lifecycle callbacks before returning
+    await this.invokeLifecycleCallbacks(result);
 
     if (params.outputOptions?.includeState) {
       return { ...result, state: lastState };

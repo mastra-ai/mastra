@@ -153,7 +153,7 @@ Score calculation: `max(0, base_score - contradiction_penalty - missing_penalty 
 
 Evaluate agent responses for similarity to ground truth across different scenarios:
 
-```typescript title="src/example-answer-similarity.ts" showLineNumbers copy
+```typescript title="src/example-answer-similarity.ts"
 import { runEvals } from "@mastra/core/evals";
 import { createAnswerSimilarityScorer } from "@mastra/evals/scorers/prebuilt";
 import { myAgent } from "./agent";

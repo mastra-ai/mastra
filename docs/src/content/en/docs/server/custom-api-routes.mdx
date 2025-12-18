@@ -9,7 +9,7 @@ By default, Mastra automatically exposes registered agents and workflows via its
 
 Routes are provided with a helper `registerApiRoute()` from `@mastra/core/server`. Routes can live in the same file as the `Mastra` instance but separating them helps keep configuration concise.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
@@ -41,7 +41,7 @@ Each route's handler receives the Hono `Context`. Within the handler you can acc
 
 To add route-specific middleware pass a `middleware` array when calling `registerApiRoute()`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 

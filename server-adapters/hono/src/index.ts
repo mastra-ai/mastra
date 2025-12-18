@@ -1,6 +1,6 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
@@ -16,7 +16,7 @@ import { authenticationMiddleware, authorizationMiddleware } from './auth-middle
 export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools: Record<string, Tool>;
+  tools: ToolsInput;
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;

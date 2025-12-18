@@ -5,6 +5,7 @@ import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 import {
+  createWorkflowRunBodySchema,
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
@@ -268,11 +269,12 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   responseType: 'json',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: optionalRunIdSchema,
+  bodySchema: createWorkflowRunBodySchema,
   responseSchema: createWorkflowRunResponseSchema,
   summary: 'Create workflow run',
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, disableScorers }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -284,7 +286,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId, disableScorers });
 
       return { runId: run.runId };
     } catch (error) {
@@ -303,7 +305,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Stream workflow execution',
   description: 'Executes a workflow and streams the results in real-time',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, ...params }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -320,7 +322,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       }
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId });
       const result = run.stream(params);
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({

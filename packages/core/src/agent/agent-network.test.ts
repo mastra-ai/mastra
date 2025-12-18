@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from '../error';
@@ -698,6 +698,173 @@ describe('Agent - network - updateWorkingMemory', () => {
     expect(thread?.resourceId).toBe(resourceId);
   });
 }, 120e3);
+
+describe('Agent - network - finalResult token efficiency', () => {
+  it('should NOT store redundant toolCalls in finalResult when messages already contain tool call data', async () => {
+    // The finalResult object was storing toolCalls separately even though
+    // the messages array already contains all tool call information.
+    // This caused massive token waste when the routing agent reads from memory.
+
+    const savedMessages: any[] = [];
+
+    // Create a mock memory that captures saved messages
+    const memory = new MockMemory();
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Create a sub-agent with a tool that will be called
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool that returns some data',
+      inputSchema: z.object({
+        query: z.string(),
+      }),
+      execute: async ({ query }) => {
+        return { result: `Processed: ${query}` };
+      },
+    });
+
+    // Create mock responses for the routing agent
+    // First call: select the sub-agent
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Use the test-tool to process "hello world"',
+      selectionReason: 'Sub-agent can use the test tool',
+    });
+
+    // Second call: completion check - mark as complete
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Task completed successfully',
+      completionReason: 'The sub-agent processed the request',
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Sub-agent mock that will "use" the tool
+    // Simulate a response that includes a tool call
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'test-tool-call-1',
+            toolName: 'test-tool',
+            args: { query: 'hello world' },
+          },
+        ],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          {
+            type: 'tool-call',
+            toolCallId: 'test-tool-call-1',
+            toolName: 'test-tool',
+            args: { query: 'hello world' },
+          },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'Sub Agent',
+      description: 'A sub-agent that can use tools',
+      instructions: 'Use the test-tool when asked to process something.',
+      model: subAgentMockModel,
+      tools: { 'test-tool': testTool },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-agent',
+      name: 'Network Agent',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: mockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Process hello world using the test tool', {
+      memory: {
+        thread: 'test-thread-11059',
+        resource: 'test-resource-11059',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Find the message saved after agent execution (contains finalResult)
+    const networkMessages = savedMessages.filter(msg => {
+      if (msg.content?.parts?.[0]?.text) {
+        try {
+          const parsed = JSON.parse(msg.content.parts[0].text);
+          return parsed.isNetwork === true && parsed.primitiveType === 'agent';
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    });
+
+    expect(networkMessages.length).toBeGreaterThan(0);
+
+    // Parse the finalResult from the saved message
+    const networkMessage = networkMessages[0];
+    const parsedContent = JSON.parse(networkMessage.content.parts[0].text);
+
+    // finalResult should only have: { text, messages }
+    // It should NOT have: toolCalls (redundant with messages)
+    expect(parsedContent.finalResult).not.toHaveProperty('toolCalls');
+
+    // But the tool call data should still be present in the messages array
+    const messagesInFinalResult = parsedContent.finalResult.messages || [];
+    const toolCallMessages = messagesInFinalResult.filter((m: any) => m.type === 'tool-call');
+    const toolResultMessages = messagesInFinalResult.filter((m: any) => m.type === 'tool-result');
+
+    // Verify tool calls are preserved in messages
+    expect(toolCallMessages.length).toBeGreaterThan(0);
+    expect(toolResultMessages.length).toBeGreaterThan(0);
+  });
+});
 
 describe('Agent - network - tool context validation', () => {
   it('should pass toolCallId, threadId, and resourceId in context.agent when network executes a tool', async () => {
