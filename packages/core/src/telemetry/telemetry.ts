@@ -9,16 +9,22 @@ import { getBaggageValues, hasActiveTelemetry } from './utility';
 // Add type declaration for global namespace
 declare global {
   var __TELEMETRY__: Telemetry | undefined;
+  var __TELEMETRY_ENABLED__: boolean | undefined;
 }
 
 export class Telemetry {
   public tracer: Tracer = trace.getTracer('default');
   name: string = 'default-service';
+  private enabled: boolean = true;
 
   private constructor(config: OtelConfig) {
     this.name = config.serviceName ?? 'default-service';
+    this.enabled = config.enabled !== false;
 
     this.tracer = trace.getTracer(this.name);
+
+    // Store enabled state globally for hasActiveTelemetry to check
+    globalThis.__TELEMETRY_ENABLED__ = this.enabled;
   }
 
   /**
@@ -72,6 +78,39 @@ export class Telemetry {
       });
     }
     return globalThis.__TELEMETRY__;
+  }
+
+  /**
+   * Check if telemetry is enabled
+   */
+  static isEnabled(): boolean {
+    return globalThis.__TELEMETRY_ENABLED__ === true;
+  }
+
+  /**
+   * Set the enabled state of telemetry globally
+   * This allows runtime control of span creation
+   */
+  static setEnabled(enabled: boolean): void {
+    globalThis.__TELEMETRY_ENABLED__ = enabled;
+    if (globalThis.__TELEMETRY__) {
+      globalThis.__TELEMETRY__.enabled = enabled;
+    }
+  }
+
+  /**
+   * Get the enabled state of the telemetry instance
+   */
+  public isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Set the enabled state of this telemetry instance
+   */
+  public setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    globalThis.__TELEMETRY_ENABLED__ = enabled;
   }
 
   /**
