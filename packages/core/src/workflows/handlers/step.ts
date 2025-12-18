@@ -55,7 +55,7 @@ export interface ExecuteStepParams {
   serializedStepGraph: SerializedStepFlowEntry[];
   tracingContext: TracingContext;
   iterationCount?: number;
-  stepThrough?: boolean;
+  perStep?: boolean;
 }
 
 export async function executeStep(
@@ -82,7 +82,7 @@ export async function executeStep(
     serializedStepGraph,
     tracingContext,
     iterationCount,
-    stepThrough,
+    perStep,
   } = params;
 
   const stepCallId = randomUUID();
@@ -190,7 +190,7 @@ export async function executeStep(
       tracingContext,
       outputWriter,
       stepSpan,
-      stepThrough,
+      perStep,
     });
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
@@ -358,7 +358,7 @@ export async function executeStep(
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
-        stepThrough,
+        perStep,
       });
 
       // Capture requestContext state after step execution (only for engines that need it)

@@ -937,6 +937,123 @@ describe('Workflow', () => {
       await mastra.stopEventEngine();
     });
 
+    it('should generate a stream for a single step when perStep is true', async () => {
+      const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+        options: {
+          validateInputs: false,
+        },
+      });
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        workflows: { 'test-workflow': workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const runId = 'test-run-id';
+      let watchData: StreamEvent[] = [];
+      const run = await workflow.createRun({
+        runId,
+      });
+
+      const streamResult = run.stream({ inputData: {}, perStep: true });
+
+      // Start watching the workflow
+      const collectedStreamData: StreamEvent[] = [];
+      for await (const data of streamResult.fullStream) {
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
+      }
+      watchData = collectedStreamData;
+
+      const executionResult = await streamResult.result;
+      if (!executionResult) {
+        expect.fail('Execution result is not set');
+      }
+
+      expect(watchData.length).toBe(6);
+      expect(watchData).toMatchObject([
+        {
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          payload: {
+            workflowId: 'test-workflow',
+          },
+        },
+        {
+          type: 'workflow-start',
+          from: 'WORKFLOW',
+          payload: {
+            runId: 'test-run-id',
+          },
+        },
+        {
+          type: 'workflow-step-start',
+          from: 'WORKFLOW',
+          payload: {
+            id: 'step1',
+          },
+        },
+        {
+          type: 'workflow-step-result',
+          from: 'WORKFLOW',
+          payload: {
+            id: 'step1',
+          },
+        },
+        {
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          payload: {
+            runId: 'test-run-id',
+          },
+        },
+        {
+          type: 'workflow-finish',
+          from: 'WORKFLOW',
+          payload: {
+            workflowStatus: 'success',
+          },
+        },
+      ]);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(executionResult.steps.step2).toBeUndefined();
+      expect((executionResult as any).result).toBeUndefined();
+      expect(step1Action).toHaveBeenCalled();
+      expect(step2Action).not.toHaveBeenCalled();
+      expect(executionResult.status).toBe('paused');
+      await mastra.stopEventEngine();
+    });
+
     it('should handle basic suspend and resume flow', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
@@ -7577,6 +7694,124 @@ describe('Workflow', () => {
       expect(parallelStep3Action).toHaveBeenCalledTimes(1);
       expect(finalStepAction).toHaveBeenCalledTimes(3);
 
+      await mastra.stopEventEngine();
+    });
+
+    it('should timeTravel to step in conditional chains', async () => {
+      const step1Action = vi.fn().mockImplementation(() => {
+        return Promise.resolve({ status: 'success' });
+      });
+      const step2Action = vi.fn().mockImplementation(() => {
+        return Promise.resolve({ result: 'step2' });
+      });
+      const step3Action = vi.fn().mockImplementation(() => {
+        return Promise.resolve({ result: 'step3' });
+      });
+      const step5Action = vi.fn().mockImplementation(() => {
+        return Promise.resolve({ result: 'step5' });
+      });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ status: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step3 = createStep({
+        id: 'step3',
+        execute: step3Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step5 = createStep({
+        id: 'step5',
+        execute: step5Action,
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ step5Result: z.string() }),
+      });
+      const step4 = createStep({
+        id: 'step4',
+        execute: async ({ inputData }) => {
+          return { result: inputData.result + inputData.step5Result };
+        },
+        inputSchema: z.object({ result: z.string(), step5Result: z.string().optional() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ status: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      workflow
+        .then(step1)
+        .branch([
+          [
+            async ({ inputData }) => {
+              return inputData.status === 'success';
+            },
+            step2,
+          ],
+          [
+            async ({ inputData }) => {
+              return inputData.status === 'success';
+            },
+            step5,
+          ],
+          [
+            async ({ inputData }) => {
+              return inputData.status === 'failed';
+            },
+            step3,
+          ],
+        ])
+        .map({
+          result: {
+            step: [step3, step2, step5],
+            path: 'result',
+          },
+          step5Result: {
+            step: step5,
+            path: 'result',
+          },
+        })
+        .then(step4)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': workflow },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      const run = await workflow.createRun();
+      const result = await run.timeTravel({
+        step: 'step5',
+        inputData: {
+          status: 'success',
+        },
+      });
+
+      expect(step1Action).not.toHaveBeenCalled();
+      expect(step2Action).not.toHaveBeenCalled();
+      expect(step3Action).not.toHaveBeenCalled();
+      expect(step5Action).toHaveBeenCalled();
+      expect(result.steps).toMatchObject({
+        input: {},
+        step1: { status: 'success', output: { status: 'success' } },
+        step2: { status: 'success', output: {} },
+        step5: { status: 'success', output: { result: 'step5' } },
+        step4: { status: 'success', output: { result: 'step5step5' } },
+      });
       await mastra.stopEventEngine();
     });
   });

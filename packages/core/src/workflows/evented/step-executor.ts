@@ -16,6 +16,7 @@ import {
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
+import { Workflow } from '../workflow';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -140,6 +141,16 @@ export class StepExecutor extends MastraBase {
         ),
       );
 
+      const isNestedWorkflowStep = step instanceof Workflow;
+
+      const stepOutput = isNestedWorkflowStep
+        ? stepResult?.status === 'success'
+          ? stepResult?.result
+          : undefined
+        : stepResult;
+
+      const nestedWflowStepStatus = isNestedWorkflowStep ? stepResult?.status : undefined;
+
       const endedAt = Date.now();
 
       let finalResult: StepResult<any, any, any, any>;
@@ -148,7 +159,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
-          ...(stepResult ? { suspendOutput: stepResult } : {}),
+          ...(stepOutput ? { suspendOutput: stepOutput } : {}),
         };
 
         if (suspended.payload) {
@@ -162,12 +173,17 @@ export class StepExecutor extends MastraBase {
           endedAt,
           output: bailed.payload,
         };
+      } else if (nestedWflowStepStatus === 'paused') {
+        finalResult = {
+          ...stepInfo,
+          status: 'paused',
+        };
       } else {
         finalResult = {
           ...stepInfo,
           status: 'success',
           endedAt,
-          output: stepResult,
+          output: stepOutput,
         };
       }
 

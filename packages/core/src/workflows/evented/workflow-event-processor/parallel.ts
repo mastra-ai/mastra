@@ -18,7 +18,7 @@ export async function processWorkflowParallel(
     resumeData,
     parentWorkflow,
     requestContext,
-    stepThrough,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -52,7 +52,7 @@ export async function processWorkflowParallel(
           parentWorkflow,
           activeSteps,
           requestContext,
-          stepThrough,
+          perStep,
         },
       });
     }),
@@ -72,7 +72,7 @@ export async function processWorkflowConditional(
     resumeData,
     parentWorkflow,
     requestContext,
-    stepThrough,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -123,7 +123,7 @@ export async function processWorkflowConditional(
             parentWorkflow,
             activeSteps,
             requestContext,
-            stepThrough,
+            perStep,
           },
         });
       } else {
@@ -141,7 +141,7 @@ export async function processWorkflowConditional(
             parentWorkflow,
             activeSteps,
             requestContext,
-            stepThrough,
+            perStep,
           },
         });
       }

@@ -231,7 +231,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     tracingContext: TracingContext;
     outputWriter?: OutputWriter;
     stepSpan?: Span<SpanType.WORKFLOW_STEP>;
-    stepThrough?: boolean;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Default: return null to use standard execution
     // Subclasses (like Inngest) override to use platform-specific invocation
@@ -493,7 +493,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-    stepThrough?: boolean;
+    perStep?: boolean;
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -508,7 +508,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       disableScorers,
       restart,
       timeTravel,
-      stepThrough,
+      perStep,
     } = params;
     const { attempts = 0, delay = 0 } = retryConfig ?? {};
     const steps = graph.steps;
@@ -583,7 +583,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         requestContext: currentRequestContext,
         outputWriter: params.outputWriter,
         disableScorers,
-        stepThrough,
+        perStep,
       });
 
       // Apply mutable context changes from entry execution
@@ -645,7 +645,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         };
       }
 
-      if (stepThrough) {
+      if (perStep) {
         const result = (await this.fmtReturnValue(params.pubsub, stepResults, lastOutput.result)) as any;
         await this.persistStepUpdate({
           workflowId,

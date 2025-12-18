@@ -43,7 +43,7 @@ export async function processWorkflowWaitForEvent(
       prevResult,
       activeSteps: [],
       requestContext: currentState?.requestContext,
-      stepThrough: workflowData.stepThrough,
+      perStep: workflowData.perStep,
     },
   });
 }
@@ -61,7 +61,7 @@ export async function processWorkflowSleep(
     resumeData,
     parentWorkflow,
     requestContext,
-    stepThrough,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -144,7 +144,7 @@ export async function processWorkflowSleep(
           parentWorkflow,
           activeSteps,
           requestContext,
-          stepThrough,
+          perStep,
         },
       });
     },
@@ -165,7 +165,7 @@ export async function processWorkflowSleepUntil(
     resumeData,
     parentWorkflow,
     requestContext,
-    stepThrough,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -248,7 +248,7 @@ export async function processWorkflowSleepUntil(
           parentWorkflow,
           activeSteps,
           requestContext,
-          stepThrough,
+          perStep,
         },
       });
     },

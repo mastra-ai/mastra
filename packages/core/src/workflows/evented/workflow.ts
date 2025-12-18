@@ -448,12 +448,12 @@ export class EventedRun<
     inputData,
     initialState,
     requestContext,
-    stepThrough,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
-    stepThrough?: boolean;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -509,7 +509,7 @@ export class EventedRun<
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
-      stepThrough,
+      perStep,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -530,12 +530,12 @@ export class EventedRun<
     inputData,
     initialState,
     requestContext,
-    stepThrough,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
-    stepThrough?: boolean;
+    perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -586,7 +586,7 @@ export class EventedRun<
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: Object.fromEntries(requestContext.entries()),
         initialState: initialStateToUse,
-        stepThrough,
+        perStep,
       },
     });
 
@@ -607,7 +607,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
-    stepThrough?: boolean;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     let steps: string[] = [];
     if (typeof params.step === 'string') {
@@ -678,7 +678,7 @@ export class EventedRun<
         pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
-        stepThrough: params.stepThrough,
+        perStep: params.perStep,
       })
       .then(result => {
         if (result.status !== 'suspended') {

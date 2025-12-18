@@ -152,6 +152,6 @@ export abstract class ExecutionEngine extends MastraBase {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-    stepThrough?: boolean;
+    perStep?: boolean;
   }): Promise<TOutput>;
 }

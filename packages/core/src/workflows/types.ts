@@ -116,12 +116,23 @@ export type StepWaiting<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepPaused<P, R, S, T> = {
+  status: 'paused';
+  payload: P;
+  suspendPayload?: S;
+  resumePayload?: R;
+  suspendOutput?: T;
+  startedAt: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
-  | StepWaiting<P, R, S, T>;
+  | StepWaiting<P, R, S, T>
+  | StepPaused<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -140,7 +151,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
-  | StepWaiting<P, R, S, T>;
+  | StepWaiting<P, R, S, T>
+  | StepPaused<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,

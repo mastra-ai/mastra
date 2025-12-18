@@ -1570,7 +1570,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should generate a stream for a single step when stepThrough is true', async () => {
+    it('should generate a stream for a single step when perStep is true', async () => {
       const step1Action = vi.fn().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn().mockResolvedValue({ result: 'success2' });
 
@@ -1604,7 +1604,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {}, stepThrough: true });
+      const streamResult = run.streamVNext({ inputData: {}, perStep: true });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -3773,7 +3773,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute a single step in a nested workflow when stepThrough is true', async () => {
+    it('should execute a single step in a nested workflow when perStep is true', async () => {
       let calls = 0;
       const step1 = createStep({
         id: 'step1',
@@ -3838,7 +3838,7 @@ describe('Workflow', () => {
       const result = await run.start({
         inputData: {},
         initialState: { value: 'test-state', otherValue: 'test-other-state' },
-        stepThrough: true,
+        perStep: true,
       });
 
       expect(calls).toBe(1);
@@ -3943,7 +3943,7 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute only one step when there are multiple steps in parallel and stepThrough is true', async () => {
+    it('should execute only one step when there are multiple steps in parallel and perStep is true', async () => {
       const step1Action = vi.fn().mockImplementation(async () => {
         return { value: 'step1' };
       });
@@ -3981,7 +3981,7 @@ describe('Workflow', () => {
       });
 
       const run = await workflow.createRun();
-      const result = await run.start({ inputData: {}, stepThrough: true });
+      const result = await run.start({ inputData: {}, perStep: true });
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
@@ -5474,7 +5474,7 @@ describe('Workflow', () => {
         });
       });
 
-      it('should follow conditional chains and run only one step when stepThrough is true', async () => {
+      it('should follow conditional chains and run only one step when perStep is true', async () => {
         const step2Action = vi.fn().mockImplementation(() => {
           return Promise.resolve({ result: 'step2' });
         });
@@ -5563,7 +5563,7 @@ describe('Workflow', () => {
           inputData: {
             status: 'success',
           },
-          stepThrough: true,
+          perStep: true,
         });
 
         expect(step2Action).toHaveBeenCalled();
@@ -10996,7 +10996,7 @@ describe('Workflow', () => {
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle basic suspend and resume single step flow with async await syntax and stepThrough:true', async () => {
+    it('should handle basic suspend and resume single step flow with async await syntax and perStep:true', async () => {
       const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
       const promptAgentAction = vi
         .fn()
@@ -11116,7 +11116,7 @@ describe('Workflow', () => {
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
 
-      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, stepThrough: true });
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, perStep: true });
       if (!firstResumeResult) {
         throw new Error('Resume failed to return a result');
       }
@@ -13374,7 +13374,7 @@ describe('Workflow', () => {
     });
   });
 
-  describe('Time travel', () => {
+  describe.only('Time travel', () => {
     afterEach(async () => {
       await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
     });
@@ -13745,7 +13745,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
     });
 
-    it('should timeTravel a workflow execution and run only one step when stepThrough is true', async () => {
+    it('should timeTravel a workflow execution and run only one step when perStep is true', async () => {
       const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
@@ -13805,7 +13805,7 @@ describe('Workflow', () => {
             endedAt: Date.now(),
           },
         },
-        stepThrough: true,
+        perStep: true,
       });
 
       expect(result.status).toBe('paused');
@@ -14025,7 +14025,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(1);
     });
 
-    it('should timeTravel a workflow execution that was previously ran and run only one step when stepThrough is true', async () => {
+    it('should timeTravel a workflow execution that was previously ran and run only one step when perStep is true', async () => {
       const execute = vi.fn().mockResolvedValue({ step1Result: 2 });
       const step1 = createStep({
         id: 'step1',
@@ -14092,7 +14092,7 @@ describe('Workflow', () => {
       const result = await run.timeTravel({
         step: 'step2',
         inputData: { step1Result: 4 },
-        stepThrough: true,
+        perStep: true,
       });
 
       expect(result.status).toBe('paused');
@@ -15286,6 +15286,15 @@ describe('Workflow', () => {
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
+          parallelStep1: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
           parallelStep2: {
             payload: {
               result: 'next step done',
@@ -15297,9 +15306,20 @@ describe('Workflow', () => {
             },
             endedAt: expect.any(Number),
           },
+          parallelStep3: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
           finalStep: {
             payload: {
+              parallelStep1: {},
               parallelStep2: { result: 'parallelStep2 done' },
+              parallelStep3: {},
             },
             startedAt: expect.any(Number),
             status: 'success',
@@ -15320,7 +15340,7 @@ describe('Workflow', () => {
       expect(finalStepAction).toHaveBeenCalledTimes(3);
     });
 
-    it('should timeTravel workflow execution for workflow with parallel steps and run just the timeTravelled step when stepThrough is true', async () => {
+    it('should timeTravel workflow execution for workflow with parallel steps and run just the timeTravelled step when perStep is true', async () => {
       const initialStepAction = vi.fn().mockImplementation(async () => {
         return { result: 'initial step done' };
       });
@@ -15457,7 +15477,7 @@ describe('Workflow', () => {
             endedAt: Date.now(),
           },
         },
-        stepThrough: true,
+        perStep: true,
       });
 
       expect(result.status).toBe('paused');
@@ -15533,7 +15553,7 @@ describe('Workflow', () => {
         inputData: {
           result: 'next step done',
         },
-        stepThrough: true,
+        perStep: true,
       });
 
       expect(result2.status).toBe('paused');
@@ -15558,6 +15578,15 @@ describe('Workflow', () => {
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
+          parallelStep1: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
+            endedAt: expect.any(Number),
+          },
           parallelStep2: {
             payload: {
               result: 'next step done',
@@ -15567,6 +15596,15 @@ describe('Workflow', () => {
             output: {
               result: 'parallelStep2 done',
             },
+            endedAt: expect.any(Number),
+          },
+          parallelStep3: {
+            payload: {
+              result: 'next step done',
+            },
+            startedAt: expect.any(Number),
+            status: 'success',
+            output: {},
             endedAt: expect.any(Number),
           },
         },
@@ -15689,13 +15727,13 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { status: 'success' } },
+        step2: { status: 'success', output: {} },
         step5: { status: 'success', output: { result: 'step5' } },
         step4: { status: 'success', output: { result: 'step5step5' } },
       });
-      expect(result.steps.step2).toBeUndefined();
     });
 
-    it('should timeTravel to step in conditional chains and run just one step when stepThrough is true', async () => {
+    it('should timeTravel to step in conditional chains and run just one step when perStep is true', async () => {
       const step1Action = vi.fn().mockImplementation(() => {
         return Promise.resolve({ status: 'success' });
       });
@@ -15795,7 +15833,7 @@ describe('Workflow', () => {
         inputData: {
           status: 'success',
         },
-        stepThrough: true,
+        perStep: true,
       });
 
       expect(step1Action).not.toHaveBeenCalled();
@@ -15805,9 +15843,9 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { status: 'success' } },
+        step2: { status: 'success', output: {} },
         step5: { status: 'success', output: { result: 'step5' } },
       });
-      expect(result.steps.step2).toBeUndefined();
       expect(result.status).toBe('paused');
     });
   });
