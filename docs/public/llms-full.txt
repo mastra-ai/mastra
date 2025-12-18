@@ -574,7 +574,7 @@ When `autoResumeSuspendedTools` is enabled:
 1. A tool suspends execution by calling `suspend()` with a payload (e.g., requesting more information)
 2. The suspension is persisted to memory along with the conversation
 3. When the user sends their next message on the same thread, the agent:
-   - Detects the suspended tool from conversation history
+   - Detects the suspended tool from message history
    - Extracts `resumeData` from the user's message based on the tool's `resumeSchema`
    - Automatically resumes the tool with the extracted data
 
@@ -668,7 +668,7 @@ For automatic tool resumption to work:
 | Manual (`resumeStream()`) | Programmatic control, webhooks, button clicks, external triggers |
 | Automatic (`autoResumeSuspendedTools`) | Conversational flows where users provide resume data in natural language |
 
-Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the conversation history and the user sends a new message on the same thread.
+Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
 ## Related
 
@@ -681,7 +681,7 @@ Both approaches work with the same tool definitions. Automatic resumption trigge
 
 ---
 title: "Agent Memory | Agents"
-description: Learn how to add memory to agents to store conversation history and maintain context across interactions.
+description: Learn how to add memory to agents to store message history and maintain context across interactions.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -690,9 +690,9 @@ import StepItem from "@site/src/components/StepItem";
 # Agent memory
 [EN] Source: https://mastra.ai/en/docs/agents/agent-memory
 
-Agents use memory to maintain context across interactions. LLMs are stateless and don't retain information between calls, so agents need memory to track conversation history and recall relevant information.
+Agents use memory to maintain context across interactions. LLMs are stateless and don't retain information between calls, so agents need memory to track message history and recall relevant information.
 
-Mastra agents can be configured to store conversation history, with optional [working memory](../memory/working-memory) to maintain recent context or [semantic recall](../memory/semantic-recall) to retrieve past messages based on meaning.
+Mastra agents can be configured to store message history, with optional [working memory](../memory/working-memory) to maintain recent context or [semantic recall](../memory/semantic-recall) to retrieve past messages based on meaning.
 
 ## When to use memory
 
@@ -708,7 +708,7 @@ npm install @mastra/memory@beta @mastra/libsql@beta
 
 ## Storage providers
 
-Memory requires a storage provider to persist conversation history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v1/memory/storage/overview) documentation.
+Memory requires a storage provider to persist message history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v1/memory/storage) documentation.
 
 ## Configuring memory
 
@@ -760,7 +760,7 @@ export const mastra = new Mastra({
 
 :::note
 
-See the [LibSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
+See the [libSQL Storage](/reference/v1/storage/libsql) docs for a full list of configuration options.
 
 :::
 
@@ -787,9 +787,9 @@ export const memoryAgent = new Agent({
 });
 ```
 
-## Conversation history
+## Message history
 
-Include a `memory` object with both `resource` and `thread` to track conversation history during agent calls.
+Include a `memory` object with both `resource` and `thread` to track message history during agent calls.
 
 - `resource`: A stable identifier for the user or entity.
 - `thread`: An ID that isolates a specific conversation or session.
@@ -860,7 +860,7 @@ See [Request Context](/docs/v1/server/request-context) docs for more information
 
 - [Working Memory](../memory/working-memory)
 - [Semantic Recall](../memory/semantic-recall)
-- [Threads and Resources](../memory/threads-and-resources)
+- [Storage](../memory/storage)
 - [Request Context](/docs/v1/server/request-context)
 
 
@@ -1925,7 +1925,7 @@ When memory is enabled on an agent, memory processors are automatically added to
 ```
 [Memory Processors] → [Your inputProcessors]
 ```
-Memory loads conversation history first, then your processors run.
+Memory loads message history first, then your processors run.
 
 **Output processors:**
 ```
@@ -3146,7 +3146,7 @@ description: "Learn how Mastra can be deployed when integrated with a Web Framew
 When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. Follow the instructions below to ensure your Mastra integration deploys correctly.
 
 :::warning
-If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
+If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/reference/v1/storage/libsql) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
 :::
 
 Integration guides:
@@ -4872,9 +4872,9 @@ Some highlights include:
 
 - [**Workflows**](/docs/v1/workflows/overview) - When you need explicit control over execution, use Mastra's graph-based workflow engine to orchestrate complex multi-step processes. Mastra workflows use an intuitive syntax for control flow (`.then()`, `.branch()`, `.parallel()`).
 
-- [**Human-in-the-loop**](/docs/v1/workflows/suspend-and-resume) - Suspend an agent or workflow and await user input or approval before resuming. Mastra uses [storage](/docs/v1/memory/storage/overview) to remember execution state, so you can pause indefinitely and resume where you left off.
+- [**Human-in-the-loop**](/docs/v1/workflows/suspend-and-resume) - Suspend an agent or workflow and await user input or approval before resuming. Mastra uses storage to remember execution state, so you can pause indefinitely and resume where you left off.
 
-- **Context management** - Give your agents the right context at the right time. Provide [conversation history](/docs/v1/memory/conversation-history), [retrieve](/docs/v1/rag/overview) data from your sources (APIs, databases, files), and add human-like [working](/docs/v1/memory/working-memory) and [semantic](/docs/v1/memory/semantic-recall) memory so your agents behave coherently.
+- **Context management** - Give your agents the right context at the right time. Provide [message history](/docs/v1/memory/message-history), [retrieve](/docs/v1/rag/overview) data from your sources (APIs, databases, files), and add human-like [working](/docs/v1/memory/working-memory) and [semantic](/docs/v1/memory/semantic-recall) memory so your agents behave coherently.
 
 - **Integrations** - Bundle agents and workflows into existing React, Next.js, or Node.js apps, or ship them as standalone endpoints. When building UIs, integrate with agentic libraries like Vercel's AI SDK UI and CopilotKit to bring your AI assistant to life on the web.
 
@@ -5191,7 +5191,7 @@ Mastra Cloud automatically detects the right build settings, but you can customi
   - **Install command**: Runs pre-build to install project dependencies
   - **Project setup command**: Runs pre-build to prepare any external dependencies
   - **Port**: The network port the server will use
-  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/docs/v1/memory/storage/overview) storage
+  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/reference/v1/storage/libsql) storage
 - **Deploy Project**: Starts the deployment process
 
 </StepItem>
@@ -5727,33 +5727,6 @@ Note: If you published without an organization scope, the `args` might just be `
 
 
 ---
-title: "Conversation History | Memory"
-description: "Learn how to configure conversation history in Mastra to store recent messages from the current conversation."
----
-
-# Conversation History
-[EN] Source: https://mastra.ai/en/docs/memory/conversation-history
-
-Conversation history is the simplest kind of memory. It is a list of messages from the current conversation.
-
-By default, each request includes the last 10 messages from the current memory thread, giving the agent short-term conversational context. This limit can be increased using the `lastMessages` parameter.
-
-You can increase this limit by passing the `lastMessages` parameter to the `Memory` instance.
-
-```typescript {3-7}
-export const testAgent = new Agent({
-  id: "test-agent",
-  // ...
-  memory: new Memory({
-    options: {
-      lastMessages: 20,
-    },
-  }),
-});
-```
-
-
----
 title: "Memory Processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
 ---
@@ -5763,7 +5736,7 @@ description: "Learn how to use memory processors in Mastra to filter, trim, and 
 
 Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
-When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve conversation history, working memory, and semantically relevant messages, then persist new messages after the model responds.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
 Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
 
@@ -5773,7 +5746,7 @@ Mastra automatically adds these processors when memory is enabled:
 
 ### MessageHistory
 
-Retrieves conversation history and persists new messages.
+Retrieves message history and persists new messages.
 
 **When you configure:**
 
@@ -5967,7 +5940,7 @@ Understanding the execution order is important when combining guardrails with me
 1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
 2. **Your input processors run AFTER**: guardrails, filters, validators
 
-This means memory loads conversation history before your processors can validate or filter the input.
+This means memory loads message history before your processors can validate or filter the input.
 
 ### Output Processors
 
@@ -6079,1428 +6052,33 @@ When creating custom processors avoid mutating the input `messages` array or its
 
 
 ---
-title: "Memory overview | Memory"
-description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
+title: "Message History | Memory"
+description: "Learn how to configure message history in Mastra to store recent messages from the current conversation."
 ---
 
-# Memory Overview
-[EN] Source: https://mastra.ai/en/docs/memory/overview
+# Message History
+[EN] Source: https://mastra.ai/en/docs/memory/message-history
 
-Memory in Mastra helps agents manage context across conversations by condensing relevant information into the language model's context window.
+Message history is the simplest kind of memory. It is a list of messages from the current conversation.
 
-Mastra supports three types of memory: working memory, conversation history, and semantic recall. It uses a two-tier scoping system where memory can be isolated per conversation thread (thread-scoped) or shared across all conversations for the same user (resource-scoped).
-
-Mastra's memory system uses [storage providers](#memory-storage-adapters) to persist conversation threads, messages, and working memory across application restarts.
-
-## Getting started
-
-First install the required dependencies:
-
-```bash
-npm install @mastra/core@beta @mastra/memory@beta @mastra/libsql@beta
-```
-
-Then add a storage adapter to the main Mastra instance. Any agent with memory enabled will use this shared storage to store and recall interactions.
-
-```typescript {6-8} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: ":memory:",
-  }),
-});
-```
-
-Now, enable memory by passing a `Memory` instance to the agent's `memory` parameter:
-
-```typescript {3-5} title="src/mastra/agents/test-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-
-export const testAgent = new Agent({
-  id: "test-agent",
-  // ...
-  memory: new Memory(),
-});
-```
-
-That memory instance has options you can configure for working memory, conversation history, and semantic recall.
-
-## Different types of memory
-
-Mastra supports three types of memory: working memory, conversation history, and semantic recall.
-
-[**Working memory**](./working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data. (Compare this to ChatGPT where you can ask it to tell you about yourself). This is implemented as a block of Markdown text that the agent is able to update over time (or alternately, as a Zod schema)
-
-[**Conversation history**](./conversation-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
-
-[**Semantic recall**](./semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
-
-Mastra combines all memory types into a single context window. If the total exceeds the model’s token limit, use [memory processors](./memory-processors) to trim or filter messages before sending them to the model.
-
-## Scoping memory with threads and resources
-
-All memory types are [resource-scoped](./working-memory#resource-scoped-memory-default) by default, meaning they persist across all conversations for the same user or entity. [Thread-scoped](./working-memory#thread-scoped-memory) configuration isolates memory to a single conversation thread.
-
-## Memory Storage Adapters
-
-To persist and recall information between conversations, memory requires a storage adapter.
-
-Supported options include [LibSQL](/docs/v1/memory/storage/memory-with-libsql), [MongoDB](/docs/v1/memory/storage/memory-with-mongodb), [Postgres](/docs/v1/memory/storage/memory-with-pg), and [Upstash](/docs/v1/memory/storage/memory-with-upstash)
-
-We use LibSQL out of the box because it is file-based or in-memory, so it is easy to install and works well with Studio.
-
-## Dedicated storage
-
-Agents can be configured with their own dedicated storage, keeping tasks, conversations, and recalled information separate across agents.
-
-### Adding storage to agents
-
-To assign dedicated storage to an agent, install and import the required dependency and pass a `storage` instance to the `Memory` constructor:
-
-```typescript {3, 9-11} title="src/mastra/agents/test-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const testAgent = new Agent({
-  id: "test-agent",
-  // ...
-  memory: new Memory({
-    // ...
-    storage: new LibSQLStore({
-      id: 'test-agent-storage',
-      url: "file:agent-memory.db",
-    }),
-    // ...
-  }),
-});
-```
-
-## Viewing retrieved messages
-
-If tracing is enabled in your Mastra deployment and memory is configured either with `lastMessages` and/or `semanticRecall`, the agent’s trace output will show all messages retrieved for context—including both recent conversation history and messages recalled via semantic recall.
-
-This is helpful for debugging, understanding agent decisions, and verifying that the agent is retrieving the right information for each request.
-
-For more details on enabling and configuring tracing, see [Tracing](../observability/tracing/overview).
-
-## Local development with LibSQL
-
-For local development with `LibSQLStore`, you can inspect stored memory using the [SQLite Viewer](https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer) extension in VS Code.
-
-![SQLite Viewer](/img/memory/memory-sqlite-viewer.jpg)
-
-## Next Steps
-
-Now that you understand the core concepts, continue to [semantic recall](./semantic-recall) to learn how to add RAG memory to your Mastra agents.
-
-Alternatively you can visit the [configuration reference](/reference/v1/memory/memory-class) for available options.
-
-
----
-title: "Semantic Recall | Memory"
-description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
----
-
-# Semantic Recall
-[EN] Source: https://mastra.ai/en/docs/memory/semantic-recall
-
-If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
-
-> **📹 Watch**: What semantic recall is, how it works, and how to configure it in Mastra → [YouTube (5 minutes)](https://youtu.be/UVZtK8cK8xQ)
-
-## How Semantic Recall Works
-
-Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent conversation history](./conversation-history).
-
-It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
-
-<br />
-<img
-  src="/img/semantic-recall.png"
-  alt="Diagram showing Mastra Memory semantic recall"
-  width={800}
-/>
-
-When it's enabled, new messages are used to query a vector DB for semantically similar messages.
-
-After getting a response from the LLM, all new messages (user, assistant, and tool calls/results) are inserted into the vector DB to be recalled in later interactions.
-
-## Quick Start
-
-Semantic recall is enabled by default, so if you give your agent memory it will be included:
-
-```typescript {8}
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-
-const agent = new Agent({
-  id: "support-agent",
-  name: "SupportAgent",
-  instructions: "You are a helpful support agent.",
-  model: "openai/gpt-5.1",
-  memory: new Memory(),
-});
-```
-
-## Recall configuration
-
-The three main parameters that control semantic recall behavior are:
-
-1. **topK**: How many semantically similar messages to retrieve
-2. **messageRange**: How much surrounding context to include with each match
-3. **scope**: Whether to search within the current thread or across all threads owned by a resource (the default is resource scope).
-
-```typescript {5-7}
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      semanticRecall: {
-        topK: 3, // Retrieve 3 most similar messages
-        messageRange: 2, // Include 2 messages before and after each match
-        scope: "resource", // Search across all threads for this user (default setting if omitted)
-      },
-    },
-  }),
-});
-```
-
-### Storage configuration
-
-Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
-
-```ts {8-17}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
-
-const agent = new Agent({
-  memory: new Memory({
-    // this is the default storage db if omitted
-    storage: new LibSQLStore({
-      id: 'agent-storage',
-      url: "file:./local.db",
-    }),
-    // this is the default vector db if omitted
-    vector: new LibSQLVector({
-      id: 'agent-vector',
-      connectionUrl: "file:./local.db",
-    }),
-  }),
-});
-```
-
-**Storage/vector code Examples**:
-
-- [LibSQL](/docs/v1/memory/storage/memory-with-libsql)
-- [MongoDB](/docs/v1/memory/storage/memory-with-mongodb)
-- [Postgres](/docs/v1/memory/storage/memory-with-pg)
-- [Upstash](/docs/v1/memory/storage/memory-with-upstash)
-
-### Embedder configuration
-
-Semantic recall relies on an [embedding model](/reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
-
-#### Using the Model Router (Recommended)
-
-The simplest way is to use a `provider/model` string with autocomplete support:
-
-```ts {7}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const agent = new Agent({
-  memory: new Memory({
-    // ... other memory options
-    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  }),
-});
-```
-
-Supported embedding models:
-
-- **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
-- **Google**: `gemini-embedding-001`, `text-embedding-004`
-
-The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
-
-#### Using AI SDK Packages
-
-You can also use AI SDK embedding models directly:
-
-```ts {2,7}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
-
-const agent = new Agent({
-  memory: new Memory({
-    // ... other memory options
-    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  }),
-});
-```
-
-#### Using FastEmbed (Local)
-
-To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
-
-```bash npm2yarn
-npm install @mastra/fastembed@beta
-```
-
-Then configure it in your memory:
-
-```ts {3,8}
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { fastembed } from "@mastra/fastembed";
-
-const agent = new Agent({
-  memory: new Memory({
-    // ... other memory options
-    embedder: fastembed,
-  }),
-});
-```
-
-### PostgreSQL Index Optimization
-
-When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
-
-PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an IVFFlat index, but HNSW indexes typically provide better performance, especially with OpenAI embeddings which use inner product distance.
-
-```typescript {9-18}
-import { Memory } from "@mastra/memory";
-import { PgStore, PgVector } from "@mastra/pg";
-
-const agent = new Agent({
-  memory: new Memory({
-    storage: new PgStore({
-      id: 'agent-storage',
-      connectionString: process.env.DATABASE_URL,
-    }),
-    vector: new PgVector({
-      id: 'agent-vector',
-      connectionString: process.env.DATABASE_URL,
-    }),
-    options: {
-      semanticRecall: {
-        topK: 5,
-        messageRange: 2,
-        indexConfig: {
-          type: "hnsw", // Use HNSW for better performance
-          metric: "dotproduct", // Best for OpenAI embeddings
-          m: 16, // Number of bi-directional links (default: 16)
-          efConstruction: 64, // Size of candidate list during construction (default: 64)
-        },
-      },
-    },
-  }),
-});
-```
-
-For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/v1/vectors/pg#index-configuration-guide).
-
-### Disabling
-
-There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
-
-Semantic recall is enabled by default but can be disabled when not needed:
-
-```typescript {4}
-const agent = new Agent({
-  memory: new Memory({
-    options: {
-      semanticRecall: false,
-    },
-  }),
-});
-```
-
-You might want to disable semantic recall in scenarios like:
-
-- When conversation history provide sufficient context for the current conversation.
-- In performance-sensitive applications, like realtime two-way audio, where the added latency of creating embeddings and running vector queries is noticeable.
-
-## Viewing Recalled Messages
-
-When tracing is enabled, any messages retrieved via semantic recall will appear in the agent’s trace output, alongside recent conversation history (if configured).
-
-For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).
-
-
----
-title: "Memory with LibSQL | Storage"
-description: Example for how to use Mastra's memory system with LibSQL storage and vector database backend.
----
-
-# Memory with LibSQL
-[EN] Source: https://mastra.ai/en/docs/memory/storage/memory-with-libsql
-
-This example demonstrates how to use Mastra's memory system with LibSQL as the storage backend.
-
-## Prerequisites
-
-This example uses the `openai` model. Make sure to add `OPENAI_API_KEY` to your `.env` file.
-
-```bash title=".env"
-OPENAI_API_KEY=<your-api-key>
-```
-
-And install the following package:
-
-```bash
-npm install @mastra/libsql@beta
-```
-
-## Adding memory to an agent
-
-To add LibSQL memory to an agent use the `Memory` class and create a new `storage` key using `LibSQLStore`. The `url` can either by a remote location, or a local file system resource.
-
-```typescript title="src/mastra/agents/example-libsql-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore } from "@mastra/libsql";
-
-export const libsqlAgent = new Agent({
-  id: "libsql-agent",
-  name: "LibSQL Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'libsql-agent-storage',
-      url: "file:libsql-agent.db",
-    }),
-    options: {
-      generateTitle: true, // Explicitly enable automatic title generation
-    },
-  }),
-});
-```
-
-## Local embeddings with fastembed
-
-Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
-
-Install `fastembed` to get started:
-
-```bash
-npm install @mastra/fastembed@beta
-```
-
-Add the following to your agent:
-
-```typescript title="src/mastra/agents/example-libsql-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
-import { fastembed } from "@mastra/fastembed";
-
-export const libsqlAgent = new Agent({
-  id: "libsql-agent",
-  name: "LibSQL Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'libsql-agent-storage',
-      url: "file:libsql-agent.db",
-    }),
-    vector: new LibSQLVector({
-      id: 'libsql-agent-vector',
-      connectionUrl: "file:libsql-agent.db",
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-      threads: {
-        generateTitle: true, // Explicitly enable automatic title generation
-      },
-    },
-  }),
-});
-```
-
-## Usage example
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-libsql-agent.ts"
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("libsqlAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-
-
----
-title: "Example: Memory with MongoDB | Storage"
-description: Example for how to use Mastra's memory system with MongoDB storage and vector capabilities.
----
-
-# Memory with MongoDB
-[EN] Source: https://mastra.ai/en/docs/memory/storage/memory-with-mongodb
-
-This example demonstrates how to use Mastra's memory system with MongoDB as the storage backend.
-
-## Prerequisites
-
-This example uses the `openai` model and requires a MongoDB database. Make sure to add the following to your `.env` file:
-
-```bash title=".env"
-OPENAI_API_KEY=<your-api-key>
-MONGODB_URI=<your-connection-string>
-MONGODB_DB_NAME=<your-db-name>
-```
-
-And install the following package:
-
-```bash
-npm install @mastra/mongodb@beta
-```
-
-## Adding memory to an agent
-
-To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
-
-```typescript title="src/mastra/agents/example-mongodb-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { MongoDBStore } from "@mastra/mongodb";
-
-export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    options: {
-      threads: {
-        generateTitle: true,
-      },
-    },
-  }),
-});
-```
-
-## Vector embeddings with MongoDB
-
-Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
-
-> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
-
-This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
-To use this, install `@mastra/fastembed`:
-
-```bash
-npm install @mastra/fastembed@beta
-```
-
-Add the following to your agent:
-
-```typescript title="src/mastra/agents/example-mongodb-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
-import { fastembed } from "@mastra/fastembed";
-
-export const mongodbAgent = new Agent({
-  id: "mongodb-agent",
-  name: "mongodb-agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new MongoDBStore({
-      url: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    vector: new MongoDBVector({
-      uri: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-      threads: {
-        generateTitle: true, // generates descriptive thread titles automatically
-      },
-    },
-  }),
-});
-```
-
-## Usage example
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-mongodb-agent.ts"
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("mongodbAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-## Related
-
-- [Calling Agents](/docs/v1/agents/overview)
-
-
----
-title: "Memory with Postgres | Storage"
-description: Example for how to use Mastra's memory system with PostgreSQL storage and vector capabilities.
----
-
-# Memory with Postgres
-[EN] Source: https://mastra.ai/en/docs/memory/storage/memory-with-pg
-
-This example demonstrates how to use Mastra's memory system with PostgreSQL as the storage backend.
-
-## Prerequisites
-
-This example uses the `openai` model and requires a PostgreSQL database with the `pgvector` extension. Make sure to add the following to your `.env` file:
-
-```bash title=".env"
-OPENAI_API_KEY=<your-api-key>
-DATABASE_URL=<your-connection-string>
-```
-
-And install the following package:
-
-```bash
-npm install @mastra/pg@beta
-```
-
-## Adding memory to an agent
-
-To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
-
-```typescript title="src/mastra/agents/example-pg-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { PostgresStore } from "@mastra/pg";
-
-export const pgAgent = new Agent({
-  id: "pg-agent",
-  name: "PG Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new PostgresStore({
-      id: 'pg-agent-storage',
-      connectionString: process.env.DATABASE_URL!,
-    }),
-    options: {
-      generateTitle: true, // Explicitly enable automatic title generation
-    },
-  }),
-});
-```
-
-## Local embeddings with fastembed
-
-Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
-
-Install `fastembed` to get started:
-
-```bash
-npm install @mastra/fastembed@beta
-```
-
-Add the following to your agent:
-
-```typescript title="src/mastra/agents/example-pg-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { PostgresStore, PgVector } from "@mastra/pg";
-import { fastembed } from "@mastra/fastembed";
-
-export const pgAgent = new Agent({
-  id: "pg-agent",
-  name: "PG Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new PostgresStore({
-      id: 'pg-agent-storage',
-      connectionString: process.env.DATABASE_URL!,
-    }),
-    vector: new PgVector({
-      id: 'pg-agent-vector',
-      connectionString: process.env.DATABASE_URL!,
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-    },
-  }),
-});
-```
-
-## Usage example
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-pg-agent.ts"
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("pgAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-
-
----
-title: "Memory with Upstash | Storage"
-description: Example for how to use Mastra's memory system with Upstash Redis storage and vector capabilities.
----
-
-# Memory with Upstash
-[EN] Source: https://mastra.ai/en/docs/memory/storage/memory-with-upstash
-
-This example demonstrates how to use Mastra's memory system with Upstash as the storage backend.
-
-## Prerequisites
-
-This example uses the `openai` model and requires both Upstash Redis and Upstash Vector services. Make sure to add the following to your `.env` file:
-
-```bash title=".env"
-OPENAI_API_KEY=<your-api-key>
-UPSTASH_REDIS_REST_URL=<your-redis-url>
-UPSTASH_REDIS_REST_TOKEN=<your-redis-token>
-UPSTASH_VECTOR_REST_URL=<your-vector-index-url>
-UPSTASH_VECTOR_REST_TOKEN=<your-vector-index-token>
-```
-
-You can get your Upstash credentials by signing up at [upstash.com](https://upstash.com) and creating both Redis and Vector databases.
-
-And install the following package:
-
-```bash
-npm install @mastra/upstash@beta
-```
-
-## Adding memory to an agent
-
-To add Upstash memory to an agent use the `Memory` class and create a new `storage` key using `UpstashStore` and a new `vector` key using `UpstashVector`. The configuration can point to either a remote service or a local setup.
-
-```typescript title="src/mastra/agents/example-upstash-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { UpstashStore } from "@mastra/upstash";
-
-export const upstashAgent = new Agent({
-  id: "upstash-agent",
-  name: "Upstash Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new UpstashStore({
-      id: 'upstash-agent-storage',
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    }),
-    options: {
-      generateTitle: true, // Explicitly enable automatic title generation
-    },
-  }),
-});
-```
-
-## Local embeddings with fastembed
-
-Embeddings are numeric vectors used by memory’s `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
-
-Install `fastembed` to get started:
-
-```bash
-npm install @mastra/fastembed@beta
-```
-
-Add the following to your agent:
-
-```typescript title="src/mastra/agents/example-upstash-agent.ts"
-import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core/agent";
-import { UpstashStore, UpstashVector } from "@mastra/upstash";
-import { fastembed } from "@mastra/fastembed";
-
-export const upstashAgent = new Agent({
-  id: "upstash-agent",
-  name: "Upstash Agent",
-  instructions:
-    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
-  model: "openai/gpt-5.1",
-  memory: new Memory({
-    storage: new UpstashStore({
-      id: 'upstash-agent-storage',
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    }),
-    vector: new UpstashVector({
-      id: 'upstash-agent-vector',
-      url: process.env.UPSTASH_VECTOR_REST_URL!,
-      token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-    },
-  }),
-});
-```
-
-## Usage example
-
-Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
-
-```typescript title="src/test-upstash-agent.ts"
-import "dotenv/config";
-
-import { mastra } from "./mastra";
-
-const threadId = "123";
-const resourceId = "user-456";
-
-const agent = mastra.getAgent("upstashAgent");
-
-const message = await agent.stream("My name is Mastra", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-});
-
-await message.textStream.pipeTo(new WritableStream());
-
-const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
-});
-
-for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk);
-}
-```
-
-
-
----
-title: "MastraStorage | Storage"
-description: Overview of Mastra's storage system and data persistence capabilities.
----
-
-import PropertiesTable from "@site/src/components/PropertiesTable";
-import { SchemaTable } from "@site/src/components/SchemaTable";
-import { StorageOverviewImage } from "@site/src/components/StorageOverviewImage";
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
-# Storage Overview
-[EN] Source: https://mastra.ai/en/docs/memory/storage/overview
-
-`MastraStorage` provides a unified interface for managing:
-
-- **Suspended Workflows**: the serialized state of suspended workflows (so they can be resumed later)
-- **Memory**: threads and messages per `resourceId` in your application
-- **Traces**: OpenTelemetry traces from all components of Mastra
-- **Eval Datasets**: scores and scoring reasons from eval runs
-
-<br />
-
-<br />
-
-<StorageOverviewImage />
-
-Mastra provides different storage providers, but you can treat them as interchangeable. Eg, you could use libsql in development but postgres in production, and your code will work the same both ways.
-
-## Configuration
-
-Mastra can be configured with a default storage option:
+Once enabled, each request includes the last 10 messages from the current memory thread, giving the agent short-term conversational context. This limit can be increased using the `lastMessages` parameter:
 
 ```typescript
-import { Mastra } from "@mastra/core";
-import { LibSQLStore } from "@mastra/libsql";
-
-const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: "file:./mastra.db",
+export const agent = new Agent({
+  id: "test-agent",
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
   }),
 });
 ```
 
-If you do not specify any `storage` configuration, Mastra will not persist data across application restarts or deployments. For any
-deployment beyond local testing you should provide your own storage
-configuration either on `Mastra` or directly within `new Memory()`.
-
-## Data Schema
-
-<Tabs>
-  <TabItem value="messages" label="Messages">
-Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
-
-<br />
-<SchemaTable
-  columns={[
-    {
-      name: "id",
-      type: "uuidv4",
-      description:
-        "Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
-      constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
-    },
-    {
-      name: "thread_id",
-      type: "uuidv4",
-      description: "Parent thread reference",
-      constraints: [
-        { type: "foreignKey", value: "threads.id" },
-        { type: "nullable", value: false },
-      ],
-    },
-    {
-      name: "resourceId",
-      type: "uuidv4",
-      description: "ID of the resource that owns this message",
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "content",
-      type: "text",
-      description:
-        "JSON of the message content in V2 format. Example: `{ format: 2, parts: [...] }`",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "role",
-      type: "text",
-      description: "Enum of `user | assistant`",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "createdAt",
-      type: "timestamp",
-      description: "Used for thread message ordering",
-      constraints: [{ type: "nullable", value: false }],
-    },
-  ]}
-/>
-
-The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
-
-<SchemaTable
-  columns={[
-    {
-      name: "format",
-      type: "integer",
-      description: "Message format version (currently 2)",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "parts",
-      type: "array (JSON)",
-      description:
-        "Array of message parts (text, tool-invocation, file, reasoning, etc.). The structure of items in this array varies by `type`.",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "experimental_attachments",
-      type: "array (JSON)",
-      description: "Optional array of file attachments",
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "content",
-      type: "text",
-      description: "Optional main text content of the message",
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "toolInvocations",
-      type: "array (JSON)",
-      description: "Optional array summarizing tool calls and results",
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "reasoning",
-      type: "object (JSON)",
-      description:
-        "Optional information about the reasoning process behind the assistant's response",
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "annotations",
-      type: "object (JSON)",
-      description: "Optional additional metadata or annotations",
-      constraints: [{ type: "nullable", value: true }],
-    },
-  ]}
-/>
-
-</TabItem>
-
-  <TabItem value="threads" label="Threads">
-Groups related messages together and associates them with a resource. Contains metadata about the conversation.
-
-<br />
-<SchemaTable
-  columns={[
-    {
-      name: "id",
-      type: "uuidv4",
-      description:
-        "Unique identifier for the thread (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
-      constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
-    },
-    {
-      name: "resourceId",
-      type: "text",
-      description:
-        "Primary identifier of the external resource this thread is associated with. Used to group and retrieve related threads.",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "title",
-      type: "text",
-      description: "Title of the conversation thread",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "metadata",
-      type: "text",
-      description: "Custom thread metadata as stringified JSON. Example:",
-      example: {
-        category: "support",
-        priority: 1,
-      },
-    },
-    {
-      name: "createdAt",
-      type: "timestamp",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "updatedAt",
-      type: "timestamp",
-      description: "Used for thread ordering history",
-      constraints: [{ type: "nullable", value: false }],
-    },
-  ]}
-/>
-
-</TabItem>
-  <TabItem value="resources" label="Resources">
-Stores user-specific data for resource-scoped working memory. Each resource represents a user or entity, allowing working memory to persist across all conversation threads for that user.
-
-<br />
-<SchemaTable
-  columns={[
-    {
-      name: "id",
-      type: "text",
-      description:
-        "Resource identifier (user or entity ID) - same as resourceId used in threads and agent calls",
-      constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
-    },
-    {
-      name: "workingMemory",
-      type: "text",
-      description:
-        "Persistent working memory data as Markdown text. Contains user profile, preferences, and contextual information that persists across conversation threads.",
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "metadata",
-      type: "jsonb",
-      description: "Additional resource metadata as JSON. Example:",
-      example: {
-        preferences: { language: "en", timezone: "UTC" },
-        tags: ["premium", "beta-user"],
-      },
-      constraints: [{ type: "nullable", value: true }],
-    },
-    {
-      name: "createdAt",
-      type: "timestamp",
-      description: "When the resource record was first created",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "updatedAt",
-      type: "timestamp",
-      description: "When the working memory was last updated",
-      constraints: [{ type: "nullable", value: false }],
-    },
-  ]}
-/>
-
-</TabItem>
-  <TabItem value="workflows" label="Workflows">
-When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
-
-<br />
-<SchemaTable
-  columns={[
-    {
-      name: "workflow_name",
-      type: "text",
-      description: "Name of the workflow",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "run_id",
-      type: "uuidv4",
-      description: "Unique identifier for the workflow execution. Used to track state across suspend/resume cycles (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "snapshot",
-      type: "text",
-      description: "Serialized workflow state as JSON. Example:",
-      example: {
-        value: { currentState: 'running' },
-        context: {
-          stepResults: {},
-          attempts: {},
-          triggerData: {}
-        },
-        activePaths: [],
-        runId: '550e8400-e29b-41d4-a716-446655440000',
-        timestamp: 1648176000000
-      },
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "createdAt",
-      type: "timestamp",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "updatedAt",
-      type: "timestamp",
-      description: "Last modification time, used to track state changes during workflow execution",
-      constraints: [{ type: "nullable", value: false }]
-    }
-  ]}
-/>
-  </TabItem>
-  <TabItem value="evals" label="Evals">
-Stores eval results from running metrics against agent outputs.
-
-<br />
-<SchemaTable
-  columns={[
-    {
-      name: "input",
-      type: "text",
-      description: "Input provided to the agent",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "output",
-      type: "text",
-      description: "Output generated by the agent",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "result",
-      type: "jsonb",
-      description: "Eval result data that includes score and details. Example:",
-      example: {
-        score: 0.95,
-        details: {
-          reason: "Response accurately reflects source material",
-          citations: ["page 1", "page 3"]
-        }
-      },
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "agent_name",
-      type: "text",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "metric_name",
-      type: "text",
-      description: "e.g Faithfulness, Hallucination, etc.",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "instructions",
-      type: "text",
-      description: "System prompt or instructions for the agent",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "test_info",
-      type: "jsonb",
-      description: "Additional test metadata and configuration",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "global_run_id",
-      type: "uuidv4",
-      description: "Groups related evaluation runs (e.g. all unit tests in a CI run)",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "run_id",
-      type: "uuidv4",
-      description: "Unique identifier for the run being evaluated (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "created_at",
-      type: "timestamp",
-      constraints: [{ type: "nullable", value: false }]
-    }
-  ]}
-/>
-  </TabItem>
-  <TabItem value="traces" label="Traces">
-Captures OpenTelemetry traces for monitoring and debugging.
-
-<br />
-<SchemaTable
-  columns={[
-    {
-      name: "id",
-      type: "text",
-      description: "Unique trace identifier",
-      constraints: [
-        { type: "nullable", value: false },
-        { type: "primaryKey" }
-      ]
-    },
-    {
-      name: "parentSpanId",
-      type: "text",
-      description: "ID of the parent span. Null if span is top level",
-    },
-    {
-      name: "name",
-      type: "text",
-      description: "Hierarchical operation name (e.g. `workflow.myWorkflow.execute`, `http.request`, `database.query`)",
-      constraints: [{ type: "nullable", value: false }],
-    },
-    {
-      name: "traceId",
-      type: "text",
-      description: "Root trace identifier that groups related spans",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "scope",
-      type: "text",
-      description: "Library/package/service that created the span (e.g. `@mastra/core`, `express`, `pg`)",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "kind",
-      type: "integer",
-      description: "`INTERNAL` (0, within process), `CLIENT` (1, outgoing calls), `SERVER` (2, incoming calls), `PRODUCER` (3, async job creation), `CONSUMER` (4, async job processing)",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "attributes",
-      type: "jsonb",
-      description: "User defined key-value pairs that contain span metadata",
-    },
-    {
-      name: "status",
-      type: "jsonb",
-      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`. Example:",
-      example: {
-        code: 1,
-        message: "HTTP request failed with status 500"
-      }
-    },
-    {
-      name: "events",
-      type: "jsonb",
-      description: "Time-stamped events that occurred during the span",
-    },
-    {
-      name: "links",
-      type: "jsonb",
-      description: "Links to other related spans",
-      },
-    {
-      name: "other",
-      type: "text",
-      description: "Additional OpenTelemetry span fields as stringified JSON. Example:",
-      example: {
-        droppedAttributesCount: 2,
-        droppedEventsCount: 1,
-        instrumentationLibrary: "@opentelemetry/instrumentation-http"
-      }
-    },
-    {
-      name: "startTime",
-      type: "bigint",
-      description: "Nanoseconds since Unix epoch when span started",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "endTime",
-      type: "bigint",
-      description: "Nanoseconds since Unix epoch when span ended",
-      constraints: [{ type: "nullable", value: false }]
-    },
-    {
-      name: "createdAt",
-      type: "timestamp",
-      constraints: [{ type: "nullable", value: false }]
-    }
-  ]}
-/>
-  </TabItem>
-</Tabs>
-
-### Querying Messages
+## Querying Messages
 
 Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
 
-```typescript
+```typescript 
 // Get messages for a thread with pagination
 const result = await mastra
   .getStorage()
@@ -7533,7 +6111,7 @@ The `threadId` parameter accepts either a single thread ID string or an array of
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
-```typescript
+```typescript 
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
 const result = await mastra
@@ -7544,78 +6122,470 @@ const result = await mastra
 const uiMessages = toAISdkV5Messages(result.messages);
 ```
 
-## Storage Providers
 
-Mastra supports the following providers:
+---
+title: "Memory overview | Memory"
+description: "Learn how Mastra's memory system works with working memory, message history, and semantic recall."
+---
 
-- For local development, check out [LibSQL Storage](/reference/v1/storage/libsql)
-- For production, check out [PostgreSQL Storage](/reference/v1/storage/postgresql)
-- For serverless deployments, check out [Upstash Storage](/reference/v1/storage/upstash)
-- For document-based storage, check out [MongoDB Storage](/reference/v1/storage/mongodb)
+# Memory
+[EN] Source: https://mastra.ai/en/docs/memory/overview
+
+Memory gives your agent coherence across interactions and allows it to improve over time by retaining relevant information from past conversations.
+
+Mastra requires a [storage provider](./storage) to persist memory and supports three types:
+
+- [**Message history**](/docs/v1/memory/message-history) captures recent messages from the current conversation, providing short-term continuity and maintaining dialogue flow.
+- [**Working memory**](/docs/v1/memory/working-memory) stores persistent user-specific details such as names, preferences, goals, and other structured data.
+- [**Semantic recall**](/docs/v1/memory/semantic-recall) retrieves older messages from past conversations based on semantic relevance. Matches are retrieved using vector search and can include surrounding context for better comprehension.
+
+You can enable any combination of these memory types. Mastra assembles the relevant memories into the model’s context window. If the total exceeds the model's token limit, use [memory processors](/docs/v1/memory/memory-processors) to trim or filter messages before sending them to the model.
+
+## Getting started
+
+Install Mastra's memory module and the storage adapter for your preferred database (see the storage section below):
+
+```bash 
+npm install @mastra/memory@beta @mastra/libsql@beta
+```
+
+Add the storage adapter to the main Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: ":memory:",
+  }),
+});
+```
+
+Enable memory by passing a `Memory` instance to your agent:
+
+```typescript title="src/mastra/agents/test-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+
+export const testAgent = new Agent({
+  id: "test-agent",
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
+When you send a new message, the model can now "see" the previous 20 messages, which gives it better context for the conversation and leads to more coherent, accurate replies.
+
+This example configures basic [message history](/docs/v1/memory/message-history). You can also enable [working memory](/docs/v1/memory/working-memory) and [semantic recall](/docs/v1/memory/semantic-recall) by passing additional options to `Memory`.
+
+## Storage
+
+Before enabling memory, you must first configure a storage adapter. Mastra supports multiple database providers including PostgreSQL, MongoDB, libSQL, and more.
+
+Storage can be configured at the instance level (shared across all agents) or at the agent level (dedicated per agent). You can also use different databases for storage and vector operations.
+
+See the [Storage](/docs/v1/memory/storage) documentation for configuration options, supported providers, and examples.
+
+## Debugging memory
+
+When tracing is enabled, you can inspect exactly which messages the agent uses for context in each request. The trace output shows all memory included in the agent's context window - both recent message history and messages recalled via semantic recall.
+
+This visibility helps you understand why an agent made specific decisions and verify that memory retrieval is working as expected.
+
+For more details on enabling and configuring tracing, see [Tracing](/docs/v1/observability/tracing/overview).
+
+## Next Steps
+
+- Learn more about [Storage](/docs/v1/memory/storage) providers and configuration options
+- Add [Message History](/docs/v1/memory/message-history), [Working Memory](/docs/v1/memory/working-memory), or [Semantic Recall](/docs/v1/memory/semantic-recall)
+- Visit the [Memory configuration reference](/reference/v1/memory/memory-class) for all available options
 
 
 ---
-title: "Memory threads and resources | Memory"
-description: "Learn how Mastra's memory system works with working memory, conversation history, and semantic recall."
+title: "Semantic Recall | Memory"
+description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
 ---
 
-# Memory threads and resources
-[EN] Source: https://mastra.ai/en/docs/memory/threads-and-resources
+# Semantic Recall
+[EN] Source: https://mastra.ai/en/docs/memory/semantic-recall
 
-Mastra organizes memory into threads, which are records that group related interactions, using two identifiers:
+If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
 
-1. **`thread`**: A globally unique ID representing the conversation (e.g., `support_123`). Must be unique across all resources.
-2. **`resource`**: The user or entity that owns the thread (e.g., `user_123`, `org_456`).
+:::tip[Watch 📹]
 
-The `resource` is especially important for [resource-scoped memory](./working-memory#resource-scoped-memory-default), which allows memory to persist across all threads associated with the same user or entity.
+What semantic recall is, how it works, and how to configure it in Mastra → [YouTube (5 minutes)](https://youtu.be/UVZtK8cK8xQ)
+
+:::
+
+## How Semantic Recall Works
+
+Semantic recall is RAG-based search that helps agents maintain context across longer interactions when messages are no longer within [recent message history](./message-history).
+
+It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
+
+![Diagram showing Mastra Memory semantic recall](/img/semantic-recall.png)
+
+When it's enabled, new messages are used to query a vector DB for semantically similar messages.
+
+After getting a response from the LLM, all new messages (user, assistant, and tool calls/results) are inserted into the vector DB to be recalled in later interactions.
+
+## Quick Start
+
+Semantic recall is enabled by default, so if you give your agent memory it will be included:
+
+```typescript {9}
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+
+const agent = new Agent({
+  id: "support-agent",
+  name: "SupportAgent",
+  instructions: "You are a helpful support agent.",
+  model: "openai/gpt-5.1",
+  memory: new Memory(),
+});
+```
+
+## Storage configuration
+
+Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
+
+```ts {8-16}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+
+const agent = new Agent({
+  memory: new Memory({
+    // this is the default storage db if omitted
+    storage: new LibSQLStore({
+      id: 'agent-storage',
+      url: "file:./local.db",
+    }),
+    // this is the default vector db if omitted
+    vector: new LibSQLVector({
+      id: 'agent-vector',
+      connectionUrl: "file:./local.db",
+    }),
+  }),
+});
+```
+
+Each vector store page below includes installation instructions, configuration parameters, and usage examples:
+
+- [Astra](/reference/v1/vectors/astra)
+- [Chroma](/reference/v1/vectors/chroma)
+- [Cloudflare Vectorize](/reference/v1/vectors/vectorize)
+- [Convex](/reference/v1/vectors/convex)
+- [Couchbase](/reference/v1/vectors/couchbase)
+- [DuckDB](/reference/v1/vectors/duckdb)
+- [Elasticsearch](/reference/v1/vectors/elasticsearch)
+- [LanceDB](/reference/v1/vectors/lance)
+- [libSQL](/reference/v1/vectors/libsql)
+- [MongoDB](/reference/v1/vectors/mongodb)
+- [OpenSearch](/reference/v1/vectors/opensearch)
+- [Pinecone](/reference/v1/vectors/pinecone)
+- [PostgreSQL](/reference/v1/vectors/pg)
+- [Qdrant](/reference/v1/vectors/qdrant)
+- [S3 Vectors](/reference/v1/vectors/s3vectors)
+- [Turbopuffer](/reference/v1/vectors/turbopuffer)
+- [Upstash](/reference/v1/vectors/upstash)
+
+## Recall configuration
+
+The three main parameters that control semantic recall behavior are:
+
+1. **topK**: How many semantically similar messages to retrieve
+2. **messageRange**: How much surrounding context to include with each match
+3. **scope**: Whether to search within the current thread or across all threads owned by a resource (the default is resource scope).
+
+```typescript {5-7}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: {
+        topK: 3, // Retrieve 3 most similar messages
+        messageRange: 2, // Include 2 messages before and after each match
+        scope: "resource", // Search across all threads for this user (default setting if omitted)
+      },
+    },
+  }),
+});
+```
+
+## Embedder configuration
+
+Semantic recall relies on an [embedding model](/reference/v1/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
+
+#### Using the Model Router (Recommended)
+
+The simplest way is to use a `provider/model` string with autocomplete support:
+
+```ts {7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  }),
+});
+```
+
+Supported embedding models:
+
+- **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
+- **Google**: `gemini-embedding-001`, `text-embedding-004`
+
+The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
+
+#### Using AI SDK Packages
+
+You can also use AI SDK embedding models directly:
+
+```ts {2,7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  }),
+});
+```
+
+#### Using FastEmbed (Local)
+
+To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
+
+```bash npm2yarn
+npm install @mastra/fastembed@beta
+```
+
+Then configure it in your memory:
+
+```ts {3,7}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { fastembed } from "@mastra/fastembed";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: fastembed,
+  }),
+});
+```
+
+## PostgreSQL Index Optimization
+
+When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
+
+PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an IVFFlat index, but HNSW indexes typically provide better performance, especially with OpenAI embeddings which use inner product distance.
+
+```typescript {18-23}
+import { Memory } from "@mastra/memory";
+import { PgStore, PgVector } from "@mastra/pg";
+
+const agent = new Agent({
+  memory: new Memory({
+    storage: new PgStore({
+      id: 'agent-storage',
+      connectionString: process.env.DATABASE_URL,
+    }),
+    vector: new PgVector({
+      id: 'agent-vector',
+      connectionString: process.env.DATABASE_URL,
+    }),
+    options: {
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+        indexConfig: {
+          type: "hnsw", // Use HNSW for better performance
+          metric: "dotproduct", // Best for OpenAI embeddings
+          m: 16, // Number of bi-directional links (default: 16)
+          efConstruction: 64, // Size of candidate list during construction (default: 64)
+        },
+      },
+    },
+  }),
+});
+```
+
+For detailed information about index configuration options and performance tuning, see the [PgVector configuration guide](/reference/v1/vectors/pg#index-configuration-guide).
+
+## Disabling
+
+There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
+
+Semantic recall is enabled by default but can be disabled when not needed:
 
 ```typescript {4}
+const agent = new Agent({
+  memory: new Memory({
+    options: {
+      semanticRecall: false,
+    },
+  }),
+});
+```
+
+You might want to disable semantic recall in scenarios like:
+
+- When message history provides sufficient context for the current conversation.
+- In performance-sensitive applications, like realtime two-way audio, where the added latency of creating embeddings and running vector queries is noticeable.
+
+## Viewing Recalled Messages
+
+When tracing is enabled, any messages retrieved via semantic recall will appear in the agent's trace output, alongside recent message history (if configured).
+
+For more info on viewing message traces, see [Viewing Retrieved Messages](./overview#viewing-retrieved-messages).
+
+
+---
+title: "Storage | Memory"
+description: Configure storage for Mastra's memory system to persist conversations, workflows, and traces.
+---
+
+# Storage
+[EN] Source: https://mastra.ai/en/docs/memory/storage
+
+For Mastra to remember previous interactions, you must configure a storage adapter. Mastra is designed to work with your preferred database provider - choose from the [supported providers](#supported-providers) and pass it to your Mastra instance.
+
+
+```typescript 
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db",
+  }),
+});
+```
+On first interaction, Mastra automatically creates the necessary tables following the [core schema](/reference/v1/storage/overview#core-schema). This includes tables for messages, threads, resources, workflows, traces, and evaluation datasets.
+
+## Supported Providers
+
+Each provider page includes installation instructions, configuration parameters, and usage examples:
+
+- [libSQL Storage](/reference/v1/storage/libsql)
+- [PostgreSQL Storage](/reference/v1/storage/postgresql)
+- [MongoDB Storage](/reference/v1/storage/mongodb)
+- [Upstash Storage](/reference/v1/storage/upstash)
+- [Cloudflare D1](/reference/v1/storage/cloudflare-d1)
+- [Cloudflare Durable Objects](/reference/v1/storage/cloudflare)
+- [Convex](/reference/v1/storage/convex)
+- [DynamoDB](/reference/v1/storage/dynamodb)
+- [LanceDB](/reference/v1/storage/lance)
+- [Microsoft SQL Server](/reference/v1/storage/mssql)
+
+:::tip
+libSQL is the easiest way to get started because it doesn’t require running a separate database server
+:::
+
+## Configuration Scope
+
+You can configure storage at two different scopes:
+
+### Instance-level storage
+
+Add storage to your Mastra instance so all agents share the same memory provider:
+
+```typescript 
+import { Mastra } from "@mastra/core";
+import { PostgresStore } from "@mastra/pg";
+
+const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
+});
+
+// All agents automatically use this storage
+const agent1 = new Agent({ memory: new Memory() });
+const agent2 = new Agent({ memory: new Memory() });
+```
+
+### Agent-level storage
+
+Add storage to a specific agent when you need data boundaries or compliance requirements:
+
+```typescript 
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/pg";
+
+const agent = new Agent({
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'agent-storage',
+      connectionString: process.env.AGENT_DATABASE_URL,
+    }),
+  }),
+});
+```
+
+This is useful when different agents need to store data in separate databases for security, compliance, or organizational reasons.
+
+## Threads and Resources
+
+Mastra organizes memory into threads using two identifiers:
+
+- **Thread**: A conversation session containing a sequence of messages (e.g., `convo_123`)
+- **Resource**: An identifier for the entity the thread belongs to, typically a user (e.g., `user_123`)
+
+Both identifiers are required for agents to store and recall information:
+
+```typescript 
 const stream = await agent.stream("message for agent", {
   memory: {
-    thread: "conversation-123",
-    resource: "user-123",
+    thread: "convo_123",
+    resource: "user_123",
   },
 });
 ```
 
-:::warning
-
-Even with memory configured, agents won’t store or recall information unless both `thread` and `resource` are provided.
-
+:::note
+[Studio](/docs/v1/getting-started/studio) automatically generates a thread and resource ID for you. Remember to  to pass these explicitly when calling `stream` or `generate` yourself.
 :::
-
-> Studio sets `thread` and `resource` IDs automatically. In your own application, you must provide them manually as part of each `.generate()` or `.stream()` call.
 
 ### Thread title generation
 
-Mastra can automatically generate descriptive thread titles based on the user's first message. This feature is disabled by default. Enable it by setting `generateTitle` to `true`. This improves organization and makes it easier to display conversations in your UI.
+Mastra can automatically generate descriptive thread titles based on the user's first message.
 
-```typescript {3-7}
+Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
+
+```typescript 
 export const testAgent = new Agent({
   memory: new Memory({
     options: {
-      generateTitle: true, // Explicitly enable automatic title generation
+      generateTitle: true,
     },
   }),
 });
 ```
 
-> Title generation runs asynchronously after the agent responds and does not affect response time. See the [full configuration reference](/reference/v1/memory/memory-class) for details and examples.
+Title generation runs asynchronously after the agent responds and does not affect response time.
 
-#### Optimizing title generation
+To optimize cost or behavior, provide a smaller `model` and custom `instructions`:
 
-Titles are generated using your agent's model by default. To optimize cost or behavior, provide a smaller `model` and custom `instructions`. This keeps title generation separate from main conversation logic.
-
-```typescript {5-9}
+```typescript
 export const testAgent = new Agent({
-  // ...
   memory: new Memory({
     options: {
       threads: {
         generateTitle: {
-          model: "openai/gpt-4.1-nano",
-          instructions:
-            "Generate a concise title based on the user's first message",
+          model: "openai/gpt-4o-mini",
+          instructions: "Generate a concise title based on the user's first message",
         },
       },
     },
@@ -7623,33 +6593,50 @@ export const testAgent = new Agent({
 });
 ```
 
-#### Dynamic model selection and instructions
+## Semantic recall
 
-You can configure thread title generation dynamically by passing functions to `model` and `instructions`. These functions receive the `requestContext` object, allowing you to adapt title generation based on user-specific values.
+Semantic recall uses vector embeddings to retrieve relevant past messages based on meaning rather than recency. This requires a vector database instance, which can be configured at the instance or agent level.
 
-```typescript {7-16}
-export const testAgent = new Agent({
-  // ...
+The vector database doesn't have to be the same as your storage provider. For example, you might use PostgreSQL for storage and Pinecone for vectors:
+
+```typescript 
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { PostgresStore } from "@mastra/pg";
+import { PineconeVector } from "@mastra/pinecone";
+
+// Instance-level vector configuration
+const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
+});
+
+// Agent-level vector configuration
+const agent = new Agent({
   memory: new Memory({
+    vector: new PineconeVector({
+      id: 'agent-vector',
+      apiKey: process.env.PINECONE_API_KEY,
+      environment: process.env.PINECONE_ENVIRONMENT,
+      indexName: 'agent-embeddings',
+    }),
     options: {
-      threads: {
-        generateTitle: {
-          model: ({ requestContext }) => {
-            const userTier = requestContext.get("userTier");
-            return userTier === "premium"
-              ? "openai/gpt-5.1"
-              : "openai/gpt-4.1-nano";
-          },
-          instructions: ({ requestContext }) => {
-            const language = requestContext.get("userLanguage") || "English";
-            return `Generate a concise, engaging title in ${language} based on the user's first message.`;
-          },
-        },
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
       },
     },
   }),
 });
 ```
+
+We support all popular vector providers including [Pinecone](/reference/v1/vectors/pinecone), [Chroma](/reference/v1/vectors/chroma), [Qdrant](/reference/v1/vectors/qdrant), and many more.
+
+For more information on configuring semantic recall, see the [Semantic Recall](./semantic-recall) documentation.
+
 
 
 ---
@@ -7662,7 +6649,7 @@ import YouTube from "@site/src/components/YouTube-player";
 # Working Memory
 [EN] Source: https://mastra.ai/en/docs/memory/working-memory
 
-While [conversation history](/docs/v1/memory/conversation-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+While [message history](/docs/v1/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
 
 Think of it as the agent's active thoughts or scratchpad – the key information they keep available about the user or task. It's similar to how a person would naturally remember someone's name, preferences, or important details during a conversation.
 
@@ -7679,7 +6666,7 @@ Working memory can persist at two different scopes:
 
 Here's a minimal example of setting up an agent with working memory:
 
-```typescript {11-14}
+```typescript {11-15}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
@@ -7781,9 +6768,9 @@ const memory = new Memory({
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### ✅ Supported Storage Adapters
+### Supported Storage Adapters
 
-- **LibSQL** (`@mastra/libsql`)
+- **libSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)
 - **Upstash** (`@mastra/upstash`)
 - **MongoDB** (`@mastra/mongodb`)
@@ -8875,7 +7862,7 @@ The `DefaultExporter` persists traces to your configured storage backend, making
 
 ### Prerequisites
 
-1. **Storage Backend**: Configure a storage provider (LibSQL, PostgreSQL, etc.)
+1. **Storage Backend**: Configure a storage provider (libSQL, PostgreSQL, etc.)
 2. **Studio**: Install for viewing traces locally
 
 ### Basic Setup
@@ -8966,7 +7953,7 @@ If you set the strategy to `'auto'`, the `DefaultExporter` automatically selects
 
 | Storage Provider                                | Preferred Strategy | Supported Strategies                      | Notes                                 |
 | ----------------------------------------------- | ------------------ | ----------------------------------------- | ------------------------------------- |
-| **[LibSQL](/reference/v1/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
+| **[libSQL](/reference/v1/storage/libsql)**         | batch-with-updates | realtime, batch-with-updates, insert-only | Default storage, good for development |
 | **[PostgreSQL](/reference/v1/storage/postgresql)** | batch-with-updates | batch-with-updates, insert-only           | Recommended for production            |
 
 ### Strategy Benefits
@@ -9024,7 +8011,7 @@ new DefaultExporter({
 
 - [Tracing Overview](/docs/v1/observability/tracing/overview)
 - [CloudExporter](/docs/v1/observability/tracing/exporters/cloud)
-- [Storage Configuration](/docs/v1/memory/storage/overview)
+- [Storage Configuration](/docs/v1/memory/storage)
 
 
 ---
@@ -11835,7 +10822,7 @@ export const ragAgent = new Agent({
 
   </TabItem>
 
-  <TabItem value="libsql" label="LibSQL">
+  <TabItem value="libsql" label="libSQL">
 
 ```ts title="vector-store.ts"
 import { LIBSQL_PROMPT } from "@mastra/libsql";
@@ -12193,7 +11180,7 @@ await store.upsert({
 
   </TabItem>
 
-  <TabItem value="libsql" label="LibSQL">
+  <TabItem value="libsql" label="libSQL">
 
 ```ts title="vector-store.ts"
 import { LibSQLVector } from "@mastra/core/vector/libsql";
@@ -12468,7 +11455,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my_collection_123` is valid
     - Example: `my-collection` is not valid (contains hyphen)
   </TabItem>
-  <TabItem value="libsql" label="LibSQL">
+  <TabItem value="libsql" label="libSQL">
     Index names must:
     - Start with a letter or underscore
     - Contain only letters, numbers, and underscores
@@ -18009,7 +16996,7 @@ Workflow steps can call agents to leverage LLM reasoning or call tools for type-
 
 ## Using agents in workflows
 
-Use agents in workflow steps when you need reasoning, language generation, or other LLM-based tasks. Call from a step's `execute` function for more control over the agent call (e.g., track conversation history or return structured output). Compose agents as steps when you don't need to modify how the agent is invoked.
+Use agents in workflow steps when you need reasoning, language generation, or other LLM-based tasks. Call from a step's `execute` function for more control over the agent call (e.g., track message history or return structured output). Compose agents as steps when you don't need to modify how the agent is invoked.
 
 ### Calling agents
 
@@ -20522,11 +19509,11 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 
 ## How snapshots are saved and retrieved
 
-Snapshots are saved to the configured storage system. By default, they use LibSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow’s `runId`.
+Snapshots are saved to the configured storage system. By default, they use libSQL, but you can configure Upstash or PostgreSQL instead. Each snapshot is saved in the `workflow_snapshots` table and identified by the workflow's `runId`.
 
 Read more about:
 
-- [LibSQL Storage](/reference/v1/storage/libsql)
+- [libSQL Storage](/reference/v1/storage/libsql)
 - [Upstash Storage](/reference/v1/storage/upstash)
 - [PostgreSQL Storage](/reference/v1/storage/postgresql)
 
@@ -20565,57 +19552,27 @@ console.log(snapshot);
 
 Snapshots are persisted using a `storage` instance configured on the `Mastra` class. This storage layer is shared across all workflows registered to that instance. Mastra supports multiple storage options for flexibility in different environments.
 
-### LibSQL `@mastra/libsql`
-
-This example demonstrates how to use snapshots with LibSQL.
-
-```typescript title="src/mastra/index.ts"
+```typescript title="src/mastra/index.ts" 
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
+import { approvalWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: 'mastra-storage',
     url: ":memory:",
   }),
+  workflows: { approvalWorkflow },
 });
 ```
 
-### Upstash `@mastra/upstash`
-
-This example demonstrates how to use snapshots with Upstash.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { UpstashStore } from "@mastra/upstash";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new UpstashStore({
-  id: 'upstash-storage',
-    url: "<upstash-redis-rest-url>",
-    token: "<upstash-redis-rest-token>",
-  }),
-});
-```
-
-### Postgres `@mastra/pg`
-
-This example demonstrates how to use snapshots with PostgreSQL.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { PostgresStore } from "@mastra/pg";
-
-export const mastra = new Mastra({
-  // ...
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: "<database-url>",
-  }),
-});
-```
+- [libSQL Storage](/reference/v1/storage/libsql)
+- [PostgreSQL Storage](/reference/v1/storage/postgresql)
+- [MongoDB Storage](/reference/v1/storage/mongodb)
+- [Upstash Storage](/reference/v1/storage/upstash)
+- [Cloudflare D1](/reference/v1/storage/cloudflare-d1)
+- [DynamoDB](/reference/v1/storage/dynamodb)
+- [More storage providers](/docs/v1/memory/storage)
 
 ## Best practices
 
@@ -23041,7 +21998,7 @@ const { text } = await generateText({
 
 ### With Memory
 
-Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a LibSQL storage backend to persist conversation history, loading the last 10 messages for context.
+Memory automatically loads previous messages from storage before the LLM call and saves new messages after. This example configures a libSQL storage backend to persist conversation history, loading the last 10 messages for context.
 
 ```typescript title="src/memory-example.ts"
 import { openai } from '@ai-sdk/openai';
@@ -25261,7 +24218,7 @@ Before deploying to AWS Lambda, ensure you have:
 ## Memory Configuration
 
 :::warning
-AWS Lambda uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+AWS Lambda uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 Lambda functions have limitations with file system storage. Configure your Mastra application to use either in-memory or external storage providers:
@@ -25417,7 +24374,7 @@ Add your environment variables in the Lambda function configuration:
 2. Add the required variables for your Mastra application:
    - `OPENAI_API_KEY`: Your OpenAI API key (if using OpenAI)
    - `ANTHROPIC_API_KEY`: Your Anthropic API key (if using Anthropic)
-   - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using LibSQL with Turso)
+   - `TURSO_AUTH_TOKEN`: Your Turso auth token (if using libSQL with Turso)
    - Other provider-specific API keys as needed
 
 </StepItem>
@@ -25543,7 +24500,7 @@ refer to our [getting started guide](/guides/v1/getting-started/quickstart)
 :::
 
 :::warning
-Azure App Services uses an ephemeral filesystem for some pricing tiers. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Azure App Services uses an ephemeral filesystem for some pricing tiers. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Prerequisites
@@ -25699,7 +24656,7 @@ description: "Learn how to deploy a Mastra application to Cloudflare using the M
 The `CloudflareDeployer` class handles deployment of standalone Mastra applications to Cloudflare Workers. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Cloudflare specific functionality.
 
 :::warning
-Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Cloudflare Workers do not support filesystem access. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Installation
@@ -25882,7 +24839,7 @@ Deployment
 You can now access your deployed application at the URL provided by Digital Ocean.
 
 :::warning
-The Digital Ocean App Platform uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+The Digital Ocean App Platform uses an ephemeral file system, meaning that any files written to the file system are short-lived and may be lost. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
   </TabItem>
@@ -26049,7 +25006,7 @@ Before deploying to a cloud provider, ensure you have:
 - Basic familiarity with server setup (e.g. Nginx, environment variables)
 
 :::warning
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 
@@ -26454,7 +25411,7 @@ description: "Learn how to deploy a Mastra application to Netlify using the Mast
 The `NetlifyDeployer` class handles deployment of standalone Mastra applications to Netlify. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Netlify specific functionality.
 
 :::warning
-Netlify Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Netlify Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Installation
@@ -26577,7 +25534,7 @@ description: "Learn how to deploy a Mastra application to Vercel using the Mastr
 The `VercelDeployer` class handles deployment of standalone Mastra applications to Vercel. It manages configuration, deployment, and extends the base [Deployer](/reference/v1/deployer/) class with Vercel specific functionality.
 
 :::warning
-Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+Vercel Functions use an ephemeral filesystem. Remove any usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs from your Mastra configuration. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::
 
 ## Installation
@@ -29732,7 +28689,7 @@ import StepItem from "@site/src/components/StepItem";
 
 In this guide, you'll create an AI research assistant that can analyze academic papers and answer specific questions about their content using Retrieval Augmented Generation (RAG).
 
-You'll use the foundational Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as your example. As a database you'll use a local LibSQL database.
+You'll use the foundational Transformer paper ["Attention Is All You Need"](https://arxiv.org/html/1706.03762) as your example. As a database you'll use a local libSQL database.
 
 ## Prerequisites
 
@@ -29855,7 +28812,7 @@ For the `connectionUrl` use the absolute path you got from the `pwd` command. Th
 :::note
 
 For the purpose of this guide you are using a hardcoded absolute path to your
-local LibSQL file, however for production usage this won't work. You should
+local libSQL file, however for production usage this won't work. You should
 use a remote persistent database then.
 
 :::
@@ -35512,7 +34469,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo="https://models.dev/logos/azure-openai.svg"
     />    <CardGridItem
       title="Netlify"
-      description="50 models"
+      description="52 models"
       href="/models/v1/gateways/netlify"
       logo={<NetlifyLogo />}
     />    <CardGridItem
@@ -35543,7 +34500,7 @@ import { NetlifyLogo } from '@site/src/components/logos/NetlifyLogo';
 # <NetlifyLogo className="inline w-8 h-8 mr-2 align-middle" />Netlify
 [EN] Source: https://mastra.ai/en/models/gateways/netlify
 
-Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 50 models through Mastra's model router.
+Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability. Access 52 models through Mastra's model router.
 
 Learn more in the [Netlify documentation](https://docs.netlify.com/build/ai-gateway/overview/).
 
@@ -35628,7 +34585,9 @@ ANTHROPIC_API_KEY=ant-...
 | `openai/gpt-5.1-codex-max` |
 | `openai/gpt-5.1-codex-mini` |
 | `openai/gpt-5.2` |
+| `openai/gpt-5.2-2025-12-11` |
 | `openai/gpt-5.2-pro` |
+| `openai/gpt-5.2-pro-2025-12-11` |
 | `openai/o3` |
 | `openai/o3-mini` |
 | `openai/o4-mini` |
@@ -35966,7 +34925,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 61+ AI providers and 1444+ models through Mastra's model router."
+description: "Access 61+ AI providers and 1447+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35979,7 +34938,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1444 models from 61 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1447 models from 61 providers through a single API.
 
 ## Features
 
@@ -42740,8 +41699,8 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 65536,
-    "inputCost": 0.15,
-    "outputCost": 0.6
+    "inputCost": 0.5,
+    "outputCost": 3
   },
   {
     "model": "google/gemini-3-pro-preview",
@@ -45396,7 +44355,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="20 models"
+      description="21 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -54898,7 +53857,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 20 models available."
+description: "Use Venice AI models with Mastra. 21 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -54908,7 +53867,7 @@ description: "Use Venice AI models with Mastra. 20 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 20 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 21 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -54969,6 +53928,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.4,
     "outputCost": 1
+  },
+  {
+    "model": "venice/gemini-3-flash-preview",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256576,
+    "maxOutput": 65536,
+    "inputCost": 0.7,
+    "outputCost": 3.75
   },
   {
     "model": "venice/gemini-3-pro-preview",
@@ -64280,7 +63251,7 @@ This method does not accept any parameters.
 
 ## Related
 
-- [Storage overview](/docs/v1/memory/storage/overview)
+- [Storage overview](/reference/v1/storage/overview)
 - [Storage reference](/reference/v1/storage/libsql)
 
 
@@ -64466,7 +63437,7 @@ When using `raw: true`, the returned object has the following structure:
 ## Related
 
 - [Mastra.listStoredAgents()](/reference/v1/core/listStoredAgents)
-- [Storage overview](/docs/v1/memory/storage/overview)
+- [Storage overview](/reference/v1/storage/overview)
 - [Agents overview](/docs/v1/agents/overview)
 
 
@@ -65231,7 +64202,7 @@ async function getAllStoredAgents(mastra: Mastra) {
 ## Related
 
 - [Mastra.getStoredAgentById()](/reference/v1/core/getStoredAgentById)
-- [Storage overview](/docs/v1/memory/storage/overview)
+- [Storage overview](/reference/v1/storage/overview)
 - [Agents overview](/docs/v1/agents/overview)
 
 
@@ -65806,7 +64777,7 @@ This method does not return a value.
 
 ## Related
 
-- [Storage overview](/docs/v1/memory/storage/overview)
+- [Storage overview](/reference/v1/storage/overview)
 - [Storage reference](/reference/v1/storage/libsql)
 
 
@@ -81321,7 +80292,7 @@ const results = await store.query({
       name: "$elemMatch",
       description: "Matches array elements meeting criteria",
       example: "{ scores: { $elemMatch: { $gt: 80 } } }",
-      supportedBy: ["LibSQL", "PgVector", "MongoDB"],
+      supportedBy: ["libSQL", "PgVector", "MongoDB"],
     },
   ]}
 />
@@ -81350,7 +80321,7 @@ const results = await store.query({
         "Qdrant",
         "Upstash",
         "PgVector",
-        "LibSQL",
+        "libSQL",
         "MongoDB",
       ],
     },
@@ -81358,7 +80329,7 @@ const results = await store.query({
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "libSQL", "MongoDB"],
     },
   ]}
 />
@@ -81382,7 +80353,7 @@ const results = await store.query({
       name: "$contains",
       description: "Text contains substring",
       example: '{ description: { $contains: "sale" } }',
-      supportedBy: ["Upstash", "LibSQL", "PgVector"],
+      supportedBy: ["Upstash", "libSQL", "PgVector"],
     },
     {
       name: "$regex",
@@ -81394,7 +80365,7 @@ const results = await store.query({
       name: "$size",
       description: "Array length check",
       example: "{ tags: { $size: { $gt: 2 } } }",
-      supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"],
+      supportedBy: ["Astra", "libSQL", "PgVector", "MongoDB"],
     },
     {
       name: "$geo",
@@ -81486,7 +80457,7 @@ const results = await store.query({
 - Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
 - Range queries may have reduced accuracy with very large datasets (~10M+ vectors)
 
-### LibSQL
+### libSQL
 
 - Supports nested object queries with dot notation
 - Array fields are validated to ensure they contain valid JSON arrays
@@ -81561,7 +80532,7 @@ const results = await store.query({
 - [Astra](/reference/v1/vectors/astra)
 - [Chroma](/reference/v1/vectors/chroma)
 - [Cloudflare Vectorize](/reference/v1/vectors/vectorize)
-- [LibSQL](/reference/v1/vectors/libsql)
+- [libSQL](/reference/v1/vectors/libsql)
 - [MongoDB](/reference/v1/vectors/mongodb)
 - [PgStore](/reference/v1/vectors/pg)
 - [Pinecone](/reference/v1/vectors/pinecone)
@@ -84213,16 +83184,20 @@ LanceStorage provides methods for managing tables:
 
 
 ---
-title: "Reference: LibSQL Storage | Storage"
-description: Documentation for the LibSQL storage implementation in Mastra.
+title: "Reference: libSQL Storage | Storage"
+description: Documentation for the libSQL storage implementation in Mastra.
 ---
 
-# LibSQL Storage
+# libSQL Storage
 [EN] Source: https://mastra.ai/en/reference/storage/libsql
 
-The LibSQL storage implementation provides a SQLite-compatible storage solution that can run both in-memory and as a persistent database.
+[libSQL](https://docs.turso.tech/libsql) is an open-source, SQLite-compatible database that supports both local and remote deployments. It can be used to store message history, workflow snapshots, traces, and eval scores.
+
+For vectors like semantic recall or traditional RAG, use [libSQL Vector](/reference/v1/vectors/libsql) which covers embeddings and vector search.
 
 ## Installation
+
+Storage providers must be installed as separate packages:
 
 ```bash
 npm install @mastra/libsql@beta
@@ -84232,21 +83207,61 @@ npm install @mastra/libsql@beta
 
 ```typescript
 import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
 
-// File database (development)
-const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: "file:./storage.db",
-});
-
-// Persistent database (production)
-const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: process.env.DATABASE_URL,
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: "file:./storage.db",
+  }),
 });
 ```
 
-## Parameters
+Agent-level file storage:
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const agent = new Agent({
+  id: "example-agent",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-storage',
+      url: "file:./agent.db",
+    }),
+  }),
+});
+```
+
+:::warning
+File storage doesn't work with serverless platforms that have ephemeral file systems. For serverless deployments, use [Turso](https://turso.tech) or a different database engine.
+:::
+
+Production with remote database:
+
+```typescript 
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: "libsql://your-db-name.aws-ap-northeast-1.turso.io",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+})
+```
+
+For local development and testing, you can store data in memory:
+
+```typescript 
+storage: new LibSQLStore({
+  id: 'libsql-storage',
+  url: ":memory:",
+})
+```
+:::warning
+In-memory storage resets when the process changes. Only suitable for development.
+:::
+
+## Options
 
 <PropertiesTable
   content={[
@@ -84254,78 +83269,49 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "Database URL. Use ':memory:' for in-memory database, 'file:filename.db' for a file database, or any LibSQL-compatible connection string for persistent storage.",
+        "Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.",
       isOptional: false,
     },
     {
       name: "authToken",
       type: "string",
-      description: "Authentication token for remote LibSQL databases.",
+      description: "Authentication token for remote libSQL databases.",
       isOptional: true,
     },
   ]}
 />
 
-## Additional Notes
+## Initialization
 
-### In-Memory vs Persistent Storage
+When you pass storage to the Mastra class, `init()` is called automatically to create the [core schema](/reference/v1/storage/overview#core-schema):
 
-The file configuration (`file:storage.db`) is useful for:
-
-- Development and testing
-- Temporary storage
-- Quick prototyping
-
-For production use cases, use a persistent database URL: `libsql://your-database.turso.io`
-
-### Schema Management
-
-The storage implementation handles schema creation and updates automatically. It creates the following tables:
-
-- `mastra_workflow_snapshot`: Stores workflow state and execution data
-- `mastra_evals`: Stores evaluation results and metadata
-- `mastra_threads`: Stores conversation threads
-- `mastra_messages`: Stores individual messages
-- `mastra_traces`: Stores telemetry and tracing data
-- `mastra_scorers`: Stores scoring and evaluation data
-- `mastra_resources`: Stores resource working memory data
-
-### Initialization
-
-When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
-
-```typescript
+```typescript 
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
 const mastra = new Mastra({
-  storage, // init() is called automatically
+  storage, // init() called automatically
 });
 ```
 
-If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+If using storage directly without Mastra, call `init()` explicitly:
 
-```typescript
+```typescript 
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
+  id: 'libsql-storage',
   url: "file:./storage.db",
 });
 
-// Required when using storage directly
 await storage.init();
-
-// Now you can use the storage
 await storage.getThread({ threadId: "..." });
 ```
-
-:::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
-:::
 
 
 ---
@@ -84378,7 +83364,7 @@ const storage = new MongoDBStore({
       name: "options",
       type: "MongoClientOptions",
       description:
-        "MongoDB client options for advanced configuration (SSL, connection pooling, etc.). See advanced configuration [here](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).",
+        "MongoDB client options for advanced configuration (SSL, connection pooling, etc.).",
       isOptional: true,
     },
   ]}
@@ -84512,6 +83498,79 @@ const results = await vectorStore.query({
     category: "technical",
   },
 });
+```
+
+## Usage Example
+
+### Adding memory to an agent
+
+To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-mongodb-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```
 
 
@@ -84674,6 +83733,440 @@ This approach is intended for advanced scenarios where low-level access is requi
 
 
 ---
+title: "Reference: Storage Overview | Storage"
+description: Core data schema and table structure for Mastra's storage system.
+---
+
+import { SchemaTable } from "@site/src/components/SchemaTable";
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Storage Overview
+[EN] Source: https://mastra.ai/en/reference/storage/overview
+
+Mastra requires the following tables to be present in the database.
+
+## Core Schema
+
+<Tabs>
+  <TabItem value="messages" label="Messages">
+Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
+
+<SchemaTable
+  columns={[
+    {
+      name: "id",
+      type: "uuidv4",
+      description:
+        "Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
+      constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
+    },
+    {
+      name: "thread_id",
+      type: "uuidv4",
+      description: "Parent thread reference",
+      constraints: [
+        { type: "foreignKey", value: "threads.id" },
+        { type: "nullable", value: false },
+      ],
+    },
+    {
+      name: "resourceId",
+      type: "uuidv4",
+      description: "ID of the resource that owns this message",
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "content",
+      type: "text",
+      description:
+        "JSON of the message content in V2 format. Example: `{ format: 2, parts: [...] }`",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "role",
+      type: "text",
+      description: "Enum of `user | assistant`",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "createdAt",
+      type: "timestamp",
+      description: "Used for thread message ordering",
+      constraints: [{ type: "nullable", value: false }],
+    },
+  ]}
+/>
+
+The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
+
+<SchemaTable
+  columns={[
+    {
+      name: "format",
+      type: "integer",
+      description: "Message format version (currently 2)",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "parts",
+      type: "array (JSON)",
+      description:
+        "Array of message parts (text, tool-invocation, file, reasoning, etc.). The structure of items in this array varies by `type`.",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "experimental_attachments",
+      type: "array (JSON)",
+      description: "Optional array of file attachments",
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "content",
+      type: "text",
+      description: "Optional main text content of the message",
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "toolInvocations",
+      type: "array (JSON)",
+      description: "Optional array summarizing tool calls and results",
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "reasoning",
+      type: "object (JSON)",
+      description:
+        "Optional information about the reasoning process behind the assistant's response",
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "annotations",
+      type: "object (JSON)",
+      description: "Optional additional metadata or annotations",
+      constraints: [{ type: "nullable", value: true }],
+    },
+  ]}
+/>
+
+</TabItem>
+
+<TabItem value="threads" label="Threads">
+Groups related messages together and associates them with a resource. Contains metadata about the conversation.
+
+<SchemaTable
+  columns={[
+    {
+      name: "id",
+      type: "uuidv4",
+      description:
+        "Unique identifier for the thread (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
+      constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
+    },
+    {
+      name: "resourceId",
+      type: "text",
+      description:
+        "Primary identifier of the external resource this thread is associated with. Used to group and retrieve related threads.",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "title",
+      type: "text",
+      description: "Title of the conversation thread",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "metadata",
+      type: "text",
+      description: "Custom thread metadata as stringified JSON. Example:",
+      example: {
+        category: "support",
+        priority: 1,
+      },
+    },
+    {
+      name: "createdAt",
+      type: "timestamp",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "updatedAt",
+      type: "timestamp",
+      description: "Used for thread ordering history",
+      constraints: [{ type: "nullable", value: false }],
+    },
+  ]}
+/>
+
+</TabItem>
+<TabItem value="resources" label="Resources">
+Stores user-specific data for resource-scoped working memory. Each resource represents a user or entity, allowing working memory to persist across all conversation threads for that user.
+
+<SchemaTable
+  columns={[
+    {
+      name: "id",
+      type: "text",
+      description:
+        "Resource identifier (user or entity ID) - same as resourceId used in threads and agent calls",
+      constraints: [{ type: "primaryKey" }, { type: "nullable", value: false }],
+    },
+    {
+      name: "workingMemory",
+      type: "text",
+      description:
+        "Persistent working memory data as Markdown text. Contains user profile, preferences, and contextual information that persists across conversation threads.",
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "metadata",
+      type: "jsonb",
+      description: "Additional resource metadata as JSON. Example:",
+      example: {
+        preferences: { language: "en", timezone: "UTC" },
+        tags: ["premium", "beta-user"],
+      },
+      constraints: [{ type: "nullable", value: true }],
+    },
+    {
+      name: "createdAt",
+      type: "timestamp",
+      description: "When the resource record was first created",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "updatedAt",
+      type: "timestamp",
+      description: "When the working memory was last updated",
+      constraints: [{ type: "nullable", value: false }],
+    },
+  ]}
+/>
+
+</TabItem>
+<TabItem value="workflows" label="Workflows">
+When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
+
+<SchemaTable
+  columns={[
+    {
+      name: "workflow_name",
+      type: "text",
+      description: "Name of the workflow",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "run_id",
+      type: "uuidv4",
+      description: "Unique identifier for the workflow execution. Used to track state across suspend/resume cycles (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "snapshot",
+      type: "text",
+      description: "Serialized workflow state as JSON. Example:",
+      example: {
+        value: { currentState: 'running' },
+        context: {
+          stepResults: {},
+          attempts: {},
+          triggerData: {}
+        },
+        activePaths: [],
+        runId: '550e8400-e29b-41d4-a716-446655440000',
+        timestamp: 1648176000000
+      },
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "createdAt",
+      type: "timestamp",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "updatedAt",
+      type: "timestamp",
+      description: "Last modification time, used to track state changes during workflow execution",
+      constraints: [{ type: "nullable", value: false }]
+    }
+  ]}
+/>
+</TabItem>
+<TabItem value="evals" label="Evals">
+Stores eval results from running metrics against agent outputs.
+
+<SchemaTable
+  columns={[
+    {
+      name: "input",
+      type: "text",
+      description: "Input provided to the agent",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "output",
+      type: "text",
+      description: "Output generated by the agent",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "result",
+      type: "jsonb",
+      description: "Eval result data that includes score and details. Example:",
+      example: {
+        score: 0.95,
+        details: {
+          reason: "Response accurately reflects source material",
+          citations: ["page 1", "page 3"]
+        }
+      },
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "agent_name",
+      type: "text",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "metric_name",
+      type: "text",
+      description: "e.g Faithfulness, Hallucination, etc.",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "instructions",
+      type: "text",
+      description: "System prompt or instructions for the agent",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "test_info",
+      type: "jsonb",
+      description: "Additional test metadata and configuration",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "global_run_id",
+      type: "uuidv4",
+      description: "Groups related evaluation runs (e.g. all unit tests in a CI run)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "run_id",
+      type: "uuidv4",
+      description: "Unique identifier for the run being evaluated (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "created_at",
+      type: "timestamp",
+      constraints: [{ type: "nullable", value: false }]
+    }
+  ]}
+/>
+</TabItem>
+<TabItem value="traces" label="Traces">
+Captures OpenTelemetry traces for monitoring and debugging.
+
+<SchemaTable
+  columns={[
+    {
+      name: "id",
+      type: "text",
+      description: "Unique trace identifier",
+      constraints: [
+        { type: "nullable", value: false },
+        { type: "primaryKey" }
+      ]
+    },
+    {
+      name: "parentSpanId",
+      type: "text",
+      description: "ID of the parent span. Null if span is top level",
+    },
+    {
+      name: "name",
+      type: "text",
+      description: "Hierarchical operation name (e.g. `workflow.myWorkflow.execute`, `http.request`, `database.query`)",
+      constraints: [{ type: "nullable", value: false }],
+    },
+    {
+      name: "traceId",
+      type: "text",
+      description: "Root trace identifier that groups related spans",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "scope",
+      type: "text",
+      description: "Library/package/service that created the span (e.g. `@mastra/core`, `express`, `pg`)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "kind",
+      type: "integer",
+      description: "`INTERNAL` (0, within process), `CLIENT` (1, outgoing calls), `SERVER` (2, incoming calls), `PRODUCER` (3, async job creation), `CONSUMER` (4, async job processing)",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "attributes",
+      type: "jsonb",
+      description: "User defined key-value pairs that contain span metadata",
+    },
+    {
+      name: "status",
+      type: "jsonb",
+      description: "JSON object with `code` (UNSET=0, ERROR=1, OK=2) and optional `message`. Example:",
+      example: {
+        code: 1,
+        message: "HTTP request failed with status 500"
+      }
+    },
+    {
+      name: "events",
+      type: "jsonb",
+      description: "Time-stamped events that occurred during the span",
+    },
+    {
+      name: "links",
+      type: "jsonb",
+      description: "Links to other related spans",
+      },
+    {
+      name: "other",
+      type: "text",
+      description: "Additional OpenTelemetry span fields as stringified JSON. Example:",
+      example: {
+        droppedAttributesCount: 2,
+        droppedEventsCount: 1,
+        instrumentationLibrary: "@opentelemetry/instrumentation-http"
+      }
+    },
+    {
+      name: "startTime",
+      type: "bigint",
+      description: "Nanoseconds since Unix epoch when span started",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "endTime",
+      type: "bigint",
+      description: "Nanoseconds since Unix epoch when span ended",
+      constraints: [{ type: "nullable", value: false }]
+    },
+    {
+      name: "createdAt",
+      type: "timestamp",
+      constraints: [{ type: "nullable", value: false }]
+    }
+  ]}
+/>
+</TabItem>
+</Tabs>
+
+
+---
 title: "Reference: PostgreSQL Storage | Storage"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 ---
@@ -84830,6 +84323,77 @@ This enables direct queries and custom transaction management. When using these 
 - Direct access bypasses any additional logic or validation provided by PostgresStore methods.
 
 This approach is intended for advanced scenarios where low-level access is required.
+
+## Usage Example
+
+### Adding memory to an agent
+
+To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore } from "@mastra/pg";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    options: {
+      generateTitle: true, // Explicitly enable automatic title generation
+    },
+  }),
+});
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-pg-agent.ts" 
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("pg-agent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
 
 ## Index Management
 
@@ -85120,6 +84684,78 @@ For optimal performance:
 - Use appropriate key prefixes to organize data
 - Monitor Redis memory usage
 - Consider data expiration policies if needed
+
+## Usage Example
+
+### Adding memory to an agent
+
+To add Upstash memory to an agent use the `Memory` class and create a new `storage` key using `UpstashStore` and a new `vector` key using `UpstashVector`. The configuration can point to either a remote service or a local setup.
+
+```typescript title="src/mastra/agents/example-upstash-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { UpstashStore } from "@mastra/upstash";
+
+export const upstashAgent = new Agent({
+  id: "upstash-agent",
+  name: "Upstash Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new UpstashStore({
+      id: 'upstash-agent-storage',
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    }),
+    options: {
+      generateTitle: true, // Explicitly enable automatic title generation
+    },
+  }),
+});
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-upstash-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("upstashAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
 
 
 ---
@@ -95801,14 +95437,14 @@ try {
 
 
 ---
-title: "Reference: LibSQLVector Store | Vectors"
-description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+title: "Reference: libSQL Vector Store | Vectors"
+description: Documentation for the LibSQLVector class in Mastra, which provides vector search using libSQL with vector extensions.
 ---
 
-# LibSQLVector Store
+# libSQL Vector Store
 [EN] Source: https://mastra.ai/en/reference/vectors/libsql
 
-The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The libSQL storage implementation provides a SQLite-compatible vector search [libSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
@@ -95866,7 +95502,7 @@ const results = await store.query({
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+        "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
@@ -95914,7 +95550,7 @@ Creates a new vector collection. The index name must start with a letter or unde
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
+        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by libSQL.",
     },
   ]}
 />
@@ -96186,6 +95822,56 @@ Common error cases include:
 - Table/index not found
 - Database connection issues
 - Transaction failures during upsert
+
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash 
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-libsql-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { fastembed } from "@mastra/fastembed";
+
+export const libsqlAgent = new Agent({
+  id: "libsql-agent",
+  name: "libSQL Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
+      url: "file:libsql-agent.db",
+    }),
+    vector: new LibSQLVector({
+      id: 'libsql-agent-vector',
+      connectionUrl: "file:libsql-agent.db",
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // Explicitly enable automatic title generation
+      },
+    },
+  }),
+});
+```
 
 ## Related
 
@@ -96537,6 +96223,59 @@ try {
 - Index metadata fields used in filters for optimal query performance.
 - Use consistent field naming in metadata to avoid unexpected query results.
 - Regularly monitor index and collection statistics to ensure efficient search.
+
+## Usage Example
+
+### Vector embeddings with MongoDB
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
+
+> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
+To use this, install `@mastra/fastembed`:
+
+```bash 
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore, MongoDBVector } from "@mastra/mongodb";
+import { fastembed } from "@mastra/fastembed";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // generates descriptive thread titles automatically
+      },
+    },
+  }),
+});
+```
 
 ## Related
 
@@ -97410,6 +97149,53 @@ This enables advanced usage such as running direct SQL queries, managing transac
 - Direct access bypasses any validation or transaction logic provided by PgVector methods.
 
 This design supports advanced use cases but requires careful resource management by the user.
+
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { fastembed } from "@mastra/fastembed";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    vector: new PgVector({
+      id: 'pg-agent-vector',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
 
 ## Related
 
@@ -99129,6 +98915,55 @@ Required environment variables:
 
 - `UPSTASH_VECTOR_URL`: Your Upstash Vector database URL
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
+
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-upstash-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { UpstashStore, UpstashVector } from "@mastra/upstash";
+import { fastembed } from "@mastra/fastembed";
+
+export const upstashAgent = new Agent({
+  id: "upstash-agent",
+  name: "Upstash Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new UpstashStore({
+      id: 'upstash-agent-storage',
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    }),
+    vector: new UpstashVector({
+      id: 'upstash-agent-vector',
+      url: process.env.UPSTASH_VECTOR_REST_URL!,
+      token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
 
 ## Related
 
