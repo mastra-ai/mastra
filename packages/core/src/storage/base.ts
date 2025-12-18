@@ -39,16 +39,7 @@ export type StorageDomains = {
   agents?: AgentsStorage;
 };
 
-export function ensureDate(date: Date | string | undefined): Date | undefined {
-  if (!date) return undefined;
-  return date instanceof Date ? date : new Date(date);
-}
 
-export function serializeDate(date: Date | string | undefined): string | undefined {
-  if (!date) return undefined;
-  const dateObj = ensureDate(date);
-  return dateObj?.toISOString();
-}
 
 /**
  * Normalizes perPage input for pagination queries.
@@ -155,14 +146,6 @@ export abstract class MastraStorage extends MastraBase {
 
   async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
     return this.stores?.[storeName];
-  }
-
-  protected ensureDate(date: Date | string | undefined): Date | undefined {
-    return ensureDate(date);
-  }
-
-  protected serializeDate(date: Date | string | undefined): string | undefined {
-    return serializeDate(date);
   }
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;

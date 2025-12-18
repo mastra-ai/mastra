@@ -11,6 +11,7 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -19,16 +20,90 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsLance } from '../operations';
-import { getTableSchema, processResultWithTypeConversion } from '../utils';
+import { LanceDB } from '../../db';
+import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
+
 
 export class StoreMemoryLance extends MemoryStorage {
   private client: Connection;
-  private operations: StoreOperationsLance;
-  constructor({ client, operations }: { client: Connection; operations: StoreOperationsLance }) {
+  #db: LanceDB;
+
+  constructor({ client }: { client: Connection; }) {
     super();
     this.client = client;
-    this.operations = operations;
+    this.#db = new LanceDB({ client });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Get messages to find their threadIds before deleting
+      for (const messageId of messageIds) {
+        const message = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id: messageId } });
+        if (message?.thread_id) {
+          threadIds.add(message.thread_id);
+        }
+      }
+
+      // Delete messages
+      const messagesTable = await this.client.openTable(TABLE_MESSAGES);
+      const idConditions = messageIds.map(id => `id = '${this.escapeSql(id)}'`).join(' OR ');
+      await messagesTable.delete(idConditions);
+
+      // Update thread timestamps using mergeInsert
+      const now = new Date().getTime();
+      const threadsTable = await this.client.openTable(TABLE_THREADS);
+      for (const threadId of threadIds) {
+        const thread = await this.getThreadById({ threadId });
+        if (thread) {
+          const record = {
+            id: threadId,
+            resourceId: thread.resourceId,
+            title: thread.title,
+            metadata: JSON.stringify(thread.metadata),
+            createdAt: new Date(thread.createdAt).getTime(),
+            updatedAt: now,
+          };
+          await threadsTable.mergeInsert('id').whenMatchedUpdateAll().whenNotMatchedInsertAll().execute([record]);
+        }
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Utility to escape single quotes in SQL strings
@@ -38,7 +113,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
+      const thread = await this.#db.load({ tableName: TABLE_THREADS, keys: { id: threadId } });
 
       if (!thread) {
         return null;
@@ -183,12 +258,12 @@ export class StoreMemoryLance extends MemoryStorage {
       content:
         typeof message.content === 'string'
           ? (() => {
-              try {
-                return JSON.parse(message.content);
-              } catch {
-                return message.content;
-              }
-            })()
+            try {
+              return JSON.parse(message.content);
+            } catch {
+              return message.content;
+            }
+          })()
           : message.content,
     };
   }
@@ -647,12 +722,12 @@ export class StoreMemoryLance extends MemoryStorage {
       content:
         typeof data.content === 'string'
           ? (() => {
-              try {
-                return JSON.parse(data.content);
-              } catch {
-                return data.content;
-              }
-            })()
+            try {
+              return JSON.parse(data.content);
+            } catch {
+              return data.content;
+            }
+          })()
           : data.content,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
@@ -661,10 +736,10 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async updateMessages(args: {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
-      {
-        id: string;
-        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-      }[];
+    {
+      id: string;
+      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+    }[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
@@ -681,7 +756,7 @@ export class StoreMemoryLance extends MemoryStorage {
         const { id, ...updates } = updateData;
 
         // Get the existing message
-        const existingMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const existingMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (!existingMessage) {
           this.logger.warn('Message not found for update', { id });
           continue;
@@ -730,10 +805,10 @@ export class StoreMemoryLance extends MemoryStorage {
         }
 
         // Update the message using merge insert
-        await this.operations.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
+        await this.#db.insert({ tableName: TABLE_MESSAGES, record: { id, ...updatePayload } });
 
         // Get the updated message
-        const updatedMessage = await this.operations.load({ tableName: TABLE_MESSAGES, keys: { id } });
+        const updatedMessage = await this.#db.load({ tableName: TABLE_MESSAGES, keys: { id } });
         if (updatedMessage) {
           updatedMessages.push(this.parseMessageData(updatedMessage));
         }
@@ -741,7 +816,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // Update timestamps for all affected threads
       for (const threadId of affectedThreadIds) {
-        await this.operations.insert({
+        await this.#db.insert({
           tableName: TABLE_THREADS,
           record: { id: threadId, updatedAt: Date.now() },
         });
@@ -763,7 +838,7 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const resource = await this.operations.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
+      const resource = await this.#db.load({ tableName: TABLE_RESOURCES, keys: { id: resourceId } });
 
       if (!resource) {
         return null;

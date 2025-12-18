@@ -6,9 +6,7 @@ import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
-  TABLE_NAMES,
   PaginationInfo,
-  StorageColumn,
   WorkflowRuns,
   StoragePagination,
   StorageDomains,
@@ -18,7 +16,6 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { StoreMemoryLance } from './domains/memory';
-import { StoreOperationsLance } from './domains/operations';
 import { StoreScoresLance } from './domains/scores';
 import { StoreWorkflowsLance } from './domains/workflows';
 
@@ -88,12 +85,10 @@ export class LanceStorage extends MastraStorage {
     const instance = new LanceStorage(id, name, storageOptions?.disableInit);
     try {
       instance.lanceClient = await connect(uri, connectionOptions);
-      const operations = new StoreOperationsLance({ client: instance.lanceClient });
       instance.stores = {
-        operations: new StoreOperationsLance({ client: instance.lanceClient }),
         workflows: new StoreWorkflowsLance({ client: instance.lanceClient }),
         scores: new StoreScoresLance({ client: instance.lanceClient }),
-        memory: new StoreMemoryLance({ client: instance.lanceClient, operations }),
+        memory: new StoreMemoryLance({ client: instance.lanceClient }),
       };
       return instance;
     } catch (e: any) {
@@ -116,60 +111,12 @@ export class LanceStorage extends MastraStorage {
    */
   private constructor(id: string, name: string, disableInit?: boolean) {
     super({ id, name, disableInit });
-    const operations = new StoreOperationsLance({ client: this.lanceClient });
 
     this.stores = {
-      operations: new StoreOperationsLance({ client: this.lanceClient }),
       workflows: new StoreWorkflowsLance({ client: this.lanceClient }),
       scores: new StoreScoresLance({ client: this.lanceClient }),
-      memory: new StoreMemoryLance({ client: this.lanceClient, operations }),
+      memory: new StoreMemoryLance({ client: this.lanceClient }),
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<any> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
   }
 
   /**
@@ -197,13 +144,17 @@ export class LanceStorage extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
   public get supports() {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
     };
   }

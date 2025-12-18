@@ -6,17 +6,35 @@ import {
   createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
+  SCORERS_SCHEMA,
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { getTableSchema, processResultWithTypeConversion } from '../utils';
+import { LanceDB } from '../../db';
+import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreScoresLance extends ScoresStorage {
   private client: Connection;
+  #db: LanceDB;
   constructor({ client }: { client: Connection }) {
     super();
     this.client = client;
+    this.#db = new LanceDB({ client });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: SCORERS_SCHEMA });
+    // Add columns for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: SCORERS_SCHEMA,
+      ifNotExists: ['spanId', 'requestContext'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
