@@ -1,6 +1,8 @@
+import { generateId } from '@internal/ai-sdk-v5';
 import { Agent } from '../agent';
-import { type ToolLoopAgentLike } from './utils';
 import { ToolLoopAgentProcessor } from './tool-loop-processor';
+import type { ToolLoopAgentLike } from './utils';
+export { type ToolLoopAgentLike, isToolLoopAgentLike, getSettings } from './utils';
 
 /**
  * Converts an AI SDK v6 ToolLoopAgent instance into a Mastra Agent.
@@ -13,7 +15,6 @@ import { ToolLoopAgentProcessor } from './tool-loop-processor';
  * import { ToolLoopAgent, tool } from 'ai';
  * import { openai } from '@ai-sdk/openai';
  * import { toolLoopAgentToMastraAgent } from '@mastra/core/tool-loop-agent';
- * import { Memory } from '@mastra/memory';
  *
  * const toolLoopAgent = new ToolLoopAgent({
  *   id: 'weather-agent',
@@ -23,21 +24,24 @@ import { ToolLoopAgentProcessor } from './tool-loop-processor';
  *   temperature: 0.7,
  * });
  *
- * const mastraAgent = toolLoopAgentToMastraAgent(toolLoopAgent, {
- *   memory: new Memory(),
- * });
+ * const mastraAgent = toolLoopAgentToMastraAgent(toolLoopAgent);
  *
  * const result = await mastraAgent.generate({ prompt: 'What is the weather in NYC?' });
  * ```
  *
  * @param agent - The ToolLoopAgent instance
- * @param options - Additional Mastra-specific configuration options
+ * @param options - Optional name fallback since Mastra Agent requires id/name but ToolLoopAgent doesn't
  * @returns A Mastra Agent instance
  */
-export function toolLoopAgentToMastraAgent(agent: ToolLoopAgentLike) {
+export function toolLoopAgentToMastraAgent(agent: ToolLoopAgentLike, options?: { fallbackName?: string }) {
   const processor = new ToolLoopAgentProcessor(agent);
+  const agentConfig = processor.getAgentConfig();
+  const id = agentConfig.id || options?.fallbackName || `tool-loop-agent-${generateId()}`;
+
   return new Agent({
-    ...processor.getAgentConfig(),
+    ...agentConfig,
+    id,
+    name: agentConfig.name || id,
     inputProcessors: [processor],
   });
 }

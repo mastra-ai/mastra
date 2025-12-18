@@ -17,7 +17,6 @@ export type { WithMastraOptions, WithMastraMemoryOptions, WithMastraSemanticReca
 // ToolLoopAgent wrapper (AI SDK v6+)
 // Re-exported from @mastra/core for convenience
 export { toolLoopAgentToMastraAgent } from '@mastra/core/tool-loop-agent';
-export type { ToolLoopAgentWrapperOptions } from '@mastra/core/tool-loop-agent';
 
 // Deprecated exports
 export { toAISdkFormat } from './to-ai-sdk-format';

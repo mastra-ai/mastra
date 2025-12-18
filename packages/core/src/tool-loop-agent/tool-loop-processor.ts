@@ -1,18 +1,16 @@
-import { generateId } from '@internal/ai-sdk-v5';
-import {
+import type {
   ToolLoopAgent,
-  type AgentCallParameters,
-  type ModelMessage,
-  type StepResult,
-  type ToolLoopAgentSettings,
+  AgentCallParameters,
+  ModelMessage,
+  StepResult,
+  ToolLoopAgentSettings,
 } from '@internal/ai-v6';
 import type { AgentExecutionOptions, AgentInstructions } from '../agent';
-import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
-import { resolveModelConfig } from '../llm/model/resolve-model';
-import { isSupportedLanguageModel } from '../agent/utils';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
 import type { OutputSchema } from '../stream';
-import { getSettings as getToolLoopAgentSettings, type ToolLoopAgentLike } from './utils';
+import { getSettings as getToolLoopAgentSettings } from './utils';
+import type { ToolLoopAgentLike } from './utils';
 
 type PrepareCallInput = AgentCallParameters<never> &
   Pick<
@@ -42,12 +40,12 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
   readonly name = 'ToolLoop to Mastra Agent Processor';
 
   private agent: ToolLoopAgentLike;
-  private toolLoopAgentSettings: ToolLoopAgentSettings<any, any, any>;
+  private settings: ToolLoopAgentSettings<any, any, any>;
   private prepareCallResult?: Awaited<ReturnType<NonNullable<ToolLoopAgentSettings<any, any, any>['prepareCall']>>>;
 
   constructor(agent: ToolLoopAgentLike) {
     this.agent = agent;
-    this.toolLoopAgentSettings = getToolLoopAgentSettings(agent);
+    this.settings = getToolLoopAgentSettings(agent);
   }
 
   public getAgentConfig() {
@@ -57,118 +55,170 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
     const defaultOptions: Omit<AgentExecutionOptions<OutputSchema>, 'abortSignal'> = {};
 
     // AgentExecutionOptions
-    if (this.toolLoopAgentSettings.toolChoice) {
-      defaultOptions.toolChoice = this.toolLoopAgentSettings.toolChoice;
+    if (this.settings.toolChoice) {
+      defaultOptions.toolChoice = this.settings.toolChoice;
     }
-    if (this.toolLoopAgentSettings.providerOptions) {
-      defaultOptions.providerOptions = this.toolLoopAgentSettings.providerOptions;
+    if (this.settings.providerOptions) {
+      defaultOptions.providerOptions = this.settings.providerOptions;
     }
     // AgentExecutionOptions["modelSettings"]
-    if (this.toolLoopAgentSettings.temperature !== undefined) {
+    if (this.settings.temperature !== undefined) {
       defaultOptions.modelSettings = {
         ...(defaultOptions.modelSettings ?? {}),
-        temperature: this.toolLoopAgentSettings.temperature,
+        temperature: this.settings.temperature,
       };
     }
-    if (this.toolLoopAgentSettings.topP !== undefined) {
-      defaultOptions.modelSettings = { ...(defaultOptions.modelSettings ?? {}), topP: this.toolLoopAgentSettings.topP };
+    if (this.settings.topP !== undefined) {
+      defaultOptions.modelSettings = { ...(defaultOptions.modelSettings ?? {}), topP: this.settings.topP };
     }
-    if (this.toolLoopAgentSettings.topK !== undefined) {
-      defaultOptions.modelSettings = { ...(defaultOptions.modelSettings ?? {}), topK: this.toolLoopAgentSettings.topK };
+    if (this.settings.topK !== undefined) {
+      defaultOptions.modelSettings = { ...(defaultOptions.modelSettings ?? {}), topK: this.settings.topK };
     }
-    if (this.toolLoopAgentSettings.seed !== undefined) {
-      defaultOptions.modelSettings = { ...(defaultOptions.modelSettings ?? {}), seed: this.toolLoopAgentSettings.seed };
+    if (this.settings.seed !== undefined) {
+      defaultOptions.modelSettings = { ...(defaultOptions.modelSettings ?? {}), seed: this.settings.seed };
     }
-    if (this.toolLoopAgentSettings.maxOutputTokens !== undefined) {
+    if (this.settings.maxOutputTokens !== undefined) {
       defaultOptions.modelSettings = {
         ...(defaultOptions.modelSettings ?? {}),
-        maxOutputTokens: this.toolLoopAgentSettings.maxOutputTokens,
+        maxOutputTokens: this.settings.maxOutputTokens,
+      };
+    }
+    if (this.settings.presencePenalty !== undefined) {
+      defaultOptions.modelSettings = {
+        ...(defaultOptions.modelSettings ?? {}),
+        presencePenalty: this.settings.presencePenalty,
+      };
+    }
+    if (this.settings.frequencyPenalty !== undefined) {
+      defaultOptions.modelSettings = {
+        ...(defaultOptions.modelSettings ?? {}),
+        frequencyPenalty: this.settings.frequencyPenalty,
+      };
+    }
+    if (this.settings.stopSequences !== undefined) {
+      defaultOptions.modelSettings = {
+        ...(defaultOptions.modelSettings ?? {}),
+        stopSequences: this.settings.stopSequences,
       };
     }
 
-    // TODO: what is presencePenalty
-    // if (this.settings.presencePenalty !== undefined) {
-    //   defaultOptions.presencePenalty = this.settings.presencePenalty;
-    // }
-    // TODO: what is frequencyPenalty
-    // if (this.settings.frequencyPenalty !== undefined) {
-    //   defaultOptions.frequencyPenalty = this.settings.frequencyPenalty;
-    // }
-    // TODO: what is stopSequences
-    // if (this.settings.stopSequences !== undefined) {
-    //   defaultOptions.stopSequences = this.settings.stopSequences;
-    // }
-
-    if (this.toolLoopAgentSettings.onStepFinish) {
-      // TODO: whats different about our onStepFinish vs ToolLoopAgent's?
-      // @ts-expect-error
-      defaultOptions.onStepFinish = this.toolLoopAgentSettings.onStepFinish;
+    if (this.settings.onStepFinish) {
+      // TODO: The callback signatures differ (ReasoningChunk vs ReasoningPart) - need adapter
+      defaultOptions.onStepFinish = this.settings.onStepFinish as unknown as typeof defaultOptions.onStepFinish;
     }
-    if (this.toolLoopAgentSettings.onFinish) {
-      // TODO: whats different about our onFinish vs ToolLoopAgent's?
-      // @ts-expect-error
-      defaultOptions.onFinish = this.toolLoopAgentSettings.onFinish;
+    if (this.settings.onFinish) {
+      // TODO: The callback signatures differ (ReasoningChunk vs ReasoningPart) - need adapter
+      defaultOptions.onFinish = this.settings.onFinish as unknown as typeof defaultOptions.onFinish;
     }
 
-    const id = this.toolLoopAgentSettings.id ?? `tool-loop-agent-${generateId()}`;
     return {
-      id,
-      name: id,
-      instructions: (this.toolLoopAgentSettings.instructions as AgentInstructions) ?? '',
-      model: this.toolLoopAgentSettings.model,
+      id: this.settings.id,
+      name: this.settings.id,
+      instructions: (this.settings.instructions as AgentInstructions) ?? '',
+      model: this.settings.model,
       tools,
-      maxRetries: this.toolLoopAgentSettings.maxRetries,
+      maxRetries: this.settings.maxRetries,
       defaultOptions: Object.keys(defaultOptions).length > 0 ? defaultOptions : undefined,
     };
   }
 
-  private toolLoopAgentCallParamsToMastraAgentExecutionOptions(params: PrepareCallInput) {
-    const {
-      model,
-      tools,
-      instructions,
-      stopWhen,
-      activeTools,
-      providerOptions,
-
-      temperature,
-      topP,
-      topK,
-      maxOutputTokens,
-      presencePenalty,
-      frequencyPenalty,
-      stopSequences,
-      seed,
-
-      //   experimental_telemetry,
-      //   experimental_context,
-      //   experimental_download,
-    } = params;
-
-    const modelSettings = {
-      temperature,
-      topP,
-      topK,
-      maxOutputTokens,
-      presencePenalty,
-      frequencyPenalty,
-      stopSequences,
-      seed,
-    };
-
-    const options: AgentExecutionOptions<any> = {
-      providerOptions,
-    };
-
-    if (Object.entries(modelSettings).map(([_, value]) => value !== undefined).length > 0) {
-      options.modelSettings = modelSettings;
+  /**
+   * Maps prepareCall or prepareStep result to ProcessInputStepResult.
+   * Both hooks return similar structures that can override model, tools, activeTools, etc.
+   */
+  private mapToProcessInputStepResult(
+    result: Awaited<ReturnType<NonNullable<ToolLoopAgentSettings<any, any, any>['prepareCall']>>> | undefined,
+  ): ProcessInputStepResult {
+    if (!result) {
+      return {};
     }
 
-    return options;
+    const stepResult: ProcessInputStepResult = {};
+
+    // Map model (both prepareCall and prepareStep can return this)
+    if (result.model) {
+      stepResult.model = result.model;
+    }
+
+    // Map tools (prepareCall can return this)
+    if ('tools' in result && result.tools) {
+      stepResult.tools = result.tools as Record<string, unknown>;
+    }
+
+    // Map toolChoice (prepareStep can return this)
+    if ('toolChoice' in result && result.toolChoice !== undefined) {
+      stepResult.toolChoice = result.toolChoice as ProcessInputStepResult['toolChoice'];
+    }
+
+    // Map activeTools (both can return this)
+    if (result.activeTools) {
+      stepResult.activeTools = result.activeTools as string[];
+    }
+
+    // Map providerOptions (prepareCall can return this)
+    if ('providerOptions' in result && result.providerOptions) {
+      stepResult.providerOptions = result.providerOptions;
+    }
+
+    // Map model settings (prepareCall can return individual settings)
+    const modelSettings: ProcessInputStepResult['modelSettings'] = {};
+    if ('temperature' in result && result.temperature !== undefined) {
+      modelSettings.temperature = result.temperature;
+    }
+    if ('topP' in result && result.topP !== undefined) {
+      modelSettings.topP = result.topP;
+    }
+    if ('topK' in result && result.topK !== undefined) {
+      modelSettings.topK = result.topK;
+    }
+    if ('maxOutputTokens' in result && result.maxOutputTokens !== undefined) {
+      modelSettings.maxOutputTokens = result.maxOutputTokens;
+    }
+    if ('presencePenalty' in result && result.presencePenalty !== undefined) {
+      modelSettings.presencePenalty = result.presencePenalty;
+    }
+    if ('frequencyPenalty' in result && result.frequencyPenalty !== undefined) {
+      modelSettings.frequencyPenalty = result.frequencyPenalty;
+    }
+    if ('stopSequences' in result && result.stopSequences !== undefined) {
+      modelSettings.stopSequences = result.stopSequences;
+    }
+    if ('seed' in result && result.seed !== undefined) {
+      modelSettings.seed = result.seed;
+    }
+
+    if (Object.keys(modelSettings).length > 0) {
+      stepResult.modelSettings = modelSettings;
+    }
+
+    // Map system/instructions to systemMessages
+    // prepareCall returns 'instructions', prepareStep returns 'system'
+    const systemContent =
+      'instructions' in result ? result.instructions : 'system' in result ? result.system : undefined;
+    if (systemContent) {
+      // Convert to CoreMessageV4 format
+      if (typeof systemContent === 'string') {
+        stepResult.systemMessages = [{ role: 'system', content: systemContent }];
+      } else if (Array.isArray(systemContent)) {
+        stepResult.systemMessages = systemContent.map(msg =>
+          typeof msg === 'string' ? { role: 'system' as const, content: msg } : msg,
+        );
+      } else if (typeof systemContent === 'object' && 'role' in systemContent && 'content' in systemContent) {
+        stepResult.systemMessages = [systemContent as { role: 'system'; content: string }];
+      }
+    }
+
+    // TODO: Map messages if prepareStep returns them
+    // This requires converting AI SDK ModelMessage[] to MastraDBMessage[]
+    // if ('messages' in result && result.messages) {
+    //   stepResult.messages = convertAiSdkMessagesToMastra(result.messages);
+    // }
+
+    return stepResult;
   }
 
   private async handlePrepareCall(args: ProcessInputStepArgs) {
-    if (this.toolLoopAgentSettings.prepareCall) {
+    if (this.settings.prepareCall) {
       const { model, messages, activeTools, providerOptions, modelSettings, tools, messageList } = args;
       // TODO: This should probably happen in processInput, currently calling in processInputStep if stepNumber === 0
 
@@ -179,8 +229,8 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
         messages: messages as unknown as any,
         model,
         tools,
-        instructions: this.toolLoopAgentSettings.instructions,
-        stopWhen: this.toolLoopAgentSettings.stopWhen,
+        instructions: this.settings.instructions,
+        stopWhen: this.settings.stopWhen,
         activeTools,
         providerOptions,
 
@@ -201,7 +251,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
       };
 
       // Call prepareCall and apply any returned overrides
-      const prepareCallResult = await this.toolLoopAgentSettings.prepareCall(prepareCallInput as any); // TODO: types
+      const prepareCallResult = await this.settings.prepareCall(prepareCallInput as any); // TODO: types
       console.log('prepareCallResult', prepareCallResult);
       this.prepareCallResult = prepareCallResult;
     }
@@ -209,18 +259,18 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
 
   private async handleStopWhen(args: ProcessInputStepArgs) {
     const { steps, abort } = args;
-    if (this.toolLoopAgentSettings.stopWhen !== undefined) {
-      if (Array.isArray(this.toolLoopAgentSettings.stopWhen)) {
-        for (const condition of this.toolLoopAgentSettings.stopWhen) {
+    if (this.settings.stopWhen !== undefined) {
+      if (Array.isArray(this.settings.stopWhen)) {
+        for (const condition of this.settings.stopWhen) {
           // TODO: Different StepResult type
           const shouldStop = await condition({ steps: steps as StepResult<any>[] });
           if (shouldStop) {
             abort('stopWhen condition met');
           }
         }
-      } else if (typeof this.toolLoopAgentSettings.stopWhen === 'function') {
+      } else if (typeof this.settings.stopWhen === 'function') {
         // TODO: Different StepResult type
-        const shouldStop = await this.toolLoopAgentSettings.stopWhen({ steps: steps as StepResult<any>[] });
+        const shouldStop = await this.settings.stopWhen({ steps: steps as StepResult<any>[] });
         if (shouldStop) {
           abort('stopWhen condition met');
         }
@@ -229,7 +279,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
   }
 
   private async handlePrepareStep(args: ProcessInputStepArgs) {
-    if (this.toolLoopAgentSettings.prepareStep) {
+    if (this.settings.prepareStep) {
       const { model, messages, steps, stepNumber } = args;
 
       // TODO: Map ToolLoopAgent prepareStep to Mastra processInputStep
@@ -267,7 +317,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
         experimental_context: undefined,
       };
 
-      const prepareStepResult = await this.toolLoopAgentSettings.prepareStep(prepareStepInputArgs);
+      const prepareStepResult = await this.settings.prepareStep(prepareStepInputArgs);
       return prepareStepResult;
     }
   }
@@ -275,32 +325,29 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-to-mastra-ag
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined | void> {
     const { stepNumber } = args;
 
-    if (this.toolLoopAgentSettings.stopWhen !== undefined) {
+    if (this.settings.stopWhen !== undefined) {
       await this.handleStopWhen(args);
     }
 
-    if (stepNumber === 0 && this.toolLoopAgentSettings.prepareCall) {
+    if (stepNumber === 0 && this.settings.prepareCall) {
       await this.handlePrepareCall(args);
     }
 
     let result: ProcessInputStepResult = {};
 
+    // Apply prepareCall result (only on step 0, already called above)
     if (this.prepareCallResult) {
-      // TODO: Map prepareCall result to processInputStep result
-      // ... add some stuff to result
-      result = {
-        ...result,
-        // tools: this.prepareCallResult.tools,
-        // model: this.prepareCallResult.model,
-      };
+      const mappedResult = this.mapToProcessInputStepResult(this.prepareCallResult);
+      result = { ...result, ...mappedResult };
     }
 
-    if (this.toolLoopAgentSettings.prepareStep) {
+    // Apply prepareStep result (called on every step)
+    if (this.settings.prepareStep) {
       const prepareStepResult = await this.handlePrepareStep(args);
-      console.log('prepareStepResult', prepareStepResult);
       if (prepareStepResult) {
-        // TODO: Map prepareStep result to processInputStep result
-        // ... add some stuff to result
+        const mappedResult = this.mapToProcessInputStepResult(prepareStepResult as any);
+        // prepareStep overrides prepareCall for this step
+        result = { ...result, ...mappedResult };
       }
     }
 

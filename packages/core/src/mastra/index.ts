@@ -22,6 +22,8 @@ import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
+import type { ToolLoopAgentLike } from '../tool-loop-agent';
+import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
 import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
@@ -29,8 +31,6 @@ import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
-import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
-import type { ToolLoopAgentLike } from '../tool-loop-agent';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -1153,7 +1153,7 @@ export class Mastra<
     let mastraAgent: Agent<any>;
     if (isToolLoopAgentLike(agent)) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
-      mastraAgent = toolLoopAgentToMastraAgent(agent, { name: key });
+      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
     } else {
       mastraAgent = agent;
     }
