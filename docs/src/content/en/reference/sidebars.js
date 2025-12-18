@@ -22,7 +22,7 @@ const sidebars = {
         {
           type: "doc",
           id: "agents/generateLegacy",
-          label: ".generateLegacy() (Legacy)",
+          label: ".generateLegacy()",
         },
         { type: "doc", id: "agents/network", label: ".network()" },
         { type: "doc", id: "agents/listAgents", label: ".listAgents()" },
@@ -577,7 +577,7 @@ const sidebars = {
             {
               type: "doc",
               id: "streaming/agents/streamLegacy",
-              label: ".streamLegacy() (Legacy)",
+              label: ".streamLegacy()",
             },
             {
               type: "doc",
