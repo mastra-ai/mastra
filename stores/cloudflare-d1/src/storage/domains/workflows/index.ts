@@ -71,11 +71,15 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     const now = new Date().toISOString();
@@ -90,15 +94,15 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           ...currentSnapshot,
           resourceId,
           snapshot: JSON.stringify(snapshot),
-          updatedAt: now,
+          updatedAt: updatedAt ? updatedAt.toISOString() : now,
         }
       : {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
           snapshot: snapshot as Record<string, any>,
-          createdAt: now,
-          updatedAt: now,
+          createdAt: createdAt ? createdAt.toISOString() : now,
+          updatedAt: updatedAt ? updatedAt.toISOString() : now,
         };
 
     // Process record for SQL insertion

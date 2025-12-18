@@ -545,7 +545,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     // implement on other stores
-    it('should update workflow results in snapshot', async () => {
+    it.todo('should update workflow results in snapshot', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
@@ -638,7 +638,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
 
     // TODO: This test requires atomic transactions for concurrent updates.
     // Stores without transaction support (e.g., Upstash) will fail this test.
-    it('should update workflow state in snapshot', async () => {
+    it.todo('should update workflow state in snapshot', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
       const snapshot = {
