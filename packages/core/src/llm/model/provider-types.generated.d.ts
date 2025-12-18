@@ -145,6 +145,7 @@ export type ProviderModelsMap = {
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];
   readonly mistral: readonly [
     'codestral-latest',
+    'devstral-2512',
     'devstral-medium-2507',
     'devstral-medium-latest',
     'devstral-small-2505',
@@ -1138,6 +1139,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4-fast',
     'x-ai/grok-4-fast-non-reasoning',
     'x-ai/grok-code-fast-1',
+    'xiaomi/mimo-v2-flash',
     'z-ai/glm-4.5-air',
     'z-ai/glm-4.6',
   ];
@@ -1256,6 +1258,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4-5',
     'google/gemini-2.5-flash',
     'google/gemini-2.5-pro',
+    'google/gemini-3-flash-preview',
     'google/gemini-3-pro-preview',
     'openai/gpt-4.1',
     'openai/gpt-4.1-mini',
