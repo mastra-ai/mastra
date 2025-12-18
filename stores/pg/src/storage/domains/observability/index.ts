@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -9,28 +9,26 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
+import { PgDB } from '../../db';
+import type { PgDBConfig } from '../../db';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema?: string;
+  #db: PgDB;
+  #schema: string;
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema?: string;
-  }) {
+  constructor(config: PgDBConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    this.#db = new PgDB(config);
+    this.#schema = config.schemaName || 'public';
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SPANS });
   }
 
   public override get tracingStrategy(): {
@@ -57,7 +55,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         // Note: createdAt/updatedAt will be set by database triggers
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.#db.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -80,10 +78,10 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -142,7 +140,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
       // Note: updatedAt will be set by database trigger automatically
 
-      await this.operations.update({
+      await this.#db.update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -215,12 +213,12 @@ export class ObservabilityPG extends ObservabilityStorage {
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.#schema),
     });
 
     try {
       // Get total count
-      const countResult = await this.client.oneOrNone<{ count: string }>(
+      const countResult = await this.#db.client.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`,
         whereClause.args,
       );
@@ -239,7 +237,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -293,7 +291,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         };
       });
 
-      return this.operations.batchInsert({
+      return this.#db.batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
@@ -317,7 +315,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      return this.#db.batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> & {
@@ -360,11 +358,11 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.#schema),
       });
 
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-      await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
     } catch (error) {
       throw new MastraError(
         {

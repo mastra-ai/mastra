@@ -2,6 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
 } from '@mastra/core/storage';
@@ -12,9 +13,17 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
-import { getTableName } from '../utils';
+import { PgDB } from '../../db';
+import type { PgDBConfig } from '../../db';
+
+function getSchemaName(schema?: string) {
+  return schema ? `"${schema}"` : '"public"';
+}
+
+function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+  const quotedIndexName = `"${indexName}"`;
+  return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
+}
 
 function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
@@ -22,7 +31,6 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
     try {
       parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
     } catch (e) {
-      // If parsing fails, return the raw snapshot string
       console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
     }
   }
@@ -37,23 +45,26 @@ function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema: string;
+  #db: PgDB;
+  #schema: string;
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema: string;
-  }) {
+  constructor(config: PgDBConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    this.#db = new PgDB(config);
+    this.#schema = config.schemaName || 'public';
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -100,8 +111,8 @@ export class WorkflowsPG extends WorkflowsStorage {
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
-      await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+      await this.#db.client.none(
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
@@ -127,7 +138,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<{ snapshot: WorkflowRunState }>({
+      const result = await this.#db.load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: workflowName, run_id: runId },
       });
@@ -171,16 +182,15 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC LIMIT 1
         `;
 
       const queryValues = values;
 
-      const result = await this.client.oneOrNone(query, queryValues);
+      const result = await this.#db.client.oneOrNone(query, queryValues);
 
       if (!result) {
         return null;
@@ -205,8 +215,8 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     try {
-      await this.client.none(
-        `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} WHERE run_id = $1 AND workflow_name = $2`,
+      await this.#db.client.none(
+        `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
         [runId, workflowName],
       );
     } catch (error) {
@@ -252,7 +262,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`"resourceId" = $${paramIndex}`);
           values.push(resourceId);
@@ -277,10 +287,9 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       let total = 0;
       const usePagination = typeof perPage === 'number' && typeof page === 'number';
-      // Only get total count when using pagination
       if (usePagination) {
-        const countResult = await this.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
+        const countResult = await this.#db.client.one(
+          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause}`,
           values,
         );
         total = Number(countResult.count);
@@ -289,9 +298,8 @@ export class WorkflowsPG extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
-      // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
@@ -299,13 +307,12 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
-      const result = await this.client.manyOrNone(query, queryValues);
+      const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
         return parseWorkflowRun(row);
       });
 
-      // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(

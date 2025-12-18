@@ -1,7 +1,7 @@
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
-  StoreOperations,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_THREADS,
   TABLE_MESSAGES,
@@ -18,26 +18,49 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import type { IDatabase } from 'pg-promise';
-import { getSchemaName, getTableName } from '../utils';
+import type { IDatabase, IMain } from 'pg-promise';
 
 // Re-export the types for convenience
 export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 
-export class StoreOperationsPG extends StoreOperations {
+/**
+ * Configuration for PgDB - accepts either credentials or an existing client
+ */
+export type PgDBConfig = {
+  /** The pg-promise database instance */
+  client: IDatabase<{}>;
+  /** Optional schema name (defaults to 'public') */
+  schemaName?: string;
+};
+
+function getSchemaName(schema?: string) {
+  return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
+}
+
+function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+  const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+  const quotedIndexName = `"${parsedIndexName}"`;
+  const quotedSchemaName = schemaName;
+  return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
+}
+
+export class PgDB extends MastraBase {
   public client: IDatabase<{}>;
   public schemaName?: string;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
-    super();
-    this.client = client;
-    this.schemaName = schemaName;
+  constructor(config: PgDBConfig) {
+    super({
+      component: 'STORAGE',
+      name: 'PG_DB_LAYER',
+    });
+
+    this.client = config.client;
+    this.schemaName = config.schemaName;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    // Use this.schema to scope the check
     const schema = this.schemaName || 'public';
 
     const result = await this.client.oneOrNone(
@@ -53,12 +76,9 @@ export class StoreOperationsPG extends StoreOperations {
    */
   private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
     return Object.entries(record).map(([key, value]) => {
-      // Get the schema for this table to determine column types
       const schema = TABLE_SCHEMAS[tableName];
       const columnSchema = schema?.[key];
 
-      // If the column is JSONB, stringify the value (unless it's null/undefined)
-      // PostgreSQL JSONB columns require valid JSON, so even primitives need to be stringified
       if (columnSchema?.type === 'jsonb' && value !== null && value !== undefined) {
         return JSON.stringify(value);
       }
@@ -82,8 +102,7 @@ export class StoreOperationsPG extends StoreOperations {
   }
 
   /**
-   * Prepares a value for database operations, handling Date objects and JSON serialization
-   * This is schema-aware and only stringifies objects for JSONB columns
+   * Prepares a value for database operations
    */
   private prepareValue(value: any, columnName: string, tableName: TABLE_NAMES): any {
     if (value === null || value === undefined) {
@@ -94,17 +113,13 @@ export class StoreOperationsPG extends StoreOperations {
       return value.toISOString();
     }
 
-    // Get the schema for this table to determine column types
     const schema = TABLE_SCHEMAS[tableName];
     const columnSchema = schema?.[columnName];
 
-    // If the column is JSONB, stringify the value
-    // PostgreSQL JSONB columns require valid JSON, so all non-null values need to be stringified
     if (columnSchema?.type === 'jsonb') {
       return JSON.stringify(value);
     }
 
-    // For non-JSONB columns with object values, stringify them (for backwards compatibility)
     if (typeof value === 'object') {
       return JSON.stringify(value);
     }
@@ -122,7 +137,6 @@ export class StoreOperationsPG extends StoreOperations {
     if (!this.setupSchemaPromise) {
       this.setupSchemaPromise = (async () => {
         try {
-          // First check if schema exists and we have usage permission
           const schemaExists = await this.client.oneOrNone(
             `
                 SELECT EXISTS (
@@ -146,11 +160,9 @@ export class StoreOperationsPG extends StoreOperations {
             }
           }
 
-          // If we got here, schema exists and we can use it
           this.schemaSetupComplete = true;
           this.logger.debug(`Schema "${schemaName}" is ready for use`);
         } catch (error) {
-          // Reset flags so we can retry
           this.schemaSetupComplete = undefined;
           this.setupSchemaPromise = null;
           throw error;
@@ -161,6 +173,38 @@ export class StoreOperationsPG extends StoreOperations {
     }
 
     await this.setupSchemaPromise;
+  }
+
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'uuid':
+        return 'UUID';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'BIGINT';
+      case 'jsonb':
+        return 'JSONB';
+      case 'boolean':
+        return 'BOOLEAN';
+      default:
+        return 'TEXT';
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'timestamp':
+        return 'DEFAULT NOW()';
+      case 'jsonb':
+        return "DEFAULT '{}'::jsonb";
+      default:
+        return '';
+    }
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
@@ -211,17 +255,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  protected getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'timestamp':
-        return 'DEFAULT NOW()';
-      case 'jsonb':
-        return "DEFAULT '{}'::jsonb";
-      default:
-        return super.getDefaultValue(type);
-    }
-  }
-
   async createTable({
     tableName,
     schema,
@@ -249,17 +282,16 @@ export class StoreOperationsPG extends StoreOperations {
         return `"${parsedName}" ${this.getSqlType(def.type)} ${constraints.join(' ')}`;
       });
 
-      // Create schema if it doesn't exist
       if (this.schemaName) {
         await this.setupSchema();
       }
 
       const finalColumns = [...columns, ...timeZColumns].join(',\n');
-
-      // Constraints are global to a database, ensure schemas do not conflict with each other
       const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
+      const schemaName = getSchemaName(this.schemaName);
+
       const sql = `
-            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
+            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName })} (
               ${finalColumns}
             );
             ${
@@ -271,7 +303,7 @@ export class StoreOperationsPG extends StoreOperations {
               ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
               ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName })}
                 ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
                 UNIQUE (workflow_name, run_id);
               END IF;
@@ -289,7 +321,6 @@ export class StoreOperationsPG extends StoreOperations {
         ifNotExists: timeZColumnNames,
       });
 
-      // Set up timestamp triggers for Spans table
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
       }
@@ -308,9 +339,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Set up timestamp triggers for a table to automatically manage createdAt/updatedAt
-   */
   private async setupTimestampTriggers(tableName: TABLE_NAMES): Promise<void> {
     const schemaName = getSchemaName(this.schemaName);
     const fullTableName = getTableName({ indexName: tableName, schemaName });
@@ -318,7 +346,6 @@ export class StoreOperationsPG extends StoreOperations {
 
     try {
       const triggerSQL = `
-        -- Create or replace the trigger function in the schema
         CREATE OR REPLACE FUNCTION ${functionName}()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -330,7 +357,6 @@ export class StoreOperationsPG extends StoreOperations {
             ELSIF TG_OP = 'UPDATE' THEN
                 NEW."updatedAt" = NOW();
                 NEW."updatedAtZ" = NOW();
-                -- Prevent createdAt from being changed
                 NEW."createdAt" = OLD."createdAt";
                 NEW."createdAtZ" = OLD."createdAtZ";
             END IF;
@@ -338,10 +364,8 @@ export class StoreOperationsPG extends StoreOperations {
         END;
         $$ LANGUAGE plpgsql;
 
-        -- Drop existing trigger if it exists
         DROP TRIGGER IF EXISTS ${tableName}_timestamps ON ${fullTableName};
 
-        -- Create the trigger
         CREATE TRIGGER ${tableName}_timestamps
             BEFORE INSERT OR UPDATE ON ${fullTableName}
             FOR EACH ROW
@@ -351,17 +375,10 @@ export class StoreOperationsPG extends StoreOperations {
       await this.client.none(triggerSQL);
       this.logger?.debug?.(`Set up timestamp triggers for table ${fullTableName}`);
     } catch (error) {
-      // Log warning but don't fail table creation
       this.logger?.warn?.(`Failed to set up timestamp triggers for ${fullTableName}:`, error);
     }
   }
 
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
   async alterTable({
     tableName,
     schema,
@@ -425,7 +442,6 @@ export class StoreOperationsPG extends StoreOperations {
         return null;
       }
 
-      // If this is a workflow snapshot, parse the snapshot field
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         const snapshot = result as any;
         if (typeof snapshot.snapshot === 'string') {
@@ -494,9 +510,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Create a new index on a table
-   */
   async createIndex(options: CreateIndexOptions): Promise<void> {
     try {
       const {
@@ -518,7 +531,6 @@ export class StoreOperationsPG extends StoreOperations {
         schemaName: getSchemaName(this.schemaName),
       });
 
-      // Check if index already exists
       const indexExists = await this.client.oneOrNone(
         `SELECT 1 FROM pg_indexes
          WHERE indexname = $1
@@ -527,19 +539,15 @@ export class StoreOperationsPG extends StoreOperations {
       );
 
       if (indexExists) {
-        // Index already exists, skip creation
         return;
       }
 
-      // Build index creation SQL
       const uniqueStr = unique ? 'UNIQUE ' : '';
       const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
       const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
-      // Handle columns with optional operator class
       const columnsStr = columns
         .map(col => {
-          // Handle columns with DESC/ASC modifiers
           if (col.includes(' DESC') || col.includes(' ASC')) {
             const [colName, ...modifiers] = col.split(' ');
             if (!colName) {
@@ -556,7 +564,6 @@ export class StoreOperationsPG extends StoreOperations {
       const whereStr = where ? ` WHERE ${where}` : '';
       const tablespaceStr = tablespace ? ` TABLESPACE ${tablespace}` : '';
 
-      // Build storage parameters string
       let withStr = '';
       if (storage && Object.keys(storage).length > 0) {
         const storageParams = Object.entries(storage)
@@ -569,9 +576,7 @@ export class StoreOperationsPG extends StoreOperations {
 
       await this.client.none(sql);
     } catch (error) {
-      // Check if error is due to concurrent index creation on a table that doesn't support it
       if (error instanceof Error && error.message.includes('CONCURRENTLY')) {
-        // Retry without CONCURRENTLY
         const retryOptions = { ...options, concurrent: false };
         return this.createIndex(retryOptions);
       }
@@ -591,12 +596,8 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Drop an existing index
-   */
   async dropIndex(indexName: string): Promise<void> {
     try {
-      // Check if index exists first
       const schemaName = this.schemaName || 'public';
       const indexExists = await this.client.oneOrNone(
         `SELECT 1 FROM pg_indexes
@@ -606,7 +607,6 @@ export class StoreOperationsPG extends StoreOperations {
       );
 
       if (!indexExists) {
-        // Index doesn't exist, nothing to drop
         return;
       }
 
@@ -627,9 +627,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * List indexes for a specific table or all tables
-   */
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
     try {
       const schemaName = this.schemaName || 'public';
@@ -677,10 +674,8 @@ export class StoreOperationsPG extends StoreOperations {
       const results = await this.client.manyOrNone(query, params);
 
       return results.map(row => {
-        // Parse PostgreSQL array format {col1,col2} to ['col1','col2']
         let columns: string[] = [];
         if (typeof row.columns === 'string' && row.columns.startsWith('{') && row.columns.endsWith('}')) {
-          // Remove braces and split by comma, handling empty arrays
           const arrayContent = row.columns.slice(1, -1);
           columns = arrayContent ? arrayContent.split(',') : [];
         } else if (Array.isArray(row.columns)) {
@@ -713,38 +708,29 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Returns definitions for automatic performance indexes
-   * These composite indexes cover both filtering and sorting in single index
-   */
   protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
     const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
     return [
-      // Composite index for threads (filter + sort)
       {
         name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
         table: TABLE_THREADS,
         columns: ['resourceId', 'createdAt DESC'],
       },
-      // Composite index for messages (filter + sort)
       {
         name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
       },
-      // Composite index for traces (filter + sort)
       {
         name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
         table: TABLE_TRACES,
         columns: ['name', 'startTime DESC'],
       },
-      // Composite index for scores (filter + sort)
       {
         name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
         table: TABLE_SCORERS,
         columns: ['traceId', 'spanId', 'createdAt DESC'],
       },
-      // Spans indexes for optimal trace querying
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
         table: TABLE_SPANS,
@@ -768,10 +754,6 @@ export class StoreOperationsPG extends StoreOperations {
     ];
   }
 
-  /**
-   * Creates automatic indexes for optimal query performance
-   * Uses getAutomaticIndexDefinitions() to determine which indexes to create
-   */
   async createAutomaticIndexes(): Promise<void> {
     try {
       const indexes = this.getAutomaticIndexDefinitions();
@@ -780,7 +762,6 @@ export class StoreOperationsPG extends StoreOperations {
         try {
           await this.createIndex(indexOptions);
         } catch (error) {
-          // Log but continue with other indexes
           this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
         }
       }
@@ -796,14 +777,10 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Get detailed statistics for a specific index
-   */
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
     try {
       const schemaName = this.schemaName || 'public';
 
-      // First get basic index info and stats
       const query = `
         SELECT
           i.indexname as name,
@@ -833,7 +810,6 @@ export class StoreOperationsPG extends StoreOperations {
         throw new Error(`Index "${indexName}" not found in schema "${schemaName}"`);
       }
 
-      // Parse PostgreSQL array format
       let columns: string[] = [];
       if (typeof result.columns === 'string' && result.columns.startsWith('{') && result.columns.endsWith('}')) {
         const arrayContent = result.columns.slice(1, -1);
@@ -869,9 +845,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Update a single record in the database
-   */
   async update({
     tableName,
     keys,
@@ -886,14 +859,12 @@ export class StoreOperationsPG extends StoreOperations {
       const setValues: any[] = [];
       let paramIndex = 1;
 
-      // Build SET clause
       Object.entries(data).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
         setValues.push(this.prepareValue(value, key, tableName));
       });
 
-      // Build WHERE clause
       const whereConditions: string[] = [];
       const whereValues: any[] = [];
 
@@ -927,9 +898,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Update multiple records in a single batch transaction
-   */
   async batchUpdate({
     tableName,
     updates,
@@ -963,9 +931,6 @@ export class StoreOperationsPG extends StoreOperations {
     }
   }
 
-  /**
-   * Delete multiple records by keys
-   */
   async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
     try {
       if (keys.length === 0) {
@@ -1007,5 +972,12 @@ export class StoreOperationsPG extends StoreOperations {
         error,
       );
     }
+  }
+
+  /**
+   * Delete all data from a table (alias for clearTable for consistency with other stores)
+   */
+  async deleteData({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    return this.clearTable({ tableName });
   }
 }

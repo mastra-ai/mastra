@@ -4,6 +4,7 @@ import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
 import { PostgresStore } from '.';
+import { PgDB } from './db';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
   id: 'test-postgres-store',
@@ -18,11 +19,14 @@ export const connectionString = `postgresql://${(TEST_CONFIG as any).user}:${(TE
 
 export function pgTests() {
   let store: PostgresStore;
+  let dbOps: PgDB;
 
   describe('PG specific tests', () => {
     beforeAll(async () => {
       store = new PostgresStore(TEST_CONFIG);
       await store.init();
+      // Create PgDB instance for low-level operations (not exposed on main store)
+      dbOps = new PgDB({ client: store.db });
     });
     afterAll(async () => {
       try {
@@ -89,8 +93,8 @@ export function pgTests() {
         // Only clear tables if store is initialized
         try {
           // Clear tables before each test
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
           // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
@@ -101,8 +105,8 @@ export function pgTests() {
         // Only clear tables if store is initialized
         try {
           // Clear tables before each test
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
           // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
@@ -111,18 +115,18 @@ export function pgTests() {
 
       it('should create and upsert to a camelCase table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: camelCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: camelCaseTable as TABLE_NAMES,
           record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: camelCaseTable as TABLE_NAMES,
           keys: { id: '1' },
         });
@@ -131,18 +135,18 @@ export function pgTests() {
 
       it('should create and upsert to a snake_case table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: snakeCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
           record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: snakeCaseTable as TABLE_NAMES,
           keys: { id: '2' },
         });
@@ -380,7 +384,9 @@ export function pgTests() {
           updatedAt: { type: 'timestamp', nullable: false },
         } as Record<string, StorageColumn>;
 
-        await testStore.createTable({
+        // Create PgDB instance for low-level operations
+        const testDbOps = new PgDB({ client: testStore.db, schemaName: testSchema });
+        await testDbOps.createTable({
           tableName: 'mastra_ai_spans' as TABLE_NAMES,
           schema: SpansSchema,
         });

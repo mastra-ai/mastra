@@ -5,9 +5,7 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
@@ -22,18 +20,20 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
+import { PgDB } from './db';
+import type { PgDBConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
-import { StoreOperationsPG } from './domains/operations';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
+export type { PgDBConfig } from './db';
 
 export class PostgresStore extends MastraStorage {
   #db: pgPromise.IDatabase<{}>;
   #pgp: pgPromise.IMain;
+  #dbOps: PgDB;
   private schema: string;
   private isInitialized: boolean = false;
 
@@ -91,15 +91,18 @@ export class PostgresStore extends MastraStorage {
       // Create all domain instances synchronously in the constructor
       // This is required for Memory to work correctly, as it checks for
       // stores.memory during getInputProcessors() before init() is called
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
-      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
-      const agents = new AgentsPG({ client: this.#db, schema: this.schema });
+      const domainConfig: PgDBConfig = { client: this.#db, schemaName: this.schema };
+
+      // Create a PgDB instance for direct operations (createTable, clearTable, etc.)
+      this.#dbOps = new PgDB(domainConfig);
+
+      const scores = new ScoresPG(domainConfig);
+      const workflows = new WorkflowsPG(domainConfig);
+      const memory = new MemoryPG(domainConfig);
+      const observability = new ObservabilityPG(domainConfig);
+      const agents = new AgentsPG(domainConfig);
 
       this.stores = {
-        operations,
         scores,
         workflows,
         memory,
@@ -131,7 +134,7 @@ export class PostgresStore extends MastraStorage {
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
-        await (this.stores.operations as StoreOperationsPG).createAutomaticIndexes();
+        await this.#dbOps.createAutomaticIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
@@ -170,48 +173,6 @@ export class PostgresStore extends MastraStorage {
       listScoresBySpan: true,
       agents: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   /**
