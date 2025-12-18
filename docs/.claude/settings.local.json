@@ -10,7 +10,8 @@
       "Bash(grep:*)",
       "Bash(npm run docusaurus:*)",
       "Bash(for f in *.mdx)",
-      "Bash(do sed -i '' 's|\\(../../docs/|\\(../../../docs/v1/|g' \"$f\")"
+      "Bash(do sed -i '' 's|\\(../../docs/|\\(../../../docs/v1/|g' \"$f\")",
+      "Bash(ls:*)"
     ]
   }
 }
