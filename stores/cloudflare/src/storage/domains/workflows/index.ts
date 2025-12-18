@@ -75,20 +75,27 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const { workflowName, runId, resourceId, snapshot } = params;
+      const { workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
+      const now = new Date();
+
+      // Check if existing record exists to preserve createdAt
+      const existingKey = this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
+      const existing = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, existingKey);
 
       await this.#db.putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        key: this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId }),
+        key: existingKey,
         value: {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
           snapshot: JSON.stringify(snapshot),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: existing?.createdAt ?? createdAt ?? now,
+          updatedAt: updatedAt ?? now,
         },
       });
     } catch (error) {
@@ -209,24 +216,19 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       const keyObjs = await this.#db.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       const runs: WorkflowRun[] = [];
       for (const { name: key } of keyObjs) {
-        // Extract workflow_name, run_id, resourceId from key
+        // Extract workflow_name, run_id from key
         const parts = key.split(':');
         const idx = parts.indexOf(TABLE_WORKFLOW_SNAPSHOT);
         if (idx === -1 || parts.length < idx + 3) continue;
         const wfName = parts[idx + 1];
-        const _runId = parts[idx + 2];
-        // If resourceId is present in the key, it's at idx+3
-        const keyResourceId = parts.length > idx + 3 ? parts[idx + 3] : undefined;
-        // Filter by namespace, workflowName, resourceId if provided
+        // Filter by workflowName if provided
         if (workflowName && wfName !== workflowName) continue;
-        // If resourceId filter is provided, the key must have that resourceId
-        if (resourceId && keyResourceId !== resourceId) continue;
         // Load the snapshot
         const data = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
         if (!data) continue;
         try {
-          // Additional check: if resourceId filter is provided but key doesn't have resourceId, skip
-          if (resourceId && !keyResourceId) continue;
+          // Filter by resourceId from the stored data
+          if (resourceId && data.resourceId !== resourceId) continue;
           const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
           if (status && snapshotData.status !== status) continue;
           // Filter by fromDate/toDate
@@ -234,11 +236,10 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
           if (fromDate && createdAt && createdAt < fromDate) continue;
           if (toDate && createdAt && createdAt > toDate) continue;
           // Parse the snapshot from JSON string if needed
-          const resourceIdToUse = keyResourceId || data.resourceId;
           const run = this.parseWorkflowRun({
             ...data,
             workflow_name: wfName,
-            resourceId: resourceIdToUse,
+            resourceId: data.resourceId,
             snapshot: snapshotData,
           });
           runs.push(run);
