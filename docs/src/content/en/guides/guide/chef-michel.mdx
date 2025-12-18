@@ -31,7 +31,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
 
 Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
-```ts copy title="src/mastra/agents/chefAgent.ts"
+```ts title="src/mastra/agents/chefAgent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const chefAgent = new Agent({
@@ -50,7 +50,7 @@ export const chefAgent = new Agent({
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy title="src/mastra/index.ts" {2, 5}
+```ts title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { chefAgent } from "./agents/chefAgent";
 
@@ -73,7 +73,7 @@ Depending on your requirements you can interact and get responses from the agent
 
 Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
 
-```ts copy title="src/index.ts"
+```ts title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 
 async function main() {
@@ -90,7 +90,7 @@ main();
 
 Afterwards, run the script:
 
-```bash copy
+```bash
 npx bun src/index.ts
 ```
 
@@ -108,7 +108,7 @@ Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some
 
 In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
 
-```ts copy title="src/index.ts"
+```ts title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 
 async function main() {
@@ -132,7 +132,7 @@ main();
 
 Afterwards, run the script again:
 
-```bash copy
+```bash
 npx bun src/index.ts
 ```
 
@@ -155,7 +155,7 @@ Instead of showing the agent's response to a human you might want to pass it alo
 
 Change your `src/index.ts` to the following:
 
-```ts copy title="src/index.ts"
+```ts title="src/index.ts"
 import { chefAgent } from "./mastra/agents/chefAgent";
 import { z } from "zod";
 
@@ -198,12 +198,10 @@ Query: I want to make lasagna, can you generate a lasagna recipe for me?
   ingredients: [
     { name: "Lasagna noodles", amount: "12 sheets" },
     { name: "Ground beef", amount: "1 pound" },
-    // ...
   ],
   steps: [
     "Preheat oven to 375°F (190°C).",
     "Cook the lasagna noodles according to package instructions.",
-    // ...
   ]
 }
 ```
@@ -222,7 +220,7 @@ Learn how to interact with your agent through Mastra's API.
 
 You can run your agent as a service using the `mastra dev` command:
 
-```bash copy
+```bash
 mastra dev
 ```
 
@@ -244,7 +242,7 @@ POST http://localhost:4111/api/agents/chefAgent/generate
 
 You can interact with the agent using `curl` from the command line:
 
-```bash copy
+```bash
 curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
   -H "Content-Type: application/json" \
   -d '{

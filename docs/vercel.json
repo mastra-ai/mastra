@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/examples/v1/memory/memory-with-mongodb",
-      "destination": "/docs/v1/memory/storage/memory-with-mongodb",
+      "destination": "/reference/v1/storage/mongodb",
       "permanent": true
     },
     {
@@ -267,7 +267,7 @@
     },
     {
       "source": "/docs/v1/server-db/storage",
-      "destination": "/docs/v1/memory/storage/overview",
+      "destination": "/docs/v1/memory/storage",
       "permanent": true
     },
     {
@@ -438,6 +438,51 @@
     {
       "source": "/docs/v1/deployment/building-mastra",
       "destination": "/docs/v1/deployment/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/workflows/inngest-workflow",
+      "destination": "/guides/v1/deployment/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/workflows/inngest-workflow",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/overview",
+      "destination": "/docs/v1/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-pg",
+      "destination": "/reference/v1/storage/postgresql",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-libsql",
+      "destination": "/reference/v1/storage/libsql",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-mongodb",
+      "destination": "/reference/v1/storage/mongodb",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/storage/memory-with-upstash",
+      "destination": "/reference/v1/storage/upstash",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/threads-and-resources",
+      "destination": "/docs/v1/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/memory/conversation-history",
+      "destination": "/docs/v1/memory/message-history",
       "permanent": true
     }
   ]

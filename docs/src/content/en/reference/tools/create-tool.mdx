@@ -9,7 +9,7 @@ The `createTool()` function is used to define custom tools that your Mastra agen
 
 ## Usage example
 
-```typescript title="src/mastra/tools/reverse-tool.ts" showLineNumbers copy
+```typescript title="src/mastra/tools/reverse-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -215,7 +215,6 @@ export const tool = createTool({
   onInputStart: ({ toolCallId, messages, abortSignal }) => {
     console.log(`Tool ${toolCallId} input streaming started`);
   },
-  // ... other properties
 });
 ```
 
@@ -230,7 +229,6 @@ export const tool = createTool({
   onInputDelta: ({ inputTextDelta, toolCallId, messages, abortSignal }) => {
     console.log(`Received input chunk: ${inputTextDelta}`);
   },
-  // ... other properties
 });
 ```
 
@@ -249,7 +247,6 @@ export const tool = createTool({
     console.log(`Tool received complete input:`, input);
     // input is fully typed based on inputSchema
   },
-  // ... other properties
 });
 ```
 

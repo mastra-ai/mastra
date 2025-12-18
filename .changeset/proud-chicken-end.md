@@ -17,7 +17,7 @@
 '@mastra/pg': major
 ---
 
-**BREAKING CHANGE**: Pagination APIs now use `page`/`perPage` instead of `offset`/`limit`
+Pagination APIs now use `page`/`perPage` instead of `offset`/`limit`
 
 All storage and memory pagination APIs have been updated to use `page` (0-indexed) and `perPage` instead of `offset` and `limit`, aligning with standard REST API patterns.
 

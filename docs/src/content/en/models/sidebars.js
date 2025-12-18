@@ -27,7 +27,7 @@ const sidebars = {
         {
           type: "doc",
           id: "gateways/azure-openai",
-          label: "Azure-openai",
+          label: "Azure OpenAI",
         },
         {
           type: "doc",
@@ -310,6 +310,11 @@ const sidebars = {
           type: "doc",
           id: "providers/siliconflow",
           label: "SiliconFlow",
+        },
+        {
+          type: "doc",
+          id: "providers/siliconflow-cn",
+          label: "SiliconFlow (China)",
         },
         {
           type: "doc",

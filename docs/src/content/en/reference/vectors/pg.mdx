@@ -374,7 +374,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface PGIndexStats {
   dimension: number;
   count: number;
@@ -434,7 +434,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 Updates an existing vector by ID or filter. At least one of vector or metadata must be provided in the update object.
 
-```typescript copy
+```typescript
 // Update by ID
 await pgVector.updateVector({
   indexName: "my_vectors",
@@ -474,7 +474,7 @@ await pgVector.updateVector({
 
 Deletes a single vector by ID from the specified index.
 
-```typescript copy
+```typescript
 await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
@@ -534,7 +534,7 @@ Closes the database connection pool. Should be called when done using the store.
 
 Builds or rebuilds an index with specified metric and configuration. Will drop any existing index before creating the new one.
 
-```typescript copy
+```typescript
 // Define HNSW index
 await pgVector.buildIndex("my_vectors", "cosine", {
   type: "hnsw",
@@ -562,7 +562,7 @@ await pgVector.buildIndex("my_vectors", "cosine", {
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -575,7 +575,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",
@@ -640,6 +640,53 @@ This enables advanced usage such as running direct SQL queries, managing transac
 - Direct access bypasses any validation or transaction logic provided by PgVector methods.
 
 This design supports advanced use cases but requires careful resource management by the user.
+
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore, PgVector } from "@mastra/pg";
+import { fastembed } from "@mastra/fastembed";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    vector: new PgVector({
+      id: 'pg-agent-vector',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
 
 ## Related
 

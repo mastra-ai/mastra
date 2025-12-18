@@ -1,12 +1,13 @@
 import type { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2Usage, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
+import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
-import type { MastraLanguageModelV2 } from '../../../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -507,11 +508,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         }
 
         const currentStep: {
-          model: MastraLanguageModelV2;
+          model: MastraLanguageModel;
           tools?: TOOLS | undefined;
           toolChoice?: ToolChoice<TOOLS> | undefined;
           activeTools?: (keyof TOOLS)[] | undefined;
-          providerOptions?: SharedV2ProviderOptions | undefined;
+          providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
           structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
         } = {
@@ -602,60 +603,58 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           }
         }
 
-        switch (currentStep.model.specificationVersion) {
-          case 'v2': {
-            modelResult = executeWithContextSync({
-              span: modelSpanTracker?.getTracingContext()?.currentSpan,
-              fn: () =>
-                execute({
-                  runId,
-                  model: currentStep.model,
-                  providerOptions: currentStep.providerOptions,
-                  inputMessages,
-                  tools: currentStep.tools,
-                  toolChoice: currentStep.toolChoice,
-                  activeTools: currentStep.activeTools as string[] | undefined,
-                  options,
-                  modelSettings: currentStep.modelSettings,
-                  includeRawChunks,
-                  structuredOutput: currentStep.structuredOutput,
-                  headers,
-                  methodType,
-                  generateId: _internal?.generateId,
-                  onResult: ({
-                    warnings: warningsFromStream,
-                    request: requestFromStream,
-                    rawResponse: rawResponseFromStream,
-                  }) => {
-                    warnings = warningsFromStream;
-                    request = requestFromStream || {};
-                    rawResponse = rawResponseFromStream;
+        if (isSupportedLanguageModel(currentStep.model)) {
+          modelResult = executeWithContextSync({
+            span: modelSpanTracker?.getTracingContext()?.currentSpan,
+            fn: () =>
+              execute({
+                runId,
+                model: currentStep.model,
+                providerOptions: currentStep.providerOptions,
+                inputMessages,
+                tools: currentStep.tools,
+                toolChoice: currentStep.toolChoice,
+                activeTools: currentStep.activeTools as string[] | undefined,
+                options,
+                modelSettings: currentStep.modelSettings,
+                includeRawChunks,
+                structuredOutput: currentStep.structuredOutput,
+                headers,
+                methodType,
+                generateId: _internal?.generateId,
+                onResult: ({
+                  warnings: warningsFromStream,
+                  request: requestFromStream,
+                  rawResponse: rawResponseFromStream,
+                }) => {
+                  warnings = warningsFromStream;
+                  request = requestFromStream || {};
+                  rawResponse = rawResponseFromStream;
 
-                    if (!isControllerOpen(controller)) {
-                      // Controller is closed or errored, skip enqueueing
-                      // This can happen when downstream errors (like in onStepFinish) close the controller
-                      return;
-                    }
+                  if (!isControllerOpen(controller)) {
+                    // Controller is closed or errored, skip enqueueing
+                    // This can happen when downstream errors (like in onStepFinish) close the controller
+                    return;
+                  }
 
-                    controller.enqueue({
-                      runId,
-                      from: ChunkFrom.AGENT,
-                      type: 'step-start',
-                      payload: {
-                        request: request || {},
-                        warnings: warnings || [],
-                        messageId: messageId,
-                      },
-                    });
-                  },
-                  shouldThrowError: !isLastModel,
-                }),
-            });
-            break;
-          }
-          default: {
-            throw new Error(`Unsupported model version: ${model.specificationVersion}`);
-          }
+                  controller.enqueue({
+                    runId,
+                    from: ChunkFrom.AGENT,
+                    type: 'step-start',
+                    payload: {
+                      request: request || {},
+                      warnings: warnings || [],
+                      messageId: messageId,
+                    },
+                  });
+                },
+                shouldThrowError: !isLastModel,
+              }),
+          });
+        } else {
+          throw new Error(
+            `Unsupported model version: ${(currentStep.model as { specificationVersion?: string }).specificationVersion}. Supported versions: ${supportedLanguageModelSpecifications.join(', ')}`,
+          );
         }
 
         const outputStream = new MastraModelOutput({

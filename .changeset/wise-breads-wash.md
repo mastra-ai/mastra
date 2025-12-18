@@ -5,7 +5,7 @@
 Add `initialState` and `outputOptions` to run.stream() call.
 
 Example code
-```
+```ts
 const run = await workflow.createRunAsync();
 
 const streamResult = run.stream({
@@ -16,7 +16,7 @@ const streamResult = run.stream({
 ```
 Then the result from the stream will include the final state information
 
-```
+```ts
 const executionResult = await streamResult.result;
 console.log(executionResult.state)
 ```

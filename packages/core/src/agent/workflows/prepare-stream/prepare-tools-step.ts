@@ -10,12 +10,9 @@ import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
-interface PrepareToolsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareToolsStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
@@ -25,10 +22,7 @@ interface PrepareToolsStepOptions<
   memory?: MastraMemory;
 }
 
-export function createPrepareToolsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareToolsStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -38,7 +32,7 @@ export function createPrepareToolsStep<
   agentSpan,
   methodType,
   memory,
-}: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
+}: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: z.object({}),

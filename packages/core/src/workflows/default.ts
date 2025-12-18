@@ -625,6 +625,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
           });
         }
+
+        // Invoke lifecycle callbacks before returning
+        await this.invokeLifecycleCallbacks(result);
+
         return {
           ...result,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
@@ -656,6 +660,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         status: result.status,
       },
     });
+
+    // Invoke lifecycle callbacks before returning
+    await this.invokeLifecycleCallbacks(result);
 
     if (params.outputOptions?.includeState) {
       return { ...result, state: lastState };

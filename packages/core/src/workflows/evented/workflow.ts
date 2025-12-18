@@ -325,6 +325,8 @@ export function createWorkflow<
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
+      onFinish: params.options?.onFinish,
+      onError: params.options?.onError,
     },
   });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
@@ -384,7 +386,9 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -442,6 +446,28 @@ export class EventedRun<
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
+  /**
+   * Set up abort signal handler to publish workflow.cancel event when abortController.abort() is called.
+   * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
+   */
+  private setupAbortHandler(): void {
+    const abortHandler = () => {
+      this.mastra?.pubsub
+        .publish('workflows', {
+          type: 'workflow.cancel',
+          runId: this.runId,
+          data: {
+            workflowId: this.workflowId,
+            runId: this.runId,
+          },
+        })
+        .catch(err => {
+          console.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+        });
+    };
+    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
+  }
+
   async start({
     inputData,
     initialState,
@@ -489,6 +515,8 @@ export class EventedRun<
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
+
+    this.setupAbortHandler();
 
     const result = await this.executionEngine.execute<
       z.infer<TState>,
@@ -653,6 +681,8 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
+    this.setupAbortHandler();
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -727,14 +757,8 @@ export class EventedRun<
       },
     });
 
-    // Publish event for event-driven architecture (watchers, running workflow termination, etc.)
-    await this.mastra?.pubsub.publish('workflows', {
-      type: 'workflow.cancel',
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-      },
-    });
+    // Trigger abort signal - the abort handler will publish the workflow.cancel event
+    // This ensures consistent behavior whether cancel() or abort() is called
+    this.abortController.abort();
   }
 }
