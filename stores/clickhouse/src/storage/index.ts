@@ -8,7 +8,6 @@ import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
   PaginationInfo,
-  StorageColumn,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -20,7 +19,7 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MemoryStorageClickhouse } from './domains/memory';
-import { StoreOperationsClickhouse } from './domains/operations';
+import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
@@ -96,18 +95,20 @@ export class ClickhouseStore extends MastraStorage {
         output_format_json_quote_64bit_integers: 0,
       },
     });
+
     this.ttl = config.ttl;
 
-    const operations = new StoreOperationsClickhouse({ client: this.db, ttl: this.ttl });
-    const workflows = new WorkflowsStorageClickhouse({ client: this.db, operations });
-    const scores = new ScoresStorageClickhouse({ client: this.db, operations });
-    const memory = new MemoryStorageClickhouse({ client: this.db, operations });
+
+    const workflows = new WorkflowsStorageClickhouse({ client: this.db, ttl: this.ttl });
+    const scores = new ScoresStorageClickhouse({ client: this.db, ttl: this.ttl });
+    const memory = new MemoryStorageClickhouse({ client: this.db, ttl: this.ttl });
+    const observability = new ObservabilityStorageClickhouse({ client: this.db, ttl: this.ttl });
 
     this.stores = {
-      operations,
       workflows,
       scores,
       memory,
+      observability,
     };
   }
 
@@ -124,14 +125,9 @@ export class ClickhouseStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
     };
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.stores.operations.batchInsert({ tableName, records });
-    // await this.optimizeTable({ tableName });
   }
 
   async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -168,44 +164,6 @@ export class ClickhouseStore extends MastraStorage {
         error,
       );
     }
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async updateWorkflowResults({
@@ -300,6 +258,10 @@ export class ClickhouseStore extends MastraStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     return this.stores.memory.deleteThread({ threadId });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

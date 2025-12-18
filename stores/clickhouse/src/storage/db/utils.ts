@@ -64,6 +64,21 @@ export type ClickhouseConfig = {
   };
 };
 
+// List of fields that should be parsed as JSON
+const JSON_FIELDS = [
+  'content',
+  'attributes',
+  'metadata',
+  'input',
+  'output',
+  'error',
+  'scope',
+  'links',
+];
+
+// Fields that should be null instead of empty string when empty
+const NULLABLE_STRING_FIELDS = ['parentSpanId', 'error'];
+
 export function transformRow<R>(row: any): R {
   if (!row) {
     return row;
@@ -75,10 +90,25 @@ export function transformRow<R>(row: any): R {
   if (row.updatedAt) {
     row.updatedAt = new Date(row.updatedAt);
   }
+  if (row.startedAt) {
+    row.startedAt = new Date(row.startedAt);
+  }
+  if (row.endedAt) {
+    row.endedAt = new Date(row.endedAt);
+  }
 
-  // Parse content field if it's a JSON string
-  if (row.content && typeof row.content === 'string') {
-    row.content = safelyParseJSON(row.content);
+  // Parse JSONB fields if they're JSON strings
+  for (const field of JSON_FIELDS) {
+    if (row[field] && typeof row[field] === 'string') {
+      row[field] = safelyParseJSON(row[field]);
+    }
+  }
+
+  // Convert empty strings to null for nullable fields
+  for (const field of NULLABLE_STRING_FIELDS) {
+    if (row[field] === '') {
+      row[field] = null;
+    }
   }
 
   return row;

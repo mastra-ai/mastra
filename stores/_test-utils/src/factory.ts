@@ -25,23 +25,23 @@ export function createTestSuite(storage: MastraStorage) {
       const clearList: Promise<void>[] = [];
 
       const workflowStorage = await storage.getStore('workflows');
+      const memoryStorage = await storage.getStore('memory');
+      const scoresStorage = await storage.getStore('scores');
+      const observabilityStorage = await storage.getStore('observability');
+      const agentsStorage = await storage.getStore('agents');
+
       if (workflowStorage) {
         clearList.push(workflowStorage.dangerouslyClearAll());
       }
-      const memoryStorage = await storage.getStore('memory');
       if (memoryStorage) {
         clearList.push(memoryStorage.dangerouslyClearAll());
       }
-      const scoresStorage = await storage.getStore('scores');
       if (scoresStorage) {
         clearList.push(scoresStorage.dangerouslyClearAll());
       }
-      const observabilityStorage = await storage.getStore('observability');
-
-      if (observabilityStorage && storage.supports.observabilityInstance) {
+      if (observabilityStorage) {
         clearList.push(observabilityStorage.dangerouslyClearAll());
       }
-      const agentsStorage = await storage.getStore('agents');
       if (agentsStorage && storage.supports.agents) {
         clearList.push(agentsStorage.dangerouslyClearAll());
       }
@@ -49,18 +49,13 @@ export function createTestSuite(storage: MastraStorage) {
       await Promise.all(clearList);
     });
 
+
+    // Tests are registered unconditionally - each test internally handles
+    // checking if the storage domain is available
     createWorkflowsTests({ storage });
-
     createMemoryTest({ storage });
-
     createScoresTest({ storage });
-
-    if (storage.supports.observabilityInstance) {
-      createObservabilityTests({ storage });
-    }
-
-    if (storage.supports.agents) {
-      createAgentsTests({ storage });
-    }
+    createObservabilityTests({ storage });
+    createAgentsTests({ storage });
   });
 }

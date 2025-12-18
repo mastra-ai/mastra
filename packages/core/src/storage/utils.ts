@@ -1,3 +1,4 @@
+import { type } from 'node:os';
 import type { ScoreRowData } from '../evals/types';
 import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';
@@ -211,6 +212,25 @@ export function createStorageErrorId(store: StoreName, operation: string, status
 
 export function createVectorErrorId(store: StoreName, operation: string, status: string): Uppercase<string> {
   return createStoreErrorId('vector', store, operation, status);
+}
+
+export function getSqlType(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'text':
+      return 'TEXT';
+    case 'timestamp':
+      return 'TIMESTAMP';
+    case 'float':
+      return 'FLOAT';
+    case 'integer':
+      return 'INTEGER';
+    case 'bigint':
+      return 'BIGINT';
+    case 'jsonb':
+      return 'JSONB';
+    default:
+      return 'TEXT';
+  }
 }
 
 export function getDefaultValue(type: StorageColumn['type']): string {
