@@ -63,16 +63,11 @@ export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
-const advancedTools = () => {
-  // ...
-};
+const advancedTools = () => {};
 
-const baseTools = () => {
-  // ...
-};
+const baseTools = () => {};
 
 export const testTool = createTool({
-  // ...
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 

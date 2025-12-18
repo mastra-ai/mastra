@@ -120,7 +120,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { testMcpServer } from "./mcp/test-mcp-server";
 
 export const mastra = new Mastra({
-  // ...
   mcpServers: { testMcpServer },
 });
 ```
@@ -146,13 +145,12 @@ Visit [getTools()](/reference/v1/tools/mcp-client#gettools) for more information
 
 :::
 
-```typescript {7} title="src/mastra/agents/test-agent.ts"
+```typescript {6} title="src/mastra/agents/test-agent.ts"
 import { Agent } from "@mastra/core/agent";
 
 import { testMcpClient } from "../mcp/test-mcp-client";
 
 export const testAgent = new Agent({
-  // ...
   tools: await testMcpClient.getTools(),
 });
 ```

@@ -145,18 +145,13 @@ export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
 
-const premiumMemory = new Memory({
-  // ...
-});
+const premiumMemory = new Memory();
 
-const standardMemory = new Memory({
-  // ...
-});
+const standardMemory = new Memory();
 
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  // ...
   memory: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 

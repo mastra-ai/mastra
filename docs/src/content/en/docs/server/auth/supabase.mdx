@@ -31,12 +31,11 @@ npm install @mastra/auth-supabase@beta
 
 ## Usage example
 
-```typescript {2,7-9} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthSupabase } from "@mastra/auth-supabase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthSupabase({
       url: process.env.SUPABASE_URL,

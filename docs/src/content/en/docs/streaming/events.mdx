@@ -44,7 +44,7 @@ When using `agent.network()` for multi-agent collaboration, additional event typ
 
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
-```typescript {3,7}
+```typescript
 const testAgent = mastra.getAgent("testAgent");
 
 const stream = await testAgent.stream([
@@ -203,7 +203,6 @@ Network streams emit events that track the orchestration flow. Each iteration be
     }
   }
 }
-// ...more events
 ```
 
 ### Filtering network events

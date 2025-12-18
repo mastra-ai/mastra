@@ -43,7 +43,6 @@ import {
 } from "@mastra/evals/scorers/prebuilt";
 
 export const evaluatedAgent = new Agent({
-  // ...
   scorers: {
     relevancy: {
       scorer: createAnswerRelevancyScorer({ model: "openai/gpt-4.1-nano" }),
@@ -67,7 +66,6 @@ import { z } from "zod";
 import { customStepScorer } from "../scorers/custom-step-scorer";
 
 const contentStep = createStep({
-  // ...
   scorers: {
     customStepScorer: {
       scorer: customStepScorer(),
@@ -115,7 +113,6 @@ To score traces, you first need to register your scorers with your Mastra instan
 
 ```typescript
 const mastra = new Mastra({
-  // ...
   scorers: {
     answerRelevancy: myAnswerRelevancyScorer,
     responseQuality: myResponseQualityScorer,

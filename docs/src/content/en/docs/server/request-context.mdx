@@ -109,7 +109,7 @@ Visit [Middleware](/docs/v1/server/middleware) for how to use server middleware.
 
 You can access the `requestContext` argument from any supported configuration options in agents. These functions can be sync or `async`. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8,15,18,21} title="src/mastra/agents/weather-agent.ts"
+```typescript title="src/mastra/agents/weather-agent.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -120,20 +120,11 @@ export const weatherAgent = new Agent({
   instructions: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === "enterprise") {
-      // ...
-    }
-    // ...
+    if (userTier === "enterprise") {}
   },
-  model: ({ requestContext }) => {
-    // ...
-  },
-  tools: ({ requestContext }) => {
-    // ...
-  },
-  memory: ({ requestContext }) => {
-    // ...
-  },
+  model: ({ requestContext }) => {},
+  tools: ({ requestContext }) => {},
+  memory: ({ requestContext }) => {},
 });
 ```
 
@@ -149,7 +140,7 @@ Visit [Agent](/reference/v1/agents/agent) for a full list of configuration optio
 
 You can access the `requestContext` argument from a workflow step's `execute` function. This function can be sync or async. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/workflows/weather-workflow.ts"
+```typescript title="src/mastra/workflows/weather-workflow.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -159,10 +150,7 @@ const stepOne = createStep({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === "enterprise") {
-      // ...
-    }
-    // ...
+    if (userTier === "enterprise") {}
   },
 });
 ```
@@ -177,7 +165,7 @@ Visit [createStep()](/reference/v1/workflows/step) for a full list of configurat
 
 You can access the `requestContext` argument from a tool’s `execute` function. This function is `async`. Use the `.get()` method to read values from `requestContext`.
 
-```typescript {7-8} title="src/mastra/tools/weather-tool.ts"
+```typescript title="src/mastra/tools/weather-tool.ts"
 export type UserTier = {
   "user-tier": "enterprise" | "pro";
 };
@@ -187,10 +175,7 @@ export const weatherTool = createTool({
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
-    if (userTier === "enterprise") {
-      // ...
-    }
-    // ...
+    if (userTier === "enterprise") {}
   },
 });
 ```

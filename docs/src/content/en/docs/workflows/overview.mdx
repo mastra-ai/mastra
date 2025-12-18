@@ -180,12 +180,11 @@ export const testWorkflow = createWorkflow({...})
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
-```typescript {6} title="src/mastra/index.ts"
+```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
-  // ...
   workflows: { testWorkflow },
 });
 ```
@@ -253,7 +252,6 @@ The workflow output includes the full execution lifecycle, showing the input and
 {
   "status": "success",
   "steps": {
-    // ...
     "step-1": {
       "status": "success",
       "payload": {
@@ -303,8 +301,6 @@ const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
 
-//.. server connection lost,
-
 const restartedResult = await run.restart();
 ```
 
@@ -335,7 +331,6 @@ export type UserTier = {
 };
 
 const step1 = createStep({
-  // ...
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 

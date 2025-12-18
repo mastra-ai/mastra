@@ -48,7 +48,6 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -57,12 +56,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account.json",

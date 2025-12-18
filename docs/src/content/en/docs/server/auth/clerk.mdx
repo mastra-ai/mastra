@@ -32,12 +32,11 @@ npm install @mastra/auth-clerk@beta
 
 ## Usage example
 
-```typescript {2,7-11} title="src/mastra/index.ts"
+```typescript {2,6-10} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,

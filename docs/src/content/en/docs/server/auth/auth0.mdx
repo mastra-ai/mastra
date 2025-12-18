@@ -40,12 +40,11 @@ npm install @mastra/auth-auth0@beta
 
 ### Basic usage with environment variables
 
-```typescript {2,7} title="src/mastra/index.ts"
+```typescript {2,6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0(),
   },
@@ -54,12 +53,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,

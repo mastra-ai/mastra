@@ -35,8 +35,7 @@ Mastra includes several processors for common use cases. You can also create cus
 
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
-```typescript {3,9-15} title="src/mastra/agents/moderated-agent.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
@@ -46,7 +45,7 @@ export const moderatedAgent = new Agent({
   model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",

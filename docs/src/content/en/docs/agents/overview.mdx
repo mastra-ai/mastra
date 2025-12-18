@@ -286,7 +286,6 @@ Agents can use tools to go beyond language generation, enabling structured inter
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   tools: { testTool },
 });
 ```
@@ -309,7 +308,6 @@ export type UserTier = {
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   model: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
