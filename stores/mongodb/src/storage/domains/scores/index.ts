@@ -12,10 +12,8 @@ import {
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
-
-export interface MongoDBScoresConfig {
-  connector: MongoDBConnector;
-}
+import type { MongoDBDomainConfig } from '../../types';
+import { resolveConnector } from '../utils';
 
 /**
  * MongoDB-specific score row transformation.
@@ -30,9 +28,9 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class ScoresStorageMongoDB extends ScoresStorage {
   #connector: MongoDBConnector;
 
-  constructor(config: MongoDBScoresConfig) {
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = config.connector;
+    this.#connector = resolveConnector(config);
   }
 
   private async getCollection(name: string) {

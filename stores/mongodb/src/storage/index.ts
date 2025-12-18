@@ -20,49 +20,13 @@ import type {
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
+import { resolveConnector } from './domains/utils';
 import { MongoDBAgentsStorage } from './domains/agents';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
-
-const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
-  try {
-    if ('connectorHandler' in config) {
-      return MongoDBConnector.fromConnectionHandler(config.connectorHandler);
-    }
-  } catch (error) {
-    throw new MastraError(
-      {
-        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { connectionHandler: true },
-      },
-      error,
-    );
-  }
-
-  try {
-    return MongoDBConnector.fromDatabaseConfig({
-      id: config.id,
-      options: config.options,
-      url: config.url,
-      dbName: config.dbName,
-    });
-  } catch (error) {
-    throw new MastraError(
-      {
-        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { url: config?.url, dbName: config?.dbName },
-      },
-      error,
-    );
-  }
-};
 
 export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
@@ -94,7 +58,7 @@ export class MongoDBStore extends MastraStorage {
 
     this.stores = {} as StorageDomains;
 
-    this.#connector = loadConnector(config);
+    this.#connector = resolveConnector(config);
 
     const memory = new MemoryStorageMongoDB({
       connector: this.#connector,

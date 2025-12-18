@@ -14,17 +14,15 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
-
-export interface MongoDBWorkflowsConfig {
-  connector: MongoDBConnector;
-}
+import type { MongoDBDomainConfig } from '../../types';
+import { resolveConnector } from '../utils';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   #connector: MongoDBConnector;
 
-  constructor(config: MongoDBWorkflowsConfig) {
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = config.connector;
+    this.#connector = resolveConnector(config);
   }
 
   private async getCollection(name: string) {

@@ -10,17 +10,15 @@ import type {
   UpdateSpanRecord,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
-
-export interface MongoDBObservabilityConfig {
-  connector: MongoDBConnector;
-}
+import type { MongoDBDomainConfig } from '../../types';
+import { resolveConnector } from '../utils';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
   #connector: MongoDBConnector;
 
-  constructor(config: MongoDBObservabilityConfig) {
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.#connector = config.connector;
+    this.#connector = resolveConnector(config);
   }
 
   private async getCollection(name: string) {
