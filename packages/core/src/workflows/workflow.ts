@@ -1570,7 +1570,9 @@ export class Workflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     // If a snapshot exists in storage, update the run's status to reflect the actual state
     // This fixes the issue where createRun checks storage but doesn't use the snapshot data
@@ -1933,8 +1935,13 @@ export class Workflow<
 
   async getWorkflowRunExecutionResult(
     runId: string,
-    withNestedWorkflows: boolean = true,
-  ): Promise<WorkflowState | null> {
+    options: {
+      withNestedWorkflows?: boolean;
+      fields?: string[];
+    } = {},
+  ): Promise<Partial<WorkflowState> | null> {
+    const { withNestedWorkflows = true, fields } = options;
+
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
@@ -1959,18 +1966,69 @@ export class Workflow<
       }
     }
 
-    const fullSteps = withNestedWorkflows
-      ? await this.getWorkflowRunSteps({ runId, workflowId: this.id })
-      : (snapshot as WorkflowRunState).context;
+    const snapshotState = snapshot as WorkflowRunState;
+
+    // Define the default result structure - this serves as the source of truth for allowed fields
+    const defaultResult = {
+      status: snapshotState.status,
+      result: snapshotState.result,
+      error: snapshotState.error,
+      payload: snapshotState.context?.input,
+      steps: null as any, // Will be populated below
+      activeStepsPath: snapshotState.activeStepsPath,
+      serializedStepGraph: snapshotState.serializedStepGraph,
+    };
+
+    // Derive allowed fields from the default result structure
+    const allowedFields = new Set(Object.keys(defaultResult));
+
+    // If fields are specified, only return requested fields
+    if (fields && fields.length > 0) {
+      const result: Partial<WorkflowState> = {};
+
+      for (const field of fields) {
+        // Skip unsupported field names
+        if (!allowedFields.has(field)) {
+          continue;
+        }
+
+        // Special cases only
+        if (field === 'steps') {
+          // Only fetch steps if explicitly requested (expensive operation)
+          let fullSteps;
+          if (withNestedWorkflows) {
+            fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+          } else {
+            // Strip input from context - steps should only contain step results
+            const { input, ...stepsOnly } = snapshotState.context || {};
+            fullSteps = stepsOnly;
+          }
+          result.steps = fullSteps as any;
+        } else if (field === 'payload') {
+          // Payload comes from context.input
+          result.payload = snapshotState.context?.input;
+        } else {
+          // 1:1 mapping - look up directly from snapshotState
+          result[field as keyof typeof result] = snapshotState[field as keyof WorkflowRunState] as any;
+        }
+      }
+
+      return result;
+    }
+
+    // Default behavior: return all fields
+    let fullSteps;
+    if (withNestedWorkflows) {
+      fullSteps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+    } else {
+      // Strip input from context - steps should only contain step results
+      const { input, ...stepsOnly } = snapshotState.context || {};
+      fullSteps = stepsOnly;
+    }
 
     return {
-      status: (snapshot as WorkflowRunState).status,
-      result: (snapshot as WorkflowRunState).result,
-      error: (snapshot as WorkflowRunState).error,
-      payload: (snapshot as WorkflowRunState).context?.input,
+      ...defaultResult,
       steps: fullSteps as any,
-      activeStepsPath: (snapshot as WorkflowRunState).activeStepsPath,
-      serializedStepGraph: (snapshot as WorkflowRunState).serializedStepGraph,
     };
   }
 }
