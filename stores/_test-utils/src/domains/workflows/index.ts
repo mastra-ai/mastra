@@ -1,4 +1,4 @@
-import { MastraStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { MastraStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -7,7 +7,7 @@ import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
   describe('listWorkflowRuns', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await storage.stores.workflows.dangerouslyClearAll();
     });
     it('returns empty array when no workflows exist', async () => {
       const { runs, total } = await storage.listWorkflowRuns();
@@ -92,35 +92,26 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
       const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
 
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName1,
-          run_id: runId1,
-          snapshot: workflow1,
-          createdAt: twoDaysAgo,
-          updatedAt: twoDaysAgo,
-        },
+      await storage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+        createdAt: twoDaysAgo,
+        updatedAt: twoDaysAgo,
       });
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName2,
-          run_id: runId2,
-          snapshot: workflow2,
-          createdAt: yesterday,
-          updatedAt: yesterday,
-        },
+      await storage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+        createdAt: yesterday,
+        updatedAt: yesterday,
       });
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName3,
-          run_id: runId3,
-          snapshot: workflow3,
-          createdAt: now,
-          updatedAt: now,
-        },
+      await storage.persistWorkflowSnapshot({
+        workflowName: workflowName3,
+        runId: runId3,
+        snapshot: workflow3,
+        createdAt: now,
+        updatedAt: now,
       });
 
       const { runs } = await storage.listWorkflowRuns({
@@ -234,30 +225,20 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       for (const status of ['success', 'failed']) {
         const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context'][string]['status']);
         runIds.push(sample.runId);
-        await storage.insert({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          record: {
-            workflow_name: workflowName,
-            run_id: sample.runId,
-            resourceId,
-            snapshot: sample.snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
+        await storage.persistWorkflowSnapshot({
+          workflowName,
+          runId: sample.runId,
+          resourceId,
+          snapshot: sample.snapshot,
         });
       }
       // Insert a run with a different resourceId
       const other = createSampleWorkflowSnapshot('waiting');
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName,
-          run_id: other.runId,
-          resourceId: 'resource-other',
-          snapshot: other.snapshot,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      await storage.persistWorkflowSnapshot({
+        workflowName,
+        runId: other.runId,
+        resourceId: 'resource-other',
+        snapshot: other.snapshot,
       });
     });
 

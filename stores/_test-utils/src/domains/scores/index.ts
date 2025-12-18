@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';
-import { TABLE_SCORERS, type MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage } from '@mastra/core/storage';
 
 // Helper function for creating test scores
 async function createScores(
@@ -34,7 +34,7 @@ async function createScores(
 export function createScoresTest({ storage }: { storage: MastraStorage }) {
   describe('Score Operations', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_SCORERS });
+      await storage.stores.scores.dangerouslyClearAll();
     });
 
     it('should retrieve scores by scorer id', async () => {

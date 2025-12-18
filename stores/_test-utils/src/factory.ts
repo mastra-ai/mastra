@@ -1,19 +1,8 @@
 import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
-import {
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_RESOURCES,
-  TABLE_SCORERS,
-  TABLE_TRACES,
-  TABLE_SPANS,
-  TABLE_AGENTS,
-} from '@mastra/core/storage';
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
-import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
 export * from './domains/memory/data';
@@ -33,20 +22,15 @@ export function createTestSuite(storage: MastraStorage) {
     });
 
     afterAll(async () => {
-      // Clear tables after tests
+      // Clear all domain data after tests
       await Promise.all([
-        storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
-        storage.clearTable({ tableName: TABLE_MESSAGES }),
-        storage.clearTable({ tableName: TABLE_THREADS }),
-        storage.clearTable({ tableName: TABLE_RESOURCES }),
-        storage.clearTable({ tableName: TABLE_SCORERS }),
-        storage.clearTable({ tableName: TABLE_TRACES }),
-        storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
-        storage.supports.agents && storage.clearTable({ tableName: TABLE_AGENTS }),
+        storage.stores.workflows.dangerouslyClearAll(),
+        storage.stores.memory.dangerouslyClearAll(),
+        storage.stores.scores.dangerouslyClearAll(),
+        storage.supports.observabilityInstance && storage.stores.observability.dangerouslyClearAll(),
+        storage.supports.agents && storage.stores.agents.dangerouslyClearAll(),
       ]);
     });
-
-    createOperationsTests({ storage });
 
     createWorkflowsTests({ storage });
 

@@ -1,4 +1,4 @@
-import { TABLE_AGENTS, type MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage } from '@mastra/core/storage';
 import { createSampleAgent, createFullSampleAgent, createSampleAgents } from './data';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -10,10 +10,10 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
   describeAgents('Agents Storage', () => {
     beforeAll(async () => {
       const start = Date.now();
-      console.log('Clearing agents table before tests');
-      await storage.clearTable({ tableName: TABLE_AGENTS });
+      console.log('Clearing agents domain data before tests');
+      await storage.stores.agents.dangerouslyClearAll();
       const end = Date.now();
-      console.log(`Agents table cleared in ${end - start}ms`);
+      console.log(`Agents domain cleared in ${end - start}ms`);
     });
 
     describe('createAgent', () => {
@@ -233,7 +233,7 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
 
     describe('listAgents', () => {
       beforeEach(async () => {
-        await storage.clearTable({ tableName: TABLE_AGENTS });
+        await storage.stores.agents.dangerouslyClearAll();
       });
 
       it('should return empty list when no agents exist', async () => {

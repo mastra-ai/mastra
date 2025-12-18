@@ -1,13 +1,12 @@
 import { SpanType } from '@mastra/core/observability';
-import { MastraStorage, TABLE_SPANS } from '@mastra/core/storage';
-import type { SpanRecord } from '@mastra/core/storage';
+import type { MastraStorage, SpanRecord } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createRootSpan, createChildSpan } from './data';
 
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
   describe('Span Operations', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_SPANS });
+      await storage.stores.observability.dangerouslyClearAll();
     });
 
     describe('single span', () => {
