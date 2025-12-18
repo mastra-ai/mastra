@@ -1,8 +1,8 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
-  StoreOperations,
   TABLE_MESSAGES,
   TABLE_SCORERS,
   TABLE_THREADS,
@@ -11,83 +11,30 @@ import {
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type Cloudflare from 'cloudflare';
-import type { ListOptions, RecordTypes } from '../../types';
+import type { ListOptions, RecordTypes } from '../types';
 
-export class StoreOperationsCloudflare extends StoreOperations {
+export interface CloudflareKVDBConfig {
+  bindings?: Record<TABLE_NAMES, KVNamespace>;
+  namespacePrefix?: string;
+  client?: Cloudflare;
+  accountId?: string;
+}
+
+export class CloudflareKVDB extends MastraBase {
   private bindings?: Record<TABLE_NAMES, KVNamespace>;
   client?: Cloudflare;
   accountId?: string;
   namespacePrefix: string;
-  constructor({
-    namespacePrefix,
-    bindings,
-    client,
-    accountId,
-  }: {
-    bindings?: Record<TABLE_NAMES, KVNamespace>;
-    namespacePrefix: string;
-    client?: Cloudflare;
-    accountId?: string;
-  }) {
-    super();
-    this.bindings = bindings;
-    this.namespacePrefix = namespacePrefix;
-    this.client = client;
-    this.accountId = accountId;
-  }
 
-  async hasColumn() {
-    return true;
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    // Nothing to do here, Cloudflare KV is schemaless
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    try {
-      const keys = await this.listKV(tableName);
-      if (keys.length > 0) {
-        await Promise.all(keys.map(keyObj => this.deleteKV(tableName, keyObj.name)));
-      }
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE', 'CLEAR_TABLE', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    try {
-      const keys = await this.listKV(tableName);
-      if (keys.length > 0) {
-        await Promise.all(keys.map(keyObj => this.deleteKV(tableName, keyObj.name)));
-      }
-    } catch (error: any) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('CLOUDFLARE', 'DROP_TABLE', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: {
-            tableName,
-          },
-        },
-        error,
-      );
-    }
+  constructor(config: CloudflareKVDBConfig) {
+    super({
+      component: 'STORAGE',
+      name: 'CLOUDFLARE_KV_DB',
+    });
+    this.bindings = config.bindings;
+    this.namespacePrefix = config.namespacePrefix || '';
+    this.client = config.client;
+    this.accountId = config.accountId;
   }
 
   private getBinding(tableName: TABLE_NAMES) {
@@ -100,7 +47,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
   }
 
   getKey<T extends TABLE_NAMES>(tableName: T, record: Record<string, string>): string {
-    // Add namespace prefix if configured
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
     switch (tableName) {
       case TABLE_THREADS:
@@ -130,7 +76,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
   }
 
   private getSchemaKey(tableName: TABLE_NAMES): string {
-    // Add namespace prefix if configured
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
     return `${prefix}schema:${tableName}`;
   }
@@ -142,13 +87,11 @@ export class StoreOperationsCloudflare extends StoreOperations {
     if (!text) return null;
     try {
       const data = JSON.parse(text);
-      // If we got an object with a value property that's a string, try to parse that too
       if (data && typeof data === 'object' && 'value' in data) {
         if (typeof data.value === 'string') {
           try {
             return JSON.parse(data.value);
           } catch {
-            // If value is a string but not JSON, return as is
             return data.value;
           }
         }
@@ -164,10 +107,8 @@ export class StoreOperationsCloudflare extends StoreOperations {
 
   private async createNamespaceById(title: string) {
     if (this.bindings) {
-      // For Workers API, namespaces are created at deploy time
-      // Return a mock response matching REST API shape
       return {
-        id: title, // Use title as ID since that's what we need
+        id: title,
         title: title,
         supports_url_encoding: true,
       };
@@ -183,9 +124,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
       const response = await this.createNamespaceById(namespaceName);
       return response.id;
     } catch (error: any) {
-      // Check if the error is because it already exists
       if (error.message && error.message.includes('already exists')) {
-        // Try to get it again since we know it exists
         const namespaces = await this.listNamespaces();
         const namespace = namespaces.result.find(ns => ns.title === namespaceName);
         if (namespace) return namespace.id;
@@ -208,9 +147,9 @@ export class StoreOperationsCloudflare extends StoreOperations {
       };
     }
 
-    let allNamespaces: Array<Cloudflare.KV.Namespace> = [];
+    let allNamespaces: Array<Cloudflare['kv']['namespaces'] extends { list: infer T } ? (T extends (...args: any) => Promise<{ result?: infer R }> ? (R extends (infer U)[] ? U : never) : never) : never> = [];
     let currentPage = 1;
-    const perPage = 50; // Using 50, max is 100 for namespaces.list
+    const perPage = 50;
     let morePagesExist = true;
 
     while (morePagesExist) {
@@ -221,7 +160,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
       });
 
       if (response.result) {
-        allNamespaces = allNamespaces.concat(response.result);
+        allNamespaces = allNamespaces.concat(response.result as any);
       }
 
       morePagesExist = response.result ? response.result.length === perPage : false;
@@ -230,7 +169,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
         currentPage++;
       }
     }
-    return { result: allNamespaces };
+    return { result: allNamespaces as any };
   }
 
   private async getNamespaceIdByName(namespaceName: string): Promise<string | null> {
@@ -340,13 +279,12 @@ export class StoreOperationsCloudflare extends StoreOperations {
     schema: Record<string, StorageColumn>,
   ): Promise<void> {
     try {
-      if (!schema || typeof schema !== 'object' || schema.value === null) {
+      if (!schema || typeof schema !== 'object' || (schema as any).value === null) {
         throw new Error('Invalid schema format');
       }
       for (const [columnName, column] of Object.entries(schema)) {
         const value = record[columnName];
 
-        // Check primary key presence
         if (column.primaryKey && (value === undefined || value === null)) {
           throw new Error(`Missing primary key value for column ${columnName}`);
         }
@@ -372,13 +310,11 @@ export class StoreOperationsCloudflare extends StoreOperations {
       const recordTyped = record as Record<string, unknown>;
       const schema = await this.getTableSchema(tableName);
 
-      // If schema exists, validate against it
       if (schema) {
         await this.validateAgainstSchema(recordTyped, schema);
         return;
       }
 
-      // Fallback validation if no schema found
       switch (tableName) {
         case TABLE_THREADS:
           if (!('id' in recordTyped) || !('resourceId' in recordTyped) || !('title' in recordTyped)) {
@@ -423,11 +359,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const key = this.getKey(tableName, record);
-
-      // Process dates and metadata
       const processedRecord = { ...record } as RecordTypes[TABLE_NAMES];
-
-      // Validate record type
       await this.validateRecord(processedRecord, tableName);
       await this.putKV({ tableName, key, value: processedRecord });
     } catch (error: any) {
@@ -447,14 +379,9 @@ export class StoreOperationsCloudflare extends StoreOperations {
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
-      // Generate key using simplified approach
       const key = this.getKey(tableName, keys as Partial<RecordTypes[typeof tableName]>);
-
-      // Get data from KV store
       const data = await this.getKV(tableName, key);
       if (!data) return null;
-
-      // Handle dates and metadata
       return data as R;
     } catch (error: any) {
       const mastraError = new MastraError(
@@ -480,10 +407,7 @@ export class StoreOperationsCloudflare extends StoreOperations {
     try {
       await Promise.all(
         input.records.map(async record => {
-          // Generate key using simplified approach
           const key = this.getKey(input.tableName, record as Record<string, string>);
-
-          // Process dates and metadata
           await this.putKV({ tableName: input.tableName, key, value: record });
         }),
       );
@@ -503,9 +427,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
     }
   }
 
-  /**
-   * Helper to safely serialize data for KV storage
-   */
   private safeSerialize(data: any): string {
     return typeof data === 'string' ? data : JSON.stringify(data);
   }
@@ -522,7 +443,6 @@ export class StoreOperationsCloudflare extends StoreOperations {
     metadata?: any;
   }) {
     try {
-      // Ensure consistent serialization
       const serializedValue = this.safeSerialize(value);
       const serializedMetadata = metadata ? this.safeSerialize(metadata) : '';
 
@@ -593,6 +513,48 @@ export class StoreOperationsCloudflare extends StoreOperations {
     }
   }
 
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      const keys = await this.listKV(tableName);
+      if (keys.length > 0) {
+        await Promise.all(keys.map(keyObj => this.deleteKV(tableName, keyObj.name)));
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'CLEAR_TABLE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      const keys = await this.listKV(tableName);
+      if (keys.length > 0) {
+        await Promise.all(keys.map(keyObj => this.deleteKV(tableName, keyObj.name)));
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'DROP_TABLE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async listNamespaceKeys(tableName: TABLE_NAMES, options?: ListOptions) {
     try {
       if (this.bindings) {
@@ -601,12 +563,9 @@ export class StoreOperationsCloudflare extends StoreOperations {
           limit: options?.limit || 1000,
           prefix: options?.prefix,
         });
-
-        // Convert Workers API response to match REST API format
         return response.keys;
       } else {
         const namespaceId = await this.getNamespaceId(tableName);
-        // Use REST API
         const response = await this.client!.kv.namespaces.keys.list(namespaceId, {
           account_id: this.accountId!,
           limit: options?.limit || 1000,
