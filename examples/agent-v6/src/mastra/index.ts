@@ -1,8 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { Observability } from '@mastra/observability';
 import { weatherToolLoopAgent } from './agents';
+// import { PinoLogger } from '@mastra/loggers';
+// import { Observability } from '@mastra/observability';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -22,8 +22,8 @@ export const mastra = new Mastra({
       swaggerUI: true,
     },
   },
-  logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
-  observability: new Observability({
-    default: { enabled: true },
-  }),
+  // logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
+  // observability: new Observability({
+  //   default: { enabled: true },
+  // }),
 });
