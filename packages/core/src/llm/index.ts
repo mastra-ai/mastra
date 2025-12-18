@@ -14,7 +14,8 @@ import type {
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
 } from '@internal/ai-sdk-v4';
-import type { SystemModelMessage } from '@internal/ai-sdk-v5';
+import type { SystemModelMessage as SystemModelMessageV5 } from '@internal/ai-sdk-v5';
+import type { SystemModelMessage as SystemModelMessageV6 } from '@internal/ai-v6';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
@@ -87,9 +88,11 @@ export type SystemMessage =
   | string
   | string[]
   | CoreSystemMessage
-  | SystemModelMessage
+  | SystemModelMessageV5
   | CoreSystemMessage[]
-  | SystemModelMessage[];
+  | SystemModelMessageV5[];
+// | SystemModelMessageV6
+// | SystemModelMessageV6[];
 
 type GenerateTextOptions = Parameters<typeof generateText>[0];
 type StreamTextOptions = Parameters<typeof streamText>[0];

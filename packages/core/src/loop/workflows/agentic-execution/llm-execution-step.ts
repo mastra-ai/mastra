@@ -842,6 +842,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           const currentRetryCount = inputData.processorRetryCount || 0;
 
           await processorRunner.runProcessOutputStep({
+            steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
             messageList,
             stepNumber,

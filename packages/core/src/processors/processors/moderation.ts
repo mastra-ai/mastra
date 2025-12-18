@@ -7,6 +7,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 /**
  * Individual moderation category score
@@ -295,7 +296,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
         response = await this.moderationAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
-          providerOptions: this.providerOptions,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

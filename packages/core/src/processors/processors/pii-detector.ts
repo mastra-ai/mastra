@@ -8,6 +8,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 /**
  * PII categories for detection and redaction
@@ -322,7 +323,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
-          providerOptions: this.providerOptions,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

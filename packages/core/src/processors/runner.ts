@@ -22,6 +22,7 @@ import type {
   RunProcessInputStepResult,
   ToolCallInfo,
 } from './index';
+import type { StepResult } from '@internal/ai-sdk-v5';
 
 /**
  * Implementation of processor state management
@@ -964,6 +965,7 @@ export class ProcessorRunner {
    * @returns The processed MessageList
    */
   async runProcessOutputStep(args: {
+    steps: Array<StepResult<any>>;
     messages: MastraDBMessage[];
     messageList: MessageList;
     stepNumber: number;
@@ -975,6 +977,7 @@ export class ProcessorRunner {
     retryCount?: number;
   }): Promise<MessageList> {
     const {
+      steps,
       messageList,
       stepNumber,
       finishReason,
@@ -1019,6 +1022,7 @@ export class ProcessorRunner {
               toolCalls,
               text,
               systemMessages: currentSystemMessages,
+              steps,
               retryCount,
             },
             tracingContext,
@@ -1077,6 +1081,7 @@ export class ProcessorRunner {
           toolCalls,
           text,
           systemMessages: currentSystemMessages,
+          steps,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,

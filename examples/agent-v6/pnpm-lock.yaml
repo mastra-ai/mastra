@@ -14,6 +14,7 @@ overrides:
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/observability': link:../../observability/mastra
   '@mastra/evals': link:../../packages/evals
+  '@mastra/ai-sdk': link:../../client-sdks/ai-sdk
   mastra: link:../../packages/cli
 
 importers:
@@ -26,6 +27,9 @@ importers:
       '@ai-sdk/provider':
         specifier: 3.0.0-beta.26
         version: 3.0.0-beta.26
+      '@mastra/ai-sdk':
+        specifier: link:../../client-sdks/ai-sdk
+        version: link:../../client-sdks/ai-sdk
       '@mastra/client-js':
         specifier: link:../../client-sdks/client-js
         version: link:../../client-sdks/client-js

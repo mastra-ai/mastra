@@ -344,7 +344,7 @@ importers:
         version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^5.0.60
-        version: 5.0.76(zod@3.25.76)
+        version: 5.0.101(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
@@ -4744,7 +4744,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.33.0
+        version: 1.34.0
       google-auth-library:
         specifier: ^10.2.1
         version: 10.4.1
@@ -7867,8 +7867,8 @@ packages:
     resolution: {integrity: sha512-gAcNqVL6E6V+d7yZbv5pQAPh5ZTE66UB0n2AZB3QaVaQDo9H8yalja3u2v3NE4QTVt03DkpoIuyvzs4i3w/b7A==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.33.0':
-    resolution: {integrity: sha512-ThUjFZ1N0DU88peFjnQkb8K198EWaW2RmmnDShFQ+O+xkIH9itjpRe358x3L/b4X/A7dimkvq63oz49Vbh7Cog==}
+  '@google/genai@1.34.0':
+    resolution: {integrity: sha512-vu53UMPvjmb7PGzlYu6Tzxso8Dfhn+a7eQFaS2uNemVtDZKwzSpJ5+ikqBbXplF7RGB1STcVDqCkPvquiwb2sw==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.24.0
@@ -21735,7 +21735,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.33.0':
+  '@google/genai@1.34.0':
     dependencies:
       google-auth-library: 10.4.1
       ws: 8.18.3

@@ -6,6 +6,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { Processor } from '../index';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 /**
  * Individual detection category score
@@ -244,7 +245,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
-          providerOptions: this.providerOptions,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

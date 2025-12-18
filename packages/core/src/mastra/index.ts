@@ -29,6 +29,8 @@ import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
+import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
+import type { ToolLoopAgentLike } from '../tool-loop-agent';
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -102,8 +104,10 @@ export interface Config<
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
+   * Accepts both Mastra Agent instances and AI SDK v6 ToolLoopAgent instances.
+   * ToolLoopAgent instances are automatically converted to Mastra Agents.
    */
-  agents?: TAgents;
+  agents?: { [K in keyof TAgents]: TAgents[K] | ToolLoopAgentLike };
 
   /**
    * Storage provider for persisting data, conversation history, and workflow state.
@@ -1142,11 +1146,18 @@ export class Mastra<
    * mastra.addAgent(newAgent, 'customKey'); // Uses custom key
    * ```
    */
-  public addAgent<A extends Agent<any>>(agent: A, key?: string): void {
+  public addAgent<A extends Agent<any> | ToolLoopAgentLike>(agent: A, key?: string): void {
     if (!agent) {
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
-    const agentKey = key || agent.id;
+    let mastraAgent: Agent<any>;
+    if (isToolLoopAgentLike(agent)) {
+      // Pass the config key as the name if the ToolLoopAgent doesn't have an id
+      mastraAgent = toolLoopAgentToMastraAgent(agent, { name: key });
+    } else {
+      mastraAgent = agent;
+    }
+    const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
       const logger = this.getLogger();
@@ -1155,21 +1166,21 @@ export class Mastra<
     }
 
     // Initialize the agent
-    agent.__setLogger(this.#logger);
-    agent.__registerMastra(this);
-    agent.__registerPrimitives({
+    mastraAgent.__setLogger(this.#logger);
+    mastraAgent.__registerMastra(this);
+    mastraAgent.__registerPrimitives({
       logger: this.getLogger(),
       storage: this.getStorage(),
       agents: agents,
       tts: this.#tts,
       vectors: this.#vectors,
     });
-    agents[agentKey] = agent;
+    agents[agentKey] = mastraAgent;
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor
     // This excludes memory-derived processors to avoid triggering memory factory functions
-    agent
+    mastraAgent
       .getConfiguredProcessorWorkflows()
       .then(processorWorkflows => {
         for (const workflow of processorWorkflows) {
