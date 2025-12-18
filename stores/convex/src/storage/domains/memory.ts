@@ -20,7 +20,8 @@ import type {
   StorageResourceType,
 } from '@mastra/core/storage';
 
-import type { StoreOperationsConvex } from '../operations';
+import type { ConvexAdminClient } from '../client';
+import { ConvexDB } from '../db';
 
 type StoredMessage = {
   id: string;
@@ -33,12 +34,24 @@ type StoredMessage = {
 };
 
 export class MemoryConvex extends MemoryStorage {
-  constructor(private readonly operations: StoreOperationsConvex) {
+  #db: ConvexDB;
+  constructor(client: ConvexAdminClient) {
     super();
+    this.#db = new ConvexDB(client);
+  }
+
+  async init(): Promise<void> {
+    // No-op for Convex; schema is managed server-side.
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const row = await this.operations.load<
+    const row = await this.#db.load<
       (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null
     >({
       tableName: TABLE_THREADS,
@@ -56,7 +69,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    await this.operations.insert({
+    await this.#db.insert({
       tableName: TABLE_THREADS,
       record: {
         ...thread,
@@ -100,14 +113,14 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const messages = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+    const messages = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
       { field: 'thread_id', value: threadId },
     ]);
-    await this.operations.deleteMany(
+    await this.#db.deleteMany(
       TABLE_MESSAGES,
       messages.map(msg => msg.id),
     );
-    await this.operations.deleteMany(TABLE_THREADS, [threadId]);
+    await this.#db.deleteMany(TABLE_THREADS, [threadId]);
   }
 
   async listThreadsByResourceId(
@@ -118,7 +131,7 @@ export class MemoryConvex extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    const rows = await this.operations.queryTable<
+    const rows = await this.#db.queryTable<
       Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
     >(TABLE_THREADS, [{ field: 'resourceId', value: resourceId }]);
 
@@ -174,7 +187,7 @@ export class MemoryConvex extends MemoryStorage {
     // Fetch messages from all threads
     let rows: StoredMessage[] = [];
     for (const tid of threadIds) {
-      const threadRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+      const threadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
         { field: 'thread_id', value: tid },
       ]);
       rows.push(...threadRows);
@@ -241,7 +254,7 @@ export class MemoryConvex extends MemoryStorage {
 
         // If not found, query by message ID directly
         if (!target) {
-          const messageRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+          const messageRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
             { field: 'id', value: includeItem.id },
           ]);
           if (messageRows.length > 0) {
@@ -250,7 +263,7 @@ export class MemoryConvex extends MemoryStorage {
 
             // Cache the thread's messages for context lookup
             if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
-              const otherThreadRows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, [
+              const otherThreadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
                 { field: 'thread_id', value: targetThreadId },
               ]);
               threadMessagesCache.set(targetThreadId, otherThreadRows);
@@ -309,7 +322,7 @@ export class MemoryConvex extends MemoryStorage {
     if (messageIds.length === 0) {
       return { messages: [] };
     }
-    const rows = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
+    const rows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
     const filtered = rows.filter(row => messageIds.includes(row.id)).map(row => this.parseStoredMessage(row));
     const list = new MessageList().add(filtered, 'memory');
     return { messages: list.get.all.db() };
@@ -337,7 +350,7 @@ export class MemoryConvex extends MemoryStorage {
       };
     });
 
-    await this.operations.batchInsert({
+    await this.#db.batchInsert({
       tableName: TABLE_MESSAGES,
       records: normalized,
     });
@@ -348,7 +361,7 @@ export class MemoryConvex extends MemoryStorage {
     for (const threadId of threadIds) {
       const thread = await this.getThreadById({ threadId });
       if (thread) {
-        await this.operations.insert({
+        await this.#db.insert({
           tableName: TABLE_THREADS,
           record: {
             ...thread,
@@ -375,7 +388,7 @@ export class MemoryConvex extends MemoryStorage {
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
-    const existing = await this.operations.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
+    const existing = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
     const updated: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
@@ -412,7 +425,7 @@ export class MemoryConvex extends MemoryStorage {
         current.content = JSON.stringify(mergedContent);
       }
 
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_MESSAGES,
         record: current,
       });
@@ -424,7 +437,7 @@ export class MemoryConvex extends MemoryStorage {
     for (const threadId of affectedThreadIds) {
       const thread = await this.getThreadById({ threadId });
       if (thread) {
-        await this.operations.insert({
+        await this.#db.insert({
           tableName: TABLE_THREADS,
           record: {
             ...thread,
@@ -441,7 +454,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async deleteMessages(messageIds: string[]): Promise<void> {
-    await this.operations.deleteMany(TABLE_MESSAGES, messageIds);
+    await this.#db.deleteMany(TABLE_MESSAGES, messageIds);
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
@@ -454,7 +467,7 @@ export class MemoryConvex extends MemoryStorage {
     if (resource.metadata !== undefined) {
       record.metadata = resource.metadata;
     }
-    await this.operations.insert({
+    await this.#db.insert({
       tableName: TABLE_RESOURCES,
       record,
     });
@@ -462,7 +475,7 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const record = await this.operations.load<
+    const record = await this.#db.load<
       (Omit<StorageResourceType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null
     >({
       tableName: TABLE_RESOURCES,

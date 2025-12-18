@@ -5,7 +5,8 @@ import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource }
 import { TABLE_SCORERS, ScoresStorage, createStorageErrorId } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 
-import type { StoreOperationsConvex } from '../operations';
+import type { ConvexAdminClient } from '../client';
+import { ConvexDB } from '../db';
 
 type StoredScore = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
@@ -13,12 +14,22 @@ type StoredScore = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
 };
 
 export class ScoresConvex extends ScoresStorage {
-  constructor(private readonly operations: StoreOperationsConvex) {
+  #db: ConvexDB;
+  constructor(client: ConvexAdminClient) {
     super();
+    this.#db = new ConvexDB(client);
+  }
+
+  async init(): Promise<void> {
+    // No-op for Convex; schema is managed server-side.
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    const row = await this.operations.load<StoredScore | null>({
+    const row = await this.#db.load<StoredScore | null>({
       tableName: TABLE_SCORERS,
       keys: { id },
     });
@@ -34,7 +45,7 @@ export class ScoresConvex extends ScoresStorage {
       updatedAt: now.toISOString(),
     } as StoredScore;
 
-    await this.operations.insert({
+    await this.#db.insert({
       tableName: TABLE_SCORERS,
       record,
     });
@@ -107,7 +118,7 @@ export class ScoresConvex extends ScoresStorage {
       );
     }
 
-    const rows = await this.operations.queryTable<StoredScore>(TABLE_SCORERS, undefined);
+    const rows = await this.#db.queryTable<StoredScore>(TABLE_SCORERS, undefined);
     const filtered = rows
       .filter(row => (filters.scorerId ? row.scorerId === filters.scorerId : true))
       .filter(row => (filters.entityId ? row.entityId === filters.entityId : true))

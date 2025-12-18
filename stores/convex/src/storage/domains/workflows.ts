@@ -8,7 +8,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
-import type { StoreOperationsConvex } from '../operations';
+import type { ConvexAdminClient } from '../client';
+import { ConvexDB } from '../db';
 
 type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snapshot'> & {
   createdAt: string;
@@ -17,8 +18,18 @@ type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snap
 };
 
 export class WorkflowsConvex extends WorkflowsStorage {
-  constructor(private readonly operations: StoreOperationsConvex) {
+  #db: ConvexDB;
+  constructor(client: ConvexAdminClient) {
     super();
+    this.#db = new ConvexDB(client);
+  }
+
+  async init(): Promise<void> {
+    // No-op for Convex; schema is managed server-side.
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   async updateWorkflowResults({
@@ -90,12 +101,12 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }): Promise<void> {
     const now = new Date();
     // Check if a record already exists to preserve createdAt
-    const existing = await this.operations.load<{ createdAt?: string } | null>({
+    const existing = await this.#db.load<{ createdAt?: string } | null>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
 
-    await this.operations.insert({
+    await this.#db.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       record: {
         workflow_name: workflowName,
@@ -115,7 +126,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    const row = await this.operations.load<{ snapshot: WorkflowRunState | string } | null>({
+    const row = await this.#db.load<{ snapshot: WorkflowRunState | string } | null>({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
@@ -127,7 +138,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
 
-    let rows = await this.operations.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
+    let rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
 
     if (workflowName) rows = rows.filter(run => run.workflow_name === workflowName);
     if (resourceId) rows = rows.filter(run => run.resourceId === resourceId);
@@ -168,7 +179,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    const runs = await this.operations.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
+    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
     const match = runs.find(run => run.run_id === runId && (!workflowName || run.workflow_name === workflowName));
     if (!match) return null;
 
@@ -183,11 +194,11 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    await this.operations.deleteMany(TABLE_WORKFLOW_SNAPSHOT, [`${workflowName}-${runId}`]);
+    await this.#db.deleteMany(TABLE_WORKFLOW_SNAPSHOT, [`${workflowName}-${runId}`]);
   }
 
   private async getRun(workflowName: string, runId: string): Promise<RawWorkflowRun | null> {
-    const runs = await this.operations.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
+    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
       { field: 'workflow_name', value: workflowName },
     ]);
     return runs.find(run => run.run_id === runId) ?? null;

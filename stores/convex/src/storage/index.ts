@@ -1,7 +1,6 @@
 import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  StorageColumn,
   StorageResourceType,
   PaginationInfo,
   StorageListMessagesInput,
@@ -12,7 +11,6 @@ import type {
   StoragePagination,
   WorkflowRun,
   WorkflowRuns,
-  TABLE_NAMES,
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
@@ -23,7 +21,6 @@ import { ConvexAdminClient } from './client';
 import { MemoryConvex } from './domains/memory';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
-import { StoreOperationsConvex } from './operations';
 
 export type ConvexStoreConfig = ConvexAdminClientConfig & {
   id: string;
@@ -51,7 +48,6 @@ export type ConvexStoreConfig = ConvexAdminClientConfig & {
 };
 
 export class ConvexStore extends MastraStorage {
-  private readonly operations: StoreOperationsConvex;
   private readonly memory: MemoryConvex;
   private readonly workflows: WorkflowsConvex;
   private readonly scores: ScoresConvex;
@@ -60,13 +56,11 @@ export class ConvexStore extends MastraStorage {
     super({ id: config.id, name: config.name ?? 'ConvexStore', disableInit: config.disableInit });
 
     const client = new ConvexAdminClient(config);
-    this.operations = new StoreOperationsConvex(client);
-    this.memory = new MemoryConvex(this.operations);
-    this.workflows = new WorkflowsConvex(this.operations);
-    this.scores = new ScoresConvex(this.operations);
+    this.memory = new MemoryConvex(client);
+    this.workflows = new WorkflowsConvex(client);
+    this.scores = new ScoresConvex(client);
 
     this.stores = {
-      operations: this.operations,
       memory: this.memory,
       workflows: this.workflows,
       scores: this.scores,
@@ -83,38 +77,6 @@ export class ConvexStore extends MastraStorage {
       observabilityInstance: false,
       listScoresBySpan: false,
     };
-  }
-
-  async createTable(_args: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
-    // No-op
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.operations.dropTable({ tableName });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    // No-op
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    await this.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
-    return this.operations.load<R>({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
