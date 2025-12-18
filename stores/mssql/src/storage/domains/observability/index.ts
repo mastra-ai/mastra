@@ -18,15 +18,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
   private db: MssqlDB;
   private schema?: string;
 
-  constructor({
-    pool,
-    db,
-    schema,
-  }: {
-    pool: ConnectionPool;
-    db: MssqlDB;
-    schema?: string;
-  }) {
+  constructor({ pool, db, schema }: { pool: ConnectionPool; db: MssqlDB; schema?: string }) {
     super();
     this.pool = pool;
     this.db = db;

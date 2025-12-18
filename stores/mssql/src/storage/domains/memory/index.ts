@@ -50,15 +50,7 @@ export class MemoryMSSQL extends MemoryStorage {
     return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
-  constructor({
-    pool,
-    schema,
-    db,
-  }: {
-    pool: sql.ConnectionPool;
-    schema: string;
-    db: MssqlDB;
-  }) {
+  constructor({ pool, schema, db }: { pool: sql.ConnectionPool; schema: string; db: MssqlDB }) {
     super();
     this.pool = pool;
     this.schema = schema;

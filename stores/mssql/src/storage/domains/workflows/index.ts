@@ -21,15 +21,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   private db: MssqlDB;
   private schema: string;
 
-  constructor({
-    pool,
-    db,
-    schema,
-  }: {
-    pool: sql.ConnectionPool;
-    db: MssqlDB;
-    schema: string;
-  }) {
+  constructor({ pool, db, schema }: { pool: sql.ConnectionPool; db: MssqlDB; schema: string }) {
     super();
     this.pool = pool;
     this.db = db;
