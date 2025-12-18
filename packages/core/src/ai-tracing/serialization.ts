@@ -23,13 +23,13 @@ export interface SerializationLimits {
   maxTotalChars: number;
 }
 
-export const DEFAULT_SERIALIZATION_LIMITS: SerializationLimits = {
+export const DEFAULT_SERIALIZATION_LIMITS: SerializationLimits = Object.freeze({
   maxAttrChars: 1024,
   maxDepth: 6,
   maxKeys: 50,
   maxArrayItems: 50,
   maxTotalChars: 8192,
-};
+});
 
 /**
  * Hard-cap any string to prevent unbounded growth.
@@ -95,10 +95,7 @@ export function deepClean(value: any, options: DeepCleanOptions = {}): any {
 
     // Handle strings - enforce length limit
     if (typeof val === 'string') {
-      if (val.length > maxStringLength) {
-        return val.slice(0, maxStringLength) + '…[truncated]';
-      }
-      return val;
+      return truncateString(val, maxStringLength);
     }
 
     // Handle other non-object primitives explicitly
@@ -115,15 +112,16 @@ export function deepClean(value: any, options: DeepCleanOptions = {}): any {
       return val.description ? `[Symbol(${val.description})]` : '[Symbol]';
     }
 
+    // Handle Date objects - preserve as-is
+    if (val instanceof Date) {
+      return val;
+    }
+
     // Handle Errors specially - preserve name and message
     if (val instanceof Error) {
       return {
         name: val.name,
-        message: val.message
-          ? val.message.length > maxStringLength
-            ? val.message.slice(0, maxStringLength) + '…[truncated]'
-            : val.message
-          : undefined,
+        message: val.message ? truncateString(val.message, maxStringLength) : undefined,
       };
     }
 
