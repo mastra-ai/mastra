@@ -321,8 +321,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
-    this.logger.debug('outputProcessors', outputProcessors);
-
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,

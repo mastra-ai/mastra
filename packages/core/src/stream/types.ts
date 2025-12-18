@@ -699,26 +699,28 @@ export type partialModel = {
   version?: string;
 };
 
-export type MastraOnStepFinishCallback = (
-  event: LLMStepResult & { model?: partialModel; runId?: string },
+export type MastraOnStepFinishCallback<OUTPUT extends OutputSchema = undefined> = (
+  event: LLMStepResult<OUTPUT> & { model?: partialModel; runId?: string },
 ) => Promise<void> | void;
 
-export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult & {
+export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult<OUTPUT> & {
   error?: Error | string | { message: string; stack: string };
   object?: InferSchemaOutput<OUTPUT>;
-  steps: LLMStepResult[];
+  steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
 };
 
-export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Promise<void> | void;
+export type MastraOnFinishCallback<OUTPUT extends OutputSchema = undefined> = (
+  event: MastraOnFinishCallbackArgs<OUTPUT>,
+) => Promise<void> | void;
 
 export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
   toolCallStreaming?: boolean;
-  onFinish?: MastraOnFinishCallback;
-  onStepFinish?: MastraOnStepFinishCallback;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];
