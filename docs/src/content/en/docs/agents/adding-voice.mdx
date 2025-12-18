@@ -297,7 +297,7 @@ export const agent = new Agent({
   id: "aisdk-voice-agent",
   name: "AI SDK Voice Agent",
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: openai("gpt-5.1"),
+  model: "openai/gpt-5.1",
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({
