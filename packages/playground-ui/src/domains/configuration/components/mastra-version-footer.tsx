@@ -115,12 +115,11 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="px-3 py-2 hover:bg-surface2 transition-colors rounded w-full text-left group">
+        <button className="px-3 py-2 hover:bg-surface2 transition-colors rounded w-full text-left">
           <div className="flex items-center gap-1.5">
             <Txt as="span" variant="ui-sm" className="text-accent1 font-mono">
               mastra version:
             </Txt>
-            <Package className="w-3 h-3 text-icon3 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
           <div className="flex items-center gap-2">
             <Txt as="span" variant="ui-sm" className="text-icon3 font-mono">
@@ -155,7 +154,8 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   if (outdatedPackages.length === 0) return null;
 
   const command = packageManagerCommands[packageManager];
-  const packageArgs = outdatedPackages.map(p => `${p.name}@latest`).join(' ');
+  // Use @beta tag for prerelease versions to avoid downgrading beta users
+  const packageArgs = outdatedPackages.map(p => `${p.name}@${p.isPrerelease ? 'beta' : 'latest'}`).join(' ');
 
   return `${command} ${packageArgs}`;
 }
