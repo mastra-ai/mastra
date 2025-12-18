@@ -2486,7 +2486,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    if (Object.keys(result).length === 0) {
+    // Only throw if scorers were provided but none could be resolved
+    if (Object.keys(result).length === 0 && Object.keys(overrideScorers).length > 0) {
       throw new MastraError({
         id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
         domain: ErrorDomain.AGENT,
