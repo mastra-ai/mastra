@@ -287,18 +287,31 @@ export class DatadogExporter extends BaseExporter {
       annotations.metadata = combinedMetadata;
     }
 
-    // Tags only for error info (structural data the exporter knows about)
-    // Note: Datadog annotation tags are string key/values, so error is 'true' (string).
-    // The native span error status is set separately via ddSpan.setTag('error', true) in emitSpan().
-    // TODO: add config option to allow user tags to be added to the annotations.tags object
+    // Build tags from span.tags (user-provided string[] converted to object) and error info
+    // Datadog annotation tags accept Record<string, any>, so we use proper types
+    // The native span error status is also set via ddSpan.setTag('error', true) in emitSpan()
+    const tags: Record<string, any> = {};
+
+    // Convert span.tags (string[]) to object format - each tag becomes a key with value true
+    if (span.tags?.length) {
+      for (const tag of span.tags) {
+        tags[tag] = true;
+      }
+    }
+
+    // Add error info as consolidated tags
     if (span.errorInfo) {
-      annotations.tags = {
-        error: 'true',
-        'error.message': span.errorInfo.message,
-        ...(span.errorInfo.id ? { 'error.id': span.errorInfo.id } : {}),
-        ...(span.errorInfo.domain ? { 'error.domain': span.errorInfo.domain } : {}),
-        ...(span.errorInfo.category ? { 'error.category': span.errorInfo.category } : {}),
+      tags.error = true;
+      tags.errorInfo = {
+        message: span.errorInfo.message,
+        ...(span.errorInfo.id ? { id: span.errorInfo.id } : {}),
+        ...(span.errorInfo.domain ? { domain: span.errorInfo.domain } : {}),
+        ...(span.errorInfo.category ? { category: span.errorInfo.category } : {}),
       };
+    }
+
+    if (Object.keys(tags).length > 0) {
+      annotations.tags = tags;
     }
 
     return annotations;

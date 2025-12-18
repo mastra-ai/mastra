@@ -598,10 +598,12 @@ describe('DatadogExporter', () => {
         expect.anything(),
         expect.objectContaining({
           tags: expect.objectContaining({
-            error: 'true',
-            'error.message': 'Something went wrong',
-            'error.id': 'err-123',
-            'error.category': 'validation',
+            error: true,
+            errorInfo: {
+              message: 'Something went wrong',
+              id: 'err-123',
+              category: 'validation',
+            },
           }),
         }),
       );
@@ -643,6 +645,86 @@ describe('DatadogExporter', () => {
 
       // Verify setTag was NOT called
       expect(capturedSpans[0].setTag).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('span tags', () => {
+    it('converts span.tags string array to object format', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        tags: ['production', 'experiment-v2', 'user-request'],
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockAnnotate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          tags: {
+            production: true,
+            'experiment-v2': true,
+            'user-request': true,
+          },
+        }),
+      );
+    });
+
+    it('merges span.tags with error tags when both present', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        tags: ['production', 'critical'],
+        errorInfo: {
+          message: 'Something failed',
+          category: 'runtime',
+        },
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      expect(mockAnnotate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          tags: {
+            production: true,
+            critical: true,
+            error: true,
+            errorInfo: {
+              message: 'Something failed',
+              category: 'runtime',
+            },
+          },
+        }),
+      );
+    });
+
+    it('does not include tags in annotations when span.tags is empty', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        tags: [],
+        input: 'test input', // Include input so annotations are not empty
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      // mockAnnotate should be called, but without tags
+      expect(mockAnnotate).toHaveBeenCalled();
+      const annotateCall = mockAnnotate.mock.calls[0][1];
+      expect(annotateCall).not.toHaveProperty('tags');
+    });
+
+    it('does not include tags in annotations when span.tags is undefined', async () => {
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const span = createMockSpan({
+        // tags not specified
+        input: 'test input', // Include input so annotations are not empty
+      });
+
+      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      // mockAnnotate should be called, but without tags
+      expect(mockAnnotate).toHaveBeenCalled();
+      const annotateCall = mockAnnotate.mock.calls[0][1];
+      expect(annotateCall).not.toHaveProperty('tags');
     });
   });
 
