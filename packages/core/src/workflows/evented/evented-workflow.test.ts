@@ -6158,9 +6158,6 @@ describe('Workflow', () => {
       const initialResult = await run.start({ inputData: { input: 'test' } });
       expect(initialResult.steps.promptAgent.status).toBe('suspended');
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
-      // expect(initialResult.activePaths.size).toBe(1);
-      // expect(initialResult.activePaths.get('promptAgent')?.status).toBe('suspended');
-      // expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toEqual({ testPayload: 'hello' });
       expect(initialResult.steps).toEqual({
         input: { input: 'test' },
         getUserInput: {
