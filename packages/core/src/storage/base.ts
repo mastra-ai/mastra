@@ -145,6 +145,7 @@ export abstract class MastraStorage extends MastraBase {
   async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
     return this.stores?.[storeName];
   }
+  abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
 
