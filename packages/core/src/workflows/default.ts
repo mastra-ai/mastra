@@ -42,7 +42,6 @@ import type {
   StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
-import { Workflow } from './workflow';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';

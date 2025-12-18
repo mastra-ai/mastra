@@ -1824,7 +1824,7 @@ export class Workflow<
       throw res.error;
     }
 
-    return res;
+    return res.status === 'success' ? res.result : undefined;
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {

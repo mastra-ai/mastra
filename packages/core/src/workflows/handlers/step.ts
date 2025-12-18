@@ -250,7 +250,7 @@ export async function executeStep(
         requestContextUpdate: null,
       };
 
-      const runResult = await runStep({
+      const output = await runStep({
         runId,
         resourceId,
         workflowId,
@@ -365,15 +365,10 @@ export async function executeStep(
       }
 
       const isNestedWorkflowStep = step.component === 'WORKFLOW';
-      const output = isNestedWorkflowStep
-        ? runResult?.status === 'success'
-          ? runResult?.result
-          : undefined
-        : runResult;
 
-      const nestedWflowStepStatus = isNestedWorkflowStep ? runResult?.status : undefined;
+      const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
 
-      return { output, suspended, bailed, contextMutations, nestedWflowStepStatus };
+      return { output, suspended, bailed, contextMutations, nestedWflowStepPaused };
     },
     { retries, delay, stepSpan, workflowId, runId },
   );
@@ -422,7 +417,7 @@ export async function executeStep(
       };
     } else if (durableResult.bailed) {
       execResults = { status: 'bailed', output: durableResult.bailed.payload, endedAt: Date.now() };
-    } else if (durableResult.nestedWflowStepStatus === 'paused') {
+    } else if (durableResult.nestedWflowStepPaused) {
       execResults = { status: 'paused' };
     } else {
       execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };

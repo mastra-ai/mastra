@@ -16,7 +16,6 @@ import {
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
-import { Workflow } from '../workflow';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -43,8 +42,9 @@ export class StepExecutor extends MastraBase {
     foreachIdx?: number;
     validateInputs?: boolean;
     abortController?: AbortController;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
     // Use provided abortController or create a new one for backwards compatibility
     const abortController = params.abortController ?? new AbortController();
@@ -91,7 +91,7 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const stepResult = await step.execute(
+      const stepOutput = await step.execute(
         createDeprecationProxy(
           {
             workflowId: params.workflowId,
@@ -143,15 +143,9 @@ export class StepExecutor extends MastraBase {
         ),
       );
 
-      const isNestedWorkflowStep = step instanceof Workflow;
+      const isNestedWorkflowStep = step.component === 'WORKFLOW';
 
-      const stepOutput = isNestedWorkflowStep
-        ? stepResult?.status === 'success'
-          ? stepResult?.result
-          : undefined
-        : stepResult;
-
-      const nestedWflowStepStatus = isNestedWorkflowStep ? stepResult?.status : undefined;
+      const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
 
       const endedAt = Date.now();
 
@@ -175,7 +169,7 @@ export class StepExecutor extends MastraBase {
           endedAt,
           output: bailed.payload,
         };
-      } else if (nestedWflowStepStatus === 'paused') {
+      } else if (nestedWflowStepPaused) {
         finalResult = {
           ...stepInfo,
           status: 'paused',
