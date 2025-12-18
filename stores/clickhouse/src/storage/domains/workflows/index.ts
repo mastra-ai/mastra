@@ -145,19 +145,19 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
       const now = new Date();
       const persisting = currentSnapshot
         ? {
-          ...currentSnapshot,
-          resourceId,
-          snapshot: JSON.stringify(snapshot),
-          updatedAt: (updatedAt ?? now).toISOString(),
-        }
+            ...currentSnapshot,
+            resourceId,
+            snapshot: JSON.stringify(snapshot),
+            updatedAt: (updatedAt ?? now).toISOString(),
+          }
         : {
-          workflow_name: workflowName,
-          run_id: runId,
-          resourceId,
-          snapshot: JSON.stringify(snapshot),
-          createdAt: (createdAt ?? now).toISOString(),
-          updatedAt: (updatedAt ?? now).toISOString(),
-        };
+            workflow_name: workflowName,
+            run_id: runId,
+            resourceId,
+            snapshot: JSON.stringify(snapshot),
+            createdAt: (createdAt ?? now).toISOString(),
+            updatedAt: (updatedAt ?? now).toISOString(),
+          };
 
       await this.client.insert({
         table: TABLE_WORKFLOW_SNAPSHOT,

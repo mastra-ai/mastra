@@ -151,7 +151,10 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       const scorerId = `scorer-${randomUUID()}`;
       const scorer = createSampleScore({ scorerId });
       await scoresStorage.saveScore(scorer);
-      const result = await scoresStorage.listScoresByRunId({ runId: scorer.runId, pagination: { page: 0, perPage: 10 } });
+      const result = await scoresStorage.listScoresByRunId({
+        runId: scorer.runId,
+        pagination: { page: 0, perPage: 10 },
+      });
       expect(result.scores).toHaveLength(1);
       expect(result.pagination.total).toBe(1);
       expect(result.pagination.page).toBe(0);

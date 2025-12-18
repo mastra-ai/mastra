@@ -67,7 +67,9 @@ export function createExecuteWriteOperationWithRetry({
         }
       }
     }
-    throw new Error(`LibSQLStore: Max retries reached for ${operationDescription}, but no error was re-thrown from the loop.`);
+    throw new Error(
+      `LibSQLStore: Max retries reached for ${operationDescription}, but no error was re-thrown from the loop.`,
+    );
   };
 }
 

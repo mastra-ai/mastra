@@ -74,10 +74,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       // Update thread timestamps
       const now = new Date().toISOString();
       for (const threadId of threadIds) {
-        await this.service.entities.thread
-          .update({ entity: 'thread', id: threadId })
-          .set({ updatedAt: now })
-          .go();
+        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
       }
     } catch (error) {
       throw new MastraError(
@@ -772,10 +769,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
   async updateMessages(args: {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
-    {
-      id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-    }[];
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });

@@ -49,7 +49,6 @@ export function createTestSuite(storage: MastraStorage) {
       await Promise.all(clearList);
     });
 
-
     // Tests are registered unconditionally - each test internally handles
     // checking if the storage domain is available
     createWorkflowsTests({ storage });

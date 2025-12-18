@@ -24,7 +24,6 @@ import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
-
 export class StoreMemoryLance extends MemoryStorage {
   private client: Connection;
   #db: LanceDB;
@@ -260,12 +259,12 @@ export class StoreMemoryLance extends MemoryStorage {
       content:
         typeof message.content === 'string'
           ? (() => {
-            try {
-              return JSON.parse(message.content);
-            } catch {
-              return message.content;
-            }
-          })()
+              try {
+                return JSON.parse(message.content);
+              } catch {
+                return message.content;
+              }
+            })()
           : message.content,
     };
   }
@@ -724,12 +723,12 @@ export class StoreMemoryLance extends MemoryStorage {
       content:
         typeof data.content === 'string'
           ? (() => {
-            try {
-              return JSON.parse(data.content);
-            } catch {
-              return data.content;
-            }
-          })()
+              try {
+                return JSON.parse(data.content);
+              } catch {
+                return data.content;
+              }
+            })()
           : data.content,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
@@ -738,10 +737,10 @@ export class StoreMemoryLance extends MemoryStorage {
 
   async updateMessages(args: {
     messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
-    {
-      id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-    }[];
+      {
+        id: string;
+        content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
+      }[];
   }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });

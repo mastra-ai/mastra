@@ -2,7 +2,14 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, getSqlType, TABLE_WORKFLOW_SNAPSHOT, TABLE_SPANS, TABLE_SCHEMAS, getDefaultValue } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  getSqlType,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+  getDefaultValue,
+} from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
@@ -37,7 +44,10 @@ export interface ClickhouseDomainRestConfig {
  * Resolves ClickhouseDomainConfig to a ClickHouse client and ttl config.
  * Handles creating a new client if config is provided.
  */
-export function resolveClickhouseConfig(config: ClickhouseDomainConfig): { client: ClickHouseClient; ttl?: ClickhouseConfig['ttl'] } {
+export function resolveClickhouseConfig(config: ClickhouseDomainConfig): {
+  client: ClickHouseClient;
+  ttl?: ClickhouseConfig['ttl'];
+} {
   // Existing client
   if ('client' in config) {
     return { client: config.client, ttl: config.ttl };
@@ -60,77 +70,77 @@ export function resolveClickhouseConfig(config: ClickhouseDomainConfig): { clien
 }
 
 export class ClickhouseDB extends MastraBase {
-    protected ttl: ClickhouseConfig['ttl'];
-    protected client: ClickHouseClient;
-    constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
-        super({
-            name: 'CLICKHOUSE_DB',
-        });
-        this.ttl = ttl;
-        this.client = client;
+  protected ttl: ClickhouseConfig['ttl'];
+  protected client: ClickHouseClient;
+  constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
+    super({
+      name: 'CLICKHOUSE_DB',
+    });
+    this.ttl = ttl;
+    this.client = client;
+  }
+
+  async hasColumn(table: string, column: string): Promise<boolean> {
+    const result = await this.client.query({
+      query: `DESCRIBE TABLE ${table}`,
+      format: 'JSONEachRow',
+    });
+    const columns = (await result.json()) as { name: string }[];
+    return columns.some(c => c.name === column);
+  }
+
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+      case 'uuid':
+      case 'jsonb':
+        return 'String';
+      case 'timestamp':
+        return 'DateTime64(3)';
+      case 'integer':
+      case 'bigint':
+        return 'Int64';
+      case 'float':
+        return 'Float64';
+      case 'boolean':
+        return 'Bool';
+      default:
+        return getSqlType(type); // fallback to base implementation
     }
+  }
 
-    async hasColumn(table: string, column: string): Promise<boolean> {
-        const result = await this.client.query({
-            query: `DESCRIBE TABLE ${table}`,
-            format: 'JSONEachRow',
-        });
-        const columns = (await result.json()) as { name: string }[];
-        return columns.some(c => c.name === column);
-    }
+  async createTable({
+    tableName,
+    schema,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+  }): Promise<void> {
+    try {
+      const columns = Object.entries(schema)
+        .map(([name, def]) => {
+          let sqlType = this.getSqlType(def.type);
+          // Only treat as nullable if explicitly set to true (default is NOT nullable)
+          const isNullable = def.nullable === true;
+          // Wrap nullable columns in Nullable() to properly support NULL values
+          if (isNullable) {
+            sqlType = `Nullable(${sqlType})`;
+          }
+          const constraints = [];
+          // Add DEFAULT '{}' for metadata columns to prevent empty string issues
+          if (name === 'metadata' && def.type === 'text' && isNullable) {
+            constraints.push("DEFAULT '{}'");
+          }
+          const columnTtl = this.ttl?.[tableName]?.columns?.[name];
+          return `"${name}" ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
+        })
+        .join(',\n');
 
-    protected getSqlType(type: StorageColumn['type']): string {
-        switch (type) {
-            case 'text':
-            case 'uuid':
-            case 'jsonb':
-                return 'String';
-            case 'timestamp':
-                return 'DateTime64(3)';
-            case 'integer':
-            case 'bigint':
-                return 'Int64';
-            case 'float':
-                return 'Float64';
-            case 'boolean':
-                return 'Bool';
-            default:
-                return getSqlType(type); // fallback to base implementation
-        }
-    }
+      const rowTtl = this.ttl?.[tableName]?.row;
+      let sql: string;
 
-    async createTable({
-        tableName,
-        schema,
-    }: {
-        tableName: TABLE_NAMES;
-        schema: Record<string, StorageColumn>;
-    }): Promise<void> {
-        try {
-            const columns = Object.entries(schema)
-                .map(([name, def]) => {
-                    let sqlType = this.getSqlType(def.type);
-                    // Only treat as nullable if explicitly set to true (default is NOT nullable)
-                    const isNullable = def.nullable === true;
-                    // Wrap nullable columns in Nullable() to properly support NULL values
-                    if (isNullable) {
-                        sqlType = `Nullable(${sqlType})`;
-                    }
-                    const constraints = [];
-                    // Add DEFAULT '{}' for metadata columns to prevent empty string issues
-                    if (name === 'metadata' && def.type === 'text' && isNullable) {
-                        constraints.push("DEFAULT '{}'");
-                    }
-                    const columnTtl = this.ttl?.[tableName]?.columns?.[name];
-                    return `"${name}" ${sqlType} ${constraints.join(' ')} ${columnTtl ? `TTL toDateTime(${columnTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${columnTtl.interval} ${columnTtl.unit}` : ''}`;
-                })
-                .join(',\n');
-
-            const rowTtl = this.ttl?.[tableName]?.row;
-            let sql: string;
-
-            if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-                sql = `
+      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+        sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${['id String'].concat(columns)}
             )
@@ -140,9 +150,9 @@ export class ClickhouseDB extends MastraBase {
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
             SETTINGS index_granularity = 8192
               `;
-            } else if (tableName === TABLE_SPANS) {
-                // Spans table uses traceId and spanId as composite key
-                sql = `
+      } else if (tableName === TABLE_SPANS) {
+        // Spans table uses traceId and spanId as composite key
+        sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${columns}
             )
@@ -152,8 +162,8 @@ export class ClickhouseDB extends MastraBase {
             ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
             SETTINGS index_granularity = 8192
           `;
-            } else {
-                sql = `
+      } else {
+        sql = `
             CREATE TABLE IF NOT EXISTS ${tableName} (
               ${columns}
             )
@@ -163,243 +173,243 @@ export class ClickhouseDB extends MastraBase {
             ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
             SETTINGS index_granularity = 8192
           `;
-            }
+      }
 
-            await this.client.query({
-                query: sql,
-                clickhouse_settings: {
-                    // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-                    date_time_input_format: 'best_effort',
-                    date_time_output_format: 'iso',
-                    use_client_time_zone: 1,
-                    output_format_json_quote_64bit_integers: 0,
-                },
-            });
-        } catch (error: any) {
-            throw new MastraError(
-                {
-                    id: createStorageErrorId('CLICKHOUSE', 'CREATE_TABLE', 'FAILED'),
-                    domain: ErrorDomain.STORAGE,
-                    category: ErrorCategory.THIRD_PARTY,
-                    details: { tableName },
-                },
-                error,
-            );
+      await this.client.query({
+        query: sql,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'CREATE_TABLE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    try {
+      // 1. Get existing columns
+      const describeSql = `DESCRIBE TABLE ${tableName}`;
+      const result = await this.client.query({
+        query: describeSql,
+      });
+      const rows = await result.json();
+      const existingColumnNames = new Set(rows.data.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          let sqlType = this.getSqlType(columnDef.type);
+          if (columnDef.nullable !== false) {
+            sqlType = `Nullable(${sqlType})`;
+          }
+          const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
+          // Use backticks or double quotes as needed for identifiers
+          const alterSql =
+            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+
+          await this.client.query({
+            query: alterSql,
+          });
+          this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
         }
+      }
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'ALTER_TABLE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
+  }
 
-    async alterTable({
-        tableName,
-        schema,
-        ifNotExists,
-    }: {
-        tableName: TABLE_NAMES;
-        schema: Record<string, StorageColumn>;
-        ifNotExists: string[];
-    }): Promise<void> {
-        try {
-            // 1. Get existing columns
-            const describeSql = `DESCRIBE TABLE ${tableName}`;
-            const result = await this.client.query({
-                query: describeSql,
-            });
-            const rows = await result.json();
-            const existingColumnNames = new Set(rows.data.map((row: any) => row.name.toLowerCase()));
+  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    try {
+      await this.client.query({
+        query: `TRUNCATE TABLE ${tableName}`,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'CLEAR_TABLE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
 
-            // 2. Add missing columns
-            for (const columnName of ifNotExists) {
-                if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
-                    const columnDef = schema[columnName];
-                    let sqlType = this.getSqlType(columnDef.type);
-                    if (columnDef.nullable !== false) {
-                        sqlType = `Nullable(${sqlType})`;
-                    }
-                    const defaultValue = columnDef.nullable === false ? getDefaultValue(columnDef.type) : '';
-                    // Use backticks or double quotes as needed for identifiers
-                    const alterSql =
-                        `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    await this.client.query({
+      query: `DROP TABLE IF EXISTS ${tableName}`,
+    });
+  }
 
-                    await this.client.query({
-                        query: alterSql,
-                    });
-                    this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
-                }
-            }
-        } catch (error: any) {
-            throw new MastraError(
-                {
-                    id: createStorageErrorId('CLICKHOUSE', 'ALTER_TABLE', 'FAILED'),
-                    domain: ErrorDomain.STORAGE,
-                    category: ErrorCategory.THIRD_PARTY,
-                    details: { tableName },
-                },
-                error,
-            );
+  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    const rawCreatedAt = record.createdAt || record.created_at || new Date();
+    const rawUpdatedAt = record.updatedAt || new Date();
+    const createdAt = rawCreatedAt instanceof Date ? rawCreatedAt.toISOString() : rawCreatedAt;
+    const updatedAt = rawUpdatedAt instanceof Date ? rawUpdatedAt.toISOString() : rawUpdatedAt;
+
+    try {
+      await this.client.insert({
+        table: tableName,
+        values: [
+          {
+            ...record,
+            createdAt,
+            updatedAt,
+          },
+        ],
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          output_format_json_quote_64bit_integers: 0,
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+        },
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'INSERT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    const recordsToBeInserted = records.map(record => ({
+      ...Object.fromEntries(
+        Object.entries(record).map(([key, value]) => [
+          key,
+          TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type === 'timestamp' ? new Date(value).toISOString() : value,
+        ]),
+      ),
+    }));
+
+    try {
+      await this.client.insert({
+        table: tableName,
+        values: recordsToBeInserted,
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'BATCH_INSERT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    try {
+      const engine = TABLE_ENGINES[tableName] ?? 'MergeTree()';
+      const keyEntries = Object.entries(keys);
+      const conditions = keyEntries
+        .map(
+          ([key]) =>
+            `"${key}" = {var_${key}:${this.getSqlType(TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text')}}`,
+        )
+        .join(' AND ');
+      const values = keyEntries.reduce((acc, [key, value]) => {
+        return { ...acc, [`var_${key}`]: value };
+      }, {});
+
+      const hasUpdatedAt = TABLE_SCHEMAS[tableName as TABLE_NAMES]?.updatedAt;
+
+      const selectClause = `SELECT *, toDateTime64(createdAt, 3) as createdAt${hasUpdatedAt ? ', toDateTime64(updatedAt, 3) as updatedAt' : ''}`;
+
+      const result = await this.client.query({
+        query: `${selectClause} FROM ${tableName} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
+        query_params: values,
+        clickhouse_settings: {
+          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      if (!result) {
+        return null;
+      }
+
+      const rows = await result.json();
+      // If this is a workflow snapshot, parse the snapshot field
+      if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+        const snapshot = rows.data[0] as any;
+        if (!snapshot) {
+          return null;
         }
-    }
-
-    async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-        try {
-            await this.client.query({
-                query: `TRUNCATE TABLE ${tableName}`,
-                clickhouse_settings: {
-                    // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-                    date_time_input_format: 'best_effort',
-                    date_time_output_format: 'iso',
-                    use_client_time_zone: 1,
-                    output_format_json_quote_64bit_integers: 0,
-                },
-            });
-        } catch (error: any) {
-            throw new MastraError(
-                {
-                    id: createStorageErrorId('CLICKHOUSE', 'CLEAR_TABLE', 'FAILED'),
-                    domain: ErrorDomain.STORAGE,
-                    category: ErrorCategory.THIRD_PARTY,
-                    details: { tableName },
-                },
-                error,
-            );
+        if (typeof snapshot.snapshot === 'string') {
+          snapshot.snapshot = JSON.parse(snapshot.snapshot);
         }
+        return transformRow(snapshot);
+      }
+
+      const data: R = transformRow(rows.data[0]);
+      return data;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LOAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
-
-    async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-        await this.client.query({
-            query: `DROP TABLE IF EXISTS ${tableName}`,
-        });
-    }
-
-    async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-        const rawCreatedAt = record.createdAt || record.created_at || new Date();
-        const rawUpdatedAt = record.updatedAt || new Date();
-        const createdAt = rawCreatedAt instanceof Date ? rawCreatedAt.toISOString() : rawCreatedAt;
-        const updatedAt = rawUpdatedAt instanceof Date ? rawUpdatedAt.toISOString() : rawUpdatedAt;
-
-        try {
-            await this.client.insert({
-                table: tableName,
-                values: [
-                    {
-                        ...record,
-                        createdAt,
-                        updatedAt,
-                    },
-                ],
-                format: 'JSONEachRow',
-                clickhouse_settings: {
-                    // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-                    output_format_json_quote_64bit_integers: 0,
-                    date_time_input_format: 'best_effort',
-                    use_client_time_zone: 1,
-                },
-            });
-        } catch (error: any) {
-            throw new MastraError(
-                {
-                    id: createStorageErrorId('CLICKHOUSE', 'INSERT', 'FAILED'),
-                    domain: ErrorDomain.STORAGE,
-                    category: ErrorCategory.THIRD_PARTY,
-                    details: { tableName },
-                },
-                error,
-            );
-        }
-    }
-
-    async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-        const recordsToBeInserted = records.map(record => ({
-            ...Object.fromEntries(
-                Object.entries(record).map(([key, value]) => [
-                    key,
-                    TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type === 'timestamp' ? new Date(value).toISOString() : value,
-                ]),
-            ),
-        }));
-
-        try {
-            await this.client.insert({
-                table: tableName,
-                values: recordsToBeInserted,
-                format: 'JSONEachRow',
-                clickhouse_settings: {
-                    // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-                    date_time_input_format: 'best_effort',
-                    use_client_time_zone: 1,
-                    output_format_json_quote_64bit_integers: 0,
-                },
-            });
-        } catch (error: any) {
-            throw new MastraError(
-                {
-                    id: createStorageErrorId('CLICKHOUSE', 'BATCH_INSERT', 'FAILED'),
-                    domain: ErrorDomain.STORAGE,
-                    category: ErrorCategory.THIRD_PARTY,
-                    details: { tableName },
-                },
-                error,
-            );
-        }
-    }
-
-    async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-        try {
-            const engine = TABLE_ENGINES[tableName] ?? 'MergeTree()';
-            const keyEntries = Object.entries(keys);
-            const conditions = keyEntries
-                .map(
-                    ([key]) =>
-                        `"${key}" = {var_${key}:${this.getSqlType(TABLE_SCHEMAS[tableName as TABLE_NAMES]?.[key]?.type ?? 'text')}}`,
-                )
-                .join(' AND ');
-            const values = keyEntries.reduce((acc, [key, value]) => {
-                return { ...acc, [`var_${key}`]: value };
-            }, {});
-
-            const hasUpdatedAt = TABLE_SCHEMAS[tableName as TABLE_NAMES]?.updatedAt;
-
-            const selectClause = `SELECT *, toDateTime64(createdAt, 3) as createdAt${hasUpdatedAt ? ', toDateTime64(updatedAt, 3) as updatedAt' : ''}`;
-
-            const result = await this.client.query({
-                query: `${selectClause} FROM ${tableName} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
-                query_params: values,
-                clickhouse_settings: {
-                    // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-                    date_time_input_format: 'best_effort',
-                    date_time_output_format: 'iso',
-                    use_client_time_zone: 1,
-                    output_format_json_quote_64bit_integers: 0,
-                },
-            });
-
-            if (!result) {
-                return null;
-            }
-
-            const rows = await result.json();
-            // If this is a workflow snapshot, parse the snapshot field
-            if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-                const snapshot = rows.data[0] as any;
-                if (!snapshot) {
-                    return null;
-                }
-                if (typeof snapshot.snapshot === 'string') {
-                    snapshot.snapshot = JSON.parse(snapshot.snapshot);
-                }
-                return transformRow(snapshot);
-            }
-
-            const data: R = transformRow(rows.data[0]);
-            return data;
-        } catch (error) {
-            throw new MastraError(
-                {
-                    id: createStorageErrorId('CLICKHOUSE', 'LOAD', 'FAILED'),
-                    domain: ErrorDomain.STORAGE,
-                    category: ErrorCategory.THIRD_PARTY,
-                    details: { tableName },
-                },
-                error,
-            );
-        }
-    }
+  }
 }

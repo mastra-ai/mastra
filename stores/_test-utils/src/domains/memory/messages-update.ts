@@ -117,7 +117,9 @@ export function createMessagesUpdateTest({ storage }: { storage: MastraStorage }
 
       await new Promise(r => setTimeout(r, 10));
 
-      await memoryStorage.updateMessages({ messages: [{ id: originalMessage.id, role: 'assistant' }] as MastraDBMessage[] });
+      await memoryStorage.updateMessages({
+        messages: [{ id: originalMessage.id, role: 'assistant' }] as MastraDBMessage[],
+      });
 
       const updatedThread = await memoryStorage.getThreadById({ threadId: thread.id });
 

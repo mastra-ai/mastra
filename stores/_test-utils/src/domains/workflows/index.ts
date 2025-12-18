@@ -32,9 +32,17 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
 
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
 
       const { runs, total } = await workflowsStorage.listWorkflowRuns();
 
@@ -59,9 +67,17 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
 
       const { runs, total } = await workflowsStorage.listWorkflowRuns({ workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
@@ -78,9 +94,17 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
 
       const { runs, total } = await workflowsStorage.listWorkflowRuns({ status: 'success' });
       expect(runs).toHaveLength(1);
@@ -149,11 +173,23 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
       const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
 
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await workflowsStorage.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName3,
+        runId: runId3,
+        snapshot: workflow3,
+      });
 
       // Get first page
       const page1 = await workflowsStorage.listWorkflowRuns({ perPage: 2, page: 0 });
@@ -549,7 +585,6 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         },
       });
 
-
       await workflowsStorage.updateWorkflowResults({
         workflowName,
         runId,
@@ -577,7 +612,6 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         },
         requestContext: { test2: 'test' },
       });
-
 
       const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
@@ -618,7 +652,6 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         snapshot,
       });
 
-
       await workflowsStorage.updateWorkflowState({
         workflowName,
         runId,
@@ -628,7 +661,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
             test: [0],
           },
         },
-      })
+      });
 
       await workflowsStorage.updateWorkflowState({
         workflowName,
@@ -643,7 +676,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
             endedAt: Date.now(),
           },
         },
-      })
+      });
 
       const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,

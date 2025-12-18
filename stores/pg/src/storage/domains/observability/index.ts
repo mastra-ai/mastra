@@ -1,6 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  SPAN_SCHEMA,
+  ObservabilityStorage,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,

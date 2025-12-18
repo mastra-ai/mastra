@@ -177,7 +177,15 @@ export class CloudflareKVDB extends MastraBase {
       };
     }
 
-    let allNamespaces: Array<Cloudflare['kv']['namespaces'] extends { list: infer T } ? (T extends (...args: any) => Promise<{ result?: infer R }> ? (R extends (infer U)[] ? U : never) : never) : never> = [];
+    let allNamespaces: Array<
+      Cloudflare['kv']['namespaces'] extends { list: infer T }
+        ? T extends (...args: any) => Promise<{ result?: infer R }>
+          ? R extends (infer U)[]
+            ? U
+            : never
+          : never
+        : never
+    > = [];
     let currentPage = 1;
     const perPage = 50;
     let morePagesExist = true;

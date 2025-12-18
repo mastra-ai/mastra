@@ -913,11 +913,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
             // Deep merge metadata if it exists on both
             ...(existingContent?.metadata && fieldsToUpdate.content.metadata
               ? {
-                metadata: {
-                  ...existingContent.metadata,
-                  ...fieldsToUpdate.content.metadata,
-                },
-              }
+                  metadata: {
+                    ...existingContent.metadata,
+                    ...fieldsToUpdate.content.metadata,
+                  },
+                }
               : {}),
           };
           updatedMessage.content = newContent;

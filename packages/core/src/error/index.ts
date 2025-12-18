@@ -38,8 +38,8 @@ type Scalar = null | boolean | number | string;
 type Json<T> = [T] extends [Scalar | undefined]
   ? Scalar
   : [T] extends [{ [x: number]: unknown }]
-  ? { [K in keyof T]: Json<T[K]> }
-  : never;
+    ? { [K in keyof T]: Json<T[K]> }
+    : never;
 
 /**
  * Defines the structure for an error's metadata.
@@ -93,9 +93,9 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
   ) {
     const error = originalError
       ? getErrorFromUnknown(originalError, {
-        serializeStack: false,
-        fallbackMessage: 'Unknown error',
-      })
+          serializeStack: false,
+          fallbackMessage: 'Unknown error',
+        })
       : undefined;
 
     const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
@@ -139,4 +139,4 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
   }
 }
 
-export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> { }
+export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}

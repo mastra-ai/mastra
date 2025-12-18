@@ -260,7 +260,10 @@ export class AgentsPG extends AgentsStorage {
 
       if (setClauses.length > 2) {
         // More than just updatedAt and updatedAtZ
-        await this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`, values);
+        await this.#db.client.none(
+          `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
+          values,
+        );
       }
 
       // Return the updated agent

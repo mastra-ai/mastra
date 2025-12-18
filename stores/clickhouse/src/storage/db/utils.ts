@@ -65,16 +65,7 @@ export type ClickhouseConfig = {
 };
 
 // List of fields that should be parsed as JSON
-const JSON_FIELDS = [
-  'content',
-  'attributes',
-  'metadata',
-  'input',
-  'output',
-  'error',
-  'scope',
-  'links',
-];
+const JSON_FIELDS = ['content', 'attributes', 'metadata', 'input', 'output', 'error', 'scope', 'links'];
 
 // Fields that should be null instead of empty string when empty
 const NULLABLE_STRING_FIELDS = ['parentSpanId', 'error'];

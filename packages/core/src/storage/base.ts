@@ -39,8 +39,6 @@ export type StorageDomains = {
   agents?: AgentsStorage;
 };
 
-
-
 /**
  * Normalizes perPage input for pagination queries.
  *
@@ -165,16 +163,16 @@ export abstract class MastraStorage extends MastraBase {
   async getResourceById(_: { resourceId: string }): Promise<StorageResourceType | null> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-      `To use per-resource working memory, switch to one of these supported storage adapters.`,
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+        `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
   async saveResource(_: { resource: StorageResourceType }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-      `To use per-resource working memory, switch to one of these supported storage adapters.`,
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+        `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
@@ -185,8 +183,8 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not supported by this storage adapter (${this.constructor.name}). ` +
-      `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
-      `To use per-resource working memory, switch to one of these supported storage adapters.`,
+        `Supported storage adapters: LibSQL (@mastra/libsql), PostgreSQL (@mastra/pg), Upstash (@mastra/upstash). ` +
+        `To use per-resource working memory, switch to one of these supported storage adapters.`,
     );
   }
 
@@ -253,7 +251,7 @@ export abstract class MastraStorage extends MastraBase {
   async deleteMessages(_messageIds: string[]): Promise<void> {
     throw new Error(
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
-      `The deleteMessages method needs to be implemented in the storage adapter.`,
+        `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
   }
 
