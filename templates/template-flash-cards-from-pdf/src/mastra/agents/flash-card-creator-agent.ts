@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { pdfContentExtractorTool } from '../tools/pdf-content-extractor-tool';
 import { contentAnalyzerTool } from '../tools/content-analyzer-tool';
@@ -35,7 +34,7 @@ Keep flash cards:
 
 Use the available tools to process PDFs and generate flash cards efficiently.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     pdfContentExtractorTool,
     contentAnalyzerTool,

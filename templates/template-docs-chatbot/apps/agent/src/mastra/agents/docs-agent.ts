@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { mcpClient } from '../mcp/mcp-client.js';
 
@@ -21,7 +20,7 @@ export const docsAgent = new Agent({
     6. If no specific function is mentioned, help users discover relevant functions
 
     Focus on practical usage examples and best practices. Help users understand not just what each function does, but how to use it effectively in their projects. When showing function arguments, explain the expected data types and formats clearly.`,
-  model: openai('gpt-4.1'),
+  model: process.env.MODEL || 'openai/gpt-4.1',
   // Get tools dynamically from the MCP server
   tools: await mcpClient.getTools(),
 });

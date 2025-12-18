@@ -263,7 +263,7 @@ export const textQuestionAgent = new Agent({
     // Customize instructions here for different question types
     // Focus on specific aspects like statistical analysis, patterns, etc.
   `,
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
 });
 ```
 

@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { pdfContentExtractorTool } from '../tools/pdf-content-extractor-tool';
 import { adCopyGeneratorTool } from '../tools/ad-copy-generator-tool';
@@ -83,7 +82,7 @@ When successful, provide:
 
 Always be creative, persuasive, and focus on generating high-converting advertising content.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   tools: {
     pdfContentExtractorTool,
     adCopyGeneratorTool,

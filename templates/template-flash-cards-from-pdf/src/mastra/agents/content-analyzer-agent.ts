@@ -1,4 +1,3 @@
-import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -103,6 +102,6 @@ Always format your analysis as valid JSON with the exact structure requested, in
 
 Your analysis will directly feed into flash card generation, so ensure every element you identify is suitable for educational question-answer pairs.
   `,
-  model: openai('gpt-4o'),
+  model: process.env.MODEL || 'openai/gpt-4o',
   memory,
 });

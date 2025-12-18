@@ -1,5 +1,15 @@
 # @mastra/dynamodb
 
+## 0.15.12
+
+### Patch Changes
+
+- Add restart method to workflow run that allows restarting an active workflow run ([#10703](https://github.com/mastra-ai/mastra/pull/10703))
+  Add status filter to `getWorkflowRuns`
+  Add automatic restart to restart active workflow runs when server starts
+- Updated dependencies [[`5cc85aa`](https://github.com/mastra-ai/mastra/commit/5cc85aa4329773cac8314f3aa0146227b6b158e4), [`c53f8e6`](https://github.com/mastra-ai/mastra/commit/c53f8e68df42464935f9a63eb0fc765a65aacb83), [`386ab43`](https://github.com/mastra-ai/mastra/commit/386ab4350cf2a814fb4ac0a5fc6983ca93158ffe), [`2b62302`](https://github.com/mastra-ai/mastra/commit/2b623027a9d65c1dbc963bf651e9e6a9d09da1fa), [`7d85da4`](https://github.com/mastra-ai/mastra/commit/7d85da42a5fab56009a959a9c20328558d14f4b5), [`3d7c5bd`](https://github.com/mastra-ai/mastra/commit/3d7c5bdbee1b2693cd45bf207b960dd9b7277680), [`31b381e`](https://github.com/mastra-ai/mastra/commit/31b381efb48e031c0ecc46bc6e410ae6e67b88e5), [`54cc99c`](https://github.com/mastra-ai/mastra/commit/54cc99cb99483b9e08ec41fa1502f43b71b4c351), [`e77a5f9`](https://github.com/mastra-ai/mastra/commit/e77a5f9718dc418e29e3c8a389299ed6dc0a6401), [`b685c9c`](https://github.com/mastra-ai/mastra/commit/b685c9c0b89f49e0d4542c4ac72569682db69794), [`b069af5`](https://github.com/mastra-ai/mastra/commit/b069af514c4dcfc4fdcb164303569bfff1c26e3d), [`7dc8304`](https://github.com/mastra-ai/mastra/commit/7dc830420296db516b86dcec663e54d0309b8fb8), [`6942109`](https://github.com/mastra-ai/mastra/commit/694210903c70e3c26b5ce8ca4f4637ca2d9eb369), [`62d13f4`](https://github.com/mastra-ai/mastra/commit/62d13f4d1db1c16742831f210fe4c2caf8a26d57), [`358ab98`](https://github.com/mastra-ai/mastra/commit/358ab98024c388e383aca15616e8988bf4a5b66e)]:
+  - @mastra/core@0.24.7
+
 ## 0.15.12-alpha.0
 
 ### Patch Changes

@@ -50,7 +50,7 @@ After generating embeddings, you need to store them in a database that supports 
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
     <GithubLink
-      link={
+      href={
         "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
       }
     />
@@ -93,7 +93,7 @@ After generating embeddings, you need to store them in a database that supports 
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
     <GithubLink
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'}
+      href={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'}
     />
 
   </Tabs.Tab>
@@ -178,7 +178,7 @@ After generating embeddings, you need to store them in a database that supports 
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
     <GithubLink
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'}
+      href={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'}
     />
 
   </Tabs.Tab>
@@ -258,7 +258,7 @@ After generating embeddings, you need to store them in a database that supports 
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
     <GithubLink
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'}
+      href={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'}
     />
 
   </Tabs.Tab>

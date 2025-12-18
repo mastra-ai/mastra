@@ -1,5 +1,21 @@
 # create-mastra
 
+## 0.18.9-alpha.0
+
+## 0.18.8
+
+## 0.18.8-alpha.0
+
+## 0.18.7
+
+### Patch Changes
+
+- Fix select options overflow when list is long by adding maximum height ([#10833](https://github.com/mastra-ai/mastra/pull/10833))
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10757](https://github.com/mastra-ai/mastra/pull/10757))
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10764](https://github.com/mastra-ai/mastra/pull/10764))
+
 ## 0.18.7-alpha.1
 
 ### Patch Changes

@@ -102,7 +102,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
+    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
       continue;
     }
 

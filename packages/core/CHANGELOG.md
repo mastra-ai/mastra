@@ -1,5 +1,73 @@
 # @mastra/core
 
+## 0.24.9-alpha.0
+
+### Patch Changes
+
+- Fix memory leak in telemetry decorators when processing large payloads. The `@withSpan` decorator now uses bounded serialization utilities to prevent unbounded memory growth when tracing agents with large inputs like base64 images. ([#11231](https://github.com/mastra-ai/mastra/pull/11231))
+
+## 0.24.8
+
+## 0.24.8-alpha.0
+
+## 0.24.7
+
+### Patch Changes
+
+- unexpected json parse issue, log error but dont fail ([#10640](https://github.com/mastra-ai/mastra/pull/10640))
+
+- Emit error chunk and call onError when agent workflow step fails ([#10905](https://github.com/mastra-ai/mastra/pull/10905))
+
+  When a workflow step fails (e.g., tool not found), the error is now properly emitted as an error chunk to the stream and the onError callback is called. This fixes the issue where agent.generate() would throw "promise 'text' was not resolved or rejected" instead of the actual error message.
+
+- Improved typing for `workflow.then` to allow the provided steps `inputSchema` to be a subset of the previous steps `outputSchema`. Also errors if the provided steps `inputSchema` is a superset of the previous steps outputSchema. ([#10775](https://github.com/mastra-ai/mastra/pull/10775))
+
+- Add timeTravel APIs and add timeTravel feature to studio ([#10757](https://github.com/mastra-ai/mastra/pull/10757))
+
+- Fix backport ([#10599](https://github.com/mastra-ai/mastra/pull/10599))
+
+- Fix type issue with workflow `.parallel()` when passing multiple steps, one or more of which has a `resumeSchema` provided. ([#10712](https://github.com/mastra-ai/mastra/pull/10712))
+
+- Handle state update and bailing in foreach steps ([#10826](https://github.com/mastra-ai/mastra/pull/10826))
+
+- Fix corrupted provider-registry.json file ([#10605](https://github.com/mastra-ai/mastra/pull/10605))
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10764](https://github.com/mastra-ai/mastra/pull/10764))
+
+- Fix writer.custom not working during workflow resume operations ([#10921](https://github.com/mastra-ai/mastra/pull/10921))
+
+  When a workflow step is resumed, the writer parameter was not being properly passed through, causing writer.custom() calls to fail. This fix ensures the writableStream parameter is correctly passed to both run.resume() and run.start() calls in the workflow execution engine, allowing custom events to be emitted properly during resume operations.
+
+- Add restart method to workflow run that allows restarting an active workflow run ([#10703](https://github.com/mastra-ai/mastra/pull/10703))
+  Add status filter to `getWorkflowRuns`
+  Add automatic restart to restart active workflow runs when server starts
+
+- Add timeTravel to workflows. This makes it possible to start a workflow run from a particular step in the workflow ([#10717](https://github.com/mastra-ai/mastra/pull/10717))
+
+  Example code:
+
+  ```ts
+  const result = await run.timeTravel({
+    step: 'step2',
+    inputData: {
+      value: 'input',
+    },
+  });
+  ```
+
+- Fixed OpenAI reasoning message merging so distinct reasoning items are no longer dropped when they share a message ID. Prevents downstream errors where a function call is missing its required "reasoning" item. See #9005. ([#10729](https://github.com/mastra-ai/mastra/pull/10729))
+
+- Commit registered uncommitted workflows automatically ([#10829](https://github.com/mastra-ai/mastra/pull/10829))
+
+- Safe stringify objects in telemetry ([#10918](https://github.com/mastra-ai/mastra/pull/10918))
+
+- Updated dependencies [[`e77a5f9`](https://github.com/mastra-ai/mastra/commit/e77a5f9718dc418e29e3c8a389299ed6dc0a6401)]:
+  - @mastra/schema-compat@0.11.9
+
+## 0.24.7-alpha.4
+
+## 0.24.7-alpha.3
+
 ## 0.24.7-alpha.2
 
 ### Patch Changes

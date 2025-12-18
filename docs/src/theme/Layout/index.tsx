@@ -42,13 +42,6 @@ export default function Layout(props: Props): ReactNode {
 
       <Head>
         <link rel="canonical" href={canonicalUrl} />
-        <link rel="alternate" hrefLang="en" href={canonicalUrl} />
-        <link
-          rel="alternate"
-          hrefLang="ja"
-          href={`${siteConfig.url}/ja${cleanPath}`}
-        />
-        <link rel="alternate" hrefLang="x-default" href={canonicalUrl} />
       </Head>
 
       <SkipToContent />

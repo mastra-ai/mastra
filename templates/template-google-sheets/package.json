@@ -17,7 +17,7 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
+    "@ai-sdk/anthropic": "^2.0.56",
     "@composio/core": "^0.1.55",
     "@composio/mastra": "^0.1.56",
     "@mastra/core": "^0.21.1",
