@@ -62,6 +62,7 @@ describe('A2A Handler', () => {
 
     beforeEach(() => {
       const mockAgent = new MockAgent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test instructions',
         model: openai('gpt-4o'),
@@ -148,6 +149,7 @@ describe('A2A Handler', () => {
     beforeEach(() => {
       vi.useFakeTimers();
       const mockAgent = new MockAgent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test instructions',
         model: openai('gpt-4o'),
@@ -197,7 +199,14 @@ describe('A2A Handler', () => {
           artifacts: [],
           id: expect.any(String),
           contextId: expect.any(String),
-          metadata: undefined,
+          metadata: {
+            execution: {
+              toolCalls: undefined,
+              toolResults: undefined,
+              usage: undefined,
+              finishReason: undefined,
+            },
+          },
           status: {
             message: {
               messageId: expect.any(String),
@@ -364,7 +373,14 @@ describe('A2A Handler', () => {
               role: 'user',
             },
           ],
-          metadata: undefined,
+          metadata: {
+            execution: {
+              toolCalls: undefined,
+              toolResults: undefined,
+              usage: undefined,
+              finishReason: undefined,
+            },
+          },
           status: {
             message: {
               messageId: expect.any(String),
@@ -384,6 +400,138 @@ describe('A2A Handler', () => {
         },
       });
     });
+
+    it('should store execution details (toolCalls, toolResults, usage) in task metadata', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const userMessage = 'Create a chart';
+      const agentResponseText = 'Here is your chart';
+
+      const mockExecutionData = {
+        text: agentResponseText,
+        toolCalls: [
+          {
+            toolCallId: 'call_123',
+            toolName: 'createChart',
+            args: { data: 'sales data' },
+          },
+        ],
+        toolResults: [
+          {
+            toolCallId: 'call_123',
+            toolName: 'createChart',
+            result: { chartUrl: 'https://example.com/chart.png' },
+          },
+        ],
+        usage: {
+          promptTokens: 150,
+          completionTokens: 200,
+          totalTokens: 350,
+        },
+        finishReason: 'stop',
+      };
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue(mockExecutionData);
+
+      vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
+      const runtimeContext = new RuntimeContext();
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        runtimeContext,
+      });
+
+      // Verify the execution metadata is stored
+      expect(result.result?.metadata).toEqual({
+        execution: {
+          toolCalls: mockExecutionData.toolCalls,
+          toolResults: mockExecutionData.toolResults,
+          usage: mockExecutionData.usage,
+          finishReason: mockExecutionData.finishReason,
+        },
+      });
+
+      // Verify the task was saved with the metadata
+      const taskId = result.result?.id;
+      if (!taskId) {
+        throw new Error('Task ID is required');
+      }
+      const savedTask = await mockTaskStore.load({ agentId, taskId });
+      expect(savedTask?.metadata).toEqual({
+        execution: {
+          toolCalls: mockExecutionData.toolCalls,
+          toolResults: mockExecutionData.toolResults,
+          usage: mockExecutionData.usage,
+          finishReason: mockExecutionData.finishReason,
+        },
+      });
+    });
+
+    it('should preserve existing metadata when adding execution details', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const userMessage = 'Hello';
+      const agentResponseText = 'Hi there';
+
+      const existingMetadata = {
+        customField: 'custom value',
+        anotherField: 123,
+      };
+
+      const mockExecutionData = {
+        text: agentResponseText,
+        toolCalls: [],
+        toolResults: [],
+        usage: {
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+        finishReason: 'stop',
+      };
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: userMessage }] },
+        metadata: existingMetadata,
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue(mockExecutionData);
+
+      vi.setSystemTime(new Date('2025-05-08T11:47:38.458Z'));
+      const runtimeContext = new RuntimeContext();
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        runtimeContext,
+      });
+
+      // Verify both existing metadata and execution metadata are present
+      expect(result.result?.metadata).toEqual({
+        ...existingMetadata,
+        execution: {
+          toolCalls: mockExecutionData.toolCalls,
+          toolResults: mockExecutionData.toolResults,
+          usage: mockExecutionData.usage,
+          finishReason: mockExecutionData.finishReason,
+        },
+      });
+    });
   });
 
   describe('handleMessageStream', () => {
@@ -392,6 +540,7 @@ describe('A2A Handler', () => {
 
     beforeEach(() => {
       const mockAgent = new MockAgent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'test instructions',
         model: openai('gpt-4o'),
@@ -454,7 +603,14 @@ describe('A2A Handler', () => {
           artifacts: [],
           id: expect.any(String),
           contextId: expect.any(String),
-          metadata: undefined,
+          metadata: {
+            execution: {
+              toolCalls: undefined,
+              toolResults: undefined,
+              usage: undefined,
+              finishReason: undefined,
+            },
+          },
           status: {
             message: {
               messageId: expect.any(String),
