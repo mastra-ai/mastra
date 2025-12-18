@@ -148,7 +148,7 @@ export async function handleMessageSend({
   });
 
   try {
-    const { text } = await agent.generate([convertToCoreMessage(message)], {
+    const result = await agent.generate([convertToCoreMessage(message)], {
       runId: taskId,
       runtimeContext,
     });
@@ -161,12 +161,23 @@ export async function handleMessageSend({
         parts: [
           {
             kind: 'text',
-            text: text,
+            text: result.text,
           },
         ],
         kind: 'message',
       },
     });
+
+    // Store execution details in task metadata
+    currentData.metadata = {
+      ...currentData.metadata,
+      execution: {
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      },
+    };
 
     await taskStore.save({ agentId, data: currentData });
     context.task = currentData;
