@@ -383,14 +383,14 @@ const sidebars = {
     {
       type: "category",
       label: "Mastra Cloud",
+      customProps: {
+        tags: ["beta"],
+      },
       items: [
         {
           type: "doc",
           id: "mastra-cloud/overview",
           label: "Overview",
-          customProps: {
-            tags: ["beta"],
-          },
         },
         {
           type: "doc",
