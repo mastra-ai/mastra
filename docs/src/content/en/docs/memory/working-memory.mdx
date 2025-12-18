@@ -24,7 +24,7 @@ Working memory can persist at two different scopes:
 
 Here's a minimal example of setting up an agent with working memory:
 
-```typescript {11-14}
+```typescript {11-15}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
@@ -126,7 +126,7 @@ const memory = new Memory({
 
 Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
 
-### ✅ Supported Storage Adapters
+### Supported Storage Adapters
 
 - **libSQL** (`@mastra/libsql`)
 - **PostgreSQL** (`@mastra/pg`)

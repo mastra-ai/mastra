@@ -12,7 +12,6 @@ Once enabled, each request includes the last 10 messages from the current memory
 ```typescript
 export const agent = new Agent({
   id: "test-agent",
-  // ...
   memory: new Memory({
     options: {
       lastMessages: 20,

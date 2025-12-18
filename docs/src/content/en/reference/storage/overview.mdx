@@ -17,7 +17,6 @@ Mastra requires the following tables to be present in the database.
   <TabItem value="messages" label="Messages">
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -117,10 +116,9 @@ The message `content` column contains a JSON object conforming to the `MastraMes
 
 </TabItem>
 
-  <TabItem value="threads" label="Threads">
+<TabItem value="threads" label="Threads">
 Groups related messages together and associates them with a resource. Contains metadata about the conversation.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -167,10 +165,9 @@ Groups related messages together and associates them with a resource. Contains m
 />
 
 </TabItem>
-  <TabItem value="resources" label="Resources">
+<TabItem value="resources" label="Resources">
 Stores user-specific data for resource-scoped working memory. Each resource represents a user or entity, allowing working memory to persist across all conversation threads for that user.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -213,10 +210,9 @@ Stores user-specific data for resource-scoped working memory. Each resource repr
 />
 
 </TabItem>
-  <TabItem value="workflows" label="Workflows">
+<TabItem value="workflows" label="Workflows">
 When `suspend` is called on a workflow, its state is saved in the following format. When `resume` is called, that state is rehydrated.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -261,11 +257,10 @@ When `suspend` is called on a workflow, its state is saved in the following form
     }
   ]}
 />
-  </TabItem>
-  <TabItem value="evals" label="Evals">
+</TabItem>
+<TabItem value="evals" label="Evals">
 Stores eval results from running metrics against agent outputs.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -335,11 +330,10 @@ Stores eval results from running metrics against agent outputs.
     }
   ]}
 />
-  </TabItem>
-  <TabItem value="traces" label="Traces">
+</TabItem>
+<TabItem value="traces" label="Traces">
 Captures OpenTelemetry traces for monitoring and debugging.
 
-<br />
 <SchemaTable
   columns={[
     {
@@ -433,5 +427,5 @@ Captures OpenTelemetry traces for monitoring and debugging.
     }
   ]}
 />
-  </TabItem>
+</TabItem>
 </Tabs>

@@ -7,7 +7,11 @@ description: "Learn how to use semantic recall in Mastra to retrieve relevant me
 
 If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
 
-> **📹 Watch**: What semantic recall is, how it works, and how to configure it in Mastra → [YouTube (5 minutes)](https://youtu.be/UVZtK8cK8xQ)
+:::tip[Watch 📹]
+
+What semantic recall is, how it works, and how to configure it in Mastra → [YouTube (5 minutes)](https://youtu.be/UVZtK8cK8xQ)
+
+:::
 
 ## How Semantic Recall Works
 
@@ -15,12 +19,7 @@ Semantic recall is RAG-based search that helps agents maintain context across lo
 
 It uses vector embeddings of messages for similarity search, integrates with various vector stores, and has configurable context windows around retrieved messages.
 
-<br />
-<img
-  src="/img/semantic-recall.png"
-  alt="Diagram showing Mastra Memory semantic recall"
-  width={800}
-/>
+![Diagram showing Mastra Memory semantic recall](/img/semantic-recall.png)
 
 When it's enabled, new messages are used to query a vector DB for semantically similar messages.
 
@@ -30,7 +29,7 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 
 Semantic recall is enabled by default, so if you give your agent memory it will be included:
 
-```typescript {8}
+```typescript {9}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 
@@ -47,7 +46,7 @@ const agent = new Agent({
 
 Semantic recall relies on a [storage and vector db](/reference/v1/memory/memory-class) to store messages and their embeddings.
 
-```ts {8-17}
+```ts {8-16}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
@@ -125,7 +124,6 @@ import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
-    // ... other memory options
     embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
@@ -149,7 +147,6 @@ import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
   memory: new Memory({
-    // ... other memory options
     embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
@@ -165,14 +162,13 @@ npm install @mastra/fastembed@beta
 
 Then configure it in your memory:
 
-```ts {3,8}
+```ts {3,7}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { fastembed } from "@mastra/fastembed";
 
 const agent = new Agent({
   memory: new Memory({
-    // ... other memory options
     embedder: fastembed,
   }),
 });
@@ -184,7 +180,7 @@ When using PostgreSQL as your vector store, you can optimize semantic recall per
 
 PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an IVFFlat index, but HNSW indexes typically provide better performance, especially with OpenAI embeddings which use inner product distance.
 
-```typescript {9-18}
+```typescript {18-23}
 import { Memory } from "@mastra/memory";
 import { PgStore, PgVector } from "@mastra/pg";
 
