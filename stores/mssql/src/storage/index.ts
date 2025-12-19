@@ -30,6 +30,14 @@ import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
+/**
+ * MSSQL configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured connection pool: `{ id, pool, schemaName? }`
+ * - Connection string: `{ id, connectionString, ... }`
+ * - Server/port config: `{ id, server, port, database, user, password, ... }`
+ */
 export type MSSQLConfigType = {
   id: string;
   schemaName?: string;
@@ -55,6 +63,33 @@ export type MSSQLConfigType = {
   disableInit?: boolean;
 } & (
   | {
+      /**
+       * Pre-configured mssql ConnectionPool.
+       * Use this when you need to configure the pool before initialization,
+       * e.g., to add pool listeners or set connection-level settings.
+       *
+       * @example
+       * ```typescript
+       * import sql from 'mssql';
+       *
+       * const pool = new sql.ConnectionPool({
+       *   server: 'localhost',
+       *   database: 'mydb',
+       *   user: 'user',
+       *   password: 'password',
+       * });
+       *
+       * // Custom setup before using
+       * pool.on('connect', () => {
+       *   console.log('Pool connected');
+       * });
+       *
+       * const store = new MSSQLStore({ id: 'my-store', pool });
+       * ```
+       */
+      pool: sql.ConnectionPool;
+    }
+  | {
       server: string;
       port: number;
       database: string;
@@ -69,6 +104,13 @@ export type MSSQLConfigType = {
 
 export type MSSQLConfig = MSSQLConfigType;
 
+/**
+ * Type guard for pre-configured pool config
+ */
+const isPoolConfig = (config: MSSQLConfigType): config is MSSQLConfigType & { pool: sql.ConnectionPool } => {
+  return 'pool' in config;
+};
+
 export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
@@ -82,7 +124,13 @@ export class MSSQLStore extends MastraStorage {
     }
     super({ id: config.id, name: 'MSSQLStore', disableInit: config.disableInit });
     try {
-      if ('connectionString' in config) {
+      this.schema = config.schemaName || 'dbo';
+
+      // Handle pre-configured pool vs creating new connection
+      if (isPoolConfig(config)) {
+        // User provided a pre-configured ConnectionPool
+        this.pool = config.pool;
+      } else if ('connectionString' in config) {
         if (
           !config.connectionString ||
           typeof config.connectionString !== 'string' ||
@@ -90,6 +138,7 @@ export class MSSQLStore extends MastraStorage {
         ) {
           throw new Error('MSSQLStore: connectionString must be provided and cannot be empty.');
         }
+        this.pool = new sql.ConnectionPool(config.connectionString);
       } else {
         const required = ['server', 'database', 'user', 'password'];
         for (const key of required) {
@@ -97,20 +146,15 @@ export class MSSQLStore extends MastraStorage {
             throw new Error(`MSSQLStore: ${key} must be provided and cannot be empty.`);
           }
         }
+        this.pool = new sql.ConnectionPool({
+          server: config.server,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          port: config.port,
+          options: config.options || { encrypt: true, trustServerCertificate: true },
+        });
       }
-
-      this.schema = config.schemaName || 'dbo';
-      this.pool =
-        'connectionString' in config
-          ? new sql.ConnectionPool(config.connectionString)
-          : new sql.ConnectionPool({
-              server: config.server,
-              database: config.database,
-              user: config.user,
-              password: config.password,
-              port: config.port,
-              options: config.options || { encrypt: true, trustServerCertificate: true },
-            });
 
       this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
       const domainConfig = { pool: this.pool, db: this.#db, schema: this.schema };

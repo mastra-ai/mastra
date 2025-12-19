@@ -40,23 +40,29 @@ type IntervalUnit =
   | 'QUARTER'
   | 'YEAR';
 
+type ClickhouseTtlConfig = {
+  [TableKey in TABLE_NAMES]?: {
+    row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
+    columns?: Partial<{
+      [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
+        interval: number;
+        unit: IntervalUnit;
+        ttlKey?: string;
+      };
+    }>;
+  };
+};
+
+/**
+ * ClickHouse configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured ClickHouse client: `{ id, client, ttl? }`
+ * - URL/credentials config: `{ id, url, username, password, ttl? }`
+ */
 export type ClickhouseConfig = {
   id: string;
-  url: string;
-  username: string;
-  password: string;
-  ttl?: {
-    [TableKey in TABLE_NAMES]?: {
-      row?: { interval: number; unit: IntervalUnit; ttlKey?: string };
-      columns?: Partial<{
-        [ColumnKey in keyof (typeof TABLE_SCHEMAS)[TableKey]]: {
-          interval: number;
-          unit: IntervalUnit;
-          ttlKey?: string;
-        };
-      }>;
-    };
-  };
+  ttl?: ClickhouseTtlConfig;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -77,6 +83,42 @@ export type ClickhouseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+} & (
+  | {
+      /**
+       * Pre-configured ClickHouse client.
+       * Use this when you need to configure the client before initialization,
+       * e.g., to set custom connection settings or interceptors.
+       *
+       * @example
+       * ```typescript
+       * import { createClient } from '@clickhouse/client';
+       *
+       * const client = createClient({
+       *   url: 'http://localhost:8123',
+       *   username: 'default',
+       *   password: '',
+       *   // Custom settings
+       *   request_timeout: 60000,
+       * });
+       *
+       * const store = new ClickhouseStore({ id: 'my-store', client });
+       * ```
+       */
+      client: ClickHouseClient;
+    }
+  | {
+      url: string;
+      username: string;
+      password: string;
+    }
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (config: ClickhouseConfig): config is ClickhouseConfig & { client: ClickHouseClient } => {
+  return 'client' in config;
 };
 
 export class ClickhouseStore extends MastraStorage {
@@ -88,17 +130,24 @@ export class ClickhouseStore extends MastraStorage {
   constructor(config: ClickhouseConfig) {
     super({ id: config.id, name: 'ClickhouseStore', disableInit: config.disableInit });
 
-    this.db = createClient({
-      url: config.url,
-      username: config.username,
-      password: config.password,
-      clickhouse_settings: {
-        date_time_input_format: 'best_effort',
-        date_time_output_format: 'iso', // This is crucial
-        use_client_time_zone: 1,
-        output_format_json_quote_64bit_integers: 0,
-      },
-    });
+    // Handle pre-configured client vs creating new connection
+    if (isClientConfig(config)) {
+      // User provided a pre-configured ClickHouse client
+      this.db = config.client;
+    } else {
+      // Create client from credentials
+      this.db = createClient({
+        url: config.url,
+        username: config.username,
+        password: config.password,
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso', // This is crucial
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+    }
 
     this.ttl = config.ttl;
 
