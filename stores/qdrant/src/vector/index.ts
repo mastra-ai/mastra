@@ -131,19 +131,15 @@ export class QdrantVector extends MastraVector {
   }
 
   /**
- * Creates a payload index on a Qdrant collection to enable efficient filtering on metadata fields.
- *
- * @param indexName - The name of the collection (index) to create the payload index on.
- * @param fieldName - The name of the payload field to index.
- * @param fieldSchema - The schema type for the field (e.g., 'keyword', 'integer', 'text').
- * @returns A promise that resolves when the index is created (idempotent if the index already exists).
- * @throws Will throw a MastraError if arguments are invalid or if the operation fails.
- */
-  async createPayloadIndex(
-    indexName: string,
-    fieldName: string,
-    fieldSchema: PayloadSchemaType,
-  ): Promise<void> {
+   * Creates a payload index on a Qdrant collection to enable efficient filtering on metadata fields.
+   *
+   * @param indexName - The name of the collection (index) to create the payload index on.
+   * @param fieldName - The name of the payload field to index.
+   * @param fieldSchema - The schema type for the field (e.g., 'keyword', 'integer', 'text').
+   * @returns A promise that resolves when the index is created (idempotent if the index already exists).
+   * @throws Will throw a MastraError if arguments are invalid or if the operation fails.
+   */
+  async createPayloadIndex(indexName: string, fieldName: string, fieldSchema: PayloadSchemaType): Promise<void> {
     if (!indexName?.trim() || !fieldName?.trim()) {
       throw new MastraError({
         id: createVectorErrorId('QDRANT', 'CREATE_PAYLOAD_INDEX', 'INVALID_ARGS'),
