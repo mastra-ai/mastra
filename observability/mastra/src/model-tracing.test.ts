@@ -505,4 +505,72 @@ describe('ModelSpanTracker', () => {
       });
     });
   });
+
+  describe('step span reuse', () => {
+    it('should reuse existing step span when step-start arrives late', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        // Text start arrives FIRST (triggering lazy step creation)
+        {
+          type: 'text-start',
+          payload: {},
+        },
+        // Text delta
+        {
+          type: 'text-delta',
+          payload: { text: 'First chunk' },
+        },
+        // Step start arrives LATE (should update existing step span)
+        {
+          type: 'step-start',
+          payload: { messageId: 'msg-1', request: { prompt: 'foo' } },
+        },
+        // Text end (completes text chunk)
+        {
+          type: 'text-end',
+          payload: {},
+        },
+        // tep finish
+        {
+          type: 'step-finish',
+          payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} },
+        },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      // Get the step span
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      const stepSpan = stepSpans[0]!;
+
+      // Get the chunk span
+      const chunkSpans = testExporter.getSpansByType(SpanType.MODEL_CHUNK);
+      // We expect at least one 'text' chunk span
+      const textChunkSpan = chunkSpans.find(s => s.name === "chunk: 'text'");
+      expect(textChunkSpan).toBeDefined();
+
+      // KEY ASSERTION: The chunk's parent should be the SAME as the exported step span
+      // If the step span was overwritten, the chunk would point to the *old* (orphaned) span ID,
+      // while stepSpan.id would be the *new* span ID.
+      expect(textChunkSpan!.parentSpanId).toBe(stepSpan.id);
+
+      // Also verify attributes were updated from step-start
+      expect(stepSpan.attributes).toMatchObject({
+        messageId: 'msg-1',
+      });
+      // And input was updated
+      expect(stepSpan.input).toEqual({ prompt: 'foo' });
+    });
+  });
 });

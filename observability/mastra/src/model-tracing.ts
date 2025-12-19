@@ -109,6 +109,18 @@ export class ModelSpanTracker {
    * Start a new Model execution step
    */
   #startStepSpan(payload?: StepStartPayload) {
+    if (this.#currentStepSpan) {
+      this.#currentStepSpan.update({
+        attributes: {
+          stepIndex: this.#stepIndex,
+          ...(payload?.messageId ? { messageId: payload.messageId } : {}),
+          ...(payload?.warnings?.length ? { warnings: payload.warnings } : {}),
+        },
+        input: payload?.request,
+      });
+      return;
+    }
+
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
