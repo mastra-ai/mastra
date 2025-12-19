@@ -130,11 +130,12 @@ export function createDomainDirectTests(config: DomainTestConfig) {
       });
 
       expect(savedScore.score.id).toBeDefined();
-      expect(savedScore.score.score).toBe(0.95);
+      // Use toBeCloseTo for float comparison (some stores like Lance use float32)
+      expect(savedScore.score.score).toBeCloseTo(0.95, 5);
 
       const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
       expect(retrievedScore).toBeDefined();
-      expect(retrievedScore?.score).toBe(0.95);
+      expect(retrievedScore?.score).toBeCloseTo(0.95, 5);
     });
 
     if (createMemoryDomainWithOptions) {
