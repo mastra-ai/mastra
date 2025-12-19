@@ -252,7 +252,6 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
 
       // Call prepareCall and apply any returned overrides
       const prepareCallResult = await this.settings.prepareCall(prepareCallInput as any); // TODO: types
-      console.log('prepareCallResult', prepareCallResult);
       this.prepareCallResult = prepareCallResult;
     }
   }
