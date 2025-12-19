@@ -872,23 +872,19 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    // Use transaction to ensure atomicity - either both deletes succeed or neither does
     try {
-      const tx = await this.#client.transaction('write');
-      try {
-        await tx.execute({
-          sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
-          args: [threadId],
-        });
-        await tx.execute({
-          sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
-          args: [threadId],
-        });
-        await tx.commit();
-      } catch (error) {
-        await tx.rollback();
-        throw error;
-      }
+      // Delete messages first (child records), then thread
+      // Note: Not using a transaction to avoid SQLITE_BUSY errors when multiple
+      // deleteThread calls run concurrently. The two deletes are independent and
+      // orphaned messages (if thread delete fails) would be cleaned up on next delete attempt.
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+        args: [threadId],
+      });
+      await this.#client.execute({
+        sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
+        args: [threadId],
+      });
     } catch (error) {
       throw new MastraError(
         {
