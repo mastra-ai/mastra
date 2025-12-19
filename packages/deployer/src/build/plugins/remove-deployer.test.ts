@@ -13,6 +13,7 @@ describe('Remove deployer', () => {
     ['./__fixtures__/basic-with-const.js'],
     ['./__fixtures__/basic-with-import.js'],
     ['./__fixtures__/basic-with-function.js'],
+    ['./__fixtures__/basic-with-spread.js'],
   ])('should remove the deployer from %s', async ([fileName]) => {
     const file = join(_dirname, fileName);
 

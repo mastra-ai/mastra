@@ -2,6 +2,7 @@ import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 import type { IMastraLogger } from '@mastra/core/logger';
+import { findPropertyByKeyName } from './utils';
 
 export function removeAllOptionsFromMastraExcept(
   result: { hasCustomConfig: boolean },
@@ -38,10 +39,7 @@ export function removeAllOptionsFromMastraExcept(
           mastraArgs = path.node.arguments[0];
         }
 
-        let configProperty = mastraArgs.properties.find(
-          // @ts-ignore
-          prop => prop.key.name === option,
-        );
+        const configProperty = findPropertyByKeyName(mastraArgs.properties, option);
         let configValue: types.Expression = t.objectExpression([]);
 
         const programPath = path.scope.getProgramParent().path as NodePath<types.Program> | undefined;

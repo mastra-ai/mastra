@@ -69,4 +69,14 @@ describe('checkConfigExport Babel plugin', () => {
     const code = 'type A = any; const foo: A = 123; export const mastra = new Mastra()';
     expect(runPlugin(code)).toBe(true);
   });
+
+  it('matches export const mastra = new Mastra({ ...config })', () => {
+    const code = 'const config = { agents: {} }; export const mastra = new Mastra({ ...config })';
+    expect(runPlugin(code)).toBe(true);
+  });
+
+  it('matches new Mastra with spread and explicit properties', () => {
+    const code = 'const config = { agents: {} }; export const mastra = new Mastra({ ...config, server: {} })';
+    expect(runPlugin(code)).toBe(true);
+  });
 });

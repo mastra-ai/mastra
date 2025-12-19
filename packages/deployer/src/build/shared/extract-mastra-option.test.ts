@@ -5,6 +5,7 @@ import { rm, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extractMastraOption } from './extract-mastra-option';
 import { removeAllOptionsExceptBundler } from '../babel/remove-all-options-bundler';
+import { removeAllOptionsExceptServer } from '../babel/remove-all-options-server';
 
 describe('extractMastraOption', () => {
   const testOutputDir = join(__dirname, '.test-output');
@@ -75,6 +76,37 @@ describe('extractMastraOption', () => {
 
       // Should be a valid file URL
       expect(fileUrl).toMatch(/^file:\/\/\//);
+    });
+  });
+
+  describe('spread operator support', () => {
+    it('should extract options from Mastra config with spread operator', async () => {
+      await mkdir(testOutputDir, { recursive: true });
+
+      // Use the spread fixture which has { ...config, server: { port: 3000 } }
+      const entryFile = join(__dirname, '../plugins/__fixtures__/basic-with-spread.js');
+      const result = await extractMastraOption('server', entryFile, removeAllOptionsExceptServer, testOutputDir);
+
+      // The key test: extraction should not throw with spread operator
+      expect(result).not.toBeNull();
+
+      // getConfig() should work and return the server config
+      const config = (await result!.getConfig()) as { port: number };
+      expect(config).toBeDefined();
+      expect(config.port).toBe(3000);
+    });
+
+    it('should extract bundler option from Mastra config with spread operator', async () => {
+      await mkdir(testOutputDir, { recursive: true });
+
+      const entryFile = join(__dirname, '../plugins/__fixtures__/basic-with-spread.js');
+      const result = await extractMastraOption('bundler', entryFile, removeAllOptionsExceptBundler, testOutputDir);
+
+      expect(result).not.toBeNull();
+
+      const config = (await result!.getConfig()) as { external: string[] };
+      expect(config).toBeDefined();
+      expect(config.external).toEqual(['nodemailer']);
     });
   });
 });

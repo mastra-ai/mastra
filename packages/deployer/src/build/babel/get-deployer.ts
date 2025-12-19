@@ -1,4 +1,5 @@
 import babel from '@babel/core';
+import { findPropertyByKeyName } from './utils';
 
 export function removeAllExceptDeployer() {
   const t = babel.types;
@@ -26,14 +27,11 @@ export function removeAllExceptDeployer() {
           return;
         }
 
-        // @ts-ignore
-        const deployer = path.node.arguments[0]?.properties?.find(
-          // @ts-ignore
-          prop => prop.key.name === 'deployer',
-        );
+        const args = path.node.arguments[0];
+        const deployer = t.isObjectExpression(args) ? findPropertyByKeyName(args.properties, 'deployer') : undefined;
 
         const programPath = path.scope.getProgramParent().path;
-        if (!deployer || !programPath) {
+        if (!deployer || !programPath || !t.isExpression(deployer.value)) {
           return;
         }
 
