@@ -536,7 +536,7 @@ describe('ModelSpanTracker', () => {
           type: 'text-end',
           payload: {},
         },
-        // tep finish
+        // Step finish
         {
           type: 'step-finish',
           payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} },
