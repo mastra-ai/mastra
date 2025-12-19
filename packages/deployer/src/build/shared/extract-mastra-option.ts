@@ -70,7 +70,7 @@ export async function extractMastraOption<T extends keyof MastraConfig>(
 } | null> {
   const result = {
     hasCustomConfig: false,
-  } as const;
+  };
 
   const bundler = await extractMastraOptionBundler(name, entryFile, result, logger);
 

@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Remove deployer > bundler > should extract the ../plugins/__fixtures__/basic.js option from undefined 1`] = `
+exports[`Extract Mastra option > bundler > should extract the ../plugins/__fixtures__/basic.js option from undefined 1`] = `
 "const bundler = {
   external: ["nodemailer"]
 };
@@ -9,7 +9,7 @@ export { bundler };
 "
 `;
 
-exports[`Remove deployer > bundler > should extract the ../plugins/__fixtures__/basic-with-const.js option from undefined 1`] = `
+exports[`Extract Mastra option > bundler > should extract the ../plugins/__fixtures__/basic-with-const.js option from undefined 1`] = `
 "const bundler = {
   external: ["nodemailer"]
 };
@@ -18,7 +18,7 @@ export { bundler };
 "
 `;
 
-exports[`Remove deployer > bundler > should extract the ../plugins/__fixtures__/basic-with-function.js option from undefined 1`] = `
+exports[`Extract Mastra option > bundler > should extract the ../plugins/__fixtures__/basic-with-function.js option from undefined 1`] = `
 "const bundler = {
   external: ["nodemailer"]
 };
@@ -27,7 +27,7 @@ export { bundler };
 "
 `;
 
-exports[`Remove deployer > bundler > should extract the ../plugins/__fixtures__/basic-with-import.js option from undefined 1`] = `
+exports[`Extract Mastra option > bundler > should extract the ../plugins/__fixtures__/basic-with-import.js option from undefined 1`] = `
 "const bundler = {
   external: ["nodemailer"]
 };
@@ -36,7 +36,7 @@ export { bundler };
 "
 `;
 
-exports[`Remove deployer > bundler > should extract the ../plugins/__fixtures__/basic-with-spread.js option from undefined 1`] = `
+exports[`Extract Mastra option > bundler > should extract the ../plugins/__fixtures__/basic-with-spread.js option from undefined 1`] = `
 "const bundler = {
   external: ["nodemailer"]
 };
@@ -45,7 +45,7 @@ export { bundler };
 "
 `;
 
-exports[`Remove deployer > deployer > should extract the ../plugins/__fixtures__/basic.js option from undefined 1`] = `
+exports[`Extract Mastra option > deployer > should extract the ../plugins/__fixtures__/basic.js option from undefined 1`] = `
 "import { TestDeployer } from '@mastra/deployer/test';
 
 const deployer = new TestDeployer();
@@ -54,7 +54,7 @@ export { deployer };
 "
 `;
 
-exports[`Remove deployer > deployer > should extract the ../plugins/__fixtures__/basic-with-const.js option from undefined 1`] = `
+exports[`Extract Mastra option > deployer > should extract the ../plugins/__fixtures__/basic-with-const.js option from undefined 1`] = `
 "import { TestDeployer } from '@mastra/deployer/test';
 
 const deployer = new TestDeployer();
@@ -63,7 +63,7 @@ export { deployer };
 "
 `;
 
-exports[`Remove deployer > deployer > should extract the ../plugins/__fixtures__/basic-with-function.js option from undefined 1`] = `
+exports[`Extract Mastra option > deployer > should extract the ../plugins/__fixtures__/basic-with-function.js option from undefined 1`] = `
 "import { TestDeployer } from '@mastra/deployer/test';
 
 const deployer = new TestDeployer();
@@ -72,7 +72,7 @@ export { deployer };
 "
 `;
 
-exports[`Remove deployer > deployer > should extract the ../plugins/__fixtures__/basic-with-import.js option from undefined 1`] = `
+exports[`Extract Mastra option > deployer > should extract the ../plugins/__fixtures__/basic-with-import.js option from undefined 1`] = `
 "import { TestDeployer } from '@mastra/deployer/test';
 
 const deployer = new TestDeployer();
@@ -81,7 +81,7 @@ export { deployer };
 "
 `;
 
-exports[`Remove deployer > deployer > should extract the ../plugins/__fixtures__/basic-with-spread.js option from undefined 1`] = `
+exports[`Extract Mastra option > deployer > should extract the ../plugins/__fixtures__/basic-with-spread.js option from undefined 1`] = `
 "import { TestDeployer } from '@mastra/deployer/test';
 
 const deployer = new TestDeployer();
@@ -90,7 +90,7 @@ export { deployer };
 "
 `;
 
-exports[`Remove deployer > server > should extract the ../plugins/__fixtures__/basic.js option from undefined 1`] = `
+exports[`Extract Mastra option > server > should extract the ../plugins/__fixtures__/basic.js option from undefined 1`] = `
 "const server = {
   port: 3e3
 };
@@ -99,7 +99,7 @@ export { server };
 "
 `;
 
-exports[`Remove deployer > server > should extract the ../plugins/__fixtures__/basic-with-const.js option from undefined 1`] = `
+exports[`Extract Mastra option > server > should extract the ../plugins/__fixtures__/basic-with-const.js option from undefined 1`] = `
 "const server = {
   port: 3e3
 };
@@ -108,7 +108,7 @@ export { server };
 "
 `;
 
-exports[`Remove deployer > server > should extract the ../plugins/__fixtures__/basic-with-function.js option from undefined 1`] = `
+exports[`Extract Mastra option > server > should extract the ../plugins/__fixtures__/basic-with-function.js option from undefined 1`] = `
 "const server = {
   port: 3e3
 };
@@ -117,7 +117,7 @@ export { server };
 "
 `;
 
-exports[`Remove deployer > server > should extract the ../plugins/__fixtures__/basic-with-import.js option from undefined 1`] = `
+exports[`Extract Mastra option > server > should extract the ../plugins/__fixtures__/basic-with-import.js option from undefined 1`] = `
 "const server = {
   port: 3e3
 };
@@ -126,7 +126,7 @@ export { server };
 "
 `;
 
-exports[`Remove deployer > server > should extract the ../plugins/__fixtures__/basic-with-spread.js option from undefined 1`] = `
+exports[`Extract Mastra option > server > should extract the ../plugins/__fixtures__/basic-with-spread.js option from undefined 1`] = `
 "const server = {
   port: 3e3
 };

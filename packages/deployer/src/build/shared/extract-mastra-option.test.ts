@@ -5,7 +5,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { extractMastraOption } from './extract-mastra-option';
 import { existsSync } from 'node:fs';
 
-describe('Remove deployer', () => {
+describe('Extract Mastra option', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));
 
   const testOutputDir = join(__dirname, '.test-output');
