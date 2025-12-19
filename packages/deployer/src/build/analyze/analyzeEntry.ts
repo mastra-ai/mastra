@@ -7,13 +7,13 @@ import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import resolveFrom from 'resolve-from';
 import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
-import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import { getPackageName, slash } from '../utils';
 import { getPackageRootPath } from '../package-info';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
+import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -63,7 +63,7 @@ function getInputPlugins(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(mastraEntry, { sourcemap: sourcemapEnabled }),
+      removeAllOptionsFromMastraExceptPlugin(mastraEntry, 'deployer', { hasCustomConfig: false }),
       esbuild(),
     ],
   );

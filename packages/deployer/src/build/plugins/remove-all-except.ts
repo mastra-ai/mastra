@@ -1,11 +1,17 @@
 import * as babel from '@babel/core';
 import type { Plugin } from 'rollup';
+import type { Config as MastraConfig } from '@mastra/core/mastra';
+import { removeAllOptionsFromMastraExcept } from '../babel/remove-all-options-except';
+import type { IMastraLogger } from '@mastra/core/logger';
 
-import { removeDeployer as removeDeployerBabelPlugin } from '../babel/remove-deployer';
-
-export function removeDeployer(mastraEntry: string, options?: { sourcemap?: boolean }): Plugin {
+export function removeAllOptionsFromMastraExceptPlugin(
+  mastraEntry: string,
+  name: keyof MastraConfig,
+  result: { hasCustomConfig: boolean },
+  options?: { sourcemap?: boolean; logger?: IMastraLogger },
+): Plugin {
   return {
-    name: 'remove-deployer',
+    name: `remove-${name}`,
     transform(code, id) {
       if (id !== mastraEntry) {
         return;
@@ -18,7 +24,7 @@ export function removeDeployer(mastraEntry: string, options?: { sourcemap?: bool
             babelrc: false,
             configFile: false,
             filename: id,
-            plugins: [removeDeployerBabelPlugin],
+            plugins: [removeAllOptionsFromMastraExcept(result, name, options?.logger)],
             sourceMaps: options?.sourcemap,
           },
           (err, result) => {
