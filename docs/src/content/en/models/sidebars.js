@@ -353,6 +353,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/xiaomi",
+          label: "Xiaomi",
+        },
+        {
+          type: "doc",
           id: "providers/zai",
           label: "Z.AI",
         },

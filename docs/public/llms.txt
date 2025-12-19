@@ -172,7 +172,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 61+ AI providers and 1450+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 62+ AI providers and 1451+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -235,6 +235,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
+- [Xiaomi | Models | Mastra](https://mastra.ai/en/models/providers/xiaomi): Use Xiaomi models with Mastra. 1 model available.
 - [Z.AI Coding Plan | Models | Mastra](https://mastra.ai/en/models/providers/zai-coding-plan): Use Z.AI Coding Plan models with Mastra. 6 models available.
 - [Z.AI | Models | Mastra](https://mastra.ai/en/models/providers/zai): Use Z.AI models with Mastra. 6 models available.
 - [ZenMux | Models | Mastra](https://mastra.ai/en/models/providers/zenmux): Use ZenMux models with Mastra. 22 models available.
@@ -378,7 +379,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Prompt Injection Detector | Processors](https://mastra.ai/en/reference/processors/prompt-injection-detector): Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input.
 - [Reference: Semantic Recall Processor | Processors](https://mastra.ai/en/reference/processors/semantic-recall-processor): Documentation for the SemanticRecall processor in Mastra, which enables semantic search over conversation history using vector embeddings.
 - [Reference: System Prompt Scrubber | Processors](https://mastra.ai/en/reference/processors/system-prompt-scrubber): Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses.
-- [Reference: Token Limiter Processor | Processors](https://mastra.ai/en/reference/processors/token-limiter-processor): Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses.
+- [Reference: Token Limiter Processor | Processors](https://mastra.ai/en/reference/processors/token-limiter-processor): Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in messages.
 - [Reference: Tool Call Filter | Processors](https://mastra.ai/en/reference/processors/tool-call-filter): Documentation for the ToolCallFilter processor in Mastra, which filters out tool calls and results from messages.
 - [Reference: Unicode Normalizer | Processors](https://mastra.ai/en/reference/processors/unicode-normalizer): Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters.
 - [Reference: Working Memory Processor | Processors](https://mastra.ai/en/reference/processors/working-memory-processor): Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions.

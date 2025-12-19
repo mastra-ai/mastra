@@ -11,7 +11,6 @@ import { RequestContext } from '../di';
 import { MastraError } from '../error';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
 import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
@@ -13371,7 +13370,8 @@ describe('Workflow', () => {
 
   describe('Time travel', () => {
     afterEach(async () => {
-      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      const workflowsStore = await testStorage.getStore('workflows');
+      await workflowsStore?.dangerouslyClearAll();
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async () => {

@@ -378,6 +378,11 @@ const sidebars = {
           id: "deployment/web-framework",
           label: "Web Framework",
         },
+        {
+          type: "doc",
+          id: "deployment/workflow-runners",
+          label: "Workflow Runners",
+        },
       ],
     },
     {

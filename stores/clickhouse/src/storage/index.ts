@@ -8,7 +8,6 @@ import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
   PaginationInfo,
-  StorageColumn,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -17,10 +16,14 @@ import type {
   StorageResourceType,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  SpanRecord,
+  TraceRecord,
+  TracesPaginatedArg,
+  CreateSpanRecord,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MemoryStorageClickhouse } from './domains/memory';
-import { StoreOperationsClickhouse } from './domains/operations';
+import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
@@ -96,18 +99,20 @@ export class ClickhouseStore extends MastraStorage {
         output_format_json_quote_64bit_integers: 0,
       },
     });
+
     this.ttl = config.ttl;
 
-    const operations = new StoreOperationsClickhouse({ client: this.db, ttl: this.ttl });
-    const workflows = new WorkflowsStorageClickhouse({ client: this.db, operations });
-    const scores = new ScoresStorageClickhouse({ client: this.db, operations });
-    const memory = new MemoryStorageClickhouse({ client: this.db, operations });
+    const domainConfig = { client: this.db, ttl: this.ttl };
+    const workflows = new WorkflowsStorageClickhouse(domainConfig);
+    const scores = new ScoresStorageClickhouse(domainConfig);
+    const memory = new MemoryStorageClickhouse(domainConfig);
+    const observability = new ObservabilityStorageClickhouse(domainConfig);
 
     this.stores = {
-      operations,
       workflows,
       scores,
       memory,
+      observability,
     };
   }
 
@@ -118,20 +123,17 @@ export class ClickhouseStore extends MastraStorage {
     createTable: boolean;
     deleteMessages: boolean;
     listScoresBySpan: boolean;
+    observabilityInstance: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
+      observabilityInstance: true,
     };
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.stores.operations.batchInsert({ tableName, records });
-    // await this.optimizeTable({ tableName });
   }
 
   async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -168,44 +170,6 @@ export class ClickhouseStore extends MastraStorage {
         error,
       );
     }
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async updateWorkflowResults({
@@ -302,6 +266,10 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.memory.deleteThread({ threadId });
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     return this.stores.memory.saveMessages(args);
   }
@@ -314,6 +282,10 @@ export class ClickhouseStore extends MastraStorage {
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(args);
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
@@ -396,5 +368,97 @@ export class ClickhouseStore extends MastraStorage {
 
   async close(): Promise<void> {
     await this.db.close();
+  }
+
+  // Observability methods
+
+  async createSpan(span: CreateSpanRecord): Promise<void> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.createSpan(span);
+  }
+
+  async updateSpan(params: {
+    spanId: string;
+    traceId: string;
+    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
+  }): Promise<void> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.updateSpan(params);
+  }
+
+  async getTrace(traceId: string): Promise<TraceRecord | null> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.getTrace(traceId);
+  }
+
+  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.getTracesPaginated(args);
+  }
+
+  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.batchCreateSpans(args);
+  }
+
+  async batchUpdateSpans(args: {
+    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
+  }): Promise<void> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.batchUpdateSpans(args);
+  }
+
+  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+    if (!this.stores.observability) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: 'Observability storage is not initialized',
+      });
+    }
+    return this.stores.observability.batchDeleteTraces(args);
   }
 }
