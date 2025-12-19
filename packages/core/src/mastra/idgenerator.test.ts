@@ -680,7 +680,7 @@ describe('Mastra ID Generator', () => {
       expect(results).toHaveLength(3);
     });
 
-    it('should handle complex workflow with memory operations', async () => {
+    it('should handle complex workflow with memory operation', async () => {
       const memory = new MockMemory();
 
       const agent = new Agent({
