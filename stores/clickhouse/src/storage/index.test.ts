@@ -6,6 +6,7 @@ import type { ClickhouseConfig } from '.';
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: ClickhouseConfig = {
+  id: 'clickhouse-test',
   url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
   username: process.env.CLICKHOUSE_USERNAME || 'default',
   password: process.env.CLICKHOUSE_PASSWORD || 'password',
@@ -16,6 +17,6 @@ const TEST_CONFIG: ClickhouseConfig = {
   // },
 };
 
-const storage = new ClickhouseStore({ ...TEST_CONFIG, id: 'clickhouse-test' });
+const storage = new ClickhouseStore(TEST_CONFIG);
 
 createTestSuite(storage);

@@ -10,7 +10,6 @@ import { RequestContext } from '../../di';
 import { MastraError } from '../../error';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
-import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
 import type { StreamEvent, WorkflowRunState } from '../types';
@@ -20,9 +19,10 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 const testStorage = new MockStore();
 
 describe('Workflow', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
-    testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    const workflowsStore = await testStorage.getStore('workflows');
+    await workflowsStore?.dangerouslyClearAll();
   });
 
   describe('Streaming Legacy', () => {
@@ -5894,7 +5894,8 @@ describe('Workflow', () => {
 
   describe('Time travel', () => {
     afterEach(async () => {
-      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      const workflowsStore = await testStorage.getStore('workflows');
+      await workflowsStore?.dangerouslyClearAll();
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async () => {
