@@ -2,9 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Plugin, PluginContext } from 'rollup';
 import { getPackageInfo } from 'local-pkg';
 import { readFile } from 'node:fs/promises';
-import { nodeResolve } from '@rollup/plugin-node-resolve';
 
-const mockNodeResolveHandler = vi.fn();
 const mockNodeResolveHandler = vi.fn();
 
 vi.mock('node:fs/promises', () => ({
