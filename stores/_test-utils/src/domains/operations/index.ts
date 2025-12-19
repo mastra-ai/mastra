@@ -1,10 +1,27 @@
 import type { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import { createIndexManagementTests } from './index-management';
+import type { IndexManagementSkipTests } from './index-management';
 
-export function createOperationsTests({ storage }: { storage: MastraStorage }) {
+/**
+ * Tests to skip in operations module
+ */
+export interface OperationsSkipTests {
+  /**
+   * Skip specific index management tests
+   */
+  indexManagement?: IndexManagementSkipTests;
+}
+
+export function createOperationsTests({
+  storage,
+  skipTests = {},
+}: {
+  storage: MastraStorage;
+  skipTests?: OperationsSkipTests;
+}) {
   // Add index management tests
-  createIndexManagementTests({ storage });
+  createIndexManagementTests({ storage, skipTests: skipTests.indexManagement });
   if (storage.supports.createTable) {
     describe('Table Operations', () => {
       const testTableName = 'test_table';

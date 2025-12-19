@@ -2,7 +2,26 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_TRACES } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-export function createIndexManagementTests({ storage }: { storage: MastraStorage }) {
+/**
+ * Tests to skip in index management module.
+ * Aurora DSQL has limitations that require skipping certain tests:
+ * - advancedOptions: DSQL doesn't support USING clause (brin, spgist, gin, hash methods)
+ * - storageParameters: DSQL doesn't support WITH clause (fillfactor, etc.)
+ */
+export interface IndexManagementSkipTests {
+  /** Skip advanced index options tests (USING brin, spgist, gin, hash) */
+  advancedOptions?: boolean;
+  /** Skip storage parameters tests (WITH fillfactor) */
+  storageParameters?: boolean;
+}
+
+export function createIndexManagementTests({
+  storage,
+  skipTests = {},
+}: {
+  storage: MastraStorage;
+  skipTests?: IndexManagementSkipTests;
+}) {
   if (storage.supports.indexManagement) {
     describe('Index Management', () => {
       // Use timestamp to ensure unique index names across test runs
@@ -126,7 +145,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           }
         });
 
-        it('should create index with advanced options', async () => {
+        it.skipIf(skipTests.advancedOptions)('should create index with advanced options', async () => {
           // Test BRIN index (efficient for large tables with natural ordering)
           const brinIndexName = `${testIndexPrefix}_brin`;
           await storage.createIndex({
@@ -158,7 +177,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           expect(spgistIndex?.definition.toLowerCase()).toContain('spgist');
         });
 
-        it('should create index with storage parameters', async () => {
+        it.skipIf(skipTests.storageParameters)('should create index with storage parameters', async () => {
           const indexName = `${testIndexPrefix}_with_storage`;
 
           // Create index with storage parameters
@@ -255,7 +274,7 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           expect(stats.columns).toContain('id');
         });
 
-        it('should return statistics for different index methods', async () => {
+        it.skipIf(skipTests.advancedOptions)('should return statistics for different index methods', async () => {
           // Test GIN index on JSONB column (use TABLE_TRACES attributes column which is JSONB)
           const ginIndexName = `${testIndexPrefix}_describe_gin`;
           await storage.createIndex({
