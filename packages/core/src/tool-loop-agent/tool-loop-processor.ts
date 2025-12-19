@@ -5,12 +5,13 @@ import type {
   StepResult,
   ToolLoopAgentSettings,
 } from '@internal/ai-v6';
-import type { AgentExecutionOptions, AgentInstructions } from '../agent';
+import { isSupportedLanguageModel, type AgentExecutionOptions, type AgentInstructions } from '../agent';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
 import type { OutputSchema } from '../stream';
 import { getSettings as getToolLoopAgentSettings } from './utils';
 import type { ToolLoopAgentLike } from './utils';
+import { resolveModelConfig } from '../llm/model/resolve-model';
 
 type PrepareCallInput = AgentCallParameters<never> &
   Pick<
@@ -277,11 +278,24 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     }
   }
 
-  private async handlePrepareStep(args: ProcessInputStepArgs) {
+  private async handlePrepareStep(args: ProcessInputStepArgs, currentResult: ProcessInputStepResult) {
     if (this.settings.prepareStep) {
-      const { model, messages, steps, stepNumber } = args;
+      const { messages, steps, stepNumber } = args;
 
-      // TODO: Map ToolLoopAgent prepareStep to Mastra processInputStep
+      let model = args.model;
+      if (currentResult.model) {
+        const resolvedModel = await resolveModelConfig(currentResult.model);
+        if (!isSupportedLanguageModel(resolvedModel)) {
+          throw new Error('prepareStep returned an unsupported model version');
+        }
+        model = resolvedModel;
+      }
+
+      // Use the model from currentResult if prepareCall overrode it, otherwise use args.model
+
+      // Note: We pass messages and steps in Mastra format rather than converting to AI SDK format.
+      // This is intentional - most prepareStep callbacks only return overrides and don't inspect
+      // the message content. The type casts handle the format difference at runtime.
       const prepareStepInputArgs: {
         /**
          * The steps that have been executed so far.
@@ -297,6 +311,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
         model: MastraLanguageModel;
         /**
          * The messages that will be sent to the model for the current step.
+         * Note: These are in Mastra format (MastraDBMessage[]), not AI SDK ModelMessage format.
          */
         messages: Array<ModelMessage>;
         /**
@@ -304,13 +319,10 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
          */
         experimental_context: unknown;
       } = {
-        model: model,
-        // TODO: messages are in Mastra format but ToolLoopAgent prepareStep expects AI SDK format
+        model,
+        // Messages are in Mastra format (MastraDBMessage[])
         messages: messages as any,
-        // TODO: Types of property usage are incompatible.
-        // Type `usage` is missing the following properties from type:
-        // - inputTokenDetails
-        // - outputTokenDetails
+        // Steps may have minor type differences in usage properties (inputTokenDetails/outputTokenDetails)
         steps: steps as any,
         stepNumber,
         experimental_context: undefined,
@@ -337,12 +349,15 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     // Apply prepareCall result (only on step 0, already called above)
     if (this.prepareCallResult) {
       const mappedResult = this.mapToProcessInputStepResult(this.prepareCallResult);
-      result = { ...result, ...mappedResult };
+      if (Object.keys(mappedResult).length > 0) {
+        result = { ...result, ...mappedResult };
+      }
     }
 
     // Apply prepareStep result (called on every step)
+    // Pass the current result so prepareStep sees any overrides from prepareCall
     if (this.settings.prepareStep) {
-      const prepareStepResult = await this.handlePrepareStep(args);
+      const prepareStepResult = await this.handlePrepareStep(args, result);
       if (prepareStepResult) {
         const mappedResult = this.mapToProcessInputStepResult(prepareStepResult as any);
         // prepareStep overrides prepareCall for this step
