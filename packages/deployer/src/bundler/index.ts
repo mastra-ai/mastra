@@ -14,7 +14,7 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
-import { slash } from '../build/utils';
+import { getPackageName, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
@@ -336,14 +336,6 @@ export abstract class Bundler extends MastraBundler {
         // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
         // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
         // For scoped packages, compare the full package name (e.g., @scope/pkg)
-        const getPackageName = (d: string) => {
-          if (d.startsWith('@')) {
-            const parts = d.split('/');
-            return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : d;
-          }
-          return d.split('/')[0] || d;
-        };
-
         const importName = getPackageName(dep);
         const isAlias = actualPackageName && importName !== actualPackageName;
 
