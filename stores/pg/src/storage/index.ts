@@ -18,7 +18,13 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
-import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import {
+  validateConfig,
+  isCloudSqlConfig,
+  isConnectionStringConfig,
+  isHostConfig,
+  isClientConfig,
+} from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { PgDB } from './db';
 import type { PgDomainConfig } from './db';
@@ -46,47 +52,55 @@ export class PostgresStore extends MastraStorage {
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
       this.schema = config.schemaName || 'public';
 
-      let pgConfig: PostgresStoreConfig;
-      if (isConnectionStringConfig(config)) {
-        pgConfig = {
-          id: config.id,
-          connectionString: config.connectionString,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-          ssl: config.ssl,
-        };
-      } else if (isCloudSqlConfig(config)) {
-        // Cloud SQL connector config
-        pgConfig = {
-          ...config,
-          id: config.id,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
-      } else if (isHostConfig(config)) {
-        pgConfig = {
-          id: config.id,
-          host: config.host,
-          port: config.port,
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          ssl: config.ssl,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
-      } else {
-        // This should never happen due to validation above, but included for completeness
-        throw new Error(
-          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
-        );
-      }
-
-      // Initialize pg-promise and create database connection synchronously
-      // Note: pg-promise creates connections lazily when queries are executed,
-      // so this is safe to do in the constructor
+      // Initialize pg-promise
       this.#pgp = pgPromise();
-      this.#db = this.#pgp(pgConfig as any);
+
+      // Handle pre-configured client vs creating new connection
+      if (isClientConfig(config)) {
+        // User provided a pre-configured pg-promise client
+        this.#db = config.client;
+      } else {
+        // Create connection from config
+        let pgConfig: PostgresStoreConfig;
+        if (isConnectionStringConfig(config)) {
+          pgConfig = {
+            id: config.id,
+            connectionString: config.connectionString,
+            max: config.max,
+            idleTimeoutMillis: config.idleTimeoutMillis,
+            ssl: config.ssl,
+          };
+        } else if (isCloudSqlConfig(config)) {
+          // Cloud SQL connector config
+          pgConfig = {
+            ...config,
+            id: config.id,
+            max: config.max,
+            idleTimeoutMillis: config.idleTimeoutMillis,
+          };
+        } else if (isHostConfig(config)) {
+          pgConfig = {
+            id: config.id,
+            host: config.host,
+            port: config.port,
+            database: config.database,
+            user: config.user,
+            password: config.password,
+            ssl: config.ssl,
+            max: config.max,
+            idleTimeoutMillis: config.idleTimeoutMillis,
+          };
+        } else {
+          // This should never happen due to validation above, but included for completeness
+          throw new Error(
+            'PostgresStore: invalid config. Provide either {client}, {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
+          );
+        }
+
+        // Note: pg-promise creates connections lazily when queries are executed,
+        // so this is safe to do in the constructor
+        this.#db = this.#pgp(pgConfig as any);
+      }
 
       // Create all domain instances synchronously in the constructor
       // This is required for Memory to work correctly, as it checks for
