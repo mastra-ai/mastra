@@ -12,6 +12,28 @@ import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
+function tryRepairJson(input: string): Record<string, any> | null {
+  let repaired = input.trim();
+
+  // Add missing quotes around property names
+  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+  // Replace single quotes with double quotes
+  repaired = repaired.replace(/'/g, '"');
+
+  // Remove trailing commas
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+  // Fix missing quote before property name after comma
+  repaired = repaired.replace(/,([a-zA-Z_][a-zA-Z0-9_]*)"/g, ',"$1"');
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
+}
+
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
@@ -138,14 +160,18 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         try {
           toolCallInput = JSON.parse(value.input);
         } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+          const repaired = tryRepairJson(value.input);
+          if (repaired) {
+            console.log('[JSON Repair] Fixed malformed JSON for tool:', value.toolName);
+            toolCallInput = repaired;
+          } else {
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: value.input,
+            });
+            toolCallInput = undefined;
+          }
         }
-      }
-
       return {
         type: 'tool-call',
         runId: ctx.runId,

@@ -137,6 +137,27 @@ describe('convertFullStreamChunkToMastra', () => {
       }
     });
 
+    it('should repair common malformed JSON errors from LLMs', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-2',
+        toolName: 'test_tool',
+        input: `{command:'echo', description:"Test", trailingComma:1,}`,
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({
+          command: 'echo',
+          description: 'Test',
+          trailingComma: 1,
+        });
+      }
+    });
+    
     it('should handle undefined input', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
