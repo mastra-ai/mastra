@@ -14,8 +14,8 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import { resolveMssqlConfig } from '../../db';
-import type { MssqlDB, MssqlDomainConfig } from '../../db';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
@@ -26,10 +26,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.db = db;
-    this.schema = schema;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName });
     this.needsConnect = needsConnect;
   }
 

@@ -20,8 +20,8 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
-import { resolveMssqlConfig } from '../../db';
-import type { MssqlDB, MssqlDomainConfig } from '../../db';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
 export class MemoryMSSQL extends MemoryStorage {
@@ -54,10 +54,10 @@ export class MemoryMSSQL extends MemoryStorage {
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.schema = schema;
-    this.db = db;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName });
     this.needsConnect = needsConnect;
   }
 

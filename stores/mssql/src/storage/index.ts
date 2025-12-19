@@ -157,7 +157,7 @@ export class MSSQLStore extends MastraStorage {
       }
 
       this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
-      const domainConfig = { pool: this.pool, db: this.#db, schema: this.schema };
+      const domainConfig = { pool: this.pool, schemaName: this.schema };
       const scores = new ScoresMSSQL(domainConfig);
       const workflows = new WorkflowsMSSQL(domainConfig);
       const memory = new MemoryMSSQL(domainConfig);

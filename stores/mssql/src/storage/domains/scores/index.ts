@@ -13,8 +13,8 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
-import { resolveMssqlConfig } from '../../db';
-import type { MssqlDB, MssqlDomainConfig } from '../../db';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 /**
@@ -35,10 +35,10 @@ export class ScoresMSSQL extends ScoresStorage {
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.db = db;
-    this.schema = schema;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName });
     this.needsConnect = needsConnect;
   }
 

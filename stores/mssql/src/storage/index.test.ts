@@ -62,12 +62,12 @@ if (process.env.ENABLE_TESTS === 'true') {
       }),
   });
 
-  // Domain-level pre-configured client tests
+  // Domain-level pre-configured client tests (using pool directly)
   createDomainDirectTests({
     storeName: 'MSSQL',
-    createMemoryDomain: () => new MemoryMSSQL(DOMAIN_CONFIG),
-    createWorkflowsDomain: () => new WorkflowsMSSQL(DOMAIN_CONFIG),
-    createScoresDomain: () => new ScoresMSSQL(DOMAIN_CONFIG),
+    createMemoryDomain: () => new MemoryMSSQL({ pool: createTestPool() }),
+    createWorkflowsDomain: () => new WorkflowsMSSQL({ pool: createTestPool() }),
+    createScoresDomain: () => new ScoresMSSQL({ pool: createTestPool() }),
   });
 
   // MSSQL-specific: schemaName option for domains
@@ -86,6 +86,32 @@ if (process.env.ENABLE_TESTS === 'true') {
         id: `thread-schema-test-${Date.now()}`,
         resourceId: 'test-resource',
         title: 'Test Schema Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      // Clean up thread
+      await memoryDomain.deleteThread({ threadId: thread.id });
+    });
+
+    it('should allow domains to use pool with custom schemaName', async () => {
+      const memoryDomain = new MemoryMSSQL({
+        pool: createTestPool(),
+        schemaName: 'pool_schema_test',
+      });
+
+      expect(memoryDomain).toBeDefined();
+      await memoryDomain.init();
+
+      // Test a basic operation to verify it works
+      const thread = {
+        id: `thread-pool-schema-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Pool Schema Thread',
         metadata: {},
         createdAt: new Date(),
         updatedAt: new Date(),

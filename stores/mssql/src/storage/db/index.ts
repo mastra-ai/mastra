@@ -28,18 +28,17 @@ export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 /**
  * Configuration for standalone domain usage.
  * Accepts either:
- * 1. An existing pool, db, and schema
+ * 1. A pre-configured pool (domain creates its own MssqlDB)
  * 2. Config to create a new pool internally
  */
 export type MssqlDomainConfig = MssqlDomainPoolConfig | MssqlDomainRestConfig;
 
 /**
- * Pass an existing pool, db, and schema
+ * Pass an existing pool - domain will create its own MssqlDB
  */
 export interface MssqlDomainPoolConfig {
   pool: sql.ConnectionPool;
-  db: MssqlDB;
-  schema?: string;
+  schemaName?: string;
 }
 
 /**
@@ -56,11 +55,11 @@ export interface MssqlDomainRestConfig {
 }
 
 /**
- * Resolves MssqlDomainConfig to pool, db, and schema.
- * Handles creating a new pool and db if config is provided.
+ * Resolves MssqlDomainConfig to pool and schema.
+ * Domain classes create their own MssqlDB instance from the returned pool.
  *
- * @param config - Either an existing connected pool/db, or connection details to create a new pool
- * @returns Object containing pool, db, schema, and whether the pool needs connection
+ * @param config - Either an existing connected pool, or connection details to create a new pool
+ * @returns Object containing pool, schemaName, and whether the pool needs connection
  *
  * @remarks
  * When using connection details (not an existing pool), the returned pool is NOT connected.
@@ -69,27 +68,26 @@ export interface MssqlDomainRestConfig {
  */
 export function resolveMssqlConfig(config: MssqlDomainConfig): {
   pool: sql.ConnectionPool;
-  db: MssqlDB;
-  schema?: string;
+  schemaName?: string;
   needsConnect: boolean;
 } {
-  // Existing pool and db - already connected by MSSQLStore
-  if ('pool' in config && 'db' in config) {
-    return { pool: config.pool, db: config.db, schema: config.schema, needsConnect: false };
+  // Existing pool - already connected
+  if ('pool' in config && !('server' in config)) {
+    return { pool: config.pool, schemaName: config.schemaName, needsConnect: false };
   }
 
   // Config to create new pool - needs to be connected via init()
+  const restConfig = config as MssqlDomainRestConfig;
   const pool = new sql.ConnectionPool({
-    server: config.server,
-    database: config.database,
-    user: config.user,
-    password: config.password,
-    port: config.port,
-    options: config.options || { encrypt: true, trustServerCertificate: true },
+    server: restConfig.server,
+    database: restConfig.database,
+    user: restConfig.user,
+    password: restConfig.password,
+    port: restConfig.port,
+    options: restConfig.options || { encrypt: true, trustServerCertificate: true },
   });
 
-  const db = new MssqlDB({ pool, schemaName: config.schemaName });
-  return { pool, db, schema: config.schemaName, needsConnect: true };
+  return { pool, schemaName: restConfig.schemaName, needsConnect: true };
 }
 
 export class MssqlDB extends MastraBase {
