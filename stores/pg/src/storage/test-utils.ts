@@ -76,6 +76,8 @@ export function pgTests() {
         await expect(store.db.connect()).rejects.toThrow();
         store = new PostgresStore(TEST_CONFIG);
         await store.init();
+        // Recreate dbOps with new store connection
+        dbOps = new PgDB({ client: store.db });
       });
     });
 
