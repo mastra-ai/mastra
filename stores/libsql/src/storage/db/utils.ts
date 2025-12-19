@@ -67,9 +67,9 @@ export function createExecuteWriteOperationWithRetry({
         }
       }
     }
-    throw new Error(
-      `LibSQLStore: Max retries reached for ${operationDescription}, but no error was re-thrown from the loop.`,
-    );
+    // TypeScript requires a return/throw here for type safety, but this is unreachable
+    // because the loop always exits via return (success) or throw (error)
+    throw new Error(`LibSQLStore: Unexpected exit from retry loop for ${operationDescription}`);
   };
 }
 

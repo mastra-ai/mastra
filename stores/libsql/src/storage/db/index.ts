@@ -100,8 +100,9 @@ export class LibSQLDB extends MastraBase {
    * @returns `true` if the column exists in the table, `false` otherwise
    */
   async hasColumn(table: string, column: string): Promise<boolean> {
+    const sanitizedTable = parseSqlIdentifier(table, 'table name');
     const result = await this.client.execute({
-      sql: `PRAGMA table_info(${table})`,
+      sql: `PRAGMA table_info("${sanitizedTable}")`,
     });
     return result.rows?.some((row: any) => row.name === column);
   }

@@ -145,6 +145,15 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       await collection.updateOne({ id }, { $set: updateDoc });
 
       const updatedAgent = await collection.findOne<any>({ id });
+      if (!updatedAgent) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Agent with id ${id} was deleted during update`,
+          details: { id },
+        });
+      }
       return this.transformAgent(updatedAgent);
     } catch (error) {
       if (error instanceof MastraError) {
