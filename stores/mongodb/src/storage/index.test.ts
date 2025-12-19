@@ -438,13 +438,12 @@ describe('MongoDB Specific Tests', () => {
 createTestSuite(new MongoDBStore(TEST_CONFIG));
 
 describe('MongoDBStore with pre-configured connectorHandler', () => {
-  it('should accept a connectorHandler with getClient and getDb', () => {
-    const mockClient = {} as MongoClient;
-    const mockDb = {} as ReturnType<MongoClient['db']>;
+  it('should accept a connectorHandler with getCollection and close', () => {
+    const mockCollection = {} as ReturnType<ReturnType<MongoClient['db']>['collection']>;
 
     const connectorHandler: ConnectorHandler = {
-      getClient: () => mockClient,
-      getDb: () => mockDb,
+      getCollection: async () => mockCollection,
+      close: async () => {},
     };
 
     const store = new MongoDBStore({
@@ -459,10 +458,12 @@ describe('MongoDBStore with pre-configured connectorHandler', () => {
   it('should work with pre-configured connectorHandler for storage operations', async () => {
     // This test uses a real MongoDB connection through connectorHandler
     const client = new MongoClient(TEST_CONFIG.url!);
+    await client.connect();
+    const db = client.db(TEST_CONFIG.dbName);
 
     const connectorHandler: ConnectorHandler = {
-      getClient: () => client,
-      getDb: () => client.db(TEST_CONFIG.dbName),
+      getCollection: async (name: string) => db.collection(name),
+      close: async () => client.close(),
     };
 
     const store = new MongoDBStore({
@@ -526,9 +527,10 @@ describe('MongoDBStore Configuration Validation - Extended', () => {
 
   describe('with connectorHandler', () => {
     it('should accept a connectorHandler', () => {
+      const mockCollection = {} as ReturnType<ReturnType<MongoClient['db']>['collection']>;
       const connectorHandler: ConnectorHandler = {
-        getClient: () => ({}) as MongoClient,
-        getDb: () => ({}) as ReturnType<MongoClient['db']>,
+        getCollection: async () => mockCollection,
+        close: async () => {},
       };
 
       expect(
@@ -541,9 +543,10 @@ describe('MongoDBStore Configuration Validation - Extended', () => {
     });
 
     it('should not require url when connectorHandler is provided', () => {
+      const mockCollection = {} as ReturnType<ReturnType<MongoClient['db']>['collection']>;
       const connectorHandler: ConnectorHandler = {
-        getClient: () => ({}) as MongoClient,
-        getDb: () => ({}) as ReturnType<MongoClient['db']>,
+        getCollection: async () => mockCollection,
+        close: async () => {},
       };
 
       expect(
@@ -557,9 +560,10 @@ describe('MongoDBStore Configuration Validation - Extended', () => {
     });
 
     it('should not require dbName when connectorHandler is provided', () => {
+      const mockCollection = {} as ReturnType<ReturnType<MongoClient['db']>['collection']>;
       const connectorHandler: ConnectorHandler = {
-        getClient: () => ({}) as MongoClient,
-        getDb: () => ({}) as ReturnType<MongoClient['db']>,
+        getCollection: async () => mockCollection,
+        close: async () => {},
       };
 
       expect(
@@ -587,9 +591,10 @@ describe('MongoDBStore Configuration Validation - Extended', () => {
     });
 
     it('should accept disableInit: true with connectorHandler', () => {
+      const mockCollection = {} as ReturnType<ReturnType<MongoClient['db']>['collection']>;
       const connectorHandler: ConnectorHandler = {
-        getClient: () => ({}) as MongoClient,
-        getDb: () => ({}) as ReturnType<MongoClient['db']>,
+        getCollection: async () => mockCollection,
+        close: async () => {},
       };
 
       expect(
@@ -607,10 +612,12 @@ describe('MongoDBStore Configuration Validation - Extended', () => {
 describe('MongoDB Domain-level Pre-configured Client', () => {
   it('should allow using MemoryStorageMongoDB domain directly with connectorHandler', async () => {
     const client = new MongoClient(TEST_CONFIG.url!);
+    await client.connect();
+    const db = client.db(TEST_CONFIG.dbName);
 
     const connectorHandler: ConnectorHandler = {
-      getClient: () => client,
-      getDb: () => client.db(TEST_CONFIG.dbName),
+      getCollection: async (name: string) => db.collection(name),
+      close: async () => client.close(),
     };
 
     // Import and use the domain class directly
@@ -645,10 +652,12 @@ describe('MongoDB Domain-level Pre-configured Client', () => {
 
   it('should allow using WorkflowsStorageMongoDB domain directly with connectorHandler', async () => {
     const client = new MongoClient(TEST_CONFIG.url!);
+    await client.connect();
+    const db = client.db(TEST_CONFIG.dbName);
 
     const connectorHandler: ConnectorHandler = {
-      getClient: () => client,
-      getDb: () => client.db(TEST_CONFIG.dbName),
+      getCollection: async (name: string) => db.collection(name),
+      close: async () => client.close(),
     };
 
     // Import and use the domain class directly
@@ -687,10 +696,12 @@ describe('MongoDB Domain-level Pre-configured Client', () => {
 
   it('should allow using ScoresStorageMongoDB domain directly with connectorHandler', async () => {
     const client = new MongoClient(TEST_CONFIG.url!);
+    await client.connect();
+    const db = client.db(TEST_CONFIG.dbName);
 
     const connectorHandler: ConnectorHandler = {
-      getClient: () => client,
-      getDb: () => client.db(TEST_CONFIG.dbName),
+      getCollection: async (name: string) => db.collection(name),
+      close: async () => client.close(),
     };
 
     // Import and use the domain class directly

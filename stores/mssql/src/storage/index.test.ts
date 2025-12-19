@@ -103,7 +103,7 @@ describe('MSSQLStore Configuration Validation', () => {
             user: 'sa',
             password: 'password',
           }),
-      ).toThrow(/server is required/i);
+      ).toThrow(/server must be provided/i);
     });
 
     it('should throw if database is empty', () => {
@@ -117,7 +117,7 @@ describe('MSSQLStore Configuration Validation', () => {
             user: 'sa',
             password: 'password',
           }),
-      ).toThrow(/database is required/i);
+      ).toThrow(/database must be provided/i);
     });
 
     it('should accept valid server/port config', () => {
@@ -158,7 +158,7 @@ describe('MSSQLStore Configuration Validation', () => {
             id: 'test-store',
             connectionString: '',
           }),
-      ).toThrow(/connectionString is required/i);
+      ).toThrow(/connectionString must be provided/i);
     });
 
     it('should accept valid connection string', () => {

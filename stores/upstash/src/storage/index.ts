@@ -96,6 +96,13 @@ export class UpstashStore extends MastraStorage {
       // User provided a pre-configured Redis client
       this.redis = config.client;
     } else {
+      // Validate URL and token before creating client
+      if (!config.url || typeof config.url !== 'string' || config.url.trim() === '') {
+        throw new Error('UpstashStore: url is required and cannot be empty.');
+      }
+      if (!config.token || typeof config.token !== 'string' || config.token.trim() === '') {
+        throw new Error('UpstashStore: token is required and cannot be empty.');
+      }
       // Create client from credentials
       this.redis = new Redis({
         url: config.url,
