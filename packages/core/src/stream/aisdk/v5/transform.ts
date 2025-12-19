@@ -185,6 +185,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         },
       };
     }
+    }
 
     case 'tool-result':
       return {
