@@ -380,6 +380,11 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the MSSQL connection pool.
+   *
+   * This will close the connection pool, including pre-configured pools.
+   */
   async close(): Promise<void> {
     await this.pool.close();
   }

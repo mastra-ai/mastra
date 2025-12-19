@@ -204,6 +204,11 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the MongoDB client connection.
+   *
+   * This will close the MongoDB client, including pre-configured clients.
+   */
   async close(): Promise<void> {
     try {
       await this.#connector.close();

@@ -426,6 +426,11 @@ export class ClickhouseStore extends MastraStorage {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
+  /**
+   * Closes the ClickHouse client connection.
+   *
+   * This will close the ClickHouse client, including pre-configured clients.
+   */
   async close(): Promise<void> {
     await this.db.close();
   }

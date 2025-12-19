@@ -337,6 +337,11 @@ export class PostgresStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the pg-promise connection pool.
+   *
+   * This will close ALL connections in the pool, including pre-configured clients.
+   */
   async close(): Promise<void> {
     this.pgp.end();
   }
