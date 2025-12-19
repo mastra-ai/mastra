@@ -5,8 +5,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { PostgresStoreConfig } from '../shared/config';
 import { PgDB } from './db';
 import { MemoryPG } from './domains/memory';
-import { ScoresPG } from './domains/scores';
-import { WorkflowsPG } from './domains/workflows';
 import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
@@ -609,266 +607,47 @@ export function pgTests() {
       });
     });
 
-    describe('Validation', () => {
-      const validConfig = TEST_CONFIG as any;
-
-      describe('Connection String Config', () => {
-        it('throws if connectionString is empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', connectionString: '' })).toThrow();
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, connectionString: '' })).toThrow();
-        });
-        it('does not throw on non-empty connection string', () => {
-          expect(() => new PostgresStore({ id: 'test-store', connectionString })).not.toThrow();
-        });
+    // PG-specific: Cloud SQL Connector configuration tests (not covered by factory)
+    describe('Cloud SQL Connector Config', () => {
+      it('accepts config with stream property (Cloud SQL connector)', () => {
+        const connectorConfig = {
+          id: 'cloud-sql-connector-store',
+          user: 'test-user',
+          database: 'test-db',
+          ssl: { rejectUnauthorized: false },
+          stream: () => ({}), // Mock stream function
+        };
+        expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
       });
 
-      describe('TCP Host Config', () => {
-        it('throws if host is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, host: '' })).toThrow();
-          const { host, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if database is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, database: '' })).toThrow();
-          const { database, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if user is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, user: '' })).toThrow();
-          const { user, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if password is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, password: '' })).toThrow();
-          const { password, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('does not throw on valid config (host-based)', () => {
-          expect(() => new PostgresStore(validConfig)).not.toThrow();
-        });
+      it('accepts config with password function (IAM auth)', () => {
+        const iamConfig = {
+          id: 'iam-auth-store',
+          user: 'test-user',
+          database: 'test-db',
+          host: 'localhost', // This could be present but ignored when password is a function
+          port: 5432,
+          password: () => Promise.resolve('dynamic-token'), // Mock password function
+          ssl: { rejectUnauthorized: false },
+        };
+        expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
       });
 
-      describe('Cloud SQL Connector Config', () => {
-        it('accepts config with stream property (Cloud SQL connector)', () => {
-          const connectorConfig = {
-            id: 'cloud-sql-connector-store',
-            user: 'test-user',
-            database: 'test-db',
-            ssl: { rejectUnauthorized: false },
-            stream: () => ({}), // Mock stream function
-          };
-          expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
-        });
-
-        it('accepts config with password function (IAM auth)', () => {
-          const iamConfig = {
-            id: 'iam-auth-store',
-            user: 'test-user',
-            database: 'test-db',
-            host: 'localhost', // This could be present but ignored when password is a function
-            port: 5432,
-            password: () => Promise.resolve('dynamic-token'), // Mock password function
-            ssl: { rejectUnauthorized: false },
-          };
-          expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
-        });
-
-        it('accepts generic pg ClientConfig', () => {
-          const clientConfig = {
-            id: 'generic-client-config-store',
-            user: 'test-user',
-            database: 'test-db',
-            application_name: 'test-app',
-            ssl: { rejectUnauthorized: false },
-            stream: () => ({}), // Mock stream
-          };
-          expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
-        });
-      });
-
-      describe('SSL Configuration', () => {
-        it('accepts connectionString with ssl: true', () => {
-          expect(() => new PostgresStore({ id: 'ssl-true-store', connectionString, ssl: true })).not.toThrow();
-        });
-
-        it('accepts connectionString with ssl object', () => {
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'ssl-object-store',
-                connectionString,
-                ssl: { rejectUnauthorized: false },
-              }),
-          ).not.toThrow();
-        });
-
-        it('accepts host config with ssl: true', () => {
-          const config = {
-            id: 'host-ssl-true-store',
-            ...validConfig,
-            ssl: true,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-
-        it('accepts host config with ssl object', () => {
-          const config = {
-            id: 'host-ssl-object-store',
-            ...validConfig,
-            ssl: { rejectUnauthorized: false },
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
-
-      describe('Pool Options', () => {
-        it('accepts max and idleTimeoutMillis with connectionString', () => {
-          const config = {
-            id: 'pool-options-connection-store',
-            connectionString,
-            max: 30,
-            idleTimeoutMillis: 60000,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-
-        it('accepts max and idleTimeoutMillis with host config', () => {
-          const config = {
-            id: 'pool-options-host-store',
-            ...validConfig,
-            max: 30,
-            idleTimeoutMillis: 60000,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
-
-      describe('Schema Configuration', () => {
-        it('accepts schemaName with connectionString', () => {
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'custom-schema-connection-store',
-                connectionString,
-                schemaName: 'custom_schema',
-              }),
-          ).not.toThrow();
-        });
-
-        it('accepts schemaName with host config', () => {
-          const config = {
-            id: 'custom-schema-host-store',
-            ...validConfig,
-            schemaName: 'custom_schema',
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
-
-      describe('Invalid Config', () => {
-        it('throws on invalid config (missing required fields)', () => {
-          expect(() => new PostgresStore({ id: 'test-store', user: 'test' } as any)).toThrow(
-            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
-          );
-        });
-
-        it('throws on completely empty config', () => {
-          expect(() => new PostgresStore({ id: 'test-store' } as any)).toThrow(
-            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
-          );
-        });
-      });
-
-      describe('Pre-configured Client Config', () => {
-        it('accepts a pre-configured pg-promise client', () => {
-          const pgp = pgPromise();
-          const client = pgp(connectionString);
-
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'pre-configured-client-store',
-                client,
-              }),
-          ).not.toThrow();
-
-          // Clean up
-          pgp.end();
-        });
-
-        it('accepts client with schemaName', () => {
-          const pgp = pgPromise();
-          const client = pgp(connectionString);
-
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'pre-configured-client-schema-store',
-                client,
-                schemaName: 'custom_schema',
-              }),
-          ).not.toThrow();
-
-          // Clean up
-          pgp.end();
-        });
-
-        it('accepts client with disableInit', () => {
-          const pgp = pgPromise();
-          const client = pgp(connectionString);
-
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'pre-configured-client-disable-init-store',
-                client,
-                disableInit: true,
-              }),
-          ).not.toThrow();
-
-          // Clean up
-          pgp.end();
-        });
+      it('accepts generic pg ClientConfig', () => {
+        const clientConfig = {
+          id: 'generic-client-config-store',
+          user: 'test-user',
+          database: 'test-db',
+          application_name: 'test-app',
+          ssl: { rejectUnauthorized: false },
+          stream: () => ({}), // Mock stream
+        };
+        expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
       });
     });
 
-    describe('Pre-configured Client Operations', () => {
-      it('should work with pre-configured client for storage operations', async () => {
-        const pgp = pgPromise();
-        const client = pgp(connectionString);
-
-        // Custom setup before using - this is what Issue #9690 was requesting
-        client.$pool.on('connect', () => {
-          // Could set role or other connection-level settings here
-          console.info('Pool client connected');
-        });
-
-        const clientStore = new PostgresStore({
-          id: 'pre-configured-client-ops-store',
-          client,
-        });
-
-        await clientStore.init();
-
-        // Test a basic operation
-        const thread = createSampleThread({
-          id: `thread-client-test-${Date.now()}`,
-          resourceId: 'test-resource',
-        });
-        thread.title = 'Test Thread';
-
-        const savedThread = await clientStore.saveThread({ thread });
-        expect(savedThread.id).toBe(thread.id);
-
-        const retrievedThread = await clientStore.getThreadById({ threadId: thread.id });
-        expect(retrievedThread).toBeDefined();
-        expect(retrievedThread?.title).toBe('Test Thread');
-
-        // Clean up
-        await clientStore.deleteThread({ threadId: thread.id });
-        await clientStore.close();
-      });
-
+    // PG-specific: db and pgp field exposure with pre-configured client
+    describe('Pre-configured Client Field Exposure', () => {
       it('should expose db and pgp fields with pre-configured client', () => {
         const pgp = pgPromise();
         const client = pgp(connectionString);
@@ -888,104 +667,8 @@ export function pgTests() {
       });
     });
 
-    describe('Domain-level Pre-configured Client', () => {
-      it('should allow using MemoryPG domain directly with pre-configured client', async () => {
-        const pgp = pgPromise();
-        const client = pgp(connectionString);
-
-        const memoryDomain = new MemoryPG({ client });
-
-        expect(memoryDomain).toBeDefined();
-        await memoryDomain.init();
-
-        // Test a basic operation
-        const thread = createSampleThread({
-          id: `thread-domain-test-${Date.now()}`,
-          resourceId: 'test-resource',
-        });
-
-        const savedThread = await memoryDomain.saveThread({ thread });
-        expect(savedThread.id).toBe(thread.id);
-
-        const retrievedThread = await memoryDomain.getThreadById({ threadId: thread.id });
-        expect(retrievedThread).toBeDefined();
-        expect(retrievedThread?.title).toBe(thread.title);
-
-        // Clean up
-        await memoryDomain.deleteThread({ threadId: thread.id });
-        pgp.end();
-      });
-
-      it('should allow using WorkflowsPG domain directly with pre-configured client', async () => {
-        const pgp = pgPromise();
-        const client = pgp(connectionString);
-
-        const workflowsDomain = new WorkflowsPG({ client });
-
-        expect(workflowsDomain).toBeDefined();
-        await workflowsDomain.init();
-
-        // Test a basic operation
-        const workflowName = 'test-workflow';
-        const runId = `run-domain-test-${Date.now()}`;
-
-        await workflowsDomain.persistWorkflowSnapshot({
-          workflowName,
-          runId,
-          snapshot: {
-            runId,
-            value: { current_step: 'initial' },
-            context: { requestContext: {} },
-            activePaths: [],
-            suspendedPaths: {},
-            timestamp: Date.now(),
-          } as any,
-        });
-
-        const snapshot = await workflowsDomain.loadWorkflowSnapshot({ workflowName, runId });
-        expect(snapshot).toBeDefined();
-        expect(snapshot?.runId).toBe(runId);
-
-        // Clean up
-        await workflowsDomain.deleteWorkflowRunById({ workflowName, runId });
-        pgp.end();
-      });
-
-      it('should allow using ScoresPG domain directly with pre-configured client', async () => {
-        const pgp = pgPromise();
-        const client = pgp(connectionString);
-
-        const scoresDomain = new ScoresPG({ client });
-
-        expect(scoresDomain).toBeDefined();
-        await scoresDomain.init();
-
-        // Test a basic operation - SaveScorePayload requires runId, scorer, output, input, entity, and other fields
-        const savedScore = await scoresDomain.saveScore({
-          runId: `run-score-test-${Date.now()}`,
-          score: 0.95,
-          scorerId: 'test-scorer',
-          scorer: { name: 'test-scorer', description: 'A test scorer' },
-          input: { query: 'test input' },
-          output: { result: 'test output' },
-          entity: { id: 'test-entity', type: 'agent' },
-          entityType: 'AGENT',
-          entityId: 'test-entity',
-          source: 'LIVE',
-          traceId: 'test-trace',
-          spanId: 'test-span',
-        });
-
-        expect(savedScore.score.id).toBeDefined();
-        expect(savedScore.score.score).toBe(0.95);
-
-        const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
-        expect(retrievedScore).toBeDefined();
-        expect(retrievedScore?.score).toBe(0.95);
-
-        pgp.end();
-      });
-
+    // PG-specific: Domain schemaName verification with pre-configured client
+    describe('Domain schemaName with Pre-configured Client', () => {
       it('should allow domains to use custom schemaName with pre-configured client', async () => {
         const pgp = pgPromise();
         const client = pgp(connectionString);
