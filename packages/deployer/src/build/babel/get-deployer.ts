@@ -26,20 +26,25 @@ export function removeAllExceptDeployer() {
           return;
         }
 
-        // @ts-ignore
-        const deployer = path.node.arguments[0]?.properties?.find(
-          // @ts-ignore
-          prop => prop.key.name === 'deployer',
+        // Find deployer property, skipping SpreadElement nodes
+        const firstArg = path.node.arguments[0];
+        if (!t.isObjectExpression(firstArg)) {
+          return;
+        }
+        const deployer = firstArg.properties.find(
+          prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name === 'deployer',
         );
 
         const programPath = path.scope.getProgramParent().path;
-        if (!deployer || !programPath) {
+        if (!deployer || !programPath || !t.isObjectProperty(deployer)) {
           return;
         }
 
         // add the deployer export
         const exportDeclaration = t.exportNamedDeclaration(
-          t.variableDeclaration('const', [t.variableDeclarator(t.identifier('deployer'), deployer.value)]),
+          t.variableDeclaration('const', [
+            t.variableDeclarator(t.identifier('deployer'), deployer.value as babel.types.Expression),
+          ]),
           [],
         );
 
