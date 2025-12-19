@@ -1,9 +1,9 @@
 /**
  * @mastra/evals - Evaluation framework for AI agents
- * 
+ *
  * This package provides scorers for evaluating AI agent performance.
  * Import specific scorers from subpaths:
- * 
+ *
  * @example
  * ```ts
  * import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
