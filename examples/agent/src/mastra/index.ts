@@ -45,7 +45,8 @@ const testScorer = createScorer({
   return 1;
 });
 
-export const mastra = new Mastra({
+// Test spread operator support (fixes #11130)
+const baseConfig = {
   agents: {
     chefAgent,
     chefAgentResponses,
@@ -86,6 +87,9 @@ export const mastra = new Mastra({
     advancedModerationWorkflow,
     findUserWorkflow,
   },
+} as const;
+
+const serverConfig = {
   bundler: {
     sourcemap: true,
   },
@@ -94,10 +98,27 @@ export const mastra = new Mastra({
       swaggerUI: true,
     },
   },
-  scorers: {
-    testScorer,
-  },
+};
+
+const observabilityConfig = {
   observability: new Observability({
     default: { enabled: true },
   }),
+};
+
+const scorersConfig = {
+  scorers: {
+    testScorer,
+  },
+};
+
+const mastraConfig = {
+  ...baseConfig,
+  ...serverConfig,
+  ...scorersConfig,
+  ...observabilityConfig,
+};
+
+export const mastra = new Mastra({
+  ...mastraConfig,
 });

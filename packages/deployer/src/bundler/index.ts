@@ -319,6 +319,18 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
+    // Read user's package.json to check for npm aliases
+    let userDependencies: Record<string, string> = {};
+    try {
+      const userPkgJson = await readJSON(join(projectRoot, 'package.json'));
+      userDependencies = {
+        ...userPkgJson.dependencies,
+        ...userPkgJson.devDependencies,
+      };
+    } catch {
+      // If we can't read user's package.json, continue without alias support
+    }
+
     const dependenciesToInstall = new Map<string, string>();
     for (const dep of analyzedBundleInfo.externalDependencies) {
       try {
@@ -326,10 +338,18 @@ export abstract class Bundler extends MastraBundler {
           continue;
         }
 
-        const rootPath = await getPackageRootPath(dep);
-        const pkg = await readJSON(`${rootPath}/package.json`);
+        // Check if this dependency is an npm alias in the user's package.json
+        const userDepValue = userDependencies[dep];
+        if (userDepValue && userDepValue.startsWith('npm:')) {
+          // Preserve the alias format (e.g., "npm:ai@^5.0.93")
+          dependenciesToInstall.set(dep, userDepValue);
+          continue;
+        }
 
-        dependenciesToInstall.set(dep, pkg.version || 'latest');
+        const rootPath = await getPackageRootPath(dep);
+        const resolvedPkg = await readJSON(`${rootPath}/package.json`);
+
+        dependenciesToInstall.set(dep, resolvedPkg.version || 'latest');
       } catch {
         dependenciesToInstall.set(dep, 'latest');
       }
