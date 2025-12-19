@@ -14,6 +14,7 @@ import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
 import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
+import { removeDeployer } from '../plugins/remove-deployer';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -63,7 +64,9 @@ function getInputPlugins(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeAllOptionsFromMastraExceptPlugin(mastraEntry, 'deployer', { hasCustomConfig: false }),
+      removeDeployer(mastraEntry, {
+        sourcemap: sourcemapEnabled,
+      }),
       esbuild(),
     ],
   );

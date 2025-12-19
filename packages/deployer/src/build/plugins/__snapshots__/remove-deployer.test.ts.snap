@@ -1,20 +1,63 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic.js 1`] = `
-"import { TestDeployer } from '@mastra/deployer/test';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+import { weatherAgent } from '@/agents';
+import { createApiRoute } from '@mastra/core/server';
 
-const deployer = new TestDeployer();
+const mastra = new Mastra({
+  agents: {
+    weatherAgent
+  },
+  logger: createLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  telemetry: {
+    enabled: true,
+    serviceName: "my-app",
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318"
+      // SigNoz local endpoint
+    }
+  },
+  server: {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
+  }
+});
 
-export { deployer };
+export { mastra };
 "
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-const.js 1`] = `
-"import { createApiRoute } from '@mastra/core/server';
-import { TestDeployer } from '@mastra/deployer/test';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+import { createApiRoute } from '@mastra/core/server';
+import { weatherAgent } from '@/agents';
 
-const testDeployer = new TestDeployer();
-({
+const telemetry = {
+  enabled: true,
+  serviceName: "my-app",
+  export: {
+    type: "otlp",
+    endpoint: "http://localhost:4318"
+    // SigNoz local endpoint
+  }
+};
+const server = {
+  port: 3e3,
+  timeout: 5e3,
   apiRoutes: [createApiRoute({
     path: "/hello",
     method: "get",
@@ -22,51 +65,111 @@ const testDeployer = new TestDeployer();
       res.send("Hello World");
     }
   })]
+};
+const mastra = new Mastra({
+  agents: {
+    weatherAgent
+  },
+  logger: createLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  telemetry,
+  server
 });
-const deployer = testDeployer;
 
-export { deployer };
+export { mastra };
 "
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-function.js 1`] = `
-"import { testDeployer } from '@mastra/deployer/test';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+import { createApiRoute } from '@mastra/core/server';
+import { weatherAgent } from '@/agents';
 
-function getDeployer() {
-  return testDeployer;
+function getTelemetryConfig() {
+  return {
+    enabled: true,
+    serviceName: "my-app",
+    export: {
+      type: "otlp",
+      endpoint: "http://localhost:4318"
+      // SigNoz local endpoint
+    }
+  };
 }
-const deployer = getDeployer();
+function getServerOptions() {
+  return {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
+  };
+}
+const mastra = new Mastra({
+  agents: {
+    weatherAgent
+  },
+  logger: createLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  telemetry: getTelemetryConfig(),
+  server: getServerOptions()
+});
 
-export { deployer };
+export { mastra };
 "
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-import.js 1`] = `
-"import { testDeployer } from '@mastra/deployer/test';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+import { weatherAgent } from '@/agents';
+import { telemetryConfig } from '@/telemetry';
+import { serverOptions } from '@/server';
 
-const deployer = testDeployer;
+const mastra = new Mastra({
+  agents: {
+    weatherAgent
+  },
+  logger: createLogger({
+    name: "Mastra",
+    level: "info"
+  }),
+  telemetry: telemetryConfig,
+  server: serverOptions
+});
 
-export { deployer };
+export { mastra };
 "
 `;
 
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-spread.js 1`] = `
-"import { createLogger } from '@mastra/core/logger';
-import { TestDeployer } from '@mastra/deployer/test';
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
 
-({
+const configLogger = {
   logger: createLogger({
     name: "yo",
     level: "info"
   })
+};
+const configDeployer = {};
+const mastra = new Mastra({
+  ...configLogger,
+  bundler: {
+    externals: ["sharp"]
+  },
+  ...configDeployer
 });
-({
-  deployer: new TestDeployer({
-    name: "yo"
-  })
-});
-const deployer = {};
 
-export { deployer };
+export { mastra };
 "
 `;
