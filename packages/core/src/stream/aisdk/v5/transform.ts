@@ -159,19 +159,19 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
             toolCallInput = undefined;
           }
         }
-      return {
-        type: 'tool-call',
-        runId: ctx.runId,
-        from: ChunkFrom.AGENT,
-        payload: {
-          toolCallId: value.toolCallId,
-          toolName: value.toolName,
-          args: toolCallInput,
-          providerExecuted: value.providerExecuted,
-          providerMetadata: value.providerMetadata,
-        },
-      };
-    }
+        return {
+          type: 'tool-call',
+          runId: ctx.runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: value.toolCallId,
+            toolName: value.toolName,
+            args: toolCallInput,
+            providerExecuted: value.providerExecuted,
+            providerMetadata: value.providerMetadata,
+          },
+        };
+      }
     }
 
     case 'tool-result':

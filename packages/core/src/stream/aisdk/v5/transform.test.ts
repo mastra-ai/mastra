@@ -208,14 +208,14 @@ describe('convertFullStreamChunkToMastra', () => {
         };
 
         const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
-        
+
         expect(result, `Test case: ${name}`).toBeDefined();
         if (result?.type === 'tool-call') {
           expect(result.payload.args, `Test case: ${name}`).toEqual(expected);
         }
       });
     });
-    
+
     it('should handle undefined input', () => {
       const chunk: StreamPart = {
         type: 'tool-call',
