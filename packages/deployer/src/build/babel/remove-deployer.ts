@@ -60,7 +60,7 @@ export function removeDeployer() {
             for (const prop of objectArg.properties) {
               if (t.isSpreadElement(prop) && t.isIdentifier(prop.argument)) {
                 const spreadBinding = state.file.scope.getBinding(prop.argument.name);
-                if (spreadBinding && t.isVariableDeclarator(spreadBinding.path.node)) {
+                if (spreadBinding?.path && t.isVariableDeclarator(spreadBinding.path.node)) {
                   const init = spreadBinding.path.node.init;
                   if (t.isObjectExpression(init)) {
                     const spreadDeployer = removeDeployerFromObject(init, state.file.scope);

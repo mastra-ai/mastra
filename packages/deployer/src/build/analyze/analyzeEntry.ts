@@ -13,7 +13,6 @@ import { getPackageRootPath } from '../package-info';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
-import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 import { removeDeployer } from '../plugins/remove-deployer';
 
 /**
