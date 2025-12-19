@@ -83,7 +83,7 @@ Mastra span types are mapped to Datadog LLMObs span kinds:
 | Mastra SpanType      | Datadog Kind |
 | -------------------- | ------------ |
 | `AGENT_RUN`          | `agent`      |
-| `MODEL_GENERATION`   | `llm`        |
+| `MODEL_GENERATION`   | `workflow`   |
 | `MODEL_STEP`         | `llm`        |
 | `MODEL_CHUNK`        | `task`       |
 | `TOOL_CALL`          | `tool`       |

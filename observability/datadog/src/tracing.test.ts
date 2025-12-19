@@ -213,7 +213,7 @@ describe('DatadogExporter', () => {
   describe('span type mapping', () => {
     it.each([
       [SpanType.AGENT_RUN, 'agent'],
-      [SpanType.MODEL_GENERATION, 'llm'],
+      [SpanType.MODEL_GENERATION, 'workflow'],
       [SpanType.MODEL_STEP, 'llm'],
       [SpanType.MODEL_CHUNK, 'task'],
       [SpanType.TOOL_CALL, 'tool'],
@@ -1117,7 +1117,7 @@ describe('DatadogExporter', () => {
     it('includes modelName and modelProvider for llm spans', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_STEP,
         attributes: {
           model: 'gpt-4',
           provider: 'openai',
@@ -1375,7 +1375,7 @@ describe('DatadogExporter', () => {
     it('excludes known LLM fields from attribute forwarding', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        type: SpanType.MODEL_GENERATION,
+        type: SpanType.MODEL_STEP,
         metadata: { userKey: 'userValue' },
         attributes: {
           model: 'gpt-4', // Should be excluded (used for modelName)
