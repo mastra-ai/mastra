@@ -256,6 +256,8 @@ export class D1DB extends MastraBase {
         return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
       case 'jsonb':
         return 'TEXT'; // Store JSON as TEXT in SQLite
+      case 'boolean':
+        return 'INTEGER'; // SQLite uses 0/1 for booleans
       default:
         return getSqlType(type);
     }

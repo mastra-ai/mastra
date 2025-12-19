@@ -84,12 +84,12 @@ export class AgentsLibSQL extends AgentsStorage {
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     try {
-      const result = await this.#db.select<StorageAgentType>({
+      const result = await this.#db.select<Record<string, any>>({
         tableName: TABLE_AGENTS,
         keys: { id },
       });
 
-      return result;
+      return result ? this.parseRow(result) : null;
     } catch (error) {
       throw new MastraError(
         {

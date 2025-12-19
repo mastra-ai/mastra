@@ -227,6 +227,8 @@ export function getSqlType(type: StorageColumn['type']): string {
       return 'BIGINT';
     case 'jsonb':
       return 'JSONB';
+    case 'boolean':
+      return 'BOOLEAN';
     default:
       return 'TEXT';
   }
@@ -245,6 +247,8 @@ export function getDefaultValue(type: StorageColumn['type']): string {
       return 'DEFAULT 0';
     case 'jsonb':
       return "DEFAULT '{}'";
+    case 'boolean':
+      return 'DEFAULT FALSE';
     default:
       return "DEFAULT ''";
   }

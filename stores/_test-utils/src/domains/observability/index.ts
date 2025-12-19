@@ -23,7 +23,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       it('should store the span successfully', async () => {
         const span = createRootSpan({ name: 'test-root-span', scope: 'test-scope' });
 
-        await expect(storage.createSpan(span)).resolves.not.toThrow();
+        await expect(observabilityStorage.createSpan(span)).resolves.not.toThrow();
       });
 
       it('should make the span retrievable via trace', async () => {
@@ -99,8 +99,8 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
         const childSpan = createChildSpan({ name: 'child-span', scope, parentSpanId: rootSpan.spanId, traceId });
 
         // Test storage operations
-        await expect(storage.createSpan(rootSpan)).resolves.not.toThrow();
-        await expect(storage.createSpan(childSpan)).resolves.not.toThrow();
+        await expect(observabilityStorage.createSpan(rootSpan)).resolves.not.toThrow();
+        await expect(observabilityStorage.createSpan(childSpan)).resolves.not.toThrow();
       });
 
       it('should retrieve complete trace with proper hierarchy', async () => {
@@ -181,7 +181,7 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
 
       it('should handle empty batch gracefully', async () => {
-        await expect(storage.batchCreateSpans({ records: [] })).resolves.not.toThrow();
+        await expect(observabilityStorage.batchCreateSpans({ records: [] })).resolves.not.toThrow();
       });
 
       it('should preserve span properties in batch creation', async () => {

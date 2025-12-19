@@ -308,17 +308,17 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
 
       // Perform concurrent updates
       const updatePromises = [
-        storage.updateResource({
+        memoryStorage.updateResource({
           resourceId: resource.id,
           workingMemory: 'Update 1',
           metadata: { update: 1 },
         }),
-        storage.updateResource({
+        memoryStorage.updateResource({
           resourceId: resource.id,
           workingMemory: 'Update 2',
           metadata: { update: 2 },
         }),
-        storage.updateResource({
+        memoryStorage.updateResource({
           resourceId: resource.id,
           workingMemory: 'Update 3',
           metadata: { update: 3 },

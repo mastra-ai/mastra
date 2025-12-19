@@ -203,7 +203,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         { ...createSampleMessageV2({ threadId: thread.id, content: { content: 'Message 2' } }), resourceId: null }, // This will cause an error
       ] as MastraDBMessage[];
 
-      await expect(storage.saveMessages({ messages })).rejects.toThrow();
+      await expect(memoryStorage.saveMessages({ messages })).rejects.toThrow();
 
       // Verify no messages were saved
       const savedMessages = await memoryStorage.listMessages({ threadId: thread.id });
@@ -534,11 +534,11 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should throw error if threadId is an empty string or whitespace only', async () => {
-      await expect(storage.listMessages({ threadId: '' })).rejects.toThrow(
+      await expect(memoryStorage.listMessages({ threadId: '' })).rejects.toThrow(
         'threadId must be a non-empty string or array of non-empty strings',
       );
 
-      await expect(storage.listMessages({ threadId: '   ' })).rejects.toThrow(
+      await expect(memoryStorage.listMessages({ threadId: '   ' })).rejects.toThrow(
         'threadId must be a non-empty string or array of non-empty strings',
       );
     });

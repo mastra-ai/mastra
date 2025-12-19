@@ -621,7 +621,8 @@ export class PgDB extends MastraBase {
         withStr = ` WITH (${storageParams})`;
       }
 
-      const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${name} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
+      const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
+      const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
       await this.client.none(sql);
     } catch (error) {
@@ -659,7 +660,8 @@ export class PgDB extends MastraBase {
         return;
       }
 
-      const sql = `DROP INDEX IF EXISTS ${getSchemaName(this.schemaName)}.${indexName}`;
+      const quotedIndexName = `"${parseSqlIdentifier(indexName, 'index name')}"`;
+      const sql = `DROP INDEX IF EXISTS ${getSchemaName(this.schemaName)}.${quotedIndexName}`;
       await this.client.none(sql);
     } catch (error) {
       throw new MastraError(

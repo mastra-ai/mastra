@@ -46,7 +46,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
           details: {
             spanId: span.spanId,
             traceId: span.traceId,
@@ -93,7 +93,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
           details: { traceId },
         },
         error,
@@ -121,7 +121,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         throw new MastraError({
           id: createStorageErrorId('CLICKHOUSE', 'UPDATE_SPAN', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
           details: { spanId, traceId },
         });
       }
@@ -149,7 +149,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
           details: { spanId, traceId },
         },
         error,
@@ -204,7 +204,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           throw new MastraError({
             id: createStorageErrorId('CLICKHOUSE', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
             domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
+            category: ErrorCategory.THIRD_PARTY,
             details: { entityType },
             text: `Cannot filter by entity type: ${entityType}`,
           });
@@ -270,7 +270,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACES_PAGINATED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
@@ -293,7 +293,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
@@ -341,7 +341,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
@@ -361,7 +361,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         {
           id: createStorageErrorId('CLICKHOUSE', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
