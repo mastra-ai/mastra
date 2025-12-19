@@ -49,10 +49,10 @@ export function telemetryTests({ loopFn, runId }: { loopFn: typeof loop; runId: 
           temperature: 0.5,
           stopSequences: ['stop'],
           maxRetries: 2,
-        },
-        headers: {
-          header1: 'value1',
-          header2: 'value2',
+          headers: {
+            header1: 'value1',
+            header2: 'value2',
+          },
         },
         telemetry_settings: {
           isEnabled: true,

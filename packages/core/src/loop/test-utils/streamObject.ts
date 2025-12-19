@@ -1514,7 +1514,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
 
       describe('options.headers', () => {
-        it('should pass headers to model', async () => {
+        it('should pass headers from modelSettings to model', async () => {
           const result = loopFn({
             methodType: 'stream',
             agentId: 'agent-id',
@@ -1551,7 +1551,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: createMessageListWithUserMessage(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
-            headers: { 'custom-request-header': 'request-header-value' },
           });
 
           // mastra
@@ -1560,6 +1559,215 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // aisdk
           expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toStrictEqual([
             { content: 'headers test' },
+          ]);
+        });
+
+        it('should pass headers from model config to model', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                headers: { 'x-model-header': 'from-config' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'x-model-header': 'from-config',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "config headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'config headers test' },
+          ]);
+        });
+
+        it('should merge headers with modelSettings overriding model config', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                headers: {
+                  'x-model-header': 'from-config',
+                  'x-shared-header': 'from-config',
+                },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'x-model-header': 'from-config',
+                      'x-shared-header': 'from-runtime', // modelSettings overrides config
+                      'x-runtime-header': 'from-runtime',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "merged headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            modelSettings: {
+              headers: {
+                'x-shared-header': 'from-runtime',
+                'x-runtime-header': 'from-runtime',
+              },
+            },
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'merged headers test' },
+          ]);
+        });
+
+        it('should use correct headers for each fallback model', async () => {
+          let attemptCount = 0;
+
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'model-1',
+                maxRetries: 0,
+                headers: { 'x-model': 'model-1', 'x-provider': 'provider-a' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    attemptCount++;
+                    expect(headers).toStrictEqual({
+                      'x-model': 'model-1',
+                      'x-provider': 'provider-a',
+                    });
+
+                    // First model fails
+                    throw new Error('Model 1 failed');
+                  },
+                }),
+              },
+              {
+                id: 'model-2',
+                maxRetries: 0,
+                headers: { 'x-model': 'model-2', 'x-provider': 'provider-b' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    attemptCount++;
+                    expect(headers).toStrictEqual({
+                      'x-model': 'model-2',
+                      'x-provider': 'provider-b',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "fallback success" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            modelSettings: { maxRetries: 0 }, // Disable retries at the loop level
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'fallback success' },
+          ]);
+          expect(attemptCount).toBe(2); // Both models should have been tried
+        });
+
+        it('should handle undefined headers gracefully', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                // No headers field
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toBeUndefined();
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "no headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            // No modelSettings.headers
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'no headers test' },
           ]);
         });
       });

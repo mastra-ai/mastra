@@ -1770,6 +1770,10 @@ exports[`Loop Tests > AISDK v5 > telemetry > should record telemetry data when e
       "stream.response.text": "Hello, world!",
       "stream.response.toolCalls": "[]",
       "stream.settings.frequencyPenalty": 0.3,
+      "stream.settings.headers": {
+        "header1": "value1",
+        "header2": "value2",
+      },
       "stream.settings.maxRetries": 2,
       "stream.settings.presencePenalty": 0.4,
       "stream.settings.stopSequences": [
@@ -1808,6 +1812,10 @@ exports[`Loop Tests > AISDK v5 > telemetry > should record telemetry data when e
       "stream.response.text": "Hello, world!",
       "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
       "stream.settings.frequencyPenalty": 0.3,
+      "stream.settings.headers": {
+        "header1": "value1",
+        "header2": "value2",
+      },
       "stream.settings.maxRetries": 2,
       "stream.settings.presencePenalty": 0.4,
       "stream.settings.stopSequences": [
