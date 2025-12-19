@@ -34,7 +34,7 @@ describe('D1Store with Workers Binding', () => {
     const store = new D1Store({
       id: 'd1-binding-test',
       binding: d1Database,
-      tablePrefix: 'test-prefix_',
+      tablePrefix: 'test_prefix_',
     });
 
     expect(store).toBeDefined();
@@ -152,13 +152,17 @@ describe('D1Store Configuration Validation', () => {
     });
 
     it('should throw if binding is falsy', () => {
-      expect(
-        () =>
+      expect(() => {
+        try {
           new D1Store({
             id: 'test-store',
             binding: null as any,
-          }),
-      ).toThrow(/D1 binding is required/);
+          });
+        } catch (e: any) {
+          // MastraError wraps the original error in cause
+          throw new Error(e.cause?.message || e.message);
+        }
+      }).toThrow(/D1 binding is required/);
     });
   });
 
@@ -178,51 +182,63 @@ describe('D1Store Configuration Validation', () => {
     });
 
     it('should throw if client is falsy', () => {
-      expect(
-        () =>
+      expect(() => {
+        try {
           new D1Store({
             id: 'test-store',
             client: null as any,
-          }),
-      ).toThrow(/D1 client is required/);
+          });
+        } catch (e: any) {
+          throw new Error(e.cause?.message || e.message);
+        }
+      }).toThrow(/D1 client is required/);
     });
   });
 
   describe('with REST API config', () => {
     it('should throw if accountId is missing', () => {
-      expect(
-        () =>
+      expect(() => {
+        try {
           new D1Store({
             id: 'test-store',
             accountId: '',
             apiToken: 'test-token',
             databaseId: 'test-db',
-          } as any),
-      ).toThrow(/accountId, databaseId, and apiToken are required/);
+          } as any);
+        } catch (e: any) {
+          throw new Error(e.cause?.message || e.message);
+        }
+      }).toThrow(/accountId, databaseId, and apiToken are required/);
     });
 
     it('should throw if apiToken is missing', () => {
-      expect(
-        () =>
+      expect(() => {
+        try {
           new D1Store({
             id: 'test-store',
             accountId: 'test-account',
             apiToken: '',
             databaseId: 'test-db',
-          } as any),
-      ).toThrow(/accountId, databaseId, and apiToken are required/);
+          } as any);
+        } catch (e: any) {
+          throw new Error(e.cause?.message || e.message);
+        }
+      }).toThrow(/accountId, databaseId, and apiToken are required/);
     });
 
     it('should throw if databaseId is missing', () => {
-      expect(
-        () =>
+      expect(() => {
+        try {
           new D1Store({
             id: 'test-store',
             accountId: 'test-account',
             apiToken: 'test-token',
             databaseId: '',
-          } as any),
-      ).toThrow(/accountId, databaseId, and apiToken are required/);
+          } as any);
+        } catch (e: any) {
+          throw new Error(e.cause?.message || e.message);
+        }
+      }).toThrow(/accountId, databaseId, and apiToken are required/);
     });
 
     it('should accept valid REST API config', () => {
@@ -251,14 +267,17 @@ describe('D1Store Configuration Validation', () => {
     });
 
     it('should throw for invalid tablePrefix with special characters', () => {
-      expect(
-        () =>
+      expect(() => {
+        try {
           new D1Store({
             id: 'test-store',
             binding: d1Database,
             tablePrefix: 'invalid-prefix!',
-          }),
-      ).toThrow(/Invalid tablePrefix/);
+          });
+        } catch (e: any) {
+          throw new Error(e.cause?.message || e.message);
+        }
+      }).toThrow(/Invalid tablePrefix/);
     });
   });
 

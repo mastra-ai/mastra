@@ -835,9 +835,9 @@ export function pgTests() {
         const client = pgp(connectionString);
 
         // Custom setup before using - this is what Issue #9690 was requesting
-        client.$pool.on('connect', poolClient => {
+        client.$pool.on('connect', () => {
           // Could set role or other connection-level settings here
-          console.log('Pool client connected');
+          console.info('Pool client connected');
         });
 
         const clientStore = new PostgresStore({

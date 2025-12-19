@@ -1,5 +1,5 @@
-import { connect } from '@lancedb/lancedb';
 import { createTestSuite } from '@internal/storage-test-utils';
+import { connect } from '@lancedb/lancedb';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { LanceStorage } from './index';
 
@@ -16,7 +16,7 @@ describe('LanceStorage with pre-configured client', () => {
   afterAll(async () => {
     // Clean up test directory
     try {
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.rm('test-client-db', { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
@@ -77,7 +77,7 @@ describe('LanceStorage Configuration Validation', () => {
       expect(store).toBeDefined();
 
       // Clean up
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.rm('test-validation-db', { recursive: true, force: true });
     });
 
@@ -88,7 +88,7 @@ describe('LanceStorage Configuration Validation', () => {
       expect(store).toBeDefined();
 
       // Clean up
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.rm('test-conn-opts-db', { recursive: true, force: true });
     });
 
@@ -103,7 +103,7 @@ describe('LanceStorage Configuration Validation', () => {
       expect(store).toBeDefined();
 
       // Clean up
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.rm('test-storage-opts-db', { recursive: true, force: true });
     });
   });
@@ -117,7 +117,7 @@ describe('LanceStorage Configuration Validation', () => {
       expect(store.name).toBe('LanceFromClientTest');
 
       // Clean up
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.rm('test-from-client-db', { recursive: true, force: true });
     });
 
@@ -130,7 +130,7 @@ describe('LanceStorage Configuration Validation', () => {
       expect(store).toBeDefined();
 
       // Clean up
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       await fs.rm('test-from-client-opts-db', { recursive: true, force: true });
     });
   });

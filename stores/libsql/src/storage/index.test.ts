@@ -1,5 +1,5 @@
-import { createClient } from '@libsql/client';
 import { createTestSuite } from '@internal/storage-test-utils';
+import { createClient } from '@libsql/client';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, vi } from 'vitest';
 
