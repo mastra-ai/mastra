@@ -82,5 +82,11 @@
     "@mastra/voice-speechify": "0.11.12",
     "@mastra/inngest": "0.18.6"
   },
-  "changesets": []
+  "changesets": [
+    "busy-pets-start",
+    "goofy-ideas-taste",
+    "smart-brooms-draw",
+    "telemetry-enabled-fix",
+    "tired-facts-sneeze"
+  ]
 }
