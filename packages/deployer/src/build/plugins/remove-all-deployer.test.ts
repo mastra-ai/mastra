@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { removeDeployer } from './remove-deployer';
+import { removeAllOptionsFromMastraExceptPlugin } from './remove-all-except';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { rollup } from 'rollup';
@@ -12,6 +12,7 @@ describe('Remove deployer', () => {
     ['./__fixtures__/basic.js'],
     ['./__fixtures__/basic-with-const.js'],
     ['./__fixtures__/basic-with-import.js'],
+    ['./__fixtures__/basic-with-spread.js'],
     ['./__fixtures__/basic-with-function.js'],
   ])('should remove the deployer from %s', async ([fileName]) => {
     const file = join(_dirname, fileName);
@@ -31,7 +32,7 @@ describe('Remove deployer', () => {
             };
           },
         },
-        removeDeployer(file),
+        removeAllOptionsFromMastraExceptPlugin(file, 'deployer', { hasCustomConfig: false }),
         esbuild({
           target: `esnext`,
           platform: 'node',

@@ -8,7 +8,7 @@ import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'roll
 import { esbuild } from './plugins/esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { analyzeBundle } from './analyze';
-import { removeDeployer } from './plugins/remove-deployer';
+import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
@@ -146,7 +146,7 @@ export async function getInputOptions(
       // },
       // },
       json(),
-      removeDeployer(entryFile, { sourcemap }),
+      removeAllOptionsFromMastraExceptPlugin(entryFile, 'deployer', { hasCustomConfig: false }, { sourcemap }),
       // treeshake unused imports
       esbuild({
         include: entryFile,
