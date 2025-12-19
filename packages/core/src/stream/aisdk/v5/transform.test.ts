@@ -157,6 +157,64 @@ describe('convertFullStreamChunkToMastra', () => {
         });
       }
     });
+
+    it('should handle strings with apostrophes without corrupting them', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-3',
+        toolName: 'test_tool',
+        // This would currently FAIL with the existing tryRepairJson implementation
+        input: `{"message": "it's working", "status": "don't panic"}`,
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result).toBeDefined();
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({
+          message: "it's working",
+          status: "don't panic",
+        });
+      }
+    });
+
+    it('should handle mixed malformed patterns', () => {
+      const testCases = [
+        {
+          name: 'unquoted keys only',
+          input: '{command: "echo", arg: 123}',
+          expected: { command: 'echo', arg: 123 },
+        },
+        {
+          name: 'trailing commas only',
+          input: '{"command": "echo", "arg": 123,}',
+          expected: { command: 'echo', arg: 123 },
+        },
+        {
+          name: 'mixed quotes on keys',
+          input: `{command: 'echo', "arg": 123}`,
+          expected: { command: 'echo', arg: 123 },
+        },
+      ];
+
+      testCases.forEach(({ name, input, expected }) => {
+        const chunk: StreamPart = {
+          type: 'tool-call',
+          toolCallId: 'call-test',
+          toolName: 'test_tool',
+          input,
+          providerExecuted: false,
+        };
+
+        const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+        
+        expect(result, `Test case: ${name}`).toBeDefined();
+        if (result?.type === 'tool-call') {
+          expect(result.payload.args, `Test case: ${name}`).toEqual(expected);
+        }
+      });
+    });
     
     it('should handle undefined input', () => {
       const chunk: StreamPart = {

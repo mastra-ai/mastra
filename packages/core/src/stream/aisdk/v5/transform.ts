@@ -11,24 +11,11 @@ import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
 import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
+import { jsonrepair } from 'jsonrepair';
 
 function tryRepairJson(input: string): Record<string, any> | null {
-  let repaired = input.trim();
-
-  // Add missing quotes around property names
-  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-
-  // Replace single quotes with double quotes
-  repaired = repaired.replace(/'/g, '"');
-
-  // Remove trailing commas
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-
-  // Fix missing quote before property name after comma
-  repaired = repaired.replace(/,([a-zA-Z_][a-zA-Z0-9_]*)"/g, ',"$1"');
-
   try {
-    return JSON.parse(repaired);
+    return JSON.parse(jsonrepair(input));
   } catch {
     return null;
   }
