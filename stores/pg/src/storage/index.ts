@@ -146,14 +146,14 @@ export class PostgresStore extends MastraStorage {
 
       await super.init();
 
-      // Create automatic performance indexes by default
+      // Create default indexes for optimal query performance
       // This is done after table creation and is safe to run multiple times
       try {
-        await this.#dbOps.createAutomaticIndexes();
+        await this.#dbOps.createDefaultIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
-        console.warn('Failed to create indexes:', indexError);
+        console.warn('Failed to create default indexes:', indexError);
       }
     } catch (error) {
       this.isInitialized = false;

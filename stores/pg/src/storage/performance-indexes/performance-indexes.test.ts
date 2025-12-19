@@ -29,9 +29,9 @@ describe('PostgresStore Performance Indexes', () => {
     vi.spyOn(dbOps, 'createIndex').mockResolvedValue(undefined);
   });
 
-  describe('createAutomaticIndexes', () => {
+  describe('createDefaultIndexes', () => {
     it('should create all necessary composite indexes', async () => {
-      await dbOps.createAutomaticIndexes();
+      await dbOps.createDefaultIndexes();
 
       // Verify that createIndex was called for composite indexes
       expect(dbOps.createIndex).toHaveBeenCalledTimes(8);
@@ -81,7 +81,7 @@ describe('PostgresStore Performance Indexes', () => {
         .mockRejectedValueOnce(new Error('Index already exists'))
         .mockResolvedValue(undefined);
 
-      await dbOps.createAutomaticIndexes();
+      await dbOps.createDefaultIndexes();
 
       // Should log warning but continue with other indexes
       expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to create index'), expect.any(Error));
@@ -98,7 +98,7 @@ describe('PostgresStore Performance Indexes', () => {
 
       vi.spyOn(publicDbOps, 'createIndex').mockResolvedValue(undefined);
 
-      await publicDbOps.createAutomaticIndexes();
+      await publicDbOps.createDefaultIndexes();
 
       // Verify indexes are created without schema prefix
       expect(publicDbOps.createIndex).toHaveBeenCalledWith({
@@ -130,7 +130,7 @@ describe('PostgresStore Performance Indexes', () => {
 
       // Create a mock dbOps instance with logger
       const mockDbOps = {
-        createAutomaticIndexes: vi.fn().mockImplementation(async function () {
+        createDefaultIndexes: vi.fn().mockImplementation(async function () {
           // Simulate index creation failures with proper logging
           for (let i = 0; i < 8; i++) {
             try {
@@ -148,15 +148,15 @@ describe('PostgresStore Performance Indexes', () => {
 
       // Mock the store's #dbOps property via init override
       testStore.init = vi.fn().mockImplementation(async function () {
-        // Call createAutomaticIndexes like the real implementation does
-        await mockDbOps.createAutomaticIndexes.call(mockDbOps);
+        // Call createDefaultIndexes like the real implementation does
+        await mockDbOps.createDefaultIndexes.call(mockDbOps);
       });
 
       // Init should still succeed even if index creation fails
       await expect(testStore.init()).resolves.not.toThrow();
 
-      // Verify that createAutomaticIndexes was called
-      expect(mockDbOps.createAutomaticIndexes).toHaveBeenCalled();
+      // Verify that createDefaultIndexes was called
+      expect(mockDbOps.createDefaultIndexes).toHaveBeenCalled();
 
       // Verify warnings were logged using the logger
       expect(mockDbOps.logger.warn).toHaveBeenCalled();

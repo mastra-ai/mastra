@@ -395,31 +395,31 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
         });
       });
 
-      describe('Automatic Performance Indexes', () => {
-        it('should create all defined automatic indexes during initialization', async () => {
-          // Get automatic index definitions (if provider supports it)
-          const definitions = (storage as any).stores?.operations?.getAutomaticIndexDefinitions?.();
+      describe('Default Performance Indexes', () => {
+        it('should create all defined default indexes during initialization', async () => {
+          // Get default index definitions (if provider supports it)
+          const definitions = (storage as any).stores?.operations?.getDefaultIndexDefinitions?.();
 
           if (!definitions || definitions.length === 0) {
-            // Provider doesn't define automatic indexes, skip test
+            // Provider doesn't define default indexes, skip test
             return;
           }
 
           const indexes = await storage.listIndexes();
 
-          // Verify each defined automatic index was created
+          // Verify each defined default index was created
           for (const def of definitions) {
             const found = indexes.some(i => i.name === def.name);
-            expect(found, `Expected automatic index "${def.name}" to be created`).toBe(true);
+            expect(found, `Expected default index "${def.name}" to be created`).toBe(true);
           }
         });
 
-        it('should have valid automatic index definitions', () => {
-          // Get automatic index definitions (if provider supports it)
-          const definitions = (storage as any).stores?.operations?.getAutomaticIndexDefinitions?.();
+        it('should have valid default index definitions', () => {
+          // Get default index definitions (if provider supports it)
+          const definitions = (storage as any).stores?.operations?.getDefaultIndexDefinitions?.();
 
           if (!definitions || definitions.length === 0) {
-            // Provider doesn't define automatic indexes, skip test
+            // Provider doesn't define default indexes, skip test
             return;
           }
 
@@ -432,12 +432,12 @@ export function createIndexManagementTests({ storage }: { storage: MastraStorage
           }
         });
 
-        it('should handle schema prefixes in automatic indexes', async () => {
-          // This test verifies that automatic indexes work correctly with schemas
+        it('should handle schema prefixes in default indexes', async () => {
+          // This test verifies that default indexes work correctly with schemas
           // The schema prefix handling is done internally by the storage adapter
           const indexes = await storage.listIndexes();
 
-          // All automatic indexes should exist regardless of schema
+          // All default indexes should exist regardless of schema
           expect(indexes.some(i => i.name.includes('threads_resourceid_createdat'))).toBe(true);
           expect(indexes.some(i => i.name.includes('messages_thread_id_createdat'))).toBe(true);
         });

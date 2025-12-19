@@ -759,7 +759,7 @@ export class PgDB extends MastraBase {
     }
   }
 
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
+  protected getDefaultIndexDefinitions(): CreateIndexOptions[] {
     const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
     return [
       {
@@ -805,9 +805,9 @@ export class PgDB extends MastraBase {
     ];
   }
 
-  async createAutomaticIndexes(): Promise<void> {
+  async createDefaultIndexes(): Promise<void> {
     try {
-      const indexes = this.getAutomaticIndexDefinitions();
+      const indexes = this.getDefaultIndexDefinitions();
 
       for (const indexOptions of indexes) {
         try {
@@ -819,7 +819,7 @@ export class PgDB extends MastraBase {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'CREATE_AUTOMATIC_INDEXES', 'FAILED'),
+          id: createStorageErrorId('PG', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

@@ -1107,11 +1107,11 @@ export class MssqlDB extends MastraBase {
   }
 
   /**
-   * Returns definitions for automatic performance indexes
+   * Returns definitions for default indexes
    * IMPORTANT: Uses seq_id DESC instead of createdAt DESC for MSSQL due to millisecond accuracy limitations
    * NOTE: Using NVARCHAR(400) for text columns (800 bytes) leaves room for composite indexes
    */
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
+  protected getDefaultIndexDefinitions(): CreateIndexOptions[] {
     const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
     return [
       // Composite indexes for optimal filtering + sorting performance
@@ -1161,12 +1161,12 @@ export class MssqlDB extends MastraBase {
   }
 
   /**
-   * Creates automatic indexes for optimal query performance
-   * Uses getAutomaticIndexDefinitions() to determine which indexes to create
+   * Creates default indexes for optimal query performance
+   * Uses getDefaultIndexDefinitions() to determine which indexes to create
    */
-  async createAutomaticIndexes(): Promise<void> {
+  async createDefaultIndexes(): Promise<void> {
     try {
-      const indexes = this.getAutomaticIndexDefinitions();
+      const indexes = this.getDefaultIndexDefinitions();
 
       for (const indexOptions of indexes) {
         try {

@@ -155,8 +155,8 @@ describe('PostgresStore Performance Indexes Integration', () => {
   }, 300000); // 5 minute timeout for comprehensive testing
 
   it('should handle index creation gracefully when indexes already exist', async () => {
-    // Create automatic indexes again - should not fail
-    await expect(dbOps.createAutomaticIndexes()).resolves.not.toThrow();
+    // Create default indexes again - should not fail
+    await expect(dbOps.createDefaultIndexes()).resolves.not.toThrow();
 
     // Verify indexes still exist
     const indexes = await dbOps.listIndexes();

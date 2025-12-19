@@ -16,9 +16,6 @@ import type {
   TraceRecord,
   TracesPaginatedArg,
   UpdateSpanRecord,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
@@ -189,14 +186,14 @@ export class MSSQLStore extends MastraStorage {
       await this.isConnected;
       await super.init();
 
-      // Create automatic performance indexes by default
+      // Create default indexes for optimal query performance
       // This is done after table creation and is safe to run multiple times
       try {
-        await this.#db.createAutomaticIndexes();
+        await this.#db.createDefaultIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
-        this.logger?.warn?.('Failed to create indexes:', indexError);
+        this.logger?.warn?.('Failed to create default indexes:', indexError);
       }
     } catch (error) {
       this.isConnected = null;
@@ -387,25 +384,6 @@ export class MSSQLStore extends MastraStorage {
    */
   async close(): Promise<void> {
     await this.pool.close();
-  }
-
-  /**
-   * Index Management
-   */
-  async createIndex(options: CreateIndexOptions): Promise<void> {
-    return this.#db.createIndex(options);
-  }
-
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return this.#db.listIndexes(tableName);
-  }
-
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    return this.#db.describeIndex(indexName);
-  }
-
-  async dropIndex(indexName: string): Promise<void> {
-    return this.#db.dropIndex(indexName);
   }
 
   /**
