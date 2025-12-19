@@ -387,12 +387,12 @@
     },
     {
       "source": "/docs/v1/deployment/mastra-cloud/setting-up",
-      "destination": "/docs/v1/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setup",
       "permanent": true
     },
     {
       "source": "/docs/v1/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/v1/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/studio",
       "permanent": true
     },
     {
@@ -483,6 +483,16 @@
     {
       "source": "/docs/v1/memory/conversation-history",
       "destination": "/docs/v1/memory/message-history",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setup",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/studio",
       "permanent": true
     }
   ]

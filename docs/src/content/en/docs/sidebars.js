@@ -399,13 +399,18 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "mastra-cloud/setting-up",
-          label: "Setup & Deploy",
+          id: "mastra-cloud/setup",
+          label: "Setup",
         },
         {
           type: "doc",
-          id: "mastra-cloud/dashboard",
-          label: "Dashboard",
+          id: "mastra-cloud/studio",
+          label: "Studio",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/deployment",
+          label: "Deployment",
         },
         {
           type: "doc",

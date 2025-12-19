@@ -1,0 +1,64 @@
+---
+title: "Setup | Mastra Cloud"
+description: Import your Mastra project to Mastra Cloud
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Setup
+
+Import your Mastra project to [Mastra Cloud](https://cloud.mastra.ai) to use [Studio](/docs/v1/mastra-cloud/studio) and optionally [deploy](/docs/v1/mastra-cloud/deployment) your agent.
+
+## Before you begin
+
+- [Sign in](https://cloud.mastra.ai) in to Cloud
+- Push your [Mastra project](/docs/v1/getting-started/start) to GitHub
+
+## Options
+
+
+![Select project type](/img/mastra-cloud/mastra-cloud-select.png)
+
+When you create a new project, you can choose from three options:
+
+1. **Create from GitHub** - Import a Mastra project from GitHub
+2. **Create from your server** - Connect a self-hosted Mastra instance to [Studio](/docs/v1/mastra-cloud/studio)
+3. **Create from template** - Start from a [pre-built template](https://mastra.ai/templates)
+
+
+To create a project from GitHub, follow these steps:
+
+## Create from GitHub
+
+<Steps>
+
+<StepItem>
+Connect to GitHub when prompted
+
+![Deployment details](/img/mastra-cloud/mastra-cloud-connect.png)
+</StepItem>
+
+<StepItem>
+Search for your repository and click **Import**
+
+![Deployment details](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
+</StepItem>
+
+<StepItem>
+Configure your project settings. Mastra Cloud auto-detects most settings, but you'll still need to enter the environment variables for your configured [model provider](/models/v1):
+
+![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
+</StepItem>
+
+<StepItem>
+
+Click **Create Project**
+</StepItem>
+</Steps>
+
+## Next steps
+
+Once your project is imported, [Studio](/docs/v1/mastra-cloud/studio) automatically creates a sandbox where you can interact with your agents and share access with your team.
+
+When you're ready for production, enable [Deployment](/docs/v1/mastra-cloud/deployment) settings and hit deploy!
