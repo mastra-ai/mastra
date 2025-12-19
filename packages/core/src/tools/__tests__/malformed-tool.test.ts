@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { createTool } from '../tool';
 import { ensureToolProperties } from '../../utils';
+import { createTool } from '../tool';
 
 /**
  * Test for GitHub Issue #11244
