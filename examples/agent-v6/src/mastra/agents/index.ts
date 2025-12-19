@@ -62,4 +62,10 @@ export const weatherToolLoopAgent = new ToolLoopAgent({
     console.log('prepareStep', args);
     return args;
   },
+  onStepFinish: event => {
+    console.log('onStepFinish', event);
+  },
+  onFinish: event => {
+    console.log('onFinish', event);
+  },
 });
