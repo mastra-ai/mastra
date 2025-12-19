@@ -14,6 +14,19 @@ dotenv.config();
 // Increase timeout for all tests in this file
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
+/**
+ * Helper to test MastraError throws - extracts the underlying error message from cause
+ */
+const expectMastraError = (fn: () => void, messagePattern: RegExp) => {
+  expect(() => {
+    try {
+      fn();
+    } catch (e: any) {
+      throw new Error(e.cause?.message || e.message);
+    }
+  }).toThrow(messagePattern);
+};
+
 // Create a Miniflare instance with D1
 const mf = new Miniflare({
   modules: true,
@@ -254,17 +267,7 @@ describe('D1Store Configuration Validation', () => {
     });
 
     it('should throw if binding is falsy', () => {
-      expect(() => {
-        try {
-          new D1Store({
-            id: 'test-store',
-            binding: null as any,
-          });
-        } catch (e: any) {
-          // MastraError wraps the original error in cause
-          throw new Error(e.cause?.message || e.message);
-        }
-      }).toThrow(/D1 binding is required/);
+      expectMastraError(() => new D1Store({ id: 'test-store', binding: null as any }), /D1 binding is required/);
     });
   });
 
@@ -284,63 +287,48 @@ describe('D1Store Configuration Validation', () => {
     });
 
     it('should throw if client is falsy', () => {
-      expect(() => {
-        try {
-          new D1Store({
-            id: 'test-store',
-            client: null as any,
-          });
-        } catch (e: any) {
-          throw new Error(e.cause?.message || e.message);
-        }
-      }).toThrow(/D1 client is required/);
+      expectMastraError(() => new D1Store({ id: 'test-store', client: null as any }), /D1 client is required/);
     });
   });
 
   describe('with REST API config', () => {
     it('should throw if accountId is missing', () => {
-      expect(() => {
-        try {
+      expectMastraError(
+        () =>
           new D1Store({
             id: 'test-store',
             accountId: '',
             apiToken: 'test-token',
             databaseId: 'test-db',
-          } as any);
-        } catch (e: any) {
-          throw new Error(e.cause?.message || e.message);
-        }
-      }).toThrow(/accountId, databaseId, and apiToken are required/);
+          } as any),
+        /accountId, databaseId, and apiToken are required/,
+      );
     });
 
     it('should throw if apiToken is missing', () => {
-      expect(() => {
-        try {
+      expectMastraError(
+        () =>
           new D1Store({
             id: 'test-store',
             accountId: 'test-account',
             apiToken: '',
             databaseId: 'test-db',
-          } as any);
-        } catch (e: any) {
-          throw new Error(e.cause?.message || e.message);
-        }
-      }).toThrow(/accountId, databaseId, and apiToken are required/);
+          } as any),
+        /accountId, databaseId, and apiToken are required/,
+      );
     });
 
     it('should throw if databaseId is missing', () => {
-      expect(() => {
-        try {
+      expectMastraError(
+        () =>
           new D1Store({
             id: 'test-store',
             accountId: 'test-account',
             apiToken: 'test-token',
             databaseId: '',
-          } as any);
-        } catch (e: any) {
-          throw new Error(e.cause?.message || e.message);
-        }
-      }).toThrow(/accountId, databaseId, and apiToken are required/);
+          } as any),
+        /accountId, databaseId, and apiToken are required/,
+      );
     });
 
     it('should accept valid REST API config', () => {
@@ -369,17 +357,15 @@ describe('D1Store Configuration Validation', () => {
     });
 
     it('should throw for invalid tablePrefix with special characters', () => {
-      expect(() => {
-        try {
+      expectMastraError(
+        () =>
           new D1Store({
             id: 'test-store',
             binding: d1Database,
             tablePrefix: 'invalid-prefix!',
-          });
-        } catch (e: any) {
-          throw new Error(e.cause?.message || e.message);
-        }
-      }).toThrow(/Invalid tablePrefix/);
+          }),
+        /Invalid tablePrefix/,
+      );
     });
   });
 

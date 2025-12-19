@@ -139,6 +139,13 @@ export class ClickhouseStore extends MastraStorage {
       if (!config.url || typeof config.url !== 'string' || config.url.trim() === '') {
         throw new Error('ClickhouseStore: url is required and cannot be empty.');
       }
+      // Validate username and password are strings (can be empty for default user)
+      if (typeof config.username !== 'string') {
+        throw new Error('ClickhouseStore: username must be a string.');
+      }
+      if (typeof config.password !== 'string') {
+        throw new Error('ClickhouseStore: password must be a string.');
+      }
       // Create client from credentials
       this.db = createClient({
         url: config.url,

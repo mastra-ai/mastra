@@ -60,28 +60,31 @@ if (process.env.ENABLE_TESTS === 'true') {
         pool,
       });
 
-      await store.init();
+      try {
+        await store.init();
 
-      // Test a basic operation
-      const thread = {
-        id: `thread-pool-test-${Date.now()}`,
-        resourceId: 'test-resource',
-        title: 'Test Thread',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        // Test a basic operation
+        const thread = {
+          id: `thread-pool-test-${Date.now()}`,
+          resourceId: 'test-resource',
+          title: 'Test Thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-      const savedThread = await store.saveThread({ thread });
-      expect(savedThread.id).toBe(thread.id);
+        const savedThread = await store.saveThread({ thread });
+        expect(savedThread.id).toBe(thread.id);
 
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toBeDefined();
-      expect(retrievedThread?.title).toBe('Test Thread');
+        const retrievedThread = await store.getThreadById({ threadId: thread.id });
+        expect(retrievedThread).toBeDefined();
+        expect(retrievedThread?.title).toBe('Test Thread');
 
-      // Clean up
-      await store.deleteThread({ threadId: thread.id });
-      await store.close();
+        // Clean up
+        await store.deleteThread({ threadId: thread.id });
+      } finally {
+        await store.close();
+      }
     });
   });
 

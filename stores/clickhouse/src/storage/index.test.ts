@@ -93,6 +93,42 @@ describe('ClickhouseStore Configuration Validation', () => {
       ).toThrow(/url is required/i);
     });
 
+    it('should throw if username is not a string', () => {
+      expect(
+        () =>
+          new ClickhouseStore({
+            id: 'test-store',
+            url: 'http://localhost:8123',
+            username: undefined as any,
+            password: 'password',
+          }),
+      ).toThrow(/username must be a string/i);
+    });
+
+    it('should throw if password is not a string', () => {
+      expect(
+        () =>
+          new ClickhouseStore({
+            id: 'test-store',
+            url: 'http://localhost:8123',
+            username: 'default',
+            password: undefined as any,
+          }),
+      ).toThrow(/password must be a string/i);
+    });
+
+    it('should accept empty string for username and password (default user)', () => {
+      expect(
+        () =>
+          new ClickhouseStore({
+            id: 'test-store',
+            url: 'http://localhost:8123',
+            username: '',
+            password: '',
+          }),
+      ).not.toThrow();
+    });
+
     it('should accept valid URL/credentials config', () => {
       expect(
         () =>
