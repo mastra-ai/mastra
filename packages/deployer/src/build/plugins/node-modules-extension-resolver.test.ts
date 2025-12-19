@@ -4,8 +4,7 @@ import { getPackageInfo } from 'local-pkg';
 import { readFile } from 'node:fs/promises';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 
-const mockResolveFrom = vi.fn();
-const mockReadFileSync = vi.fn();
+const mockNodeResolveHandler = vi.fn();
 const mockNodeResolveHandler = vi.fn();
 
 vi.mock('node:fs/promises', () => ({
