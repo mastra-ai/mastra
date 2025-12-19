@@ -11,6 +11,10 @@ import {
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createTestSuite } from '@internal/storage-test-utils';
 import { beforeAll, describe, expect, it } from 'vitest';
+
+import { MemoryStorageDynamoDB } from './domains/memory';
+import { ScoresStorageDynamoDB } from './domains/scores';
+import { WorkflowStorageDynamoDB } from './domains/workflows';
 import { DynamoDBStore } from '..';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
@@ -426,6 +430,148 @@ describe('DynamoDBStore', () => {
             }),
         ).not.toThrow();
       });
+    });
+  });
+
+  describe('DynamoDB Domain-level Pre-configured Client', () => {
+    it('should allow using MemoryStorageDynamoDB domain directly with connection config', async () => {
+      const memoryDomain = new MemoryStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      expect(memoryDomain).toBeDefined();
+      await memoryDomain.init();
+
+      // Test a basic operation
+      const thread = {
+        id: `thread-domain-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Domain Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      const retrievedThread = await memoryDomain.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeDefined();
+      expect(retrievedThread?.title).toBe('Test Domain Thread');
+
+      // Clean up
+      await memoryDomain.deleteThread({ threadId: thread.id });
+    });
+
+    it('should allow using WorkflowStorageDynamoDB domain directly with connection config', async () => {
+      const workflowsDomain = new WorkflowStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      expect(workflowsDomain).toBeDefined();
+      await workflowsDomain.init();
+
+      // Test a basic operation
+      const workflowName = 'test-workflow';
+      const runId = `run-domain-test-${Date.now()}`;
+
+      await workflowsDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          value: { current_step: 'initial' },
+          context: { requestContext: {} },
+          activePaths: [],
+          suspendedPaths: {},
+          timestamp: Date.now(),
+        } as any,
+      });
+
+      const snapshot = await workflowsDomain.loadWorkflowSnapshot({ workflowName, runId });
+      expect(snapshot).toBeDefined();
+      expect(snapshot?.runId).toBe(runId);
+
+      // Clean up
+      await workflowsDomain.deleteWorkflowRunById({ workflowName, runId });
+    });
+
+    it('should allow using ScoresStorageDynamoDB domain directly with connection config', async () => {
+      const scoresDomain = new ScoresStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      expect(scoresDomain).toBeDefined();
+      await scoresDomain.init();
+
+      // Test a basic operation
+      const savedScore = await scoresDomain.saveScore({
+        runId: `run-score-test-${Date.now()}`,
+        score: 0.95,
+        scorerId: 'test-scorer',
+        scorer: { name: 'test-scorer', description: 'A test scorer' },
+        input: { query: 'test input' },
+        output: { result: 'test output' },
+        entity: { id: 'test-entity', type: 'agent' },
+        entityType: 'AGENT',
+        entityId: 'test-entity',
+        source: 'LIVE',
+        traceId: 'test-trace',
+        spanId: 'test-span',
+      });
+
+      expect(savedScore.score.id).toBeDefined();
+      expect(savedScore.score.score).toBe(0.95);
+
+      const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
+      expect(retrievedScore).toBeDefined();
+      expect(retrievedScore?.score).toBe(0.95);
+    });
+
+    it('should allow using domains with pre-configured ElectroDB service', async () => {
+      // Create a DynamoDB client and ElectroDB service
+      const dynamoClient = new DynamoDBClient({
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+      const documentClient = DynamoDBDocumentClient.from(dynamoClient, {
+        marshallOptions: { removeUndefinedValues: true },
+      });
+
+      // Import the service factory
+      const { getElectroDbService } = await import('../entities');
+      const service = getElectroDbService(documentClient, TEST_TABLE_NAME);
+
+      const memoryDomain = new MemoryStorageDynamoDB({ service });
+
+      expect(memoryDomain).toBeDefined();
+      await memoryDomain.init();
+
+      // Test a basic operation to verify it works
+      const thread = {
+        id: `thread-service-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Service Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      // Clean up
+      await memoryDomain.deleteThread({ threadId: thread.id });
     });
   });
 });

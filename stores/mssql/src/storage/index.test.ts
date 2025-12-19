@@ -2,6 +2,9 @@ import { createTestSuite } from '@internal/storage-test-utils';
 import sql from 'mssql';
 import { describe, expect, it, vi } from 'vitest';
 
+import { MemoryMSSQL } from './domains/memory';
+import { ScoresMSSQL } from './domains/scores';
+import { WorkflowsMSSQL } from './domains/workflows';
 import { MSSQLStore } from '.';
 import type { MSSQLConfig } from '.';
 
@@ -79,6 +82,151 @@ if (process.env.ENABLE_TESTS === 'true') {
       // Clean up
       await store.deleteThread({ threadId: thread.id });
       await store.close();
+    });
+  });
+
+  describe('MSSQL Domain-level with connection config', () => {
+    // Note: MSSQL domains currently require MssqlDomainRestConfig (connection details)
+    // when used standalone. See DOMAIN_CONFIG_NOTE.md for discussion on allowing just pool.
+
+    it('should allow using MemoryMSSQL domain directly with connection config', async () => {
+      const memoryDomain = new MemoryMSSQL({
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        options: { encrypt: true, trustServerCertificate: true },
+      });
+
+      expect(memoryDomain).toBeDefined();
+      await memoryDomain.init();
+
+      // Test a basic operation
+      const thread = {
+        id: `thread-domain-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Domain Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      const retrievedThread = await memoryDomain.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeDefined();
+      expect(retrievedThread?.title).toBe('Test Domain Thread');
+
+      // Clean up
+      await memoryDomain.deleteThread({ threadId: thread.id });
+    });
+
+    it('should allow using WorkflowsMSSQL domain directly with connection config', async () => {
+      const workflowsDomain = new WorkflowsMSSQL({
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        options: { encrypt: true, trustServerCertificate: true },
+      });
+
+      expect(workflowsDomain).toBeDefined();
+      await workflowsDomain.init();
+
+      // Test a basic operation
+      const workflowName = 'test-workflow';
+      const runId = `run-domain-test-${Date.now()}`;
+
+      await workflowsDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          value: { current_step: 'initial' },
+          context: { requestContext: {} },
+          activePaths: [],
+          suspendedPaths: {},
+          timestamp: Date.now(),
+        } as any,
+      });
+
+      const snapshot = await workflowsDomain.loadWorkflowSnapshot({ workflowName, runId });
+      expect(snapshot).toBeDefined();
+      expect(snapshot?.runId).toBe(runId);
+
+      // Clean up
+      await workflowsDomain.deleteWorkflowRunById({ workflowName, runId });
+    });
+
+    it('should allow using ScoresMSSQL domain directly with connection config', async () => {
+      const scoresDomain = new ScoresMSSQL({
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        options: { encrypt: true, trustServerCertificate: true },
+      });
+
+      expect(scoresDomain).toBeDefined();
+      await scoresDomain.init();
+
+      // Test a basic operation
+      const savedScore = await scoresDomain.saveScore({
+        runId: `run-score-test-${Date.now()}`,
+        score: 0.95,
+        scorerId: 'test-scorer',
+        scorer: { name: 'test-scorer', description: 'A test scorer' },
+        input: { query: 'test input' },
+        output: { result: 'test output' },
+        entity: { id: 'test-entity', type: 'agent' },
+        entityType: 'AGENT',
+        entityId: 'test-entity',
+        source: 'LIVE',
+        traceId: 'test-trace',
+        spanId: 'test-span',
+      });
+
+      expect(savedScore.score.id).toBeDefined();
+      expect(savedScore.score.score).toBe(0.95);
+
+      const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
+      expect(retrievedScore).toBeDefined();
+      expect(retrievedScore?.score).toBe(0.95);
+    });
+
+    it('should allow domains to use custom schemaName with connection config', async () => {
+      const memoryDomain = new MemoryMSSQL({
+        server: (TEST_CONFIG as any).server,
+        port: (TEST_CONFIG as any).port,
+        database: (TEST_CONFIG as any).database,
+        user: (TEST_CONFIG as any).user,
+        password: (TEST_CONFIG as any).password,
+        schemaName: 'domain_test_schema',
+        options: { encrypt: true, trustServerCertificate: true },
+      });
+
+      expect(memoryDomain).toBeDefined();
+      await memoryDomain.init();
+
+      // Test a basic operation to verify it works
+      const thread = {
+        id: `thread-schema-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Schema Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await memoryDomain.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      // Clean up thread
+      await memoryDomain.deleteThread({ threadId: thread.id });
     });
   });
 } else {
