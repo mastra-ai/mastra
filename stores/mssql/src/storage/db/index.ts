@@ -58,18 +58,27 @@ export interface MssqlDomainRestConfig {
 /**
  * Resolves MssqlDomainConfig to pool, db, and schema.
  * Handles creating a new pool and db if config is provided.
+ *
+ * @param config - Either an existing connected pool/db, or connection details to create a new pool
+ * @returns Object containing pool, db, schema, and whether the pool needs connection
+ *
+ * @remarks
+ * When using connection details (not an existing pool), the returned pool is NOT connected.
+ * The caller must call `pool.connect()` before use, typically in an `init()` method.
+ * The `needsConnect` flag indicates whether the pool was newly created and needs connecting.
  */
 export function resolveMssqlConfig(config: MssqlDomainConfig): {
   pool: sql.ConnectionPool;
   db: MssqlDB;
   schema?: string;
+  needsConnect: boolean;
 } {
-  // Existing pool and db
+  // Existing pool and db - already connected by MSSQLStore
   if ('pool' in config && 'db' in config) {
-    return { pool: config.pool, db: config.db, schema: config.schema };
+    return { pool: config.pool, db: config.db, schema: config.schema, needsConnect: false };
   }
 
-  // Config to create new pool
+  // Config to create new pool - needs to be connected via init()
   const pool = new sql.ConnectionPool({
     server: config.server,
     database: config.database,
@@ -80,7 +89,7 @@ export function resolveMssqlConfig(config: MssqlDomainConfig): {
   });
 
   const db = new MssqlDB({ pool, schemaName: config.schemaName });
-  return { pool, db, schema: config.schemaName };
+  return { pool, db, schema: config.schemaName, needsConnect: true };
 }
 
 export class MssqlDB extends MastraBase {

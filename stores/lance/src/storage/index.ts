@@ -107,16 +107,13 @@ export class LanceStorage extends MastraStorage {
 
   /**
    * @internal
-   * Private constructor to enforce using the create factory method
+   * Private constructor to enforce using the create factory method.
+   * Note: stores is initialized in create() after the lanceClient is connected.
    */
   private constructor(id: string, name: string, disableInit?: boolean) {
     super({ id, name, disableInit });
-
-    this.stores = {
-      workflows: new StoreWorkflowsLance({ client: this.lanceClient }),
-      scores: new StoreScoresLance({ client: this.lanceClient }),
-      memory: new StoreMemoryLance({ client: this.lanceClient }),
-    };
+    // stores will be initialized in create() after lanceClient is connected
+    this.stores = {} as StorageDomains;
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {

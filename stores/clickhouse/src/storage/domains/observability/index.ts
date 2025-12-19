@@ -260,7 +260,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
           total,
           page,
           perPage,
-          hasMore: spans.length === perPage,
+          hasMore: (page + 1) * perPage < total,
         },
         spans,
       };

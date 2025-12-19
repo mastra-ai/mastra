@@ -3,6 +3,7 @@ import {
   createStorageErrorId,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
@@ -21,13 +22,23 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
   private db: MssqlDB;
   private schema?: string;
+  private needsConnect: boolean;
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, db, schema } = resolveMssqlConfig(config);
+    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.db = db;
     this.schema = schema;
+    this.needsConnect = needsConnect;
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
   }
 
   async dangerouslyClearAll(): Promise<void> {

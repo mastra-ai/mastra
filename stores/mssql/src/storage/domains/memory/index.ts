@@ -28,6 +28,7 @@ export class MemoryMSSQL extends MemoryStorage {
   private pool: sql.ConnectionPool;
   private schema?: string;
   private db: MssqlDB;
+  private needsConnect: boolean;
 
   private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
     // Parse content back to objects if they were stringified during storage
@@ -53,10 +54,21 @@ export class MemoryMSSQL extends MemoryStorage {
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, db, schema } = resolveMssqlConfig(config);
+    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schema;
     this.db = db;
+    this.needsConnect = needsConnect;
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
   }
 
   async dangerouslyClearAll(): Promise<void> {

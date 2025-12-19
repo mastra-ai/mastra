@@ -105,10 +105,10 @@ export class WorkflowsStorageClickhouse extends WorkflowsStorage {
 
     if (!snapshot.context) {
       throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'SNAPSHOT_NOT_FOUND'),
+        id: createStorageErrorId('CLICKHOUSE', 'UPDATE_WORKFLOW_STATE', 'CONTEXT_MISSING'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
-        text: `Snapshot not found for runId ${runId}`,
+        text: `Snapshot context is missing for runId ${runId}`,
       });
     }
 
