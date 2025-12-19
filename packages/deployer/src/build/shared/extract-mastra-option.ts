@@ -16,7 +16,7 @@ export function extractMastraOptionBundler(
   name: keyof MastraConfig,
   entryFile: string,
   result: {
-    hasCustomConfig: false;
+    hasCustomConfig: boolean;
   },
   logger?: IMastraLogger,
 ) {
