@@ -632,13 +632,14 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
-  callback: (model: MastraLanguageModelV2, isLastModel: boolean) => Promise<T>,
+  callback: (modelConfig: ModelManagerModelConfig, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
 
 export type ModelManagerModelConfig = {
   model: MastraLanguageModelV2;
   maxRetries: number;
   id: string;
+  headers?: Record<string, string>;
 };
 
 export interface LanguageModelUsage {

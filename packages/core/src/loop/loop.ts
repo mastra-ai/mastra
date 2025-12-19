@@ -74,7 +74,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       provider: firstModel.model.provider,
     },
     modelSettings,
-    headers: modelSettings?.headers ?? rest.headers,
+    headers: modelSettings?.headers,
     telemetry_settings,
   });
 
@@ -93,7 +93,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       provider: firstModel.model.provider,
     },
     modelSettings,
-    headers: modelSettings?.headers ?? rest.headers,
+    headers: modelSettings?.headers,
     telemetry_settings,
   });
 

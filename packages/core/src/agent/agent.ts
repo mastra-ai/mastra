@@ -33,6 +33,7 @@ import type {
 } from '../llm/model/base.types';
 import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type {
   TripwireProperties,
   MastraLanguageModel,
@@ -3409,6 +3410,12 @@ export class Agent<
         throw mastraError;
       }
 
+      // Extract headers from ModelRouterLanguageModel if available
+      let headers: Record<string, string> | undefined;
+      if (resolvedModel instanceof ModelRouterLanguageModel) {
+        headers = (resolvedModel as any).config?.headers;
+      }
+
       return [
         {
           id: 'main',
@@ -3416,6 +3423,7 @@ export class Agent<
           model: resolvedModel as MastraLanguageModelV2,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
+          headers,
         },
       ];
     }
@@ -3455,11 +3463,18 @@ export class Agent<
           throw mastraError;
         }
 
+        // Extract headers from ModelRouterLanguageModel if available
+        let headers: Record<string, string> | undefined;
+        if (model instanceof ModelRouterLanguageModel) {
+          headers = (model as any).config?.headers;
+        }
+
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
+          headers,
         };
       }),
     );
