@@ -4,6 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import { ErrorCategory, ErrorDomain, MastraError } from './error';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
@@ -11,6 +12,7 @@ import type { AiMessageType, MastraMemory } from './memory';
 import type { TracingContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
+import { Tool } from './tools/tool';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
@@ -298,6 +300,19 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
   const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
+      // Check if the tool is a plain function (not a Tool instance or Vercel tool)
+      // This catches the common mistake of passing a tool factory function instead of the tool itself
+      // We need to cast to unknown first since ToolsInput doesn't include functions in its type,
+      // but users can still pass functions at runtime which causes silent failures
+      if (typeof tool === 'function' && !((tool as unknown) instanceof Tool) && !isVercelTool(tool)) {
+        throw new MastraError({
+          id: 'TOOL_INVALID_FORMAT',
+          domain: ErrorDomain.TOOL,
+          category: ErrorCategory.USER,
+          text: `Tool "${key}" is not a valid tool format. Tools must be created using createTool() or be a valid Vercel AI SDK tool. Received a function.`,
+        });
+      }
+
       if (isVercelTool(tool)) {
         acc[key] = setVercelToolProperties(tool) as VercelTool;
       } else {
