@@ -1,5 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
@@ -96,9 +96,10 @@ const startServer = async (
     // Write mastra packages to a file and pass the file path via env var
     const packagesFilePath = join(dotMastraPath, '..', 'mastra-packages.json');
     if (startOptions.mastraPackages) {
-      writeFileSync(packagesFilePath, JSON.stringify(startOptions.mastraPackages), 'utf-8');
+      await writeFile(packagesFilePath, JSON.stringify(startOptions.mastraPackages), 'utf-8');
     }
 
+    await mkdir(publicDir, { recursive: true });
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
