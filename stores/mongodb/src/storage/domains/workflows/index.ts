@@ -293,8 +293,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
       snapshot: parsedSnapshot,
-      createdAt: new Date(row.createdAt as string),
-      updatedAt: new Date(row.updatedAt as string),
+      createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
       resourceId: row.resourceId,
     };
   }

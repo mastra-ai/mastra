@@ -18,6 +18,13 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
 
+/**
+ * Escapes single quotes in SQL string values to prevent SQL injection.
+ */
+function escapeSql(str: string): string {
+  return str.replace(/'/g, "''");
+}
+
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
   if (typeof parsedSnapshot === 'string') {
@@ -156,7 +163,9 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       // Try to find the existing record
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table
+        .query()
+        .where(`workflow_name = '${escapeSql(workflowName)}' AND run_id = '${escapeSql(runId)}'`);
       const records = await query.toArray();
       let createdAtValue: number;
       const now = createdAt?.getTime() ?? Date.now();
@@ -204,7 +213,9 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }): Promise<WorkflowRunState | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table
+        .query()
+        .where(`workflow_name = '${escapeSql(workflowName)}' AND run_id = '${escapeSql(runId)}'`);
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
     } catch (error: any) {
@@ -229,9 +240,9 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   } | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      let whereClause = `run_id = '${args.runId}'`;
+      let whereClause = `run_id = '${escapeSql(args.runId)}'`;
       if (args.workflowName) {
-        whereClause += ` AND workflow_name = '${args.workflowName}'`;
+        whereClause += ` AND workflow_name = '${escapeSql(args.workflowName)}'`;
       }
       const query = table.query().where(whereClause);
       const records = await query.toArray();
@@ -254,7 +265,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const whereClause = `run_id = '${runId.replace(/'/g, "''")}' AND workflow_name = '${workflowName.replace(/'/g, "''")}'`;
+      const whereClause = `run_id = '${escapeSql(runId)}' AND workflow_name = '${escapeSql(workflowName)}'`;
       await table.delete(whereClause);
     } catch (error: any) {
       throw new MastraError(
@@ -278,10 +289,11 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const conditions: string[] = [];
 
       if (args?.workflowName) {
-        conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+        conditions.push(`workflow_name = '${escapeSql(args.workflowName)}'`);
       }
 
       if (args?.status) {
+        // Escape for LIKE pattern: backslashes, single quotes, and LIKE wildcards
         const escapedStatus = args.status
           .replace(/\\/g, '\\\\')
           .replace(/'/g, "''")
@@ -293,7 +305,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       }
 
       if (args?.resourceId) {
-        conditions.push(`\`resourceId\` = '${args.resourceId}'`);
+        conditions.push(`\`resourceId\` = '${escapeSql(args.resourceId)}'`);
       }
 
       if (args?.fromDate instanceof Date) {

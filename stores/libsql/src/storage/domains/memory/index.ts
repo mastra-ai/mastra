@@ -872,16 +872,23 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    // Delete messages for this thread (manual step)
+    // Use transaction to ensure atomicity - either both deletes succeed or neither does
     try {
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
-        args: [threadId],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
-        args: [threadId],
-      });
+      const tx = await this.#client.transaction('write');
+      try {
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+          args: [threadId],
+        });
+        await tx.execute({
+          sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
+          args: [threadId],
+        });
+        await tx.commit();
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -893,6 +900,5 @@ export class MemoryLibSQL extends MemoryStorage {
         error,
       );
     }
-    // TODO: Need to check if CASCADE is enabled so that messages will be automatically deleted due to CASCADE constraint
   }
 }
