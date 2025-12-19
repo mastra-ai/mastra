@@ -22,7 +22,7 @@ import type { OutputChunkType } from './transform';
 export type AISDKV5FullOutput<OUTPUT extends OutputSchema = undefined> = {
   text: string;
   usage: LLMStepResult['usage'];
-  steps: LLMStepResult[];
+  steps: LLMStepResult<OUTPUT>[];
   finishReason: LLMStepResult['finishReason'];
   warnings: LLMStepResult['warnings'];
   providerMetadata: LLMStepResult['providerMetadata'];

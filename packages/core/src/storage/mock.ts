@@ -4,24 +4,17 @@ import type { StorageThreadType } from '../memory/types';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 import { MastraStorage } from './base';
 import type { StorageDomains } from './base';
-import type { TABLE_NAMES } from './constants';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
-import type { InMemoryAgents } from './domains/agents/inmemory';
+import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMemory } from './domains/memory/inmemory';
-import type { InMemoryThreads, InMemoryResources, InMemoryMessages } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
-import type { InMemoryObservability } from './domains/observability/inmemory';
-import { StoreOperationsInMemory } from './domains/operations/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
-import type { InMemoryScores } from './domains/scores/inmemory';
-import { WorkflowsInMemory } from './domains/workflows';
-import type { InMemoryWorkflows } from './domains/workflows/inmemory';
+import { WorkflowsInMemory } from './domains/workflows/inmemory';
 
 import type {
   SpanRecord,
   TraceRecord,
   PaginationInfo,
-  StorageColumn,
   StoragePagination,
   StorageResourceType,
   UpdateWorkflowStateOptions,
@@ -31,57 +24,35 @@ import type {
 export class InMemoryStore extends MastraStorage {
   stores: StorageDomains;
 
+  /**
+   * Internal database layer shared across all domains.
+   * This is an implementation detail - domains interact with this
+   * rather than managing their own data structures.
+   */
+  #db: InMemoryDB;
+
   constructor({ id = 'in-memory' }: { id?: string } = {}) {
     super({ id, name: 'InMemoryStorage' });
-    // MockStore doesn't need async initialization
+    // InMemoryStore doesn't need async initialization
     this.hasInitialized = Promise.resolve(true);
 
-    const operationsStorage = new StoreOperationsInMemory();
+    // Create internal db layer - shared across all domains
+    this.#db = new InMemoryDB();
 
-    const database = operationsStorage.getDatabase();
-
-    const scoresStorage = new ScoresInMemory({
-      collection: database.mastra_scorers as InMemoryScores,
-    });
-
-    const workflowsStorage = new WorkflowsInMemory({
-      collection: database.mastra_workflow_snapshot as InMemoryWorkflows,
-      operations: operationsStorage,
-    });
-
-    const memoryStorage = new InMemoryMemory({
-      collection: {
-        threads: database.mastra_threads as InMemoryThreads,
-        resources: database.mastra_resources as InMemoryResources,
-        messages: database.mastra_messages as InMemoryMessages,
-      },
-      operations: operationsStorage,
-    });
-
-    const observabilityStorage = new ObservabilityInMemory({
-      collection: database.mastra_ai_spans as InMemoryObservability,
-      operations: operationsStorage,
-    });
-
-    const agentsCollection: InMemoryAgents = new Map();
-    const agentsStorage = new InMemoryAgentsStorage({
-      collection: agentsCollection,
-    });
-
+    // Create all domain instances with the shared db
     this.stores = {
-      operations: operationsStorage,
-      workflows: workflowsStorage,
-      scores: scoresStorage,
-      memory: memoryStorage,
-      observability: observabilityStorage,
-      agents: agentsStorage,
+      memory: new InMemoryMemory({ db: this.#db }),
+      workflows: new WorkflowsInMemory({ db: this.#db }),
+      scores: new ScoresInMemory({ db: this.#db }),
+      observability: new ObservabilityInMemory({ db: this.#db }),
+      agents: new InMemoryAgentsStorage({ db: this.#db }),
     };
   }
 
   public get supports() {
     return {
       selectByIncludeResourceScope: false,
-      resourceWorkingMemory: false,
+      resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
@@ -92,18 +63,38 @@ export class InMemoryStore extends MastraStorage {
     };
   }
 
+  /**
+   * Clears all data from the in-memory database.
+   * Useful for testing.
+   * @deprecated Use dangerouslyClearAll() on individual domains instead.
+   */
+  clear(): void {
+    this.#db.clear();
+  }
+
   async persistWorkflowSnapshot({
     workflowName,
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
-    await this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
+    await this.stores.workflows.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot,
+      createdAt,
+      updatedAt,
+    });
   }
 
   async loadWorkflowSnapshot({
@@ -114,40 +105,6 @@ export class InMemoryStore extends MastraStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    await this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    await this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    await this.stores.operations.insert({ tableName, record });
   }
 
   async updateWorkflowResults({
@@ -177,15 +134,6 @@ export class InMemoryStore extends MastraStorage {
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     return this.stores.memory.getThreadById({ threadId });
   }

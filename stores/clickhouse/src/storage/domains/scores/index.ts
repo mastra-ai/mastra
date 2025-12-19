@@ -10,17 +10,28 @@ import {
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsClickhouse } from '../operations';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
 
 export class ScoresStorageClickhouse extends ScoresStorage {
   protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+  #db: ClickhouseDB;
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new ClickhouseDB({ client, ttl });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   /**

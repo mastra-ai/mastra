@@ -19,15 +19,56 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  async init(): Promise<void> {
+    // Create indexes for threads collection
+    const threadsCollection = await this.getCollection(TABLE_THREADS);
+    await threadsCollection.createIndex({ id: 1 }, { unique: true });
+    await threadsCollection.createIndex({ resourceId: 1 });
+    await threadsCollection.createIndex({ createdAt: -1 });
+    await threadsCollection.createIndex({ updatedAt: -1 });
+
+    // Create indexes for messages collection
+    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+    await messagesCollection.createIndex({ id: 1 }, { unique: true });
+    await messagesCollection.createIndex({ thread_id: 1 });
+    await messagesCollection.createIndex({ resourceId: 1 });
+    await messagesCollection.createIndex({ createdAt: -1 });
+    await messagesCollection.createIndex({ thread_id: 1, createdAt: 1 });
+
+    // Create indexes for resources collection
+    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
+    await resourcesCollection.createIndex({ id: 1 }, { unique: true });
+    await resourcesCollection.createIndex({ createdAt: -1 });
+    await resourcesCollection.createIndex({ updatedAt: -1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const threadsCollection = await this.getCollection(TABLE_THREADS);
+    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
+
+    await Promise.all([
+      threadsCollection.deleteMany({}),
+      messagesCollection.deleteMany({}),
+      resourcesCollection.deleteMany({}),
+    ]);
   }
 
   private parseRow(row: any): MastraDBMessage {
@@ -56,7 +97,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
-    const collection = await this.operations.getCollection(TABLE_MESSAGES);
+    const collection = await this.getCollection(TABLE_MESSAGES);
     const includedMessages: any[] = [];
 
     for (const inc of include) {
@@ -99,7 +140,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
     try {
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
+      const collection = await this.getCollection(TABLE_MESSAGES);
       const rawMessages = await collection
         .find({ id: { $in: messageIds } })
         .sort({ createdAt: -1 })
@@ -161,7 +202,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const sortOrder = direction === 'ASC' ? 1 : -1;
 
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
+      const collection = await this.getCollection(TABLE_MESSAGES);
 
       // Build query conditions - use $in for multiple thread IDs
       const query: any = { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } };
@@ -294,8 +335,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         throw new Error('Thread ID is required');
       }
 
-      const collection = await this.operations.getCollection(TABLE_MESSAGES);
-      const threadsCollection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_MESSAGES);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
 
       // Prepare messages for insertion
       const messagesToInsert = messages.map(message => {
@@ -363,7 +404,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
 
     const messageIds = messages.map(m => m.id);
-    const collection = await this.operations.getCollection(TABLE_MESSAGES);
+    const collection = await this.getCollection(TABLE_MESSAGES);
 
     const existingMessages = await collection.find({ id: { $in: messageIds } }).toArray();
 
@@ -439,7 +480,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
     // Update thread timestamps
     if (threadIdsToUpdate.size > 0) {
-      const threadsCollection = await this.operations.getCollection(TABLE_THREADS);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
       await threadsCollection.updateMany(
         { id: { $in: Array.from(threadIdsToUpdate) } },
         { $set: { updatedAt: new Date() } },
@@ -454,7 +495,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_RESOURCES);
+      const collection = await this.getCollection(TABLE_RESOURCES);
       const result = await collection.findOne<any>({ id: resourceId });
 
       if (!result) {
@@ -483,7 +524,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
     try {
-      const collection = await this.operations.getCollection(TABLE_RESOURCES);
+      const collection = await this.getCollection(TABLE_RESOURCES);
       await collection.updateOne(
         { id: resource.id },
         {
@@ -540,7 +581,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         updatedAt: new Date(),
       };
 
-      const collection = await this.operations.getCollection(TABLE_RESOURCES);
+      const collection = await this.getCollection(TABLE_RESOURCES);
       const updateDoc: any = { updatedAt: updatedResource.updatedAt };
 
       if (workingMemory !== undefined) {
@@ -569,7 +610,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
       const result = await collection.findOne<any>({ id: threadId });
       if (!result) {
         return null;
@@ -613,7 +654,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
 
       const query = { resourceId };
       const total = await collection.countDocuments(query);
@@ -669,7 +710,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
       await collection.updateOne(
         { id: thread.id },
         {
@@ -724,7 +765,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     };
 
     try {
-      const collection = await this.operations.getCollection(TABLE_THREADS);
+      const collection = await this.getCollection(TABLE_THREADS);
       await collection.updateOne(
         { id },
         {
@@ -752,10 +793,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
       // First, delete all messages associated with the thread
-      const collectionMessages = await this.operations.getCollection(TABLE_MESSAGES);
+      const collectionMessages = await this.getCollection(TABLE_MESSAGES);
       await collectionMessages.deleteMany({ thread_id: threadId });
       // Then delete the thread itself
-      const collectionThreads = await this.operations.getCollection(TABLE_THREADS);
+      const collectionThreads = await this.getCollection(TABLE_THREADS);
       await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
       throw new MastraError(
@@ -764,6 +805,37 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    try {
+      const messagesCollection = await this.getCollection(TABLE_MESSAGES);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+
+      // Get unique thread IDs from messages before deleting
+      const messagesToDelete = await messagesCollection.find({ id: { $in: messageIds } }).toArray();
+      const threadIds = [...new Set(messagesToDelete.map((m: any) => m.thread_id))];
+
+      // Delete the messages
+      await messagesCollection.deleteMany({ id: { $in: messageIds } });
+
+      // Update thread timestamps for affected threads
+      if (threadIds.length > 0) {
+        await threadsCollection.updateMany({ id: { $in: threadIds } }, { $set: { updatedAt: new Date() } });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );

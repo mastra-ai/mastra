@@ -24,6 +24,7 @@ export type ProviderModelsMap = {
     'kimi-k2-turbo-preview',
   ];
   readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly xiaomi: readonly ['mimo-v2-flash'];
   readonly alibaba: readonly [
     'qvq-max',
     'qwen-flash',

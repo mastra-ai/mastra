@@ -273,14 +273,19 @@ export class BraintrustExporter extends BaseExporter {
       return;
     }
 
-    const logger = await initLogger({
-      projectName: this.config.projectName ?? 'mastra-tracing',
-      apiKey: this.config.apiKey,
-      appUrl: this.config.endpoint,
-      ...this.config.tuningParameters,
-    });
+    try {
+      const loggerInstance = await initLogger({
+        projectName: this.config.projectName ?? 'mastra-tracing',
+        apiKey: this.config.apiKey,
+        appUrl: this.config.endpoint,
+        ...this.config.tuningParameters,
+      });
 
-    this.initTraceMap({ logger, isExternal: false, traceId: span.traceId });
+      this.initTraceMap({ logger: loggerInstance, isExternal: false, traceId: span.traceId });
+    } catch (err) {
+      this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err, traceId: span.traceId });
+      this.setDisabled('Failed to initialize Braintrust logger');
+    }
   }
 
   /**
