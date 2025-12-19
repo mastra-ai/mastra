@@ -1,18 +1,17 @@
 ---
-'@mastra/core': patch
+'@mastra/core': minor
+'@mastra/clickhouse': minor
+'@mastra/cloudflare-d1': minor
+'@mastra/cloudflare': minor
+'@mastra/convex': minor
+'@mastra/dynamodb': minor
+'@mastra/lance': minor
+'@mastra/libsql': minor
+'@mastra/mongodb': minor
+'@mastra/mssql': minor
+'@mastra/pg': minor
+'@mastra/upstash': minor
 '@mastra/memory': patch
-'@mastra/server': patch
-'@mastra/clickhouse': patch
-'@mastra/cloudflare-d1': patch
-'@mastra/cloudflare': patch
-'@mastra/convex': patch
-'@mastra/dynamodb': patch
-'@mastra/lance': patch
-'@mastra/libsql': patch
-'@mastra/mongodb': patch
-'@mastra/mssql': patch
-'@mastra/pg': patch
-'@mastra/upstash': patch
 ---
 
 Introduce StorageDomain base class for composite storage support
