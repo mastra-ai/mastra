@@ -69,6 +69,12 @@ export async function createHonoServer(
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
+  let __dirname: string = '.';
+  if (import.meta.url) {
+    const __filename = fileURLToPath(import.meta.url);
+    __dirname = dirname(__filename);
+  }
+
   // Store custom route auth configurations
   const customRouteAuthConfig = new Map<string, boolean>();
 
