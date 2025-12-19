@@ -370,18 +370,49 @@ export class BraintrustExporter extends BaseExporter {
   }
 
   /**
+   * Recursively serializes Date objects to ISO strings for JSON serialization.
+   * This ensures Date objects are properly displayed in Braintrust traces instead of
+   * appearing as empty objects `{}`.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/11024
+   */
+  private serializeDates(value: any): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(item => this.serializeDates(item));
+    }
+
+    if (typeof value === 'object') {
+      const result: Record<string, any> = {};
+      for (const [key, val] of Object.entries(value)) {
+        result[key] = this.serializeDates(val);
+      }
+      return result;
+    }
+
+    return value;
+  }
+
+  /**
    * Transforms MODEL_GENERATION input to Braintrust Thread view format.
    */
   private transformInput(input: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
       if (input && Array.isArray(input.messages)) {
-        return input.messages;
+        return this.serializeDates(input.messages);
       } else if (input && typeof input === 'object' && 'content' in input) {
-        return [{ role: input.role, content: input.content }];
+        return this.serializeDates([{ role: input.role, content: input.content }]);
       }
     }
 
-    return input;
+    return this.serializeDates(input);
   }
 
   /**
@@ -390,10 +421,10 @@ export class BraintrustExporter extends BaseExporter {
   private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
       const { text, ...rest } = output;
-      return { role: 'assistant', content: text, ...rest };
+      return this.serializeDates({ role: 'assistant', content: text, ...rest });
     }
 
-    return output;
+    return this.serializeDates(output);
   }
 
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
@@ -411,7 +442,7 @@ export class BraintrustExporter extends BaseExporter {
     payload.metrics = {};
     payload.metadata = {
       spanType: span.type,
-      ...span.metadata,
+      ...this.serializeDates(span.metadata),
     };
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
@@ -441,27 +472,27 @@ export class BraintrustExporter extends BaseExporter {
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = modelAttr.parameters;
+        payload.metadata.modelParameters = this.serializeDates(modelAttr.parameters);
       }
 
       // Other LLM attributes go to metadata
       const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
-        ...otherAttributes,
+        ...this.serializeDates(otherAttributes),
       };
     } else {
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...attributes,
+        ...this.serializeDates(attributes),
       };
     }
 
     // Handle errors
     if (span.errorInfo) {
       payload.error = span.errorInfo.message;
-      payload.metadata.errorDetails = span.errorInfo;
+      payload.metadata.errorDetails = this.serializeDates(span.errorInfo);
     }
 
     // Clean up empty metrics object
