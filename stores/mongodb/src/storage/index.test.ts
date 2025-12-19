@@ -109,15 +109,16 @@ createConfigValidationTests({
 });
 
 // Pre-configured client (connectorHandler) acceptance tests
+// Note: MongoDB needs a real connection for init() to work (createIndex calls)
+// So we use URL/dbName config which creates a real connection
 createClientAcceptanceTests({
   storeName: 'MongoDBStore',
   expectedStoreName: 'MongoDBStore',
   createStoreWithClient: () => {
-    // Note: This creates a mock handler since we can't do async in sync factory
-    // The actual async test is in the store-specific section below
     return new MongoDBStore({
-      id: 'mongodb-handler-test',
-      connectorHandler: createMockConnectorHandler(),
+      id: 'mongodb-client-test',
+      url: TEST_CONFIG.url!,
+      dbName: TEST_CONFIG.dbName!,
     });
   },
 });

@@ -152,7 +152,7 @@ createConfigValidationTests({
     {
       description: 'empty connectionString',
       config: { id: 'test-store', connectionString: '' },
-      expectedError: /connectionString must be a non-empty string/i,
+      expectedError: /connectionString must be provided and cannot be empty/i,
     },
     {
       description: 'empty host',
