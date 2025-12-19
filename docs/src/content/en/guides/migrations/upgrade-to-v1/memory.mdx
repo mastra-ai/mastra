@@ -261,9 +261,11 @@ To migrate, move processor configuration from Memory to Agent.
     embedder,
 -   processors: [/* ... */],
   });
-  
+
   const agent = new Agent({
     memory,
 +   processors: [/* ... */],
   });
 ```
+
+Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/v1/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
