@@ -775,6 +775,256 @@ export function pgTests() {
           );
         });
       });
+
+      describe('Pre-configured Client Config', () => {
+        it('accepts a pre-configured pg-promise client', () => {
+          const pgp = pgPromise();
+          const client = pgp(connectionString);
+
+          expect(
+            () =>
+              new PostgresStore({
+                id: 'pre-configured-client-store',
+                client,
+              }),
+          ).not.toThrow();
+
+          // Clean up
+          pgp.end();
+        });
+
+        it('accepts client with schemaName', () => {
+          const pgp = pgPromise();
+          const client = pgp(connectionString);
+
+          expect(
+            () =>
+              new PostgresStore({
+                id: 'pre-configured-client-schema-store',
+                client,
+                schemaName: 'custom_schema',
+              }),
+          ).not.toThrow();
+
+          // Clean up
+          pgp.end();
+        });
+
+        it('accepts client with disableInit', () => {
+          const pgp = pgPromise();
+          const client = pgp(connectionString);
+
+          expect(
+            () =>
+              new PostgresStore({
+                id: 'pre-configured-client-disable-init-store',
+                client,
+                disableInit: true,
+              }),
+          ).not.toThrow();
+
+          // Clean up
+          pgp.end();
+        });
+      });
+    });
+
+    describe('Pre-configured Client Operations', () => {
+      it('should work with pre-configured client for storage operations', async () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        // Custom setup before using - this is what Issue #9690 was requesting
+        client.$pool.on('connect', poolClient => {
+          // Could set role or other connection-level settings here
+          console.log('Pool client connected');
+        });
+
+        const clientStore = new PostgresStore({
+          id: 'pre-configured-client-ops-store',
+          client,
+        });
+
+        await clientStore.init();
+
+        // Test a basic operation
+        const thread = createSampleThread({
+          id: `thread-client-test-${Date.now()}`,
+          resourceId: 'test-resource',
+        });
+        thread.title = 'Test Thread';
+
+        const savedThread = await clientStore.saveThread({ thread });
+        expect(savedThread.id).toBe(thread.id);
+
+        const retrievedThread = await clientStore.getThreadById({ threadId: thread.id });
+        expect(retrievedThread).toBeDefined();
+        expect(retrievedThread?.title).toBe('Test Thread');
+
+        // Clean up
+        await clientStore.deleteThread({ threadId: thread.id });
+        await clientStore.close();
+      });
+
+      it('should expose db and pgp fields with pre-configured client', () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        const clientStore = new PostgresStore({
+          id: 'pre-configured-client-fields-store',
+          client,
+        });
+
+        // db should be the same client we passed in
+        expect(clientStore.db).toBe(client);
+        // pgp should be defined (may be a new instance or the one used internally)
+        expect(clientStore.pgp).toBeDefined();
+
+        // Clean up
+        pgp.end();
+      });
+    });
+
+    describe('Domain-level Pre-configured Client', () => {
+      it('should allow using MemoryPG domain directly with pre-configured client', async () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        // Import and use the domain class directly
+        const { MemoryPG } = await import('./domains/memory');
+
+        const memoryDomain = new MemoryPG({ client });
+
+        expect(memoryDomain).toBeDefined();
+        await memoryDomain.init();
+
+        // Test a basic operation
+        const thread = createSampleThread({
+          id: `thread-domain-test-${Date.now()}`,
+          resourceId: 'test-resource',
+        });
+
+        const savedThread = await memoryDomain.saveThread({ thread });
+        expect(savedThread.id).toBe(thread.id);
+
+        const retrievedThread = await memoryDomain.getThreadById({ threadId: thread.id });
+        expect(retrievedThread).toBeDefined();
+        expect(retrievedThread?.title).toBe(thread.title);
+
+        // Clean up
+        await memoryDomain.deleteThread({ threadId: thread.id });
+        pgp.end();
+      });
+
+      it('should allow using WorkflowsPG domain directly with pre-configured client', async () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        // Import and use the domain class directly
+        const { WorkflowsPG } = await import('./domains/workflows');
+
+        const workflowsDomain = new WorkflowsPG({ client });
+
+        expect(workflowsDomain).toBeDefined();
+        await workflowsDomain.init();
+
+        // Test a basic operation
+        const workflowName = 'test-workflow';
+        const runId = `run-domain-test-${Date.now()}`;
+
+        await workflowsDomain.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: {
+            runId,
+            value: { current_step: 'initial' },
+            context: { requestContext: {} },
+            activePaths: [],
+            suspendedPaths: {},
+            timestamp: Date.now(),
+          } as any,
+        });
+
+        const snapshot = await workflowsDomain.loadWorkflowSnapshot({ workflowName, runId });
+        expect(snapshot).toBeDefined();
+        expect(snapshot?.runId).toBe(runId);
+
+        // Clean up
+        await workflowsDomain.deleteWorkflowRunById({ workflowName, runId });
+        pgp.end();
+      });
+
+      it('should allow using ScoresPG domain directly with pre-configured client', async () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        // Import and use the domain class directly
+        const { ScoresPG } = await import('./domains/scores');
+
+        const scoresDomain = new ScoresPG({ client });
+
+        expect(scoresDomain).toBeDefined();
+        await scoresDomain.init();
+
+        // Test a basic operation - SaveScorePayload requires runId, scorer, output, input, entity, and other fields
+        const savedScore = await scoresDomain.saveScore({
+          runId: `run-score-test-${Date.now()}`,
+          score: 0.95,
+          scorerId: 'test-scorer',
+          scorer: { name: 'test-scorer', description: 'A test scorer' },
+          input: { query: 'test input' },
+          output: { result: 'test output' },
+          entity: { id: 'test-entity', type: 'agent' },
+          entityType: 'AGENT',
+          entityId: 'test-entity',
+          source: 'LIVE',
+          traceId: 'test-trace',
+          spanId: 'test-span',
+        });
+
+        expect(savedScore.score.id).toBeDefined();
+        expect(savedScore.score.score).toBe(0.95);
+
+        const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
+        expect(retrievedScore).toBeDefined();
+        expect(retrievedScore?.score).toBe(0.95);
+
+        pgp.end();
+      });
+
+      it('should allow domains to use custom schemaName with pre-configured client', async () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        // Create schema for test
+        await client.none('CREATE SCHEMA IF NOT EXISTS domain_test_schema');
+
+        try {
+          const { MemoryPG } = await import('./domains/memory');
+
+          const memoryDomain = new MemoryPG({
+            client,
+            schemaName: 'domain_test_schema',
+          });
+
+          expect(memoryDomain).toBeDefined();
+          await memoryDomain.init();
+
+          // Verify tables were created in the custom schema
+          const tableExists = await client.oneOrNone(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'domain_test_schema'
+              AND table_name = 'mastra_threads'
+            )`,
+          );
+          expect(tableExists?.exists).toBe(true);
+        } finally {
+          // Clean up
+          await client.none('DROP SCHEMA IF EXISTS domain_test_schema CASCADE');
+          pgp.end();
+        }
+      });
     });
   });
 }

@@ -8,8 +8,9 @@ import {
   waitUntilTableExists,
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createTestSuite } from '@internal/storage-test-utils';
-import { beforeAll, describe } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { DynamoDBStore } from '..';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
@@ -234,4 +235,197 @@ describe('DynamoDBStore', () => {
       },
     }),
   );
+
+  // Test with pre-configured client
+  describe('DynamoDBStore with pre-configured client', () => {
+    it('should accept a pre-configured DynamoDBDocumentClient', () => {
+      const dynamoClient = new DynamoDBClient({
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+      const documentClient = DynamoDBDocumentClient.from(dynamoClient, {
+        marshallOptions: { removeUndefinedValues: true },
+      });
+
+      const store = new DynamoDBStore({
+        name: 'DynamoDBStoreWithClient',
+        config: {
+          id: 'dynamodb-client-test',
+          tableName: TEST_TABLE_NAME,
+          client: documentClient,
+        },
+      });
+
+      expect(store).toBeDefined();
+      expect(store.name).toBe('DynamoDBStoreWithClient');
+    });
+
+    it('should work with pre-configured client for storage operations', async () => {
+      const dynamoClient = new DynamoDBClient({
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+        maxAttempts: 5,
+      });
+      const documentClient = DynamoDBDocumentClient.from(dynamoClient, {
+        marshallOptions: { removeUndefinedValues: true },
+      });
+
+      const store = new DynamoDBStore({
+        name: 'DynamoDBStoreWithClientOps',
+        config: {
+          id: 'dynamodb-client-ops-test',
+          tableName: TEST_TABLE_NAME,
+          client: documentClient,
+        },
+      });
+
+      await store.init();
+
+      // Test a basic operation
+      const thread = {
+        id: `thread-client-test-${Date.now()}`,
+        resourceId: 'test-resource',
+        title: 'Test Thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const savedThread = await store.saveThread({ thread });
+      expect(savedThread.id).toBe(thread.id);
+
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeDefined();
+      expect(retrievedThread?.title).toBe('Test Thread');
+
+      // Clean up
+      await store.deleteThread({ threadId: thread.id });
+      await store.close();
+    });
+  });
+
+  describe('DynamoDBStore Configuration Validation', () => {
+    describe('with credentials config', () => {
+      it('should accept region, endpoint, and credentials', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'test-table',
+                region: 'us-east-1',
+                endpoint: 'http://localhost:8000',
+                credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+              },
+            }),
+        ).not.toThrow();
+      });
+
+      it('should accept minimal config with just tableName', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'test-table',
+              },
+            }),
+        ).not.toThrow();
+      });
+    });
+
+    describe('with pre-configured client', () => {
+      it('should accept a DynamoDBDocumentClient', () => {
+        const dynamoClient = new DynamoDBClient({ region: 'us-east-1' });
+        const documentClient = DynamoDBDocumentClient.from(dynamoClient);
+
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'test-table',
+                client: documentClient,
+              },
+            }),
+        ).not.toThrow();
+      });
+    });
+
+    describe('tableName validation', () => {
+      it('should throw if tableName is empty', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: '',
+              },
+            }),
+        ).toThrow(/tableName must be provided/);
+      });
+
+      it('should throw if tableName contains invalid characters', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'invalid@table#name',
+              },
+            }),
+        ).toThrow(/invalid characters/);
+      });
+
+      it('should throw if tableName is too short', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'ab',
+              },
+            }),
+        ).toThrow(/invalid characters|not between 3 and 255/);
+      });
+    });
+
+    describe('disableInit option', () => {
+      it('should accept disableInit: true', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'test-table',
+                disableInit: true,
+              },
+            }),
+        ).not.toThrow();
+      });
+
+      it('should accept disableInit: false', () => {
+        expect(
+          () =>
+            new DynamoDBStore({
+              name: 'test',
+              config: {
+                id: 'test-store',
+                tableName: 'test-table',
+                disableInit: false,
+              },
+            }),
+        ).not.toThrow();
+      });
+    });
+  });
 });
