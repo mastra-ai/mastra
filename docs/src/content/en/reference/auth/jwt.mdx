@@ -14,7 +14,6 @@ import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraJwtAuth({
       secret: "<your-secret>",

@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # Workflows overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/v1/deployment/workflow-runners) like Inngest for managed infrastructure.
 
 ![Workflows overview](/img/workflows/workflows-overview.jpg)
 
@@ -53,7 +53,11 @@ const step1 = createStep({
 });
 ```
 
-> See the [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+:::info
+
+Visit [Step Class](/reference/v1/workflows/step) for a full list of configuration options.
+
+:::
 
 ### Using agents and tools
 
@@ -82,7 +86,11 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
-> See the [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+:::info
+
+Visit [Workflow Class](/reference/v1/workflows/workflow) for a full list of configuration options.
+
+:::
 
 ### Understanding control flow
 
@@ -110,7 +118,11 @@ const step1 = createStep({
 });
 ```
 
-> See [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+:::info
+
+Visit [Workflow State](/docs/v1/workflows/workflow-state) for complete documentation on state schemas, initial state, persistence across suspend/resume, and nested workflows.
+
+:::
 
 ## Workflows as steps
 
@@ -168,12 +180,11 @@ export const testWorkflow = createWorkflow({...})
 
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
-```typescript {6} title="src/mastra/index.ts"
+```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core/mastra";
 import { testWorkflow } from "./workflows/test-workflow";
 
 export const mastra = new Mastra({
-  // ...
   workflows: { testWorkflow },
 });
 ```
@@ -241,7 +252,6 @@ The workflow output includes the full execution lifecycle, showing the input and
 {
   "status": "success",
   "steps": {
-    // ...
     "step-1": {
       "status": "success",
       "payload": {
@@ -291,8 +301,6 @@ const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
 
-//.. server connection lost,
-
 const restartedResult = await run.restart();
 ```
 
@@ -323,7 +331,6 @@ export type UserTier = {
 };
 
 const step1 = createStep({
-  // ...
   execute: async ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -336,7 +343,11 @@ const step1 = createStep({
 });
 ```
 
-> See [Request Context](/docs/v1/server/request-context) for more information.
+:::info
+
+Visit [Request Context](/docs/v1/server/request-context) for more information.
+
+:::
 
 ## Testing with Studio
 

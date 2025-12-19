@@ -13,14 +13,35 @@ import type {
   UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig } from '../../types';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  async init(): Promise<void> {
+    const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+    await collection.createIndex({ workflow_name: 1, run_id: 1 }, { unique: true });
+    await collection.createIndex({ run_id: 1 });
+    await collection.createIndex({ workflow_name: 1 });
+    await collection.createIndex({ resourceId: 1 });
+    await collection.createIndex({ createdAt: -1 });
+    await collection.createIndex({ 'snapshot.status': 1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+    await collection.deleteMany({});
   }
 
   updateWorkflowResults(
@@ -59,14 +80,19 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date();
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
         { workflow_name: workflowName, run_id: runId },
         {
@@ -75,8 +101,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             run_id: runId,
             resourceId,
             snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            updatedAt: updatedAt ?? now,
+          },
+          $setOnInsert: {
+            createdAt: createdAt ?? now,
           },
         },
         { upsert: true },
@@ -102,19 +130,17 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<any[]>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          workflow_name: workflowName,
-          run_id: runId,
-        },
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const result = await collection.findOne({
+        workflow_name: workflowName,
+        run_id: runId,
       });
 
-      if (!result?.length) {
+      if (!result) {
         return null;
       }
 
-      return typeof result[0].snapshot === 'string' ? safelyParseJSON(result[0].snapshot) : result[0].snapshot;
+      return typeof result.snapshot === 'string' ? safelyParseJSON(result.snapshot as string) : result.snapshot;
     } catch (error) {
       throw new MastraError(
         {
@@ -152,7 +178,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['resourceId'] = options.resourceId;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       let total = 0;
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
@@ -215,7 +241,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['workflow_name'] = args.workflowName;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const result = await collection.findOne(query);
       if (!result) {
         return null;
@@ -237,7 +263,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.deleteOne({ workflow_name: workflowName, run_id: runId });
     } catch (error) {
       throw new MastraError(
@@ -267,8 +293,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
       snapshot: parsedSnapshot,
-      createdAt: new Date(row.createdAt as string),
-      updatedAt: new Date(row.updatedAt as string),
+      createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
       resourceId: row.resourceId,
     };
   }

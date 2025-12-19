@@ -3,8 +3,6 @@
 "@mastra/server": patch
 ---
 
-fix(a2a): fix streaming and memory support for A2A protocol
-
 **Client (`@mastra/client-js`):**
 - Fixed `sendStreamingMessage` to properly return a streaming response instead of attempting to parse it as JSON
 

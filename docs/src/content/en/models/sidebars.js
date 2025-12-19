@@ -313,6 +313,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/siliconflow-cn",
+          label: "SiliconFlow (China)",
+        },
+        {
+          type: "doc",
           id: "providers/submodel",
           label: "submodel",
         },
@@ -345,6 +350,11 @@ const sidebars = {
           type: "doc",
           id: "providers/wandb",
           label: "Weights & Biases",
+        },
+        {
+          type: "doc",
+          id: "providers/xiaomi",
+          label: "Xiaomi",
         },
         {
           type: "doc",

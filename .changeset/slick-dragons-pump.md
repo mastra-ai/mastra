@@ -2,8 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fix agent network iteration counter bug causing infinite loops
-
 The iteration counter in agent networks was stuck at 0 due to a faulty ternary operator that treated 0 as falsy. This prevented `maxSteps` from working correctly, causing infinite loops when the routing agent kept selecting primitives instead of returning "none".
 
 **Changes:**
