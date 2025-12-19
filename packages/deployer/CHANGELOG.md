@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.24.9
+
+### Patch Changes
+
+- Update prompt handler to use new scoring system instead of deprecated evals. ([#11274](https://github.com/mastra-ai/mastra/pull/11274))
+
+- Updated dependencies [[`c56f64b`](https://github.com/mastra-ai/mastra/commit/c56f64b0d7365d744cfe99f54369795917c057b7), [`60d99c0`](https://github.com/mastra-ai/mastra/commit/60d99c0addeed9d759c1b9fe4924d830ec93ac84)]:
+  - @mastra/core@0.24.9
+  - @mastra/server@0.24.9
+
 ## 0.24.9-alpha.1
 
 ### Patch Changes

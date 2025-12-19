@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.24.9
+
+### Patch Changes
+
+- Fix memory leak in telemetry decorators when processing large payloads. The `@withSpan` decorator now uses bounded serialization utilities to prevent unbounded memory growth when tracing agents with large inputs like base64 images. ([#11231](https://github.com/mastra-ai/mastra/pull/11231))
+
 ## 0.24.9-alpha.1
 
 ## 0.24.9-alpha.0
