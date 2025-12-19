@@ -1,18 +1,12 @@
 /**
  * @mastra/evals - Evaluation framework for AI agents
  *
- * This package provides scorers for evaluating AI agent performance.
- * Import specific scorers from subpaths:
+ * This package uses subpath exports. Import from specific paths:
  *
  * @example
  * ```ts
  * import { createToolCallAccuracyScorerCode } from '@mastra/evals/scorers/prebuilt';
  * import { getUserMessageFromRunInput } from '@mastra/evals/scorers/utils';
- * ```
- */
+ * */
 
-// Re-export commonly used utilities
-export * from './scorers/utils';
-
-// Re-export prebuilt scorers for convenience
-export * from './scorers/prebuilt';
+// This package uses subpath exports - see package.json for available paths
