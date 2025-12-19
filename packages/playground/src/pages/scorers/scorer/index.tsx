@@ -174,7 +174,7 @@ export default function Scorer() {
           </HeaderGroup>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">
+            <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank" size="tiny">
               <Icon>
                 <DocsIcon />
               </Icon>
