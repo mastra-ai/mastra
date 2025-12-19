@@ -492,7 +492,7 @@
     },
     {
       "source": "/docs/v1/mastra-cloud/dashboard",
-      "destination": "/docs/v1/mastra-cloud/studio",
+      "destination": "/docs/v1/mastra-cloud/overview",
       "permanent": true
     }
   ]
