@@ -5,21 +5,39 @@ import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScoreP
 import {
   createStorageErrorId,
   TABLE_SCORERS,
+  SCORERS_SCHEMA,
   ScoresStorage,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsLibSQL } from '../operations';
+import { LibSQLDB, resolveClient } from '../../db';
+import type { LibSQLDomainConfig } from '../../db';
 
 export class ScoresLibSQL extends ScoresStorage {
-  private operations: StoreOperationsLibSQL;
-  private client: Client;
-  constructor({ client, operations }: { client: Client; operations: StoreOperationsLibSQL }) {
+  #db: LibSQLDB;
+  #client: Client;
+
+  constructor(config: LibSQLDomainConfig) {
     super();
-    this.operations = operations;
-    this.client = client;
+    const client = resolveClient(config);
+    this.#client = client;
+    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: SCORERS_SCHEMA });
+    // Add columns for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: SCORERS_SCHEMA,
+      ifNotExists: ['spanId', 'requestContext'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_SCORERS });
   }
 
   async listScoresByRunId({
@@ -33,7 +51,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const { page, perPage: perPageInput } = pagination;
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE runId = ?`,
         args: [runId],
       });
@@ -56,7 +74,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE runId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [runId, limitValue, start],
       });
@@ -126,7 +144,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} ${whereClause}`,
         args: queryParams,
       });
@@ -149,7 +167,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, start],
       });
@@ -188,7 +206,7 @@ export class ScoresLibSQL extends ScoresStorage {
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    const result = await this.client.execute({
+    const result = await this.#client.execute({
       sql: `SELECT * FROM ${TABLE_SCORERS} WHERE id = ?`,
       args: [id],
     });
@@ -221,7 +239,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const id = crypto.randomUUID();
       const now = new Date();
 
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_SCORERS,
         record: {
           ...parsedScore,
@@ -257,7 +275,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const { page, perPage: perPageInput } = pagination;
 
       // Get total count first
-      const countResult = await this.client.execute({
+      const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ?`,
         args: [entityId, entityType],
       });
@@ -280,7 +298,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [entityId, entityType, limitValue, start],
       });
@@ -322,7 +340,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const countSQLResult = await this.client.execute({
+      const countSQLResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ?`,
         args: [traceId, spanId],
       });
@@ -332,7 +350,7 @@ export class ScoresLibSQL extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 
-      const result = await this.client.execute({
+      const result = await this.#client.execute({
         sql: `SELECT * FROM ${TABLE_SCORERS} WHERE traceId = ? AND spanId = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
         args: [traceId, spanId, limitValue, start],
       });

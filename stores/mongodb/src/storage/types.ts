@@ -1,5 +1,6 @@
 import type { MongoClientOptions } from 'mongodb';
 import type { ConnectorHandler } from './connectors/base';
+import type { MongoDBConnector } from './connectors/MongoDBConnector';
 
 /**
  * Base configuration options shared across MongoDB configurations
@@ -39,3 +40,15 @@ export type DatabaseConfig = MongoDBBaseConfig & {
   dbName: string;
   options?: MongoClientOptions;
 };
+
+/**
+ * Configuration for MongoDB domains.
+ * Domains can receive either:
+ * - An existing connector (internal: passed from main store)
+ * - A connectorHandler (user: custom connection management)
+ * - Database config (user: standard url/dbName config)
+ */
+export type MongoDBDomainConfig =
+  | { connector: MongoDBConnector }
+  | { connectorHandler: ConnectorHandler; disableInit?: boolean }
+  | { url: string; dbName: string; options?: MongoClientOptions; disableInit?: boolean };

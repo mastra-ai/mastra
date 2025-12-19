@@ -1,16 +1,21 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { PgDB } from '../db';
 import { PostgresStore } from '../index';
 import { PostgresPerformanceTest } from './performance-test';
 
 // Integration tests that require a real database connection
 describe('PostgresStore Performance Indexes Integration', () => {
   let store: PostgresStore;
+  let dbOps: PgDB;
   let performanceTest: PostgresPerformanceTest;
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
 
   beforeAll(async () => {
     store = new PostgresStore({ id: 'integration-test-store', connectionString });
     await store.init();
+
+    // Create PgDB instance for index operations (not exposed on main store)
+    dbOps = new PgDB({ client: store.db });
 
     performanceTest = new PostgresPerformanceTest({
       connectionString,
@@ -30,7 +35,7 @@ describe('PostgresStore Performance Indexes Integration', () => {
 
   it('should create performance indexes during store initialization', async () => {
     // Composite indexes are created by default during init
-    const indexes = await store.listIndexes();
+    const indexes = await dbOps.listIndexes();
 
     expect(indexes.length).toBeGreaterThan(0);
 
@@ -150,14 +155,11 @@ describe('PostgresStore Performance Indexes Integration', () => {
   }, 300000); // 5 minute timeout for comprehensive testing
 
   it('should handle index creation gracefully when indexes already exist', async () => {
-    // Access operations to test index creation
-    const operations = store.stores.operations as any;
-
     // Create automatic indexes again - should not fail
-    await expect(operations.createAutomaticIndexes()).resolves.not.toThrow();
+    await expect(dbOps.createAutomaticIndexes()).resolves.not.toThrow();
 
     // Verify indexes still exist
-    const indexes = await store.listIndexes();
+    const indexes = await dbOps.listIndexes();
     const compositeIndexes = indexes.filter(
       idx => idx.name.includes('threads_resourceid_createdat') || idx.name.includes('messages_thread_id_createdat'),
     );

@@ -8,18 +8,19 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '../../types';
-import type { StoreOperations } from '../operations';
+import type { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
 
-export type InMemoryObservability = Map<string, SpanRecord>;
 export class ObservabilityInMemory extends ObservabilityStorage {
-  operations: StoreOperations;
-  collection: InMemoryObservability;
+  private db: InMemoryDB;
 
-  constructor({ collection, operations }: { collection: InMemoryObservability; operations: StoreOperations }) {
+  constructor({ db }: { db: InMemoryDB }) {
     super();
-    this.collection = collection;
-    this.operations = operations;
+    this.db = db;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.db.spans.clear();
   }
 
   public get tracingStrategy(): {
@@ -38,7 +39,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const record = span as SpanRecord;
     record.createdAt = new Date();
     record.updatedAt = record.createdAt;
-    this.collection.set(id, record);
+    this.db.spans.set(id, record);
   }
 
   async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
@@ -72,7 +73,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
-    const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
+    const spans = Array.from(this.db.spans.values()).filter(span => span.traceId === traceId);
     if (spans.length === 0) {
       return null;
     }
@@ -88,7 +89,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     filters,
     pagination,
   }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    const allRootSpans = this.filterForRootSpans(Array.from(this.collection.values()));
+    const allRootSpans = this.filterForRootSpans(Array.from(this.db.spans.values()));
     const filteredRootSpans = this.filterSpansByFilter(allRootSpans, filters);
 
     const startDate = pagination?.dateRange?.start;
@@ -144,7 +145,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async updateSpan(params: { spanId: string; traceId: string; updates: Partial<UpdateSpanRecord> }): Promise<void> {
     const id = this.generateId(params);
-    const span = this.collection.get(id);
+    const span = this.db.spans.get(id);
 
     if (!span) {
       throw new MastraError({
@@ -155,7 +156,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       });
     }
 
-    this.collection.set(id, { ...span, ...params.updates, updatedAt: new Date() });
+    this.db.spans.set(id, { ...span, ...params.updates, updatedAt: new Date() });
   }
 
   async batchUpdateSpans(args: {
@@ -172,9 +173,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     for (const traceId of args.traceIds) {
-      const spans = Array.from(this.collection.values()).filter(span => span.traceId === traceId);
+      const spans = Array.from(this.db.spans.values()).filter(span => span.traceId === traceId);
       for (const span of spans) {
-        this.collection.delete(this.generateId(span));
+        this.db.spans.delete(this.generateId(span));
       }
     }
   }
