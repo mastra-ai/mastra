@@ -4,6 +4,9 @@ import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
 import { PgDB } from './db';
+import { MemoryPG } from './domains/memory';
+import { ScoresPG } from './domains/scores';
+import { WorkflowsPG } from './domains/workflows';
 import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
@@ -890,9 +893,6 @@ export function pgTests() {
         const pgp = pgPromise();
         const client = pgp(connectionString);
 
-        // Import and use the domain class directly
-        const { MemoryPG } = await import('./domains/memory');
-
         const memoryDomain = new MemoryPG({ client });
 
         expect(memoryDomain).toBeDefined();
@@ -919,9 +919,6 @@ export function pgTests() {
       it('should allow using WorkflowsPG domain directly with pre-configured client', async () => {
         const pgp = pgPromise();
         const client = pgp(connectionString);
-
-        // Import and use the domain class directly
-        const { WorkflowsPG } = await import('./domains/workflows');
 
         const workflowsDomain = new WorkflowsPG({ client });
 
@@ -957,9 +954,6 @@ export function pgTests() {
       it('should allow using ScoresPG domain directly with pre-configured client', async () => {
         const pgp = pgPromise();
         const client = pgp(connectionString);
-
-        // Import and use the domain class directly
-        const { ScoresPG } = await import('./domains/scores');
 
         const scoresDomain = new ScoresPG({ client });
 
@@ -1000,8 +994,6 @@ export function pgTests() {
         await client.none('CREATE SCHEMA IF NOT EXISTS domain_test_schema');
 
         try {
-          const { MemoryPG } = await import('./domains/memory');
-
           const memoryDomain = new MemoryPG({
             client,
             schemaName: 'domain_test_schema',

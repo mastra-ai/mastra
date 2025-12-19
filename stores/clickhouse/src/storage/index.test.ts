@@ -1,6 +1,9 @@
 import { createClient } from '@clickhouse/client';
 import { createTestSuite } from '@internal/storage-test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import { MemoryStorageClickhouse } from './domains/memory';
+import { ScoresStorageClickhouse } from './domains/scores';
+import { WorkflowsStorageClickhouse } from './domains/workflows';
 import { ClickhouseStore } from '.';
 import type { ClickhouseConfig } from '.';
 
@@ -200,9 +203,6 @@ describe('ClickHouse Domain-level Pre-configured Client', () => {
       password: TEST_CONFIG.password,
     });
 
-    // Import and use the domain class directly
-    const { MemoryStorageClickhouse } = await import('./domains/memory');
-
     const memoryDomain = new MemoryStorageClickhouse({ client });
 
     expect(memoryDomain).toBeDefined();
@@ -236,9 +236,6 @@ describe('ClickHouse Domain-level Pre-configured Client', () => {
       username: TEST_CONFIG.username,
       password: TEST_CONFIG.password,
     });
-
-    // Import and use the domain class directly
-    const { WorkflowsStorageClickhouse } = await import('./domains/workflows');
 
     const workflowsDomain = new WorkflowsStorageClickhouse({ client });
 
@@ -278,9 +275,6 @@ describe('ClickHouse Domain-level Pre-configured Client', () => {
       password: TEST_CONFIG.password,
     });
 
-    // Import and use the domain class directly
-    const { ScoresStorageClickhouse } = await import('./domains/scores');
-
     const scoresDomain = new ScoresStorageClickhouse({ client });
 
     expect(scoresDomain).toBeDefined();
@@ -313,9 +307,6 @@ describe('ClickHouse Domain-level Pre-configured Client', () => {
   });
 
   it('should allow domains to accept URL/credentials config directly', async () => {
-    // Import and use the domain class directly
-    const { MemoryStorageClickhouse } = await import('./domains/memory');
-
     // Domains can also accept standard URL/credentials config
     const memoryDomain = new MemoryStorageClickhouse({
       url: TEST_CONFIG.url,
@@ -349,8 +340,6 @@ describe('ClickHouse Domain-level Pre-configured Client', () => {
       username: TEST_CONFIG.username,
       password: TEST_CONFIG.password,
     });
-
-    const { MemoryStorageClickhouse } = await import('./domains/memory');
 
     // Domains accept TTL config alongside the client
     const memoryDomain = new MemoryStorageClickhouse({

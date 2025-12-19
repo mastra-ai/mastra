@@ -3,6 +3,9 @@ import { createClient } from '@libsql/client';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, vi } from 'vitest';
 
+import { MemoryLibSQL } from './domains/memory';
+import { ScoresLibSQL } from './domains/scores';
+import { WorkflowsLibSQL } from './domains/workflows';
 import { LibSQLStore } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -183,9 +186,6 @@ describe('LibSQL Domain-level Pre-configured Client', () => {
   it('should allow using MemoryLibSQL domain directly with pre-configured client', async () => {
     const client = createClient({ url: TEST_DB_URL });
 
-    // Import and use the domain class directly
-    const { MemoryLibSQL } = await import('./domains/memory');
-
     const memoryDomain = new MemoryLibSQL({ client });
 
     expect(memoryDomain).toBeDefined();
@@ -214,9 +214,6 @@ describe('LibSQL Domain-level Pre-configured Client', () => {
 
   it('should allow using WorkflowsLibSQL domain directly with pre-configured client', async () => {
     const client = createClient({ url: TEST_DB_URL });
-
-    // Import and use the domain class directly
-    const { WorkflowsLibSQL } = await import('./domains/workflows');
 
     const workflowsDomain = new WorkflowsLibSQL({ client });
 
@@ -251,9 +248,6 @@ describe('LibSQL Domain-level Pre-configured Client', () => {
   it('should allow using ScoresLibSQL domain directly with pre-configured client', async () => {
     const client = createClient({ url: TEST_DB_URL });
 
-    // Import and use the domain class directly
-    const { ScoresLibSQL } = await import('./domains/scores');
-
     const scoresDomain = new ScoresLibSQL({ client });
 
     expect(scoresDomain).toBeDefined();
@@ -285,8 +279,6 @@ describe('LibSQL Domain-level Pre-configured Client', () => {
 
   it('should allow domains to accept retry options with pre-configured client', async () => {
     const client = createClient({ url: TEST_DB_URL });
-
-    const { MemoryLibSQL } = await import('./domains/memory');
 
     // Domains accept retry options alongside the client
     const memoryDomain = new MemoryLibSQL({

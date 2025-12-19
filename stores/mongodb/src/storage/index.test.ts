@@ -3,6 +3,9 @@ import { SpanType } from '@mastra/core/observability';
 import { MongoClient } from 'mongodb';
 import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import type { ConnectorHandler } from './connectors/base';
+import { MemoryStorageMongoDB } from './domains/memory';
+import { ScoresStorageMongoDB } from './domains/scores';
+import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 import { MongoDBStore } from './index';
 
@@ -620,9 +623,6 @@ describe('MongoDB Domain-level Pre-configured Client', () => {
       close: async () => client.close(),
     };
 
-    // Import and use the domain class directly
-    const { MemoryStorageMongoDB } = await import('./domains/memory');
-
     const memoryDomain = new MemoryStorageMongoDB({ connectorHandler });
 
     expect(memoryDomain).toBeDefined();
@@ -659,9 +659,6 @@ describe('MongoDB Domain-level Pre-configured Client', () => {
       getCollection: async (name: string) => db.collection(name),
       close: async () => client.close(),
     };
-
-    // Import and use the domain class directly
-    const { WorkflowsStorageMongoDB } = await import('./domains/workflows');
 
     const workflowsDomain = new WorkflowsStorageMongoDB({ connectorHandler });
 
@@ -704,9 +701,6 @@ describe('MongoDB Domain-level Pre-configured Client', () => {
       close: async () => client.close(),
     };
 
-    // Import and use the domain class directly
-    const { ScoresStorageMongoDB } = await import('./domains/scores');
-
     const scoresDomain = new ScoresStorageMongoDB({ connectorHandler });
 
     expect(scoresDomain).toBeDefined();
@@ -739,9 +733,6 @@ describe('MongoDB Domain-level Pre-configured Client', () => {
   });
 
   it('should allow domains to accept URL/dbName config directly', async () => {
-    // Import and use the domain class directly
-    const { MemoryStorageMongoDB } = await import('./domains/memory');
-
     // Domains can also accept standard URL/dbName config
     const memoryDomain = new MemoryStorageMongoDB({
       url: TEST_CONFIG.url!,
