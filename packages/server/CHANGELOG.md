@@ -1,5 +1,98 @@
 # @mastra/server
 
+## 1.0.0-beta.14
+
+### Patch Changes
+
+- Add execution metadata to A2A message/send responses. The A2A protocol now returns detailed execution information including tool calls, tool results, token usage, and finish reason in the task metadata. This allows clients to inspect which tools were invoked during agent execution and access execution statistics without additional queries. ([#11241](https://github.com/mastra-ai/mastra/pull/11241))
+
+- feat: Add field filtering and nested workflow control to workflow execution result endpoint ([#11246](https://github.com/mastra-ai/mastra/pull/11246))
+
+  Adds two optional query parameters to `/api/workflows/:workflowId/runs/:runId/execution-result` endpoint:
+  - `fields`: Request only specific fields (e.g., `status`, `result`, `error`)
+  - `withNestedWorkflows`: Control whether to fetch nested workflow data
+
+  This significantly reduces response payload size and improves response times for large workflows.
+
+  ## Server Endpoint Usage
+
+  ```http
+  # Get only status (minimal payload - fastest)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status
+
+  # Get status and result
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status,result
+
+  # Get all fields but without nested workflow data (faster)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?withNestedWorkflows=false
+
+  # Get only specific fields without nested workflow data
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status,steps&withNestedWorkflows=false
+
+  # Get full data (default behavior)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result
+  ```
+
+  ## Client SDK Usage
+
+  ```typescript
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const workflow = client.getWorkflow('myWorkflow');
+
+  // Get only status (minimal payload - fastest)
+  const statusOnly = await workflow.runExecutionResult(runId, {
+    fields: ['status'],
+  });
+  console.log(statusOnly.status); // 'success' | 'failed' | 'running' | etc.
+
+  // Get status and result
+  const statusAndResult = await workflow.runExecutionResult(runId, {
+    fields: ['status', 'result'],
+  });
+
+  // Get all fields but without nested workflow data (faster)
+  const resultWithoutNested = await workflow.runExecutionResult(runId, {
+    withNestedWorkflows: false,
+  });
+
+  // Get specific fields without nested workflow data
+  const optimized = await workflow.runExecutionResult(runId, {
+    fields: ['status', 'steps'],
+    withNestedWorkflows: false,
+  });
+
+  // Get full execution result (default behavior)
+  const fullResult = await workflow.runExecutionResult(runId);
+  ```
+
+  ## Core API Changes
+
+  The `Workflow.getWorkflowRunExecutionResult` method now accepts an options object:
+
+  ```typescript
+  await workflow.getWorkflowRunExecutionResult(runId, {
+    withNestedWorkflows: false, // default: true, set to false to skip nested workflow data
+    fields: ['status', 'result'], // optional field filtering
+  });
+  ```
+
+  ## Inngest Compatibility
+
+  The `@mastra/inngest` package has been updated to use the new options object API. This is a non-breaking internal change - no action required from inngest workflow users.
+
+  ## Performance Impact
+
+  For workflows with large step outputs:
+  - Requesting only `status`: ~99% reduction in payload size
+  - Requesting `status,result,error`: ~95% reduction in payload size
+  - Using `withNestedWorkflows=false`: Avoids expensive nested workflow data fetching
+  - Combining both: Maximum performance optimization
+
+- Updated dependencies [[`4f94ed8`](https://github.com/mastra-ai/mastra/commit/4f94ed8177abfde3ec536e3574883e075423350c), [`ac3cc23`](https://github.com/mastra-ai/mastra/commit/ac3cc2397d1966bc0fc2736a223abc449d3c7719), [`a86f4df`](https://github.com/mastra-ai/mastra/commit/a86f4df0407311e0d2ea49b9a541f0938810d6a9), [`029540c`](https://github.com/mastra-ai/mastra/commit/029540ca1e582fc2dd8d288ecd4a9b0f31a954ef), [`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`01b20fe`](https://github.com/mastra-ai/mastra/commit/01b20fefb7c67c2b7d79417598ef4e60256d1225), [`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/core@1.0.0-beta.14
+
 ## 1.0.0-beta.13
 
 ### Patch Changes

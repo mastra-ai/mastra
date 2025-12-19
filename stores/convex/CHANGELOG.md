@@ -1,5 +1,35 @@
 # @mastra/convex
 
+## 0.1.0-beta.5
+
+### Minor Changes
+
+- Fixed Convex schema exports to support import in `convex/schema.ts` files. ([#11242](https://github.com/mastra-ai/mastra/pull/11242))
+
+  Previously, importing table definitions from `@mastra/convex/server` failed in Convex schema files because it transitively imported Node.js runtime modules (`crypto`, `fs`, `path`) that are unavailable in Convex's deploy-time sandbox.
+
+  **Changes**
+  - Added new export path `@mastra/convex/schema` that provides table definitions without runtime dependencies
+  - Moved schema definitions to a separate `src/schema.ts` file
+  - Updated `@mastra/convex/server` to re-export schema definitions from the new location for backward compatibility
+
+  **Migration**
+
+  Users should now import schema tables from `@mastra/convex/schema` instead of `@mastra/convex/server` in their `convex/schema.ts` files:
+
+  ```ts
+  // Before
+  import { mastraThreadsTable, mastraMessagesTable } from '@mastra/convex/server';
+
+  // After
+  import { mastraThreadsTable, mastraMessagesTable } from '@mastra/convex/schema';
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`4f94ed8`](https://github.com/mastra-ai/mastra/commit/4f94ed8177abfde3ec536e3574883e075423350c), [`ac3cc23`](https://github.com/mastra-ai/mastra/commit/ac3cc2397d1966bc0fc2736a223abc449d3c7719), [`a86f4df`](https://github.com/mastra-ai/mastra/commit/a86f4df0407311e0d2ea49b9a541f0938810d6a9), [`029540c`](https://github.com/mastra-ai/mastra/commit/029540ca1e582fc2dd8d288ecd4a9b0f31a954ef), [`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`01b20fe`](https://github.com/mastra-ai/mastra/commit/01b20fefb7c67c2b7d79417598ef4e60256d1225), [`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/core@1.0.0-beta.14
+
 ## 0.1.0-beta.4
 
 ### Patch Changes
