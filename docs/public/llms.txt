@@ -30,6 +30,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Deploy in a Monorepo | Deployment](https://mastra.ai/en/docs/deployment/monorepo): Learn how to deploy Mastra applications that are part of a monorepo setup
 - [Deployment Overview | Deployment](https://mastra.ai/en/docs/deployment/overview): Learn about different deployment options for your Mastra applications
 - [Deploy with a Web Framework | Deployment](https://mastra.ai/en/docs/deployment/web-framework): Learn how Mastra can be deployed when integrated with a Web Framework
+- [Workflow Runners | Deployment](https://mastra.ai/en/docs/deployment/workflow-runners): Deploy Mastra workflows to specialized workflow execution platforms
 - [Built-in Scorers | Evals](https://mastra.ai/en/docs/evals/built-in-scorers): Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions.
 - [Custom Scorers | Evals](https://mastra.ai/en/docs/evals/custom-scorers)
 - [Scorers overview | Evals](https://mastra.ai/en/docs/evals/overview): Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
@@ -99,7 +100,6 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Control Flow | Workflows](https://mastra.ai/en/docs/workflows/control-flow): Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements.
 - [Error Handling | Workflows](https://mastra.ai/en/docs/workflows/error-handling): Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring.
 - [Human-in-the-loop (HITL) | Workflows](https://mastra.ai/en/docs/workflows/human-in-the-loop): Human-in-the-loop workflows in Mastra allow you to pause execution for manual approvals, reviews, or user input before continuing.
-- [Inngest Workflow | Workflows](https://mastra.ai/en/docs/workflows/inngest-workflow): Inngest workflow allows you to run Mastra workflows with Inngest
 - [Input Data Mapping | Workflows](https://mastra.ai/en/docs/workflows/input-data-mapping): Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows.
 - [Workflows overview | Workflows](https://mastra.ai/en/docs/workflows/overview): Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more.
 - [Snapshots | Workflows](https://mastra.ai/en/docs/workflows/snapshots): Learn how to save and resume workflow execution state with snapshots in Mastra
