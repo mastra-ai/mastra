@@ -80,13 +80,18 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
+      const now = new Date();
       const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
         { workflow_name: workflowName, run_id: runId },
@@ -96,8 +101,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             run_id: runId,
             resourceId,
             snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            updatedAt: updatedAt ?? now,
+          },
+          $setOnInsert: {
+            createdAt: createdAt ?? now,
           },
         },
         { upsert: true },

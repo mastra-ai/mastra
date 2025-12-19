@@ -216,19 +216,22 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       const keyObjs = await this.#db.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       const runs: WorkflowRun[] = [];
       for (const { name: key } of keyObjs) {
-        // Extract workflow_name, run_id from key
+        // Extract workflow_name, run_id, and optionally resourceId from key
         const parts = key.split(':');
         const idx = parts.indexOf(TABLE_WORKFLOW_SNAPSHOT);
         if (idx === -1 || parts.length < idx + 3) continue;
         const wfName = parts[idx + 1];
+        // resourceId may be in key (legacy) at idx+3
+        const keyResourceId = parts.length > idx + 3 ? parts[idx + 3] : undefined;
         // Filter by workflowName if provided
         if (workflowName && wfName !== workflowName) continue;
         // Load the snapshot
         const data = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
         if (!data) continue;
         try {
-          // Filter by resourceId from the stored data
-          if (resourceId && data.resourceId !== resourceId) continue;
+          // Filter by resourceId - check both key (legacy) and data (current)
+          const effectiveResourceId = keyResourceId || data.resourceId;
+          if (resourceId && effectiveResourceId !== resourceId) continue;
           const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
           if (status && snapshotData.status !== status) continue;
           // Filter by fromDate/toDate
@@ -239,7 +242,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
           const run = this.parseWorkflowRun({
             ...data,
             workflow_name: wfName,
-            resourceId: data.resourceId,
+            resourceId: effectiveResourceId,
             snapshot: snapshotData,
           });
           runs.push(run);
