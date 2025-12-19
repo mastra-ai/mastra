@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
@@ -89,6 +90,7 @@ const startServer = async (
 
     commands.push(join(dotMastraPath, 'index.mjs'));
 
+    await mkdir(publicDir, { recursive: true });
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
