@@ -139,7 +139,6 @@ export class Memory extends MastraMemory {
       vector?: number[];
     }[] = [];
 
-
     // Log memory recall parameters, excluding potentially large schema objects
     this.logger.debug(`Memory recall() with:`, {
       threadId,
