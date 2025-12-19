@@ -9,7 +9,12 @@ import {
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { createTestSuite } from '@internal/storage-test-utils';
+import {
+  createTestSuite,
+  createClientAcceptanceTests,
+  createConfigValidationTests,
+  createDomainDirectTests,
+} from '@internal/storage-test-utils';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { DynamoDBStore } from '..';
@@ -26,6 +31,19 @@ let dynamodbProcess: ReturnType<typeof spawn>;
 
 // AWS SDK Client for setup/teardown
 let setupClient: DynamoDBClient;
+
+// Helper to create a pre-configured DynamoDB client
+const createTestClient = () => {
+  const dynamoClient = new DynamoDBClient({
+    endpoint: LOCAL_ENDPOINT,
+    region: LOCAL_REGION,
+    credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+    maxAttempts: 5,
+  });
+  return DynamoDBDocumentClient.from(dynamoClient, {
+    marshallOptions: { removeUndefinedValues: true },
+  });
+};
 
 // Function to wait for DynamoDB Local to be ready
 async function waitForDynamoDBLocal(client: DynamoDBClient, timeoutMs = 90000): Promise<void> {
@@ -240,303 +258,104 @@ describe('DynamoDBStore', () => {
     }),
   );
 
-  // Test with pre-configured client
-  describe('DynamoDBStore with pre-configured client', () => {
-    it('should accept a pre-configured DynamoDBDocumentClient', () => {
-      const dynamoClient = new DynamoDBClient({
-        endpoint: LOCAL_ENDPOINT,
-        region: LOCAL_REGION,
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-      });
-      const documentClient = DynamoDBDocumentClient.from(dynamoClient, {
-        marshallOptions: { removeUndefinedValues: true },
-      });
-
-      const store = new DynamoDBStore({
+  // Pre-configured client acceptance tests
+  createClientAcceptanceTests({
+    storeName: 'DynamoDBStore',
+    expectedStoreName: 'DynamoDBStoreWithClient',
+    createStoreWithClient: () =>
+      new DynamoDBStore({
         name: 'DynamoDBStoreWithClient',
         config: {
           id: 'dynamodb-client-test',
           tableName: TEST_TABLE_NAME,
-          client: documentClient,
+          client: createTestClient(),
         },
-      });
+      }),
+  });
 
-      expect(store).toBeDefined();
-      expect(store.name).toBe('DynamoDBStoreWithClient');
-    });
-
-    it('should work with pre-configured client for storage operations', async () => {
-      const dynamoClient = new DynamoDBClient({
-        endpoint: LOCAL_ENDPOINT,
-        region: LOCAL_REGION,
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-        maxAttempts: 5,
-      });
-      const documentClient = DynamoDBDocumentClient.from(dynamoClient, {
-        marshallOptions: { removeUndefinedValues: true },
-      });
-
-      const store = new DynamoDBStore({
-        name: 'DynamoDBStoreWithClientOps',
+  // Configuration validation tests
+  createConfigValidationTests({
+    storeName: 'DynamoDBStore',
+    createStore: config =>
+      new DynamoDBStore({
+        name: 'test',
+        config: config as any,
+      }),
+    validConfigs: [
+      {
+        description: 'region, endpoint, and credentials',
         config: {
-          id: 'dynamodb-client-ops-test',
-          tableName: TEST_TABLE_NAME,
-          client: documentClient,
+          id: 'test-store',
+          tableName: 'test-table',
+          region: 'us-east-1',
+          endpoint: 'http://localhost:8000',
+          credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
         },
-      });
-
-      await store.init();
-
-      // Test a basic operation
-      const thread = {
-        id: `thread-client-test-${Date.now()}`,
-        resourceId: 'test-resource',
-        title: 'Test Thread',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const savedThread = await store.saveThread({ thread });
-      expect(savedThread.id).toBe(thread.id);
-
-      const retrievedThread = await store.getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toBeDefined();
-      expect(retrievedThread?.title).toBe('Test Thread');
-
-      // Clean up
-      await store.deleteThread({ threadId: thread.id });
-      await store.close();
-    });
+      },
+      {
+        description: 'minimal config with just tableName',
+        config: { id: 'test-store', tableName: 'test-table' },
+      },
+      {
+        description: 'pre-configured DynamoDBDocumentClient',
+        config: { id: 'test-store', tableName: 'test-table', client: createTestClient() },
+      },
+      {
+        description: 'disableInit: true',
+        config: { id: 'test-store', tableName: 'test-table', disableInit: true },
+      },
+      {
+        description: 'disableInit: false',
+        config: { id: 'test-store', tableName: 'test-table', disableInit: false },
+      },
+    ],
+    invalidConfigs: [
+      {
+        description: 'empty tableName',
+        config: { id: 'test-store', tableName: '' },
+        expectedError: /tableName must be provided/,
+      },
+      {
+        description: 'tableName with invalid characters',
+        config: { id: 'test-store', tableName: 'invalid@table#name' },
+        expectedError: /invalid characters/,
+      },
+      {
+        description: 'tableName too short',
+        config: { id: 'test-store', tableName: 'ab' },
+        expectedError: /invalid characters|not between 3 and 255/,
+      },
+    ],
   });
 
-  describe('DynamoDBStore Configuration Validation', () => {
-    describe('with credentials config', () => {
-      it('should accept region, endpoint, and credentials', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'test-table',
-                region: 'us-east-1',
-                endpoint: 'http://localhost:8000',
-                credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-              },
-            }),
-        ).not.toThrow();
-      });
-
-      it('should accept minimal config with just tableName', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'test-table',
-              },
-            }),
-        ).not.toThrow();
-      });
-    });
-
-    describe('with pre-configured client', () => {
-      it('should accept a DynamoDBDocumentClient', () => {
-        const dynamoClient = new DynamoDBClient({ region: 'us-east-1' });
-        const documentClient = DynamoDBDocumentClient.from(dynamoClient);
-
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'test-table',
-                client: documentClient,
-              },
-            }),
-        ).not.toThrow();
-      });
-    });
-
-    describe('tableName validation', () => {
-      it('should throw if tableName is empty', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: '',
-              },
-            }),
-        ).toThrow(/tableName must be provided/);
-      });
-
-      it('should throw if tableName contains invalid characters', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'invalid@table#name',
-              },
-            }),
-        ).toThrow(/invalid characters/);
-      });
-
-      it('should throw if tableName is too short', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'ab',
-              },
-            }),
-        ).toThrow(/invalid characters|not between 3 and 255/);
-      });
-    });
-
-    describe('disableInit option', () => {
-      it('should accept disableInit: true', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'test-table',
-                disableInit: true,
-              },
-            }),
-        ).not.toThrow();
-      });
-
-      it('should accept disableInit: false', () => {
-        expect(
-          () =>
-            new DynamoDBStore({
-              name: 'test',
-              config: {
-                id: 'test-store',
-                tableName: 'test-table',
-                disableInit: false,
-              },
-            }),
-        ).not.toThrow();
-      });
-    });
+  // Domain-level pre-configured client tests
+  createDomainDirectTests({
+    storeName: 'DynamoDB',
+    createMemoryDomain: () =>
+      new MemoryStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+    createWorkflowsDomain: () =>
+      new WorkflowStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
+    createScoresDomain: () =>
+      new ScoresStorageDynamoDB({
+        tableName: TEST_TABLE_NAME,
+        endpoint: LOCAL_ENDPOINT,
+        region: LOCAL_REGION,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }),
   });
 
-  describe('DynamoDB Domain-level Pre-configured Client', () => {
-    it('should allow using MemoryStorageDynamoDB domain directly with connection config', async () => {
-      const memoryDomain = new MemoryStorageDynamoDB({
-        tableName: TEST_TABLE_NAME,
-        endpoint: LOCAL_ENDPOINT,
-        region: LOCAL_REGION,
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-      });
-
-      expect(memoryDomain).toBeDefined();
-      await memoryDomain.init();
-
-      // Test a basic operation
-      const thread = {
-        id: `thread-domain-test-${Date.now()}`,
-        resourceId: 'test-resource',
-        title: 'Test Domain Thread',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const savedThread = await memoryDomain.saveThread({ thread });
-      expect(savedThread.id).toBe(thread.id);
-
-      const retrievedThread = await memoryDomain.getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toBeDefined();
-      expect(retrievedThread?.title).toBe('Test Domain Thread');
-
-      // Clean up
-      await memoryDomain.deleteThread({ threadId: thread.id });
-    });
-
-    it('should allow using WorkflowStorageDynamoDB domain directly with connection config', async () => {
-      const workflowsDomain = new WorkflowStorageDynamoDB({
-        tableName: TEST_TABLE_NAME,
-        endpoint: LOCAL_ENDPOINT,
-        region: LOCAL_REGION,
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-      });
-
-      expect(workflowsDomain).toBeDefined();
-      await workflowsDomain.init();
-
-      // Test a basic operation
-      const workflowName = 'test-workflow';
-      const runId = `run-domain-test-${Date.now()}`;
-
-      await workflowsDomain.persistWorkflowSnapshot({
-        workflowName,
-        runId,
-        snapshot: {
-          runId,
-          value: { current_step: 'initial' },
-          context: { requestContext: {} },
-          activePaths: [],
-          suspendedPaths: {},
-          timestamp: Date.now(),
-        } as any,
-      });
-
-      const snapshot = await workflowsDomain.loadWorkflowSnapshot({ workflowName, runId });
-      expect(snapshot).toBeDefined();
-      expect(snapshot?.runId).toBe(runId);
-
-      // Clean up
-      await workflowsDomain.deleteWorkflowRunById({ workflowName, runId });
-    });
-
-    it('should allow using ScoresStorageDynamoDB domain directly with connection config', async () => {
-      const scoresDomain = new ScoresStorageDynamoDB({
-        tableName: TEST_TABLE_NAME,
-        endpoint: LOCAL_ENDPOINT,
-        region: LOCAL_REGION,
-        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-      });
-
-      expect(scoresDomain).toBeDefined();
-      await scoresDomain.init();
-
-      // Test a basic operation
-      const savedScore = await scoresDomain.saveScore({
-        runId: `run-score-test-${Date.now()}`,
-        score: 0.95,
-        scorerId: 'test-scorer',
-        scorer: { name: 'test-scorer', description: 'A test scorer' },
-        input: { query: 'test input' },
-        output: { result: 'test output' },
-        entity: { id: 'test-entity', type: 'agent' },
-        entityType: 'AGENT',
-        entityId: 'test-entity',
-        source: 'LIVE',
-        traceId: 'test-trace',
-        spanId: 'test-span',
-      });
-
-      expect(savedScore.score.id).toBeDefined();
-      expect(savedScore.score.score).toBe(0.95);
-
-      const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
-      expect(retrievedScore).toBeDefined();
-      expect(retrievedScore?.score).toBe(0.95);
-    });
-
+  // DynamoDB-specific: ElectroDB service integration test
+  describe('DynamoDB ElectroDB Service Integration', () => {
     it('should allow using domains with pre-configured ElectroDB service', async () => {
       // Create a DynamoDB client and ElectroDB service
       const dynamoClient = new DynamoDBClient({

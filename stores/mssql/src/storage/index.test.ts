@@ -1,4 +1,9 @@
-import { createTestSuite } from '@internal/storage-test-utils';
+import {
+  createTestSuite,
+  createClientAcceptanceTests,
+  createConfigValidationTests,
+  createDomainDirectTests,
+} from '@internal/storage-test-utils';
 import sql from 'mssql';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -19,197 +24,58 @@ const TEST_CONFIG: MSSQLConfig = {
 
 const CONNECTION_STRING = `Server=${(TEST_CONFIG as any).server},${(TEST_CONFIG as any).port};Database=${(TEST_CONFIG as any).database};User Id=${(TEST_CONFIG as any).user};Password=${(TEST_CONFIG as any).password};Encrypt=true;TrustServerCertificate=true`;
 
+// Helper to create a pre-configured pool for tests
+const createTestPool = () =>
+  new sql.ConnectionPool({
+    server: (TEST_CONFIG as any).server,
+    port: (TEST_CONFIG as any).port,
+    database: (TEST_CONFIG as any).database,
+    user: (TEST_CONFIG as any).user,
+    password: (TEST_CONFIG as any).password,
+    options: { encrypt: true, trustServerCertificate: true },
+  });
+
+// Domain connection config (reusable)
+const DOMAIN_CONFIG = {
+  server: (TEST_CONFIG as any).server,
+  port: (TEST_CONFIG as any).port,
+  database: (TEST_CONFIG as any).database,
+  user: (TEST_CONFIG as any).user,
+  password: (TEST_CONFIG as any).password,
+  options: { encrypt: true, trustServerCertificate: true },
+};
+
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 console.log('Not running MSSQL tests in CI. You can enable them if you want to test them locally.');
 if (process.env.ENABLE_TESTS === 'true') {
   createTestSuite(new MSSQLStore(TEST_CONFIG));
 
-  describe('MSSQLStore with pre-configured pool', () => {
-    it('should accept a pre-configured ConnectionPool', () => {
-      const pool = new sql.ConnectionPool({
-        server: (TEST_CONFIG as any).server,
-        port: (TEST_CONFIG as any).port,
-        database: (TEST_CONFIG as any).database,
-        user: (TEST_CONFIG as any).user,
-        password: (TEST_CONFIG as any).password,
-        options: { encrypt: true, trustServerCertificate: true },
-      });
-
-      const store = new MSSQLStore({
+  // Pre-configured client (pool) acceptance tests
+  createClientAcceptanceTests({
+    storeName: 'MSSQLStore',
+    expectedStoreName: 'MSSQLStore',
+    createStoreWithClient: () =>
+      new MSSQLStore({
         id: 'mssql-pool-test',
-        pool,
-      });
-
-      expect(store).toBeDefined();
-      expect(store.pool).toBe(pool);
-    });
-
-    it('should work with pre-configured pool for storage operations', async () => {
-      const pool = new sql.ConnectionPool({
-        server: (TEST_CONFIG as any).server,
-        port: (TEST_CONFIG as any).port,
-        database: (TEST_CONFIG as any).database,
-        user: (TEST_CONFIG as any).user,
-        password: (TEST_CONFIG as any).password,
-        options: { encrypt: true, trustServerCertificate: true },
-      });
-
-      const store = new MSSQLStore({
-        id: 'mssql-pool-ops-test',
-        pool,
-      });
-
-      try {
-        await store.init();
-
-        // Test a basic operation
-        const thread = {
-          id: `thread-pool-test-${Date.now()}`,
-          resourceId: 'test-resource',
-          title: 'Test Thread',
-          metadata: {},
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        const savedThread = await store.saveThread({ thread });
-        expect(savedThread.id).toBe(thread.id);
-
-        const retrievedThread = await store.getThreadById({ threadId: thread.id });
-        expect(retrievedThread).toBeDefined();
-        expect(retrievedThread?.title).toBe('Test Thread');
-
-        // Clean up
-        await store.deleteThread({ threadId: thread.id });
-      } finally {
-        await store.close();
-      }
-    });
+        pool: createTestPool(),
+      }),
   });
 
-  describe('MSSQL Domain-level with connection config', () => {
-    // Note: MSSQL domains currently require MssqlDomainRestConfig (connection details)
-    // when used standalone. See DOMAIN_CONFIG_NOTE.md for discussion on allowing just pool.
+  // Domain-level pre-configured client tests
+  createDomainDirectTests({
+    storeName: 'MSSQL',
+    createMemoryDomain: () => new MemoryMSSQL(DOMAIN_CONFIG),
+    createWorkflowsDomain: () => new WorkflowsMSSQL(DOMAIN_CONFIG),
+    createScoresDomain: () => new ScoresMSSQL(DOMAIN_CONFIG),
+  });
 
-    it('should allow using MemoryMSSQL domain directly with connection config', async () => {
-      const memoryDomain = new MemoryMSSQL({
-        server: (TEST_CONFIG as any).server,
-        port: (TEST_CONFIG as any).port,
-        database: (TEST_CONFIG as any).database,
-        user: (TEST_CONFIG as any).user,
-        password: (TEST_CONFIG as any).password,
-        options: { encrypt: true, trustServerCertificate: true },
-      });
-
-      expect(memoryDomain).toBeDefined();
-      await memoryDomain.init();
-
-      // Test a basic operation
-      const thread = {
-        id: `thread-domain-test-${Date.now()}`,
-        resourceId: 'test-resource',
-        title: 'Test Domain Thread',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const savedThread = await memoryDomain.saveThread({ thread });
-      expect(savedThread.id).toBe(thread.id);
-
-      const retrievedThread = await memoryDomain.getThreadById({ threadId: thread.id });
-      expect(retrievedThread).toBeDefined();
-      expect(retrievedThread?.title).toBe('Test Domain Thread');
-
-      // Clean up
-      await memoryDomain.deleteThread({ threadId: thread.id });
-    });
-
-    it('should allow using WorkflowsMSSQL domain directly with connection config', async () => {
-      const workflowsDomain = new WorkflowsMSSQL({
-        server: (TEST_CONFIG as any).server,
-        port: (TEST_CONFIG as any).port,
-        database: (TEST_CONFIG as any).database,
-        user: (TEST_CONFIG as any).user,
-        password: (TEST_CONFIG as any).password,
-        options: { encrypt: true, trustServerCertificate: true },
-      });
-
-      expect(workflowsDomain).toBeDefined();
-      await workflowsDomain.init();
-
-      // Test a basic operation
-      const workflowName = 'test-workflow';
-      const runId = `run-domain-test-${Date.now()}`;
-
-      await workflowsDomain.persistWorkflowSnapshot({
-        workflowName,
-        runId,
-        snapshot: {
-          runId,
-          value: { current_step: 'initial' },
-          context: { requestContext: {} },
-          activePaths: [],
-          suspendedPaths: {},
-          timestamp: Date.now(),
-        } as any,
-      });
-
-      const snapshot = await workflowsDomain.loadWorkflowSnapshot({ workflowName, runId });
-      expect(snapshot).toBeDefined();
-      expect(snapshot?.runId).toBe(runId);
-
-      // Clean up
-      await workflowsDomain.deleteWorkflowRunById({ workflowName, runId });
-    });
-
-    it('should allow using ScoresMSSQL domain directly with connection config', async () => {
-      const scoresDomain = new ScoresMSSQL({
-        server: (TEST_CONFIG as any).server,
-        port: (TEST_CONFIG as any).port,
-        database: (TEST_CONFIG as any).database,
-        user: (TEST_CONFIG as any).user,
-        password: (TEST_CONFIG as any).password,
-        options: { encrypt: true, trustServerCertificate: true },
-      });
-
-      expect(scoresDomain).toBeDefined();
-      await scoresDomain.init();
-
-      // Test a basic operation
-      const savedScore = await scoresDomain.saveScore({
-        runId: `run-score-test-${Date.now()}`,
-        score: 0.95,
-        scorerId: 'test-scorer',
-        scorer: { name: 'test-scorer', description: 'A test scorer' },
-        input: { query: 'test input' },
-        output: { result: 'test output' },
-        entity: { id: 'test-entity', type: 'agent' },
-        entityType: 'AGENT',
-        entityId: 'test-entity',
-        source: 'LIVE',
-        traceId: 'test-trace',
-        spanId: 'test-span',
-      });
-
-      expect(savedScore.score.id).toBeDefined();
-      expect(savedScore.score.score).toBe(0.95);
-
-      const retrievedScore = await scoresDomain.getScoreById({ id: savedScore.score.id });
-      expect(retrievedScore).toBeDefined();
-      expect(retrievedScore?.score).toBe(0.95);
-    });
-
+  // MSSQL-specific: schemaName option for domains
+  describe('MSSQL Domain schemaName Option', () => {
     it('should allow domains to use custom schemaName with connection config', async () => {
       const memoryDomain = new MemoryMSSQL({
-        server: (TEST_CONFIG as any).server,
-        port: (TEST_CONFIG as any).port,
-        database: (TEST_CONFIG as any).database,
-        user: (TEST_CONFIG as any).user,
-        password: (TEST_CONFIG as any).password,
+        ...DOMAIN_CONFIG,
         schemaName: 'domain_test_schema',
-        options: { encrypt: true, trustServerCertificate: true },
       });
 
       expect(memoryDomain).toBeDefined();
@@ -241,173 +107,136 @@ if (process.env.ENABLE_TESTS === 'true') {
 }
 
 // Configuration validation tests (run even without ENABLE_TESTS)
-describe('MSSQLStore Configuration Validation', () => {
-  describe('with server/port config', () => {
-    it('should throw if server is empty', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            server: '',
-            port: 1433,
-            database: 'master',
-            user: 'sa',
-            password: 'password',
-          }),
-      ).toThrow(/server must be provided/i);
-    });
-
-    it('should throw if database is empty', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            server: 'localhost',
-            port: 1433,
-            database: '',
-            user: 'sa',
-            password: 'password',
-          }),
-      ).toThrow(/database must be provided/i);
-    });
-
-    it('should accept valid server/port config', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            server: 'localhost',
-            port: 1433,
-            database: 'master',
-            user: 'sa',
-            password: 'password',
-          }),
-      ).not.toThrow();
-    });
-
-    it('should accept config with schemaName', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            server: 'localhost',
-            port: 1433,
-            database: 'master',
-            user: 'sa',
-            password: 'password',
-            schemaName: 'custom_schema',
-          }),
-      ).not.toThrow();
-    });
-  });
-
-  describe('with connection string', () => {
-    it('should throw if connectionString is empty', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            connectionString: '',
-          }),
-      ).toThrow(/connectionString must be provided/i);
-    });
-
-    it('should accept valid connection string', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            connectionString: CONNECTION_STRING,
-          }),
-      ).not.toThrow();
-    });
-  });
-
-  describe('with pre-configured pool', () => {
-    it('should accept a ConnectionPool', () => {
-      const pool = new sql.ConnectionPool({
-        server: 'localhost',
-        database: 'master',
-        user: 'sa',
-        password: 'password',
-      });
-
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            pool,
-          }),
-      ).not.toThrow();
-    });
-
-    it('should accept pool with schemaName', () => {
-      const pool = new sql.ConnectionPool({
-        server: 'localhost',
-        database: 'master',
-        user: 'sa',
-        password: 'password',
-      });
-
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            pool,
-            schemaName: 'custom_schema',
-          }),
-      ).not.toThrow();
-    });
-
-    it('should expose pool as public field', () => {
-      const pool = new sql.ConnectionPool({
-        server: 'localhost',
-        database: 'master',
-        user: 'sa',
-        password: 'password',
-      });
-
-      const store = new MSSQLStore({
+createConfigValidationTests({
+  storeName: 'MSSQLStore',
+  createStore: config => new MSSQLStore(config as any),
+  validConfigs: [
+    {
+      description: 'valid server/port config',
+      config: {
         id: 'test-store',
-        pool,
-      });
-
-      expect(store.pool).toBe(pool);
-    });
-  });
-
-  describe('disableInit option', () => {
-    it('should accept disableInit: true with server config', () => {
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            server: 'localhost',
-            port: 1433,
-            database: 'master',
-            user: 'sa',
-            password: 'password',
-            disableInit: true,
-          }),
-      ).not.toThrow();
-    });
-
-    it('should accept disableInit: true with pool config', () => {
-      const pool = new sql.ConnectionPool({
         server: 'localhost',
+        port: 1433,
         database: 'master',
         user: 'sa',
         password: 'password',
-      });
+      },
+    },
+    {
+      description: 'config with schemaName',
+      config: {
+        id: 'test-store',
+        server: 'localhost',
+        port: 1433,
+        database: 'master',
+        user: 'sa',
+        password: 'password',
+        schemaName: 'custom_schema',
+      },
+    },
+    {
+      description: 'valid connection string',
+      config: { id: 'test-store', connectionString: CONNECTION_STRING },
+    },
+    {
+      description: 'pre-configured ConnectionPool',
+      config: {
+        id: 'test-store',
+        pool: new sql.ConnectionPool({
+          server: 'localhost',
+          database: 'master',
+          user: 'sa',
+          password: 'password',
+        }),
+      },
+    },
+    {
+      description: 'pool with schemaName',
+      config: {
+        id: 'test-store',
+        pool: new sql.ConnectionPool({
+          server: 'localhost',
+          database: 'master',
+          user: 'sa',
+          password: 'password',
+        }),
+        schemaName: 'custom_schema',
+      },
+    },
+    {
+      description: 'disableInit with server config',
+      config: {
+        id: 'test-store',
+        server: 'localhost',
+        port: 1433,
+        database: 'master',
+        user: 'sa',
+        password: 'password',
+        disableInit: true,
+      },
+    },
+    {
+      description: 'disableInit with pool config',
+      config: {
+        id: 'test-store',
+        pool: new sql.ConnectionPool({
+          server: 'localhost',
+          database: 'master',
+          user: 'sa',
+          password: 'password',
+        }),
+        disableInit: true,
+      },
+    },
+  ],
+  invalidConfigs: [
+    {
+      description: 'empty server',
+      config: {
+        id: 'test-store',
+        server: '',
+        port: 1433,
+        database: 'master',
+        user: 'sa',
+        password: 'password',
+      },
+      expectedError: /server must be provided/i,
+    },
+    {
+      description: 'empty database',
+      config: {
+        id: 'test-store',
+        server: 'localhost',
+        port: 1433,
+        database: '',
+        user: 'sa',
+        password: 'password',
+      },
+      expectedError: /database must be provided/i,
+    },
+    {
+      description: 'empty connectionString',
+      config: { id: 'test-store', connectionString: '' },
+      expectedError: /connectionString must be provided/i,
+    },
+  ],
+});
 
-      expect(
-        () =>
-          new MSSQLStore({
-            id: 'test-store',
-            pool,
-            disableInit: true,
-          }),
-      ).not.toThrow();
+// MSSQL-specific: pool exposure test (run even without ENABLE_TESTS)
+describe('MSSQLStore Pool Exposure', () => {
+  it('should expose pool as public field', () => {
+    const pool = new sql.ConnectionPool({
+      server: 'localhost',
+      database: 'master',
+      user: 'sa',
+      password: 'password',
     });
+
+    const store = new MSSQLStore({
+      id: 'test-store',
+      pool,
+    });
+
+    expect(store.pool).toBe(pool);
   });
 });

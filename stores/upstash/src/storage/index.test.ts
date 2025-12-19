@@ -8,8 +8,8 @@ import { Redis } from '@upstash/redis';
 import { describe, expect, it, vi } from 'vitest';
 
 import { StoreMemoryUpstash } from './domains/memory';
-import { StoreScoresUpstash } from './domains/scores';
-import { StoreWorkflowsUpstash } from './domains/workflows';
+import { ScoresUpstash } from './domains/scores';
+import { WorkflowsUpstash } from './domains/workflows';
 import { UpstashStore } from './index';
 
 vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
@@ -81,8 +81,8 @@ createClientAcceptanceTests({
 createDomainDirectTests({
   storeName: 'Upstash',
   createMemoryDomain: () => new StoreMemoryUpstash({ client: createTestClient() }),
-  createWorkflowsDomain: () => new StoreWorkflowsUpstash({ client: createTestClient() }),
-  createScoresDomain: () => new StoreScoresUpstash({ client: createTestClient() }),
+  createWorkflowsDomain: () => new WorkflowsUpstash({ client: createTestClient() }),
+  createScoresDomain: () => new ScoresUpstash({ client: createTestClient() }),
 });
 
 // Additional Upstash-specific tests
