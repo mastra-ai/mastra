@@ -164,7 +164,7 @@ Returns an array of index names (namespaces) as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -238,7 +238,7 @@ Upstash Vector supports hybrid search that combines semantic search (dense vecto
 
 ### Basic Hybrid Usage
 
-```typescript copy
+```typescript
 import { UpstashVector } from "@mastra/upstash";
 
 const vectorStore = new UpstashVector({
@@ -275,7 +275,7 @@ const results = await vectorStore.query({
 
 ### Advanced Hybrid Search Options
 
-```typescript copy
+```typescript
 import { FusionAlgorithm, QueryMode } from "@upstash/vector";
 
 // Query with specific fusion algorithm
@@ -307,7 +307,7 @@ const sparseResults = await vectorStore.query({
 
 ### Updating Hybrid Vectors
 
-```typescript copy
+```typescript
 // Update both dense and sparse components
 await vectorStore.updateVector({
   indexName: "hybrid-index",
@@ -324,7 +324,7 @@ await vectorStore.updateVector({
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -337,7 +337,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",
@@ -357,6 +357,55 @@ Required environment variables:
 
 - `UPSTASH_VECTOR_URL`: Your Upstash Vector database URL
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
+
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-upstash-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { UpstashStore, UpstashVector } from "@mastra/upstash";
+import { fastembed } from "@mastra/fastembed";
+
+export const upstashAgent = new Agent({
+  id: "upstash-agent",
+  name: "Upstash Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new UpstashStore({
+      id: 'upstash-agent-storage',
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    }),
+    vector: new UpstashVector({
+      id: 'upstash-agent-vector',
+      url: process.env.UPSTASH_VECTOR_REST_URL!,
+      token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+    },
+  }),
+});
+```
 
 ## Related
 

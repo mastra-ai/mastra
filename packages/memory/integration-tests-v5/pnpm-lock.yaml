@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@mastra/ai-sdk': link:../../../client-sdks/ai-sdk
+  '@mastra/client-js': link:../../../client-sdks/client-js
   '@mastra/core': link:../../core
   mastra: link:../../cli
   '@mastra/memory': link:../../memory
@@ -20,6 +21,9 @@ importers:
       '@mastra/ai-sdk':
         specifier: link:../../../client-sdks/ai-sdk
         version: link:../../../client-sdks/ai-sdk
+      '@mastra/client-js':
+        specifier: link:../../../client-sdks/client-js
+        version: link:../../../client-sdks/client-js
       '@mastra/fastembed':
         specifier: link:../../fastembed
         version: link:../../fastembed

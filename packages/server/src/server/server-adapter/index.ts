@@ -1,7 +1,7 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
@@ -54,7 +54,7 @@ export interface StreamOptions {
 export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
-  protected tools?: Record<string, Tool>;
+  protected tools?: ToolsInput;
   protected prefix?: string;
   protected openapiPath?: string;
   protected taskStore?: InMemoryTaskStore;
@@ -75,7 +75,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     app: TApp;
     mastra: Mastra;
     bodyLimitOptions?: BodyLimitOptions;
-    tools?: Record<string, Tool>;
+    tools?: ToolsInput;
     prefix?: string;
     openapiPath?: string;
     taskStore?: InMemoryTaskStore;

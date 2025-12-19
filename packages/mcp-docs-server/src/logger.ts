@@ -4,6 +4,55 @@ import * as path from 'node:path';
 import type { MCPServer } from '@mastra/mcp';
 import type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 
+// Simplified log levels matching MCP client (debug, info, warn, error, none)
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'none';
+
+// Priority map for log level filtering (higher = more severe)
+const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
+  debug: 0,
+  info: 1,
+  warn: 2,
+  error: 3,
+  none: 4, // none = disable all logs
+};
+
+// Map MCP LoggingLevel to our simplified LogLevel
+function mapToLogLevel(level: LoggingLevel): LogLevel {
+  switch (level) {
+    case 'debug':
+      return 'debug';
+    case 'info':
+    case 'notice':
+      return 'info';
+    case 'warning':
+      return 'warn';
+    case 'error':
+    case 'critical':
+    case 'alert':
+    case 'emergency':
+      return 'error';
+    default:
+      return 'info';
+  }
+}
+
+// Current log level (default: debug = show all)
+let currentLogLevel: LogLevel = 'debug';
+
+export function setLogLevel(level: LogLevel): void {
+  currentLogLevel = level;
+}
+
+export function getLogLevel(): LogLevel {
+  return currentLogLevel;
+}
+
+// Check if a log level should be shown based on current minimum level
+function shouldLog(level: LoggingLevel): boolean {
+  const mappedLevel = mapToLogLevel(level);
+  return LOG_LEVEL_PRIORITY[mappedLevel] >= LOG_LEVEL_PRIORITY[currentLogLevel];
+}
+
 // Logger interface for type safety
 export interface Logger {
   debug: (message: string, data?: any) => Promise<void>;
@@ -49,6 +98,7 @@ export const writeErrorLog = (message: string, data?: any) => {
 export function createLogger(server?: MCPServer): Logger {
   const sendLog = async (level: LoggingLevel, message: string, data?: any) => {
     if (!server) return;
+    if (!shouldLog(level)) return;
 
     try {
       const sdkServer = server.getServer();

@@ -4,8 +4,6 @@
 '@mastra/core': patch
 ---
 
-fix(agent): persist messages before tool suspension
-
 Fixes issues where thread and messages were not saved before suspension when tools require approval or call suspend() during execution. This caused conversation history to be lost if users refreshed during tool approval or suspension.
 
 **Backend changes (@mastra/core):**

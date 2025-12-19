@@ -21,6 +21,7 @@ import {
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE,
+  STREAM_WORKFLOW_ROUTE,
 } from './workflows';
 
 vi.mock('zod', async importOriginal => {
@@ -503,6 +504,64 @@ describe('vNext Workflow Handlers', () => {
         serializedStepGraph: mockWorkflow.serializedStepGraph,
       });
     });
+
+    it('should get workflow run execution result with field filtering (status only)', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-fields',
+      });
+      await run.start({ inputData: {} });
+      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-fields',
+        fields: 'status',
+      } as any);
+
+      // Should only return status field
+      expect(result).toEqual({
+        status: 'success',
+      });
+      expect(result.steps).toBeUndefined();
+      expect(result.result).toBeUndefined();
+    });
+
+    it('should get workflow run execution result with multiple fields', async () => {
+      const run = await mockWorkflow.createRun({
+        runId: 'test-run-multi-fields',
+      });
+      await run.start({ inputData: {} });
+      const result = await GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-multi-fields',
+        fields: 'status,result,error',
+      } as any);
+
+      // Should only return requested fields
+      expect(result).toEqual({
+        status: 'success',
+        result: { result: 'success' },
+        error: undefined,
+      });
+      expect(result.steps).toBeUndefined();
+      expect(result.payload).toBeUndefined();
+      expect(result.activeStepsPath).toBeUndefined();
+    });
+
+    it('should reject invalid field names in query schema', () => {
+      const { queryParamSchema } = GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE;
+
+      // Valid fields should pass
+      expect(() => queryParamSchema?.parse({ fields: 'status,result' })).not.toThrow();
+
+      // Invalid field should fail
+      expect(() => queryParamSchema?.parse({ fields: 'invalidField' })).toThrow();
+      expect(() => queryParamSchema?.parse({ fields: 'status,invalidField' })).toThrow();
+
+      // Empty/undefined should pass
+      expect(() => queryParamSchema?.parse({})).not.toThrow();
+      expect(() => queryParamSchema?.parse({ fields: undefined })).not.toThrow();
+    });
   });
 
   describe('CREATE_WORKFLOW_RUN_ROUTE', () => {
@@ -533,6 +592,23 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(result).toEqual({ runId: 'test-run' });
+    });
+
+    it('should create workflow run with resourceId', async () => {
+      const resourceId = 'user-create-test';
+
+      const result = await CREATE_WORKFLOW_RUN_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-with-resource-create',
+        resourceId,
+      } as any);
+
+      expect(result).toEqual({ runId: 'test-run-with-resource-create' });
+
+      // Verify resourceId is stored
+      const run = await mockWorkflow.getWorkflowRunById('test-run-with-resource-create');
+      expect(run?.resourceId).toBe(resourceId);
     });
   });
 
@@ -932,6 +1008,28 @@ describe('vNext Workflow Handlers', () => {
       // Verify resourceId is preserved
       const runAfter = await freshWorkflow.getWorkflowRunById('test-run-cancel-resource');
       expect(runAfter?.resourceId).toBe(resourceId);
+    });
+  });
+
+  describe('STREAM_WORKFLOW_ROUTE', () => {
+    it('should stream workflow with resourceId', async () => {
+      const resourceId = 'user-stream-test';
+
+      // Stream the workflow with resourceId - creates the run and sets resourceId
+      await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-stream-resource',
+        resourceId,
+        inputData: {},
+      } as any);
+
+      // Wait for stream to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify resourceId is stored
+      const storedRun = await mockWorkflow.getWorkflowRunById('test-run-stream-resource');
+      expect(storedRun?.resourceId).toBe(resourceId);
     });
   });
 });

@@ -1,4 +1,5 @@
 import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
+import type { EmbeddingModelV3 } from '@ai-sdk/provider-v6';
 import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
@@ -16,7 +17,30 @@ import type {
   DeleteIndexParams,
 } from './types';
 
-export type MastraEmbeddingModel<T> = EmbeddingModelV1<T> | EmbeddingModelV2<T>;
+/** Legacy embedding model (V1) - use embedV1 function */
+export type MastraLegacyEmbeddingModel<T> = EmbeddingModelV1<T>;
+
+/** Modern embedding model (V2/V3) - use embedV2 for V2 models, embedV3 for V3 models */
+export type MastraSupportedEmbeddingModel<T> = EmbeddingModelV2<T> | EmbeddingModelV3;
+
+/** All supported embedding model types */
+export type MastraEmbeddingModel<T> = MastraLegacyEmbeddingModel<T> | MastraSupportedEmbeddingModel<T>;
+
+/** Specification versions for supported (modern) embedding models */
+export const supportedEmbeddingModelSpecifications = ['v2', 'v3'] as const;
+
+/**
+ * Type guard to check if an embedding model is a supported modern version (V2 or V3).
+ * Use embedV2 for V2 models, embedV3 for V3 models, and embedV1 for legacy V1 models.
+ */
+export const isSupportedEmbeddingModel = <T>(
+  model: MastraEmbeddingModel<T>,
+): model is MastraSupportedEmbeddingModel<T> => {
+  return supportedEmbeddingModelSpecifications.includes(
+    model.specificationVersion as (typeof supportedEmbeddingModelSpecifications)[number],
+  );
+};
+
 export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   id: string;
 

@@ -9,7 +9,7 @@ The `.startAsync()` method starts a workflow run without waiting for completion.
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 // Fire-and-forget - returns immediately
@@ -123,7 +123,7 @@ Use `startAsync()` instead of `start()` when:
 
 After calling `startAsync()`, you can check the workflow status using:
 
-```typescript showLineNumbers copy
+```typescript
 // Get the execution result (including step outputs)
 const result = await workflow.getWorkflowRunExecutionResult(runId);
 

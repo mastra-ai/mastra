@@ -10,7 +10,7 @@ The Azure OpenAI gateway supports three configuration modes:
 2. **Dynamic discovery**: Query Azure Management API for available deployments
 3. **Manual**: Specify deployment names when creating agents
 
-## Usage
+**Usage**
 
 ```typescript
 import { Mastra } from "@mastra/core";

@@ -5,6 +5,7 @@ import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { useWorkflow, useWorkflowRunExecutionResult } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
+import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
 
 export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
 
@@ -32,6 +33,7 @@ type WorkflowRunContextType = {
     params: {
       workflowId: string;
       requestContext: Record<string, unknown>;
+      runId: string;
     } & Omit<TimeTravelParams, 'requestContext'>,
   ) => Promise<void>;
   runSnapshot?: WorkflowRunState;
@@ -162,7 +164,7 @@ export function WorkflowRunProvider({
         withoutTimeTravel,
       }}
     >
-      {children}
+      <WorkflowStepDetailProvider>{children}</WorkflowStepDetailProvider>
     </WorkflowRunContext.Provider>
   );
 }

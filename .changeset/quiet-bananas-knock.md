@@ -2,8 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fix tool input validation to use schema-compat transformed schemas
-
 Previously, tool input validation used the original Zod schema while the LLM received a schema-compat transformed version. This caused validation failures when LLMs (like OpenAI o3 or Claude 3.5 Haiku) sent arguments matching the transformed schema but not the original.
 
 For example:

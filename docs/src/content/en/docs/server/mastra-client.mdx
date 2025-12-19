@@ -61,7 +61,7 @@ To use the Mastra Client SDK, install the required dependencies:
 
 Once initialized with a `baseUrl`, `MastraClient` exposes a type-safe interface for calling agents, tools, and workflows.
 
-```typescript title="lib/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -85,7 +85,7 @@ The Mastra Client SDK exposes all resources served by the Mastra Server
 
 Call `.generate()` with an array of message objects that include `role` and `content`:
 
-```typescript showLineNumbers copy
+```typescript
 import { mastraClient } from "lib/mastra-client";
 
 const testAgent = async () => {
@@ -108,13 +108,17 @@ const testAgent = async () => {
 };
 ```
 
-> See [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+:::info
+
+Visit [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+
+:::
 
 ## Streaming responses
 
 Use `.stream()` for real-time responses with an array of message objects that include `role` and `content`:
 
-```typescript showLineNumbers copy
+```typescript
 import { mastraClient } from "lib/mastra-client";
 
 const testAgent = async () => {
@@ -141,17 +145,20 @@ const testAgent = async () => {
 };
 ```
 
-> See [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+:::info
+
+Visit [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+
+:::
 
 ## Configuration options
 
 `MastraClient` accepts optional parameters like `retries`, `backoffMs`, and `headers` to control request behavior. These parameters are useful for controlling retry behavior and including diagnostic metadata.
 
-```typescript title="lib/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  // ...
   retries: 3,
   backoffMs: 300,
   maxBackoffMs: 5000,
@@ -161,7 +168,11 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+:::info
+
+Visit [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+
+:::
 
 ## Adding request cancelling
 
@@ -169,7 +180,7 @@ export const mastraClient = new MastraClient({
 
 Pass an `AbortSignal` to the client constructor to enable cancellation across all requests.
 
-```typescript {3,7} title="lib/mastra-client.ts" showLineNumbers copy
+```typescript {3,7} title="lib/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const controller = new AbortController();
@@ -184,7 +195,7 @@ export const mastraClient = new MastraClient({
 
 Calling `.abort()` will cancel any ongoing requests tied to that signal.
 
-```typescript {4} showLineNumbers copy
+```typescript {4}
 import { mastraClient, controller } from "lib/mastra-client";
 
 const handleAbort = () => {
@@ -198,7 +209,7 @@ Define tools directly in client-side applications using the `createTool()` funct
 
 This lets agents trigger browser-side functionality such as DOM manipulation, local storage access, or other Web APIs, enabling tool execution in the user's environment rather than on the server.
 
-```typescript {27} showLineNumbers copy
+```typescript {27}
 import { createTool } from "@mastra/client-js";
 import { z } from "zod";
 
@@ -239,7 +250,7 @@ const handleClientTool = async () => {
 
 This is a standard Mastra [agent](../agents/overview#setting-up-agents) configured to return hex color codes, intended to work with the browser-based client tool defined above.
 
-```typescript title="src/mastra/agents/color-agent" showLineNumbers copy
+```typescript title="src/mastra/agents/color-agent"
 import { Agent } from "@mastra/core/agent";
 
 export const colorAgent = new Agent({
@@ -256,7 +267,7 @@ export const colorAgent = new Agent({
 
 You can also use `MastraClient` in server-side environments such as API routes, serverless functions or actions. The usage will broadly remain the same but you may need to recreate the response to your client:
 
-```typescript {8} showLineNumbers
+```typescript {8}
 export async function action() {
   const agent = mastraClient.getAgent("testAgent");
 

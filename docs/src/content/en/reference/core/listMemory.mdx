@@ -9,7 +9,7 @@ The `.listMemory()` method returns all memory instances registered with the Mast
 
 ## Usage example
 
-```typescript copy
+```typescript
 const memoryInstances = mastra.listMemory();
 
 for (const [key, memory] of Object.entries(memoryInstances)) {
@@ -36,7 +36,7 @@ This method takes no parameters.
 
 ## Example: Checking Registered Memory
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";

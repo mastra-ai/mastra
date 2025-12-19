@@ -9,7 +9,7 @@ The `.foreach()` method creates a loop that executes a step for each item in an 
 
 ## Usage example
 
-```typescript copy
+```typescript
 workflow.foreach(step1, { concurrency: 2 });
 ```
 
@@ -67,7 +67,7 @@ If you need to run multiple operations per item, use a nested workflow as the st
 
 `.foreach()` always outputs an array. Each element in the output array corresponds to the result of processing the element at the same index in the input array.
 
-```typescript copy
+```typescript
 // Input: [{ value: 1 }, { value: 2 }, { value: 3 }]
 // Step adds 10 to each value
 // Output: [{ value: 11 }, { value: 12 }, { value: 13 }]
@@ -77,7 +77,7 @@ If you need to run multiple operations per item, use a nested workflow as the st
 
 When you chain `.then()` after `.foreach()`, the next step receives the entire output array as its input. This allows you to aggregate or process all results together.
 
-```typescript copy
+```typescript
 workflow
   .foreach(processItemStep)    // Output: array of processed items
   .then(aggregateStep)         // Input: the entire array
@@ -88,7 +88,7 @@ workflow
 
 Use `.map()` to transform the array output before passing it to the next step:
 
-```typescript copy
+```typescript
 workflow
   .foreach(processItemStep)
   .map(async ({ inputData }) => ({
@@ -103,7 +103,7 @@ workflow
 
 When you chain `.foreach()` calls, each operates on the array from the previous step:
 
-```typescript copy
+```typescript
 workflow
   .foreach(stepA)    // If input is [a, b, c], output is [A, B, C]
   .foreach(stepB)    // Operates on [A, B, C], output is [A', B', C']
@@ -112,7 +112,7 @@ workflow
 
 If a step inside `.foreach()` returns an array, the output becomes an array of arrays. Use `.map()` with `.flat()` to flatten:
 
-```typescript copy
+```typescript
 workflow
   .foreach(chunkStep)           // Output: [[chunk1, chunk2], [chunk3, chunk4]]
   .map(async ({ inputData }) => inputData.flat())  // Output: [chunk1, chunk2, chunk3, chunk4]

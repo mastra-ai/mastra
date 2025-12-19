@@ -29,7 +29,6 @@ import { LibSqlStorage } from "@mastra/libsql";
 import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   logger: new PinoLogger(),
   storage: new LibSQLStore({
     id: 'mastra-storage',

@@ -300,6 +300,27 @@ export interface WorkflowRunState {
   tripwire?: StepTripwireInfo;
 }
 
+/**
+ * Result object passed to the onFinish callback when a workflow completes.
+ */
+export interface WorkflowFinishCallbackResult {
+  status: WorkflowRunStatus;
+  result?: any;
+  error?: SerializedError;
+  steps: Record<string, StepResult<any, any, any, any>>;
+  tripwire?: StepTripwireInfo;
+}
+
+/**
+ * Error info object passed to the onError callback when a workflow fails.
+ */
+export interface WorkflowErrorCallbackInfo {
+  status: 'failed' | 'tripwire';
+  error?: SerializedError;
+  steps: Record<string, StepResult<any, any, any, any>>;
+  tripwire?: StepTripwireInfo;
+}
+
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
@@ -307,6 +328,20 @@ export interface WorkflowOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Called when workflow execution completes (success, failed, suspended, or tripwire).
+   * This callback is invoked server-side without requiring client-side .watch().
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+
+  /**
+   * Called only when workflow execution fails (failed or tripwire status).
+   * This callback is invoked server-side without requiring client-side .watch().
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
 }
 
 export type WorkflowInfo = {
@@ -778,6 +813,7 @@ export type FormattedWorkflowResult = {
   result?: any;
   error?: SerializedError;
   suspended?: string[][];
+  suspendPayload?: any;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
 };

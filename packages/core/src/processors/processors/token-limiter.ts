@@ -30,8 +30,11 @@ export interface TokenLimiterOptions {
 }
 
 /**
- * Output processor that limits the number of tokens in generated responses.
- * Implements both processOutputStream for streaming and processOutputResult for non-streaming.
+ * Processor that limits the number of tokens in messages.
+ *
+ * Can be used as:
+ * - Input processor: Filters historical messages to fit within context window, prioritizing recent messages
+ * - Output processor: Limits generated response tokens via streaming (processOutputStream) or non-streaming (processOutputResult)
  */
 export class TokenLimiterProcessor implements Processor<'token-limiter'> {
   public readonly id = 'token-limiter';

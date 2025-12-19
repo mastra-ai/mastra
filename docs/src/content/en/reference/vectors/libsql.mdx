@@ -1,22 +1,22 @@
 ---
-title: "Reference: LibSQLVector Store | Vectors"
-description: Documentation for the LibSQLVector class in Mastra, which provides vector search using LibSQL with vector extensions.
+title: "Reference: libSQL Vector Store | Vectors"
+description: Documentation for the LibSQLVector class in Mastra, which provides vector search using libSQL with vector extensions.
 ---
 
-# LibSQLVector Store
+# libSQL Vector Store
 
-The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
+The libSQL storage implementation provides a SQLite-compatible vector search [libSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
 It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/libsql@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
@@ -63,7 +63,7 @@ const results = await store.query({
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a LibSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+        "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
     },
     {
       name: "authToken",
@@ -111,7 +111,7 @@ Creates a new vector collection. The index name must start with a letter or unde
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by LibSQL.",
+        "Distance metric for similarity search. Note: Currently only cosine similarity is supported by libSQL.",
     },
   ]}
 />
@@ -209,7 +209,7 @@ Gets information about an index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -343,7 +343,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -356,7 +356,7 @@ interface QueryResult {
 
 The store throws specific errors for different failure cases:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my-collection",
@@ -383,6 +383,56 @@ Common error cases include:
 - Table/index not found
 - Database connection issues
 - Transaction failures during upsert
+
+## Usage Example
+
+### Local embeddings with fastembed
+
+Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords). This setup uses `@mastra/fastembed` to generate vector embeddings.
+
+Install `fastembed` to get started:
+
+```bash 
+npm install @mastra/fastembed@beta
+```
+
+Add the following to your agent:
+
+```typescript title="src/mastra/agents/example-libsql-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { fastembed } from "@mastra/fastembed";
+
+export const libsqlAgent = new Agent({
+  id: "libsql-agent",
+  name: "libSQL Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'libsql-agent-storage',
+      url: "file:libsql-agent.db",
+    }),
+    vector: new LibSQLVector({
+      id: 'libsql-agent-vector',
+      connectionUrl: "file:libsql-agent.db",
+    }),
+    embedder: fastembed,
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 3,
+        messageRange: 2,
+      },
+      threads: {
+        generateTitle: true, // Explicitly enable automatic title generation
+      },
+    },
+  }),
+});
+```
 
 ## Related
 

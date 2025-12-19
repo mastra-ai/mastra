@@ -4,7 +4,7 @@
 '@mastra/core': minor
 ---
 
-**BREAKING CHANGE**: Memory scope defaults changed from 'thread' to 'resource'
+Memory scope defaults changed from 'thread' to 'resource'
 
 Both `workingMemory.scope` and `semanticRecall.scope` now default to `'resource'` instead of `'thread'`. This means:
 
@@ -25,7 +25,5 @@ memory: new Memory({
   },
 }),
 ```
-
-See the [migration guide](https://mastra.ai/docs/guides/migrations/memory-scope-defaults) for more details.
 
 Also fixed issues where playground semantic recall search could show missing or incorrect results in certain cases.

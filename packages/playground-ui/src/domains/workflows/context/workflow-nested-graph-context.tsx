@@ -1,10 +1,6 @@
-import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
-import { createContext, useState } from 'react';
-import { ReactFlowProvider } from '@xyflow/react';
+import { createContext } from 'react';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { Workflow } from 'lucide-react';
-import { Text } from '@/components/ui/text';
-import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
+import { useWorkflowStepDetail } from './workflow-step-detail-context';
 
 type WorkflowNestedGraphContextType = {
   showNestedGraph: ({
@@ -24,45 +20,22 @@ export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphConte
 );
 
 export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
-  const [stepGraph, setStepGraph] = useState<SerializedStepFlowEntry[] | null>(null);
-  const [parentStepGraphList, setParentStepGraphList] = useState<
-    { stepGraph: SerializedStepFlowEntry[]; label: string; fullStep: string }[]
-  >([]);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-  const [label, setLabel] = useState<string>('');
-  const [fullStep, setFullStep] = useState<string>('');
-
-  const closeNestedGraph = () => {
-    if (parentStepGraphList.length) {
-      const lastStepGraph = parentStepGraphList[parentStepGraphList.length - 1];
-      setStepGraph(lastStepGraph.stepGraph);
-      setLabel(lastStepGraph.label);
-      setFullStep(lastStepGraph.fullStep);
-      setParentStepGraphList(parentStepGraphList.slice(0, -1));
-    } else {
-      setOpenDialog(false);
-      setStepGraph(null);
-      setLabel('');
-      setFullStep('');
-    }
-  };
+  const { showNestedGraph: showNestedGraphInPanel, closeStepDetail } = useWorkflowStepDetail();
 
   const showNestedGraph = ({
-    label: newLabel,
-    stepGraph: newStepGraph,
-    fullStep: newFullStep,
+    label,
+    stepGraph,
+    fullStep,
   }: {
     label: string;
     stepGraph: SerializedStepFlowEntry[];
     fullStep: string;
   }) => {
-    if (stepGraph) {
-      setParentStepGraphList([...parentStepGraphList, { stepGraph, label, fullStep }]);
-    }
-    setLabel(newLabel);
-    setFullStep(newFullStep);
-    setStepGraph(newStepGraph);
-    setOpenDialog(true);
+    showNestedGraphInPanel({ label, stepGraph, fullStep });
+  };
+
+  const closeNestedGraph = () => {
+    closeStepDetail();
   };
 
   return (
@@ -73,22 +46,6 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
       }}
     >
       {children}
-
-      <Dialog open={openDialog} onOpenChange={closeNestedGraph} key={`${label}-${fullStep}`}>
-        <DialogPortal>
-          <DialogContent className="w-[45rem] h-[45rem] max-w-[unset] bg-[#121212] p-[0.5rem]">
-            <DialogTitle className="flex items-center gap-1.5 absolute top-3 left-3 z-50">
-              <Workflow className="text-current w-4 h-4" />
-              <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
-                {label} workflow
-              </Text>
-            </DialogTitle>
-            <ReactFlowProvider>
-              <WorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} workflowName={fullStep} />
-            </ReactFlowProvider>
-          </DialogContent>
-        </DialogPortal>
-      </Dialog>
     </WorkflowNestedGraphContext.Provider>
   );
 }

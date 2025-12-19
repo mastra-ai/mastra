@@ -34,7 +34,7 @@ This process helps surface information that might not be semantically similar to
 
 The Graph Query Tool provides agents with the ability to perform graph-based retrieval:
 
-```ts showLineNumbers copy
+```ts
 import { createGraphRAGTool } from "@mastra/rag";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
@@ -55,7 +55,7 @@ The `graphOptions` parameter controls how the knowledge graph is built and trave
 - `threshold`: Similarity threshold (0-1) for determining which chunks are related. Higher values create sparser graphs with stronger connections; lower values create denser graphs with more potential relationships.
 - `dimension`: Vector embedding dimension. Must match the embedding model's output dimension (e.g., 1536 for OpenAI's text-embedding-3-small).
 
-```ts showLineNumbers copy
+```ts
 const graphQueryTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
@@ -71,7 +71,7 @@ const graphQueryTool = createGraphRAGTool({
 
 Integrate the graph query tool with an agent to enable graph-based retrieval:
 
-```ts showLineNumbers copy
+```ts
 import { Agent } from "@mastra/core/agent";
 
 const ragAgent = new Agent({
@@ -91,7 +91,7 @@ Base your answers on the context provided by the tool, and clearly state if the 
 
 Before using graph-based retrieval, process documents into chunks and store their embeddings:
 
-```ts showLineNumbers copy
+```ts
 import { MDocument } from "@mastra/rag";
 import { embedMany } from "ai";
 import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
@@ -129,7 +129,7 @@ await vectorStore.upsert({
 
 Once configured, the agent can perform graph-based queries:
 
-```ts showLineNumbers copy
+```ts
 const query = "What are the effects of infrastructure changes on local businesses?";
 const response = await ragAgent.generate(query);
 console.log(response.text);
@@ -153,7 +153,7 @@ The threshold parameter significantly impacts retrieval quality:
 
 Start with 0.7 and adjust based on your specific use case:
 
-```ts showLineNumbers copy
+```ts
 // Strict connections for precise answers
 const strictGraphTool = createGraphRAGTool({
   vectorStoreName: "pgVector",
@@ -179,7 +179,7 @@ const broadGraphTool = createGraphRAGTool({
 
 GraphRAG can be used alongside other retrieval approaches:
 
-```ts showLineNumbers copy
+```ts
 import { createVectorQueryTool } from "@mastra/rag";
 
 const vectorQueryTool = createVectorQueryTool({

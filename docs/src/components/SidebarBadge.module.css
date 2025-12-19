@@ -34,13 +34,13 @@
   color: rgb(96, 165, 250);
 }
 
-/* Experimental badge - Orange */
-.badge--experimental {
+/* Beta badge - Orange */
+.badge--beta {
   background-color: rgba(251, 146, 60, 0.1);
   color: rgb(251, 146, 60);
 }
 
-[data-theme="dark"] .badge--experimental {
+[data-theme="dark"] .badge--beta {
   background-color: rgba(251, 146, 60, 0.2);
   color: rgb(254, 215, 170);
 }

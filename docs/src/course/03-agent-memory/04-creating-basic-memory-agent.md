@@ -8,7 +8,6 @@ Create or update your `src/mastra/agents/index.ts` file:
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
 
 // Create a basic memory instance
 const memory = new Memory({
@@ -27,7 +26,7 @@ export const memoryAgent = new Agent({
     When a user shares information about themselves, acknowledge it and remember it for future reference.
     If asked about something mentioned earlier in the conversation, recall it accurately.
   `,
-  model: openai("gpt-4o"), // You can use "gpt-3.5-turbo" if you prefer
+  model: "openai/gpt-4.1-mini",
   memory: memory,
 });
 ```

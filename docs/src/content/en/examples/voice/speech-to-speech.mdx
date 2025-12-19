@@ -25,7 +25,7 @@ The system creates a voice conversation with a Mastra agent, records the entire 
 
 Create a `.env` file based on the sample provided:
 
-```bash title="speech-to-speech/call-analysis/sample.env" copy
+```bash title="speech-to-speech/call-analysis/sample.env"
 OPENAI_API_KEY=
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -37,7 +37,7 @@ ROARK_API_KEY=
 
 Install the required dependencies:
 
-```bash copy
+```bash
 npm install
 ```
 
@@ -47,7 +47,7 @@ npm install
 
 First, we define our agent with voice capabilities:
 
-```ts title="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
+```ts title="speech-to-speech/call-analysis/src/mastra/agents/index.ts"
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
@@ -78,7 +78,7 @@ export const speechToSpeechServer = new Agent({
 
 Register the agent with Mastra:
 
-```ts title="speech-to-speech/call-analysis/src/mastra/index.ts" copy
+```ts title="speech-to-speech/call-analysis/src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { speechToSpeechServer } from "./agents";
 
@@ -93,7 +93,7 @@ export const mastra = new Mastra({
 
 Set up Cloudinary for storing the recorded audio files:
 
-```ts title="speech-to-speech/call-analysis/src/upload.ts" copy
+```ts title="speech-to-speech/call-analysis/src/upload.ts"
 import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({
@@ -115,7 +115,7 @@ export async function uploadToCloudinary(path: string) {
 
 The main application orchestrates the conversation flow, recording, and analytics integration:
 
-```ts title="speech-to-speech/call-analysis/src/base.ts" copy
+```ts title="speech-to-speech/call-analysis/src/base.ts"
 import { Roark } from "@roarkanalytics/sdk";
 import chalk from "chalk";
 
@@ -195,7 +195,7 @@ The `utils.ts` file contains helper functions for managing the conversation, inc
 
 Start the conversation with:
 
-```bash copy
+```bash
 npm run dev
 ```
 

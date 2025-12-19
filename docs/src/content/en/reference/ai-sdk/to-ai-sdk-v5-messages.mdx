@@ -11,7 +11,7 @@ Converts messages from various input formats to AI SDK V5 UI message format. Thi
 
 ## Usage example
 
-```typescript title="app/chat/page.tsx" copy
+```typescript title="app/chat/page.tsx"
 import { toAISdkV5Messages } from "@mastra/ai-sdk";
 import { useChat } from "ai/react";
 
@@ -87,7 +87,7 @@ Returns an array of AI SDK V5 `UIMessage` objects with the following structure:
 
 ### Converting simple text messages
 
-```typescript copy
+```typescript
 import { toAISdkV5Messages } from "@mastra/ai-sdk";
 
 const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
@@ -96,7 +96,7 @@ const messages = toAISdkV5Messages(["Hello", "How can I help you today?"]);
 
 ### Loading messages with Mastra client
 
-```typescript copy
+```typescript
 import { MastraClient } from "@mastra/client-js";
 import { toAISdkV5Messages } from "@mastra/ai-sdk";
 

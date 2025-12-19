@@ -23,7 +23,7 @@ See [Workflow Streaming](/docs/v1/streaming/workflow-streaming#streaming-agent-t
 
 This example shows how to set up a workflow route at the `/workflow` endpoint that uses a workflow with the ID `weatherWorkflow`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { workflowRoute } from "@mastra/ai-sdk";
 
@@ -41,7 +41,7 @@ export const mastra = new Mastra({
 
 You can also use dynamic workflow routing based on a `workflowId`. The URL `/workflow/weatherWorkflow` will resolve to the workflow with the ID `weatherWorkflow`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { workflowRoute } from "@mastra/ai-sdk";
 

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@mastra/ai-sdk": "latest",
+    "@mastra/client-js": "latest",
     "@mastra/fastembed": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
@@ -49,6 +50,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/ai-sdk": "link:../../../client-sdks/ai-sdk",
+      "@mastra/client-js": "link:../../../client-sdks/client-js",
       "@mastra/core": "link:../../core",
       "mastra": "link:../../cli",
       "@mastra/memory": "link:../../memory",

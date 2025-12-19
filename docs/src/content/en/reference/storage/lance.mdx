@@ -17,7 +17,7 @@ npm install @mastra/lance@beta
 
 ### Basic Storage Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { LanceStorage } from "@mastra/lance";
 
 // Connect to a local database
@@ -77,7 +77,7 @@ The LanceStorage implementation automatically handles schema creation and update
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { LanceStorage } from "@mastra/lance";
 
@@ -90,7 +90,7 @@ const mastra = new Mastra({
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
-```typescript copy
+```typescript
 import { LanceStorage } from "@mastra/lance";
 
 const storage = await LanceStorage.create("my-storage", "/path/to/db");

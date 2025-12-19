@@ -19,7 +19,7 @@
 '@mastra/pg': major
 ---
 
-```
+```ts
 import { Mastra } from '@mastra/core';
 import { Observability } from '@mastra/observability';  // Explicit import
 
@@ -33,7 +33,7 @@ const mastra = new Mastra({
 
 Instead of:
 
-```
+```ts
 import { Mastra } from '@mastra/core';
 import '@mastra/observability/init';  // Explicit import
 

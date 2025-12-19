@@ -12,8 +12,6 @@
 "@mastra/lance": patch
 ---
 
-Unify transformScoreRow functions across storage adapters
-
 Added a unified `transformScoreRow` function in `@mastra/core/storage` that provides schema-driven row transformation for score data. This eliminates code duplication across 10 storage adapters while maintaining store-specific behavior through configurable options:
 
 - `preferredTimestampFields`: Preferred source fields for timestamps (PostgreSQL, Cloudflare D1)

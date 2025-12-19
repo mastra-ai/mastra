@@ -11,13 +11,13 @@ It's part of the `@mastra/duckdb` package and offers efficient vector similarity
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/duckdb@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { DuckDBVector } from "@mastra/duckdb";
 
 // Create a new vector store instance
@@ -206,7 +206,7 @@ Gets information about an index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -330,7 +330,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Closes the database connection and releases resources.
 
-```typescript copy
+```typescript
 await store.close();
 ```
 
@@ -338,7 +338,7 @@ await store.close();
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -361,7 +361,7 @@ DuckDB vector store supports MongoDB-like filter operators:
 
 ### Filter Examples
 
-```typescript copy
+```typescript
 // Allegato operators
 const results = await store.query({
   indexName: "docs",
@@ -394,7 +394,7 @@ const results = await store.query({
 
 The store throws specific errors for different failure cases:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "my-collection",
@@ -425,7 +425,7 @@ Common error cases include:
 
 Build offline-capable AI applications with semantic search that runs entirely in-process:
 
-```typescript copy
+```typescript
 const store = new DuckDBVector({
   id: "offline-search",
   path: "./search.duckdb",
@@ -436,7 +436,7 @@ const store = new DuckDBVector({
 
 Process sensitive documents locally without sending data to cloud vector databases:
 
-```typescript copy
+```typescript
 const store = new DuckDBVector({
   id: "private-rag",
   path: "./confidential.duckdb",
@@ -448,7 +448,7 @@ const store = new DuckDBVector({
 
 Rapidly prototype vector search features with zero infrastructure:
 
-```typescript copy
+```typescript
 const store = new DuckDBVector({
   id: "dev-store",
   path: ":memory:", // Fast in-memory for tests

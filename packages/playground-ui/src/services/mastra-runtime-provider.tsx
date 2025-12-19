@@ -114,18 +114,19 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
             } else if (part.toolInvocation.state === 'call') {
               // Only return pending tool calls that are legitimately awaiting approval
               const toolCallId = part.toolInvocation.toolCallId;
+              const toolName = part.toolInvocation.toolName;
               const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
               const suspensionData = pendingToolApprovals?.[toolCallId];
               if (suspensionData) {
                 return {
                   type: 'tool-call',
                   toolCallId,
-                  toolName: part.toolInvocation.toolName,
+                  toolName,
                   args: part.toolInvocation.args,
                   metadata: {
                     mode: 'stream',
                     requireApprovalMetadata: {
-                      [toolCallId]: suspensionData,
+                      [toolName]: suspensionData,
                     },
                   },
                 };
@@ -239,7 +240,7 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
-  const isVNext = modelVersion === 'v2';
+  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
@@ -247,7 +248,7 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    if (!isVNext) {
+    if (!isSupportedModel) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
 
@@ -264,7 +265,7 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      if (isVNext) {
+      if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
             message: input,
@@ -690,7 +691,7 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      if (isVNext) {
+      if (isSupportedModel) {
         setMessages(currentConversation => [
           ...currentConversation,
           { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
@@ -722,7 +723,7 @@ export function MastraRuntimeProvider({
 
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,
-    messages: isVNext ? vnextmessages : legacyMessages,
+    messages: isSupportedModel ? vnextmessages : legacyMessages,
     convertMessage: x => x,
     onNew,
     onCancel,

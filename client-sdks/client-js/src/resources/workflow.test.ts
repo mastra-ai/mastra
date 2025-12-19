@@ -81,9 +81,15 @@ describe('Workflow (fetch-mocked)', () => {
     ]);
   });
 
-  it('start uses provided runId', async () => {
-    const res = await wf.start({ runId: 'r-x', inputData: { b: 2 } });
-    expect(res).toEqual({ message: 'started' });
+  it('creates run using provided runId', async () => {
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) {
+        return Promise.resolve(createJsonResponse({ runId: 'r-x' }));
+      }
+    });
+    const run = await wf.createRun({ runId: 'r-x' });
+    expect(run.runId).toBe('r-x');
   });
 
   it('starts workflow run synchronously with tracingOptions', async () => {
@@ -172,6 +178,7 @@ describe('Workflow error deserialization', () => {
 
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
       if (url.includes('/start-async')) {
         return Promise.resolve(
           createJsonResponse({
@@ -183,7 +190,9 @@ describe('Workflow error deserialization', () => {
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     });
 
-    const result = (await wf.startAsync({ inputData: {} })) as any;
+    const run = await wf.createRun();
+
+    const result = (await run.startAsync({ inputData: {} })) as any;
 
     expect(result.status).toBe('failed');
     expect(result.error).toBeInstanceOf(Error);
@@ -202,6 +211,7 @@ describe('Workflow error deserialization', () => {
 
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
       if (url.includes('/resume-async')) {
         return Promise.resolve(
           createJsonResponse({
@@ -213,7 +223,9 @@ describe('Workflow error deserialization', () => {
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     });
 
-    const result = (await wf.resumeAsync({ runId: 'r-123', step: 's1' })) as any;
+    const run = await wf.createRun();
+
+    const result = (await run.resumeAsync({ step: 's1' })) as any;
 
     expect(result.status).toBe('failed');
     expect(result.error).toBeInstanceOf(Error);
@@ -229,6 +241,7 @@ describe('Workflow error deserialization', () => {
 
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
       if (url.includes('/restart-async')) {
         return Promise.resolve(
           createJsonResponse({
@@ -240,7 +253,9 @@ describe('Workflow error deserialization', () => {
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     });
 
-    const result = (await wf.restartAsync({ runId: 'r-123' })) as any;
+    const run = await wf.createRun();
+
+    const result = (await run.restartAsync()) as any;
 
     expect(result.status).toBe('failed');
     expect(result.error).toBeInstanceOf(Error);
@@ -255,6 +270,7 @@ describe('Workflow error deserialization', () => {
 
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
       if (url.includes('/time-travel-async')) {
         return Promise.resolve(
           createJsonResponse({
@@ -266,7 +282,9 @@ describe('Workflow error deserialization', () => {
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     });
 
-    const result = (await wf.timeTravelAsync({ runId: 'r-123', step: 's1' })) as any;
+    const run = await wf.createRun();
+
+    const result = (await run.timeTravelAsync({ step: 's1' })) as any;
 
     expect(result.status).toBe('failed');
     expect(result.error).toBeInstanceOf(Error);
@@ -282,13 +300,15 @@ describe('Workflow error deserialization', () => {
 
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: '123' }));
       if (url.includes('/start-async')) {
         return Promise.resolve(createJsonResponse(successResult));
       }
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     });
+    const run = await wf.createRun();
 
-    const result = (await wf.startAsync({ inputData: {} })) as any;
+    const result = (await run.startAsync({ inputData: {} })) as any;
 
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ data: 'test-output' });
@@ -305,13 +325,16 @@ describe('Workflow error deserialization', () => {
 
     fetchMock.mockImplementation((input: any) => {
       const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: '123' }));
       if (url.includes('/start-async')) {
         return Promise.resolve(createJsonResponse(suspendedResult));
       }
       return Promise.reject(new Error(`Unhandled fetch to ${url}`));
     });
 
-    const result = (await wf.startAsync({ inputData: {} })) as any;
+    const run = await wf.createRun();
+
+    const result = (await run.startAsync({ inputData: {} })) as any;
 
     expect(result.status).toBe('suspended');
     expect(result.error).toBeUndefined();

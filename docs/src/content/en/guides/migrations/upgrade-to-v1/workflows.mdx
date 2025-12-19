@@ -153,7 +153,6 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
 -       return suspend({ reason: "Suspension reason" }); // Missing otherReason
 +       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
       }
-      //... continue execution logic
     },
   });
 ```
@@ -334,7 +333,6 @@ createStep({
 +   if (!context.resumeData) {
 +     return context.suspend({})
 +   }
-+   //..continue execution logic
 + }
 });
 +

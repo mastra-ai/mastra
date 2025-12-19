@@ -10,7 +10,7 @@ Add `startAsync()` method and fix Inngest duplicate workflow execution bug
 - Add `EventedRun.startAsync()` - publishes workflow start event without subscribing for completion
 - Add `InngestRun.startAsync()` - sends Inngest event without polling for result
 
-**Bug Fix: Prevent duplicate Inngest workflow executions**
+**Prevent duplicate Inngest workflow executions**
 - Fix `getRuns()` to properly handle rate limits (429), empty responses, and JSON parse errors with retry logic and exponential backoff
 - Fix `getRunOutput()` to throw `NonRetriableError` when polling fails, preventing Inngest from retrying the parent function and re-triggering the workflow
 - Add timeout to `getRunOutput()` polling (default 5 minutes) with `NonRetriableError` on timeout

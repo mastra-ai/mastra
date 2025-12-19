@@ -15,7 +15,7 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 
 ![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
-```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
@@ -60,7 +60,7 @@ Use `resume()` to restart a suspended workflow from the step where it paused. Pa
 
 ![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
-```typescript showLineNumbers copy
+```typescript
 import { step1 } from "./workflows/test-workflow";
 
 const workflow = mastra.getWorkflow("testWorkflow");
@@ -82,7 +82,7 @@ const handleResume = async () => {
 
 Passing the `step` object provides full type-safety for `resumeData`. Alternatively, you can pass a step ID for more flexibility when the ID comes from user input or a database.
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.resume({
   step: "step-1",
   resumeData: { approved: true }
@@ -93,7 +93,7 @@ If only one step is suspended, you can omit the step argument entirely and Mastr
 
 When resuming with only a `runId`, create a run instance first using `createRunAsync()`.
 
-```typescript showLineNumbers copy
+```typescript
 const workflow = mastra.getWorkflow("testWorkflow");
 const run = await workflow.createRunAsync({ runId: "123" });
 
@@ -104,7 +104,7 @@ const stream = run.resume({
 
 You can call `resume()` from anywhere in your application, including HTTP endpoints, event handlers, in response to [human input](/docs/v1/workflows/human-in-the-loop), or timers.
 
-```typescript showLineNumbers copy
+```typescript
 const midnight = new Date();
 midnight.setUTCHours(24, 0, 0, 0);
 
@@ -119,7 +119,7 @@ setTimeout(async () => {
 ## Accessing suspend data with `suspendData`
 When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
 
-```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts" showLineNumbers copy
+```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts"
 const approvalStep = createStep({
   id: "user-approval",
   inputSchema: z.object({
@@ -164,7 +164,7 @@ The `suspendData` parameter is automatically populated when a step is resumed an
 
 When a workflow is suspended, it restarts from the step where it paused. You can check the workflow's `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/v1/workflows/overview#workflows-as-steps).
 
-```typescript {11} showLineNumbers copy
+```typescript {11}
 const workflow = mastra.getWorkflow("testWorkflow");
 const run = await workflow.createRun();
 

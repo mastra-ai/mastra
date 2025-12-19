@@ -174,8 +174,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'start': {
       // Create a new assistant message
+      // Use the server-provided messageId if available, otherwise fall back to generated ID
       const newMessage: MastraUIMessage = {
-        id: `start-${chunk.runId + Date.now()}`,
+        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,
@@ -569,10 +570,39 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             mode: 'stream',
             requireApprovalMetadata: {
               ...lastRequireApprovalMetadata,
-              [chunk.payload.toolCallId]: {
+              [chunk.payload.toolName]: {
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    case 'tool-call-suspended': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      // Find and update the corresponding tool call
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'stream',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
               },
             },
           },

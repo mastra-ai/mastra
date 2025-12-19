@@ -4,8 +4,9 @@
 
 Prefill `providerOptions` on Mastra Studio. When creating your agent, you can add `providerOptions` to the Agent `instructions`, we now prefill the `providerOptions` field on Mastra Studio model settings advanced settings section with the `instructions.providerOptions` added.
 
-Example agent code
-``` @typescript
+Example agent code:
+
+```typescript
 export const chefModelV2Agent = new Agent({
   name: 'Chef Agent V2 Model',
   description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
@@ -29,5 +30,3 @@ export const chefModelV2Agent = new Agent({
   memory
 });
 ```
-
-

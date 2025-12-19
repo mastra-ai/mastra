@@ -9,7 +9,7 @@ The `.listThreadsByResourceId()` method retrieves threads associated with a spec
 
 ## Usage Example
 
-```typescript copy
+```typescript
 await memory.listThreadsByResourceId({
   resourceId: "user-123",
   page: 0,
@@ -70,7 +70,7 @@ The return object contains:
 
 ## Extended usage example
 
-```typescript title="src/test-memory.ts" showLineNumbers copy
+```typescript title="src/test-memory.ts"
 import { mastra } from "./mastra";
 
 const agent = mastra.getAgent("agent");

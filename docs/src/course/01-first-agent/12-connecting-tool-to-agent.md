@@ -19,7 +19,7 @@ export const financialAgent = new Agent({
   TOOLS
   - Use the getTransactions tool to fetch financial transaction data.
   - Analyze the transaction data to answer user questions about their spending.`,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   tools: { getTransactionsTool }, // Add our tool here
 });
 ```

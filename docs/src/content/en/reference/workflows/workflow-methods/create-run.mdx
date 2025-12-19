@@ -9,7 +9,7 @@ The `.createRun()` method creates a new workflow run instance, allowing you to e
 
 ## Usage example
 
-```typescript copy
+```typescript
 await workflow.createRun();
 ```
 
@@ -21,6 +21,18 @@ await workflow.createRun();
       name: "runId",
       type: "string",
       description: "Optional custom identifier for the workflow run",
+      isOptional: true,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description: "Optional identifier to associate the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the workflow run and can be used for filtering and querying runs.",
+      isOptional: true,
+    },
+    {
+      name: "disableScorers",
+      type: "boolean",
+      description: "Optional flag to disable scorers for this workflow run",
       isOptional: true,
     },
   ]}
@@ -41,7 +53,7 @@ await workflow.createRun();
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 const workflow = mastra.getWorkflow("workflow");
 
 const run = await workflow.createRun();
@@ -51,6 +63,29 @@ const result = await run.start({
     value: 10,
   },
 });
+```
+
+## Using resourceId
+
+The `resourceId` parameter associates a workflow run with a specific resource, such as a user or tenant. This is useful for multi-tenant applications or when you need to track which user initiated a workflow.
+
+```typescript
+const workflow = mastra.getWorkflow("workflow");
+
+// Create a run associated with a specific user
+const run = await workflow.createRun({
+  resourceId: "user-123",
+});
+
+const result = await run.start({
+  inputData: {
+    value: 10,
+  },
+});
+
+// Later, retrieve the run and access the resourceId
+const storedRun = await workflow.getWorkflowRunById(run.runId);
+console.log(storedRun.resourceId); // "user-123"
 ```
 
 ## Related

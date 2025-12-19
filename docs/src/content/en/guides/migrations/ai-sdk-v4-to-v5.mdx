@@ -45,7 +45,7 @@ When using tools with TypeScript in AI SDK v5, Mastra provides type inference he
 
 The `InferUITool` type helper infers the input and output types of a single Mastra tool:
 
-```typescript title="app/types.ts" copy
+```typescript title="app/types.ts"
 import { InferUITool, createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -80,7 +80,7 @@ type WeatherUITool = InferUITool<typeof weatherTool>;
 
 The `InferUITools` type helper infers the input and output types of multiple tools:
 
-```typescript title="app/mastra/tools.ts" copy
+```typescript title="app/mastra/tools.ts"
 import { InferUITools, createTool } from "@mastra/core/tools";
 import { z } from "zod";
 

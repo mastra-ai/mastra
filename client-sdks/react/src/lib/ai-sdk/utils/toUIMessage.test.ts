@@ -1620,7 +1620,7 @@ describe('toUIMessage', () => {
       expect(result[0].metadata).toEqual({
         mode: 'stream',
         requireApprovalMetadata: {
-          'call-1': {
+          'dangerous-tool': {
             toolCallId: 'call-1',
             toolName: 'dangerous-tool',
             args: { action: 'delete', target: 'database' },
@@ -1649,7 +1649,7 @@ describe('toUIMessage', () => {
           metadata: {
             mode: 'stream',
             requireApprovalMetadata: {
-              'call-1': {
+              'first-tool': {
                 toolCallId: 'call-1',
                 toolName: 'first-tool',
                 args: {},
@@ -1662,8 +1662,8 @@ describe('toUIMessage', () => {
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
       expect(result[0].metadata?.mode).toBe('stream');
-      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('call-1');
-      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('call-2');
+      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('first-tool');
+      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('another-tool');
     });
 
     it('should return unchanged if no assistant message', () => {

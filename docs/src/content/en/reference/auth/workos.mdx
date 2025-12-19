@@ -9,12 +9,11 @@ The `MastraAuthWorkos` class provides authentication for Mastra using WorkOS. It
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,

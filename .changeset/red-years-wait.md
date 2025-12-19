@@ -8,7 +8,7 @@ Mastra now supports AI SDK's transcription and speech models directly in `Compos
 
 AI SDK models are automatically wrapped when passed to `CompositeVoice`, so you can mix and match AI SDK models with existing Mastra voice providers for maximum flexibility.
 
-## Usage Example
+**Usage Example**
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";

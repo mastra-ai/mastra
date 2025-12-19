@@ -1517,7 +1517,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
 
       describe('options.headers', () => {
-        it('should pass headers to model', async () => {
+        it('should pass headers from modelSettings to model', async () => {
           const result = loopFn({
             methodType: 'stream',
             agentId: 'agent-id',
@@ -1554,7 +1554,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: createMessageListWithUserMessage(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
-            headers: { 'custom-request-header': 'request-header-value' },
           });
 
           // mastra
@@ -1563,6 +1562,215 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           // aisdk
           expect(await convertAsyncIterableToArray(result.aisdk.v5.objectStream)).toStrictEqual([
             { content: 'headers test' },
+          ]);
+        });
+
+        it('should pass headers from model config to model', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                headers: { 'x-model-header': 'from-config' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'x-model-header': 'from-config',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "config headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'config headers test' },
+          ]);
+        });
+
+        it('should merge headers with modelSettings overriding model config', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                headers: {
+                  'x-model-header': 'from-config',
+                  'x-shared-header': 'from-config',
+                },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'x-model-header': 'from-config',
+                      'x-shared-header': 'from-runtime', // modelSettings overrides config
+                      'x-runtime-header': 'from-runtime',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "merged headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            modelSettings: {
+              headers: {
+                'x-shared-header': 'from-runtime',
+                'x-runtime-header': 'from-runtime',
+              },
+            },
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'merged headers test' },
+          ]);
+        });
+
+        it('should use correct headers for each fallback model', async () => {
+          let attemptCount = 0;
+
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'model-1',
+                maxRetries: 0,
+                headers: { 'x-model': 'model-1', 'x-provider': 'provider-a' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    attemptCount++;
+                    expect(headers).toStrictEqual({
+                      'x-model': 'model-1',
+                      'x-provider': 'provider-a',
+                    });
+
+                    // First model fails
+                    throw new Error('Model 1 failed');
+                  },
+                }),
+              },
+              {
+                id: 'model-2',
+                maxRetries: 0,
+                headers: { 'x-model': 'model-2', 'x-provider': 'provider-b' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    attemptCount++;
+                    expect(headers).toStrictEqual({
+                      'x-model': 'model-2',
+                      'x-provider': 'provider-b',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "fallback success" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            modelSettings: { maxRetries: 0 }, // Disable retries at the loop level
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'fallback success' },
+          ]);
+          expect(attemptCount).toBe(2); // Both models should have been tried
+        });
+
+        it('should handle undefined headers gracefully', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                // No headers field
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toBeUndefined();
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "no headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            // No modelSettings.headers
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'no headers test' },
           ]);
         });
       });
@@ -2375,290 +2583,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           "foobar",
         ]
       `);
-      });
-    });
-
-    describe.todo('options.experimental_repairText', () => {
-      it('should be able to repair a JSONParseError', async () => {
-        const result = loopFn({
-          methodType: 'stream',
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: 'text-1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '{ "content": "provider metadata test" ',
-                    },
-                    { type: 'text-end', id: 'text-1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(JSONParseError);
-          //     expect(text).toStrictEqual('{ "content": "provider metadata test" ');
-          //     return text + '}';
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        expect(await result.object).toStrictEqual({
-          content: 'provider metadata test',
-        });
-      });
-
-      it('should be able to repair a TypeValidationError', async () => {
-        const result = loopFn({
-          methodType: 'stream',
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: 'text-1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '{ "content-a": "provider metadata test" }',
-                    },
-                    { type: 'text-end', id: 'text-1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(TypeValidationError);
-          //     expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
-          //     return `{ "content": "provider metadata test" }`;
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        expect(await result.aisdk.v5.object).toStrictEqual({
-          content: 'provider metadata test',
-        });
-      });
-
-      it('should be able to handle repair that returns null', async () => {
-        const result = loopFn({
-          methodType: 'stream',
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: 'text-1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '{ "content-a": "provider metadata test" }',
-                    },
-                    { type: 'text-end', id: 'text-1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-
-          // TODO: experimental_repairText?
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(TypeValidationError);
-          //     expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
-          //     return null;
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        await expect(await result.aisdk.v5.object).rejects.toThrow(
-          'No object generated: response did not match schema.',
-        );
-      });
-
-      it('should be able to repair JSON wrapped with markdown code blocks', async () => {
-        const result = loopFn({
-          methodType: 'stream',
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: 'text-1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '```json\n{ "content": "test message" }\n```',
-                    },
-                    { type: 'text-end', id: 'text-1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(JSONParseError);
-          //     expect(text).toStrictEqual('```json\n{ "content": "test message" }\n```');
-
-          //     // Remove markdown code block wrapper
-          //     const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          //     return cleaned;
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        expect(await result.aisdk.v5.object).toStrictEqual({
-          content: 'test message',
-        });
-      });
-
-      it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
-        const result = loopFn({
-          methodType: 'stream',
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: 'text-1' },
-                    { type: 'text-delta', id: 'text-1', delta: '{ broken json' },
-                    { type: 'text-end', id: 'text-1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text }) => text + '{',
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        try {
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          await result.aisdk.v5.object;
-          fail('must throw error');
-        } catch (error) {
-          verifyNoObjectGeneratedError(error, {
-            message: 'No object generated: could not parse the response.',
-            response: {
-              id: 'id-0',
-              timestamp: new Date(0),
-              modelId: 'mock-model-id',
-            },
-            usage: testUsage,
-            finishReason: 'stop',
-          });
-        }
       });
     });
   });

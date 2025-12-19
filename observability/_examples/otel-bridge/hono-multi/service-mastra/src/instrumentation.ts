@@ -4,3 +4,5 @@ try {
 } catch (error) {
   console.error('[instrumentation] Failed to initialize telemetry:', error);
 }
+
+export {};
