@@ -15,7 +15,7 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class MongoDBAgentsStorage extends AgentsStorage {
   #connector: MongoDBConnector;
@@ -25,23 +25,41 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     this.#connector = resolveMongoDBConfig(config);
   }
 
-  async init(): Promise<void> {
-    const collection = await this.#connector.getCollection(TABLE_AGENTS);
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
 
-    // Create indexes for efficient querying
-    await collection.createIndex({ id: 1 }, { unique: true });
-    await collection.createIndex({ createdAt: -1 });
-    await collection.createIndex({ updatedAt: -1 });
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_AGENTS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_AGENTS, keys: { createdAt: -1 } },
+      { collection: TABLE_AGENTS, keys: { updatedAt: -1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        console.warn(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  async init(): Promise<void> {
+    await this.createDefaultIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const collection = await this.#connector.getCollection(TABLE_AGENTS);
+    const collection = await this.getCollection(TABLE_AGENTS);
     await collection.deleteMany({});
   }
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
       const result = await collection.findOne<any>({ id });
 
       if (!result) {
@@ -64,7 +82,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
 
       // Check if agent already exists
       const existing = await collection.findOne({ id: agent.id });
@@ -106,7 +124,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
 
       const existingAgent = await collection.findOne<any>({ id });
       if (!existingAgent) {
@@ -173,7 +191,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
       // Idempotent delete - no-op if agent doesn't exist
       await collection.deleteOne({ id });
     } catch (error) {
@@ -209,7 +227,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
       const total = await collection.countDocuments({});
 
       if (total === 0 || perPage === 0) {

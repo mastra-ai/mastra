@@ -13,7 +13,7 @@ import {
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 /**
  * MongoDB-specific score row transformation.
@@ -37,15 +37,31 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     return this.#connector.getCollection(name);
   }
 
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_SCORERS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_SCORERS, keys: { scorerId: 1 } },
+      { collection: TABLE_SCORERS, keys: { runId: 1 } },
+      { collection: TABLE_SCORERS, keys: { entityId: 1, entityType: 1 } },
+      { collection: TABLE_SCORERS, keys: { traceId: 1, spanId: 1 } },
+      { collection: TABLE_SCORERS, keys: { createdAt: -1 } },
+      { collection: TABLE_SCORERS, keys: { source: 1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        console.warn(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
   async init(): Promise<void> {
-    const collection = await this.getCollection(TABLE_SCORERS);
-    await collection.createIndex({ id: 1 }, { unique: true });
-    await collection.createIndex({ scorerId: 1 });
-    await collection.createIndex({ runId: 1 });
-    await collection.createIndex({ entityId: 1, entityType: 1 });
-    await collection.createIndex({ traceId: 1, spanId: 1 });
-    await collection.createIndex({ createdAt: -1 });
-    await collection.createIndex({ source: 1 });
+    await this.createDefaultIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {

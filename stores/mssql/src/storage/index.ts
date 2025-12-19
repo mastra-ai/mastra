@@ -21,7 +21,6 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
@@ -112,7 +111,6 @@ export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
-  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -153,7 +151,6 @@ export class MSSQLStore extends MastraStorage {
         });
       }
 
-      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
       const domainConfig = { pool: this.pool, schemaName: this.schema };
       const scores = new ScoresMSSQL(domainConfig);
       const workflows = new WorkflowsMSSQL(domainConfig);
@@ -184,17 +181,8 @@ export class MSSQLStore extends MastraStorage {
     }
     try {
       await this.isConnected;
+      // Each domain creates its own indexes during init()
       await super.init();
-
-      // Create default indexes for optimal query performance
-      // This is done after table creation and is safe to run multiple times
-      try {
-        await this.#db.createDefaultIndexes();
-      } catch (indexError) {
-        // Log the error but don't fail initialization
-        // Indexes are performance optimizations, not critical for functionality
-        this.logger?.warn?.('Failed to create default indexes:', indexError);
-      }
     } catch (error) {
       this.isConnected = null;
       throw new MastraError(

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { PaginationInfo, StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -48,6 +48,36 @@ export class ScoresMSSQL extends ScoresStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.createDefaultIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the scores domain tables.
+   * IMPORTANT: Uses seq_id DESC instead of createdAt DESC for MSSQL due to millisecond accuracy limitations
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.schema ? `${this.schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
+        table: TABLE_SCORERS,
+        columns: ['traceId', 'spanId', 'seq_id DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

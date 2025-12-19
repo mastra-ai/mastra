@@ -26,7 +26,6 @@ import {
   isClientConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
-import { PgDB } from './db';
 import type { PgDomainConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
@@ -39,7 +38,6 @@ export type { PgDomainConfig, PgDBConfig } from './db';
 export class PostgresStore extends MastraStorage {
   #db: pgPromise.IDatabase<{}>;
   #pgp: pgPromise.IMain;
-  #dbOps: PgDB;
   private schema: string;
   private isInitialized: boolean = false;
 
@@ -107,10 +105,6 @@ export class PostgresStore extends MastraStorage {
       // stores.memory during getInputProcessors() before init() is called
       const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema };
 
-      // Create a PgDB instance for direct operations (createTable, clearTable, etc.)
-      // PgDB expects the internal config format (already resolved client)
-      this.#dbOps = new PgDB({ client: this.#db, schemaName: this.schema });
-
       const scores = new ScoresPG(domainConfig);
       const workflows = new WorkflowsPG(domainConfig);
       const memory = new MemoryPG(domainConfig);
@@ -144,17 +138,8 @@ export class PostgresStore extends MastraStorage {
     try {
       this.isInitialized = true;
 
+      // Each domain creates its own indexes during init()
       await super.init();
-
-      // Create default indexes for optimal query performance
-      // This is done after table creation and is safe to run multiple times
-      try {
-        await this.#dbOps.createDefaultIndexes();
-      } catch (indexError) {
-        // Log the error but don't fail initialization
-        // Indexes are performance optimizations, not critical for functionality
-        console.warn('Failed to create default indexes:', indexError);
-      }
     } catch (error) {
       this.isInitialized = false;
       throw new MastraError(

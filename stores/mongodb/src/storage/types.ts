@@ -1,4 +1,4 @@
-import type { MongoClientOptions } from 'mongodb';
+import type { MongoClientOptions, IndexSpecification, CreateIndexesOptions } from 'mongodb';
 import type { ConnectorHandler } from './connectors/base';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 
@@ -52,3 +52,15 @@ export type MongoDBDomainConfig =
   | { connector: MongoDBConnector }
   | { connectorHandler: ConnectorHandler; disableInit?: boolean }
   | { url: string; dbName: string; options?: MongoClientOptions; disableInit?: boolean };
+
+/**
+ * MongoDB index definition for the getDefaultIndexDefinitions pattern.
+ */
+export interface MongoDBIndexConfig {
+  /** Collection name */
+  collection: string;
+  /** Index specification (e.g., { id: 1 } or { thread_id: 1, createdAt: -1 }) */
+  keys: IndexSpecification;
+  /** Index options (e.g., { unique: true }) */
+  options?: CreateIndexesOptions;
+}

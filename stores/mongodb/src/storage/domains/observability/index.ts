@@ -11,7 +11,7 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
   #connector: MongoDBConnector;
@@ -25,14 +25,30 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     return this.#connector.getCollection(name);
   }
 
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_SPANS, keys: { spanId: 1, traceId: 1 }, options: { unique: true } },
+      { collection: TABLE_SPANS, keys: { traceId: 1 } },
+      { collection: TABLE_SPANS, keys: { parentSpanId: 1 } },
+      { collection: TABLE_SPANS, keys: { startedAt: -1 } },
+      { collection: TABLE_SPANS, keys: { spanType: 1 } },
+      { collection: TABLE_SPANS, keys: { name: 1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        console.warn(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
   async init(): Promise<void> {
-    const collection = await this.getCollection(TABLE_SPANS);
-    await collection.createIndex({ spanId: 1, traceId: 1 }, { unique: true });
-    await collection.createIndex({ traceId: 1 });
-    await collection.createIndex({ parentSpanId: 1 });
-    await collection.createIndex({ startedAt: -1 });
-    await collection.createIndex({ spanType: 1 });
-    await collection.createIndex({ name: 1 });
+    await this.createDefaultIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
