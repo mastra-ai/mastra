@@ -328,8 +328,30 @@ export abstract class Bundler extends MastraBundler {
 
         const rootPath = await getPackageRootPath(dep);
         const pkg = await readJSON(`${rootPath}/package.json`);
+        const actualPackageName = pkg.name;
+        const version = pkg.version || 'latest';
 
-        dependenciesToInstall.set(dep, pkg.version || 'latest');
+        // Check if this is an npm alias (import name differs from actual package name)
+        // e.g., importing "ai-v5" which resolves to package "ai"
+        // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
+        // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
+        // For scoped packages, compare the full package name (e.g., @scope/pkg)
+        const getPackageName = (d: string) => {
+          if (d.startsWith('@')) {
+            const parts = d.split('/');
+            return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : d;
+          }
+          return d.split('/')[0] || d;
+        };
+
+        const importName = getPackageName(dep);
+        const isAlias = actualPackageName && importName !== actualPackageName;
+
+        if (isAlias) {
+          dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
+        } else {
+          dependenciesToInstall.set(dep, version);
+        }
       } catch {
         dependenciesToInstall.set(dep, 'latest');
       }
