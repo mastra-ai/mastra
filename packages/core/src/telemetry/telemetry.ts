@@ -14,9 +14,11 @@ declare global {
 export class Telemetry {
   public tracer: Tracer = trace.getTracer('default');
   name: string = 'default-service';
+  private enabled: boolean = true;
 
   private constructor(config: OtelConfig) {
     this.name = config.serviceName ?? 'default-service';
+    this.enabled = config.enabled !== false;
 
     this.tracer = trace.getTracer(this.name);
   }
@@ -72,6 +74,38 @@ export class Telemetry {
       });
     }
     return globalThis.__TELEMETRY__;
+  }
+
+  /**
+   * Check if telemetry is enabled
+   */
+  static isEnabled(): boolean {
+    // If telemetry not initialized, default to true for backward compatibility
+    return globalThis.__TELEMETRY__?.isEnabled() ?? true;
+  }
+
+  /**
+   * Set the enabled state of telemetry globally
+   * This allows runtime control of span creation
+   */
+  static setEnabled(enabled: boolean): void {
+    if (globalThis.__TELEMETRY__) {
+      globalThis.__TELEMETRY__.setEnabled(enabled);
+    }
+  }
+
+  /**
+   * Get the enabled state of the telemetry instance
+   */
+  public isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Set the enabled state of this telemetry instance
+   */
+  public setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
   }
 
   /**

@@ -1,10 +1,17 @@
 import { propagation, trace } from '@opentelemetry/api';
 import type { Context } from '@opentelemetry/api';
 
-// Helper function to check if telemetry is active
+/**
+ * Check if telemetry is active and enabled.
+ * This function checks both if telemetry is enabled in the configuration AND if a tracer exists.
+ *
+ * @param tracerName - Optional tracer name to check (currently unused, kept for backwards compatibility)
+ * @returns true if telemetry is both initialized and enabled, false otherwise
+ */
 export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boolean {
   try {
-    return !!trace.getTracer(tracerName);
+    const isEnabled = globalThis.__TELEMETRY__?.isEnabled() ?? true;
+    return isEnabled && !!trace.getTracer(tracerName);
   } catch {
     return false;
   }
