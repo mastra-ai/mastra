@@ -42,6 +42,25 @@ export interface LanceStorageOptions {
   disableInit?: boolean;
 }
 
+export interface LanceStorageClientOptions extends LanceStorageOptions {
+  /**
+   * Pre-configured LanceDB connection.
+   * Use this when you need to configure the connection before initialization.
+   *
+   * @example
+   * ```typescript
+   * import { connect } from '@lancedb/lancedb';
+   *
+   * const client = await connect('/path/to/db', {
+   *   // Custom connection options
+   * });
+   *
+   * const store = await LanceStorage.fromClient('my-id', 'MyStorage', client);
+   * ```
+   */
+  client: Connection;
+}
+
 export class LanceStorage extends MastraStorage {
   stores: StorageDomains;
   private lanceClient!: Connection;
@@ -103,6 +122,37 @@ export class LanceStorage extends MastraStorage {
         e,
       );
     }
+  }
+
+  /**
+   * Creates a new instance of LanceStorage from a pre-configured LanceDB connection.
+   * Use this when you need to configure the connection before initialization.
+   *
+   * @param id The unique identifier for this storage instance
+   * @param name The name for this storage instance
+   * @param client Pre-configured LanceDB connection
+   * @param options Storage options including disableInit
+   *
+   * @example
+   * ```typescript
+   * import { connect } from '@lancedb/lancedb';
+   *
+   * const client = await connect('/path/to/db', {
+   *   // Custom connection options
+   * });
+   *
+   * const store = LanceStorage.fromClient('my-id', 'MyStorage', client);
+   * ```
+   */
+  public static fromClient(id: string, name: string, client: Connection, options?: LanceStorageOptions): LanceStorage {
+    const instance = new LanceStorage(id, name, options?.disableInit);
+    instance.lanceClient = client;
+    instance.stores = {
+      workflows: new StoreWorkflowsLance({ client }),
+      scores: new StoreScoresLance({ client }),
+      memory: new StoreMemoryLance({ client }),
+    };
+    return instance;
   }
 
   /**

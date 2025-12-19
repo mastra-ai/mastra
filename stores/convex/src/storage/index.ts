@@ -22,7 +22,14 @@ import { MemoryConvex } from './domains/memory';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 
-export type ConvexStoreConfig = ConvexAdminClientConfig & {
+/**
+ * Convex configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured ConvexAdminClient: `{ id, client }`
+ * - Deployment config: `{ id, deploymentUrl, adminAuthToken, storageFunction? }`
+ */
+export type ConvexStoreConfig = {
   id: string;
   name?: string;
   /**
@@ -45,6 +52,35 @@ export type ConvexStoreConfig = ConvexAdminClientConfig & {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+} & (
+  | {
+      /**
+       * Pre-configured ConvexAdminClient.
+       * Use this when you need to configure the client before initialization.
+       *
+       * @example
+       * ```typescript
+       * import { ConvexAdminClient } from '@mastra/convex/storage/client';
+       *
+       * const client = new ConvexAdminClient({
+       *   deploymentUrl: 'https://your-deployment.convex.cloud',
+       *   adminAuthToken: 'your-token',
+       *   storageFunction: 'custom/storage:handle',
+       * });
+       *
+       * const store = new ConvexStore({ id: 'my-store', client });
+       * ```
+       */
+      client: ConvexAdminClient;
+    }
+  | ConvexAdminClientConfig
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (config: ConvexStoreConfig): config is ConvexStoreConfig & { client: ConvexAdminClient } => {
+  return 'client' in config;
 };
 
 export class ConvexStore extends MastraStorage {
@@ -55,7 +91,9 @@ export class ConvexStore extends MastraStorage {
   constructor(config: ConvexStoreConfig) {
     super({ id: config.id, name: config.name ?? 'ConvexStore', disableInit: config.disableInit });
 
-    const client = new ConvexAdminClient(config);
+    // Handle pre-configured client vs creating new one
+    const client = isClientConfig(config) ? config.client : new ConvexAdminClient(config);
+
     const domainConfig = { client };
     this.memory = new MemoryConvex(domainConfig);
     this.workflows = new WorkflowsConvex(domainConfig);

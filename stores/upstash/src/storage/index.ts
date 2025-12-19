@@ -19,10 +19,15 @@ import { StoreMemoryUpstash } from './domains/memory';
 import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
-export interface UpstashConfig {
+/**
+ * Upstash configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured Redis client: `{ id, client }`
+ * - URL/token config: `{ id, url, token }`
+ */
+export type UpstashConfig = {
   id: string;
-  url: string;
-  token: string;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -43,7 +48,41 @@ export interface UpstashConfig {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
-}
+} & (
+  | {
+      /**
+       * Pre-configured Upstash Redis client.
+       * Use this when you need to configure the client before initialization,
+       * e.g., to set custom retry strategies or interceptors.
+       *
+       * @example
+       * ```typescript
+       * import { Redis } from '@upstash/redis';
+       *
+       * const client = new Redis({
+       *   url: 'https://...',
+       *   token: '...',
+       *   // Custom settings
+       *   retry: { retries: 5, backoff: (retryCount) => Math.exp(retryCount) * 50 },
+       * });
+       *
+       * const store = new UpstashStore({ id: 'my-store', client });
+       * ```
+       */
+      client: Redis;
+    }
+  | {
+      url: string;
+      token: string;
+    }
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (config: UpstashConfig): config is UpstashConfig & { client: Redis } => {
+  return 'client' in config;
+};
 
 export class UpstashStore extends MastraStorage {
   private redis: Redis;
@@ -51,10 +90,25 @@ export class UpstashStore extends MastraStorage {
 
   constructor(config: UpstashConfig) {
     super({ id: config.id, name: 'Upstash', disableInit: config.disableInit });
-    this.redis = new Redis({
-      url: config.url,
-      token: config.token,
-    });
+
+    // Handle pre-configured client vs creating new connection
+    if (isClientConfig(config)) {
+      // User provided a pre-configured Redis client
+      this.redis = config.client;
+    } else {
+      // Validate URL and token before creating client
+      if (!config.url || typeof config.url !== 'string' || config.url.trim() === '') {
+        throw new Error('UpstashStore: url is required and cannot be empty.');
+      }
+      if (!config.token || typeof config.token !== 'string' || config.token.trim() === '') {
+        throw new Error('UpstashStore: token is required and cannot be empty.');
+      }
+      // Create client from credentials
+      this.redis = new Redis({
+        url: config.url,
+        token: config.token,
+      });
+    }
 
     const scores = new ScoresUpstash({ client: this.redis });
     const workflows = new WorkflowsUpstash({ client: this.redis });

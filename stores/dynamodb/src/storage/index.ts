@@ -23,15 +23,16 @@ import { MemoryStorageDynamoDB } from './domains/memory';
 import { ScoresStorageDynamoDB } from './domains/scores';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
-export interface DynamoDBStoreConfig {
+/**
+ * DynamoDB configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured DynamoDB client: `{ id, client, tableName }`
+ * - AWS config: `{ id, tableName, region?, endpoint?, credentials? }`
+ */
+export type DynamoDBStoreConfig = {
   id: string;
-  region?: string;
   tableName: string;
-  endpoint?: string;
-  credentials?: {
-    accessKeyId: string;
-    secretAccessKey: string;
-  };
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -52,7 +53,54 @@ export interface DynamoDBStoreConfig {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
-}
+} & (
+  | {
+      /**
+       * Pre-configured DynamoDB Document client.
+       * Use this when you need to configure the client before initialization,
+       * e.g., to set custom middleware or retry strategies.
+       *
+       * @example
+       * ```typescript
+       * import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+       * import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+       *
+       * const dynamoClient = new DynamoDBClient({
+       *   region: 'us-east-1',
+       *   // Custom settings
+       *   maxAttempts: 5,
+       * });
+       *
+       * const client = DynamoDBDocumentClient.from(dynamoClient, {
+       *   marshallOptions: { removeUndefinedValues: true },
+       * });
+       *
+       * const store = new DynamoDBStore({
+       *   name: 'my-store',
+       *   config: { id: 'my-id', client, tableName: 'my-table' }
+       * });
+       * ```
+       */
+      client: DynamoDBDocumentClient;
+    }
+  | {
+      region?: string;
+      endpoint?: string;
+      credentials?: {
+        accessKeyId: string;
+        secretAccessKey: string;
+      };
+    }
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (
+  config: DynamoDBStoreConfig,
+): config is DynamoDBStoreConfig & { client: DynamoDBDocumentClient } => {
+  return 'client' in config;
+};
 
 // Define a type for our service that allows string indexing
 type MastraService = Service<Record<string, any>> & {
@@ -81,14 +129,22 @@ export class DynamoDBStore extends MastraStorage {
         );
       }
 
-      const dynamoClient = new DynamoDBClient({
-        region: config.region || 'us-east-1',
-        endpoint: config.endpoint,
-        credentials: config.credentials,
-      });
-
       this.tableName = config.tableName;
-      this.client = DynamoDBDocumentClient.from(dynamoClient);
+
+      // Handle pre-configured client vs creating new connection
+      if (isClientConfig(config)) {
+        // User provided a pre-configured DynamoDBDocumentClient
+        this.client = config.client;
+      } else {
+        // Create client from AWS config
+        const dynamoClient = new DynamoDBClient({
+          region: config.region || 'us-east-1',
+          endpoint: config.endpoint,
+          credentials: config.credentials,
+        });
+        this.client = DynamoDBDocumentClient.from(dynamoClient);
+      }
+
       this.service = getElectroDbService(this.client, this.tableName) as MastraService;
 
       const domainConfig = { service: this.service };

@@ -1,9 +1,21 @@
-import { createTestSuite } from '@internal/storage-test-utils';
+import {
+  createTestSuite,
+  createClientAcceptanceTests,
+  createConfigValidationTests,
+  createDomainDirectTests,
+} from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from 'vitest';
+import { MongoClient } from 'mongodb';
+import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+
 import type { ConnectorHandler } from './connectors/base';
+import { MemoryStorageMongoDB } from './domains/memory';
+import { ScoresStorageMongoDB } from './domains/scores';
+import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 import { MongoDBStore } from './index';
+
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: MongoDBConfig = {
   id: 'mongodb-test-store',
@@ -11,57 +23,175 @@ const TEST_CONFIG: MongoDBConfig = {
   dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
 };
 
-describe('MongoDB Store Validation', () => {
-  describe('with database options', () => {
-    const validConfig = TEST_CONFIG;
-    it('throws if url is empty', () => {
-      expect(() => new MongoDBStore({ ...validConfig, url: '' })).toThrow(/url must be provided and cannot be empty/);
+// Helper to create a connectorHandler from MongoClient
+const createConnectorHandler = async (): Promise<{ handler: ConnectorHandler; client: MongoClient }> => {
+  const client = new MongoClient(TEST_CONFIG.url!);
+  await client.connect();
+  const db = client.db(TEST_CONFIG.dbName);
+
+  return {
+    handler: {
+      getCollection: async (name: string) => db.collection(name),
+      close: async () => client.close(),
+    },
+    client,
+  };
+};
+
+// Mock connectorHandler for config validation tests (doesn't need real connection)
+const createMockConnectorHandler = (): ConnectorHandler => {
+  const mockCollection = {} as ReturnType<ReturnType<MongoClient['db']>['collection']>;
+  return {
+    getCollection: async () => mockCollection,
+    close: async () => {},
+  };
+};
+
+// Run the shared test suite
+createTestSuite(new MongoDBStore(TEST_CONFIG));
+
+// Configuration validation tests
+createConfigValidationTests({
+  storeName: 'MongoDBStore',
+  createStore: config => new MongoDBStore(config as any),
+  validConfigs: [
+    {
+      description: 'URL/dbName config',
+      config: { id: 'test-store', url: 'mongodb://localhost:27017', dbName: 'test-db' },
+    },
+    {
+      description: 'URL/dbName with options',
+      config: {
+        id: 'test-store',
+        url: 'mongodb://localhost:27017',
+        dbName: 'test-db',
+        options: { maxPoolSize: 50, minPoolSize: 5 },
+      },
+    },
+    {
+      description: 'connectorHandler',
+      config: { id: 'test-store', connectorHandler: createMockConnectorHandler() },
+    },
+    {
+      description: 'connectorHandler with empty url (allowed)',
+      config: { id: 'test-store', connectorHandler: createMockConnectorHandler(), url: '' },
+    },
+    {
+      description: 'connectorHandler with empty dbName (allowed)',
+      config: { id: 'test-store', connectorHandler: createMockConnectorHandler(), dbName: '' },
+    },
+    {
+      description: 'disableInit with URL config',
+      config: { id: 'test-store', url: 'mongodb://localhost:27017', dbName: 'test-db', disableInit: true },
+    },
+    {
+      description: 'disableInit with connectorHandler',
+      config: { id: 'test-store', connectorHandler: createMockConnectorHandler(), disableInit: true },
+    },
+  ],
+  invalidConfigs: [
+    {
+      description: 'empty url without connectorHandler',
+      config: { id: 'test-store', url: '', dbName: 'test-db' },
+      expectedError: /url must be provided and cannot be empty/,
+    },
+    {
+      description: 'empty dbName without connectorHandler',
+      config: { id: 'test-store', url: 'mongodb://localhost:27017', dbName: '' },
+      expectedError: /dbName must be provided and cannot be empty/,
+    },
+    {
+      description: 'missing dbName without connectorHandler',
+      config: { id: 'test-store', url: 'mongodb://localhost:27017' },
+      expectedError: /dbName must be provided and cannot be empty/,
+    },
+  ],
+});
+
+// Pre-configured client (connectorHandler) acceptance tests
+// Note: MongoDB needs a real connection for init() to work (createIndex calls)
+// So we use URL/dbName config which creates a real connection
+createClientAcceptanceTests({
+  storeName: 'MongoDBStore',
+  expectedStoreName: 'MongoDBStore',
+  createStoreWithClient: () => {
+    return new MongoDBStore({
+      id: 'mongodb-client-test',
+      url: TEST_CONFIG.url!,
+      dbName: TEST_CONFIG.dbName!,
+    });
+  },
+});
+
+// Domain-level pre-configured client tests
+// Note: MongoDB domains need real connections, so we use URL/dbName config
+// The connectorHandler variant is tested in store-specific tests below
+createDomainDirectTests({
+  storeName: 'MongoDB',
+  createMemoryDomain: () =>
+    new MemoryStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: TEST_CONFIG.dbName!,
+    }),
+  createWorkflowsDomain: () =>
+    new WorkflowsStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: TEST_CONFIG.dbName!,
+    }),
+  createScoresDomain: () =>
+    new ScoresStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: TEST_CONFIG.dbName!,
+    }),
+});
+
+// MongoDB-specific: connectorHandler with real operations
+describe('MongoDBStore connectorHandler Operations', () => {
+  it('should work with pre-configured connectorHandler for storage operations', async () => {
+    const { handler, client } = await createConnectorHandler();
+
+    const store = new MongoDBStore({
+      id: 'mongodb-handler-ops-test',
+      connectorHandler: handler,
     });
 
-    it('throws if dbName is missing or empty', () => {
-      expect(() => new MongoDBStore({ ...validConfig, dbName: '' })).toThrow(
-        /dbName must be provided and cannot be empty/,
-      );
-      const { dbName, ...rest } = validConfig;
-      expect(() => new MongoDBStore(rest as any)).toThrow(/dbName must be provided and cannot be empty/);
-    });
+    await store.init();
 
-    it('does not throw on valid config (host-based)', () => {
-      expect(() => new MongoDBStore(validConfig)).not.toThrow();
-    });
-  });
-
-  describe('with connection handler', () => {
-    const validWithConnectionHandlerConfig = {
-      id: 'mongodb-handler-test',
-      connectorHandler: {} as ConnectorHandler,
+    // Test a basic operation
+    const thread = {
+      id: `thread-handler-test-${Date.now()}`,
+      resourceId: 'test-resource',
+      title: 'Test Thread',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
-    it('not throws if url is empty', () => {
-      expect(() => new MongoDBStore({ ...validWithConnectionHandlerConfig, url: '' })).not.toThrow(
-        /url must be provided and cannot be empty/,
-      );
+    const savedThread = await store.saveThread({ thread });
+    expect(savedThread.id).toBe(thread.id);
+
+    const retrievedThread = await store.getThreadById({ threadId: thread.id });
+    expect(retrievedThread).toBeDefined();
+    expect(retrievedThread?.title).toBe('Test Thread');
+
+    // Clean up
+    await store.deleteThread({ threadId: thread.id });
+    await store.close();
+    await client.close();
+  });
+
+  it('should expose stores when using connectorHandler', () => {
+    const store = new MongoDBStore({
+      id: 'mongodb-handler-stores-test',
+      connectorHandler: createMockConnectorHandler(),
     });
 
-    it('not throws if dbName is missing or empty', () => {
-      expect(() => new MongoDBStore({ ...validWithConnectionHandlerConfig, dbName: '' })).not.toThrow(
-        /dbName must be provided and cannot be empty/,
-      );
-      const { dbName, ...rest } = validWithConnectionHandlerConfig as any;
-      expect(() => new MongoDBStore(rest as any)).not.toThrow(/dbName must be provided and cannot be empty/);
-    });
-
-    it('does not throw on valid config', () => {
-      expect(() => new MongoDBStore(validWithConnectionHandlerConfig)).not.toThrow();
-    });
-
-    it('should initialize the stores correctly', () => {
-      const store = new MongoDBStore(validWithConnectionHandlerConfig);
-      expect(Object.keys(store.stores)).not.toHaveLength(0);
-    });
+    expect(store).toBeDefined();
+    expect(Object.keys(store.stores)).not.toHaveLength(0);
   });
 });
 
+// MongoDB-specific tests that demonstrate unique MongoDB capabilities
 describe('MongoDB Specific Tests', () => {
   let store: MongoDBStore;
 
@@ -84,7 +214,7 @@ describe('MongoDB Specific Tests', () => {
         dbName: 'test-db',
         options: {
           retryWrites: true,
-          w: 'majority',
+          w: 'majority' as const,
         },
       };
       expect(() => new MongoDBStore(atlasConfig)).not.toThrow();
@@ -97,7 +227,7 @@ describe('MongoDB Specific Tests', () => {
         dbName: 'test-db',
         options: {
           authSource: 'admin',
-          authMechanism: 'SCRAM-SHA-1',
+          authMechanism: 'SCRAM-SHA-1' as const,
         },
       };
       expect(() => new MongoDBStore(authConfig)).not.toThrow();
@@ -303,7 +433,7 @@ describe('MongoDB Specific Tests', () => {
         spanId,
         traceId,
         name: 'MongoDB AI Operation',
-        spanType: SpanType.LLM_GENERATION,
+        spanType: SpanType.MODEL_GENERATION,
         parentSpanId: null,
         scope: {
           name: 'mongodb-test',
@@ -430,6 +560,3 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 });
-
-// Run the shared test suite
-createTestSuite(new MongoDBStore(TEST_CONFIG));
