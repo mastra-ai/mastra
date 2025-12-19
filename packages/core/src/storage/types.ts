@@ -299,6 +299,12 @@ export interface CreateIndexOptions {
   columns: string[];
   unique?: boolean;
   concurrent?: boolean;
+  /**
+   * SQL WHERE clause for creating partial indexes.
+   * @internal Reserved for internal use only. Callers must pre-validate this value.
+   * DDL statements cannot use parameterized queries for WHERE clauses, so this value
+   * is concatenated directly into the SQL. Any user-facing usage must validate input.
+   */
   where?: string;
   method?: 'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin';
   opclass?: string; // Operator class for GIN/GIST indexes

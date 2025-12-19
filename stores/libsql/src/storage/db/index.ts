@@ -605,7 +605,7 @@ export class LibSQLDB extends MastraBase {
     try {
       // Get existing columns
       const tableInfo = await this.client.execute({
-        sql: `PRAGMA table_info(${parsedTableName})`,
+        sql: `PRAGMA table_info("${parsedTableName}")`,
       });
       const existingColumns = new Set((tableInfo.rows || []).map((row: any) => row.name?.toLowerCase()));
 

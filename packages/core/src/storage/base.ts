@@ -285,12 +285,7 @@ export abstract class MastraStorage extends MastraBase {
       initTasks.push(this.stores.agents.init());
     }
 
-    this.hasInitialized = Promise.all(initTasks)
-      .then(() => true)
-      .catch(error => {
-        this.hasInitialized = null; // Reset on failure to allow retry
-        throw error;
-      });
+    this.hasInitialized = Promise.all(initTasks).then(() => true);
 
     await this.hasInitialized;
   }
