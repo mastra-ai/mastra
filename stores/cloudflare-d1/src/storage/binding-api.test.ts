@@ -3,11 +3,11 @@ import { createTestSuite } from '@internal/storage-test-utils';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, expect, it, vi } from 'vitest';
-import type { D1Client } from '.';
-import { D1Store } from '.';
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
+import { D1Store } from '.';
+import type { D1Client } from '.';
 
 dotenv.config();
 

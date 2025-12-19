@@ -12,10 +12,10 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { createTestSuite } from '@internal/storage-test-utils';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { DynamoDBStore } from '..';
 import { MemoryStorageDynamoDB } from './domains/memory';
 import { ScoresStorageDynamoDB } from './domains/scores';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
-import { DynamoDBStore } from '..';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
 const LOCAL_ENDPOINT = 'http://localhost:8000';
