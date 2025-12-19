@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-Fix malformed JSON handling in tool-call inputs by adding automatic JSON repair functionality. The `convertFullStreamChunkToMastra` function now gracefully handles malformed or incomplete JSON from tool-call chunks using the `jsonrepair` library. This prevents crashes during streaming scenarios when processing partial or invalid tool-call payloads. Resolves #11078.
+Fixed handling of malformed JSON in tool-call inputs during streaming. Tool-call payloads that are incomplete or invalid are now automatically repaired, preventing crashes in streaming scenarios. Resolves #11078.
