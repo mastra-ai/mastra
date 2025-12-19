@@ -31,6 +31,11 @@ const REVERSE_METRIC_MAPPING = {
 
 type ElasticSearchVectorParams = QueryVectorParams<ElasticSearchVectorFilter>;
 
+type ElasticSearchAuth =
+  | { apiKey: string }
+  | { username: string; password: string }
+  | { bearer: string };
+
 export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter> {
   private client: ElasticSearchClient;
 
@@ -38,10 +43,11 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
    * Creates a new ElasticSearchVector client.
    *
    * @param {string} url - The url of the ElasticSearch node.
+   * @param {ElasticSearchAuth} [auth] - The authentication credentials for ElasticSearch.
    */
-  constructor({ url, id }: { url: string } & { id: string }) {
+  constructor({ url, id, auth }: { url: string } & { id: string } & { auth?: ElasticSearchAuth }) {
     super({ id });
-    this.client = new ElasticSearchClient({ node: url });
+    this.client = new ElasticSearchClient({ node: url, ...(auth && { auth }) });
   }
 
   /**
