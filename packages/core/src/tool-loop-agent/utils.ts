@@ -1,4 +1,5 @@
-import { ToolLoopAgent, type ToolLoopAgentSettings } from '@internal/ai-v6';
+import { ToolLoopAgent } from '@internal/ai-v6';
+import type { ToolLoopAgentSettings } from '@internal/ai-v6';
 
 /**
  * Shape of a ToolLoopAgent-like object for runtime extraction.

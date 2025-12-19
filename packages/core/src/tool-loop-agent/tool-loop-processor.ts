@@ -5,13 +5,14 @@ import type {
   StepResult,
   ToolLoopAgentSettings,
 } from '@internal/ai-v6';
-import { isSupportedLanguageModel, type AgentExecutionOptions, type AgentInstructions } from '../agent';
+import { isSupportedLanguageModel } from '../agent';
+import type { AgentExecutionOptions, AgentInstructions } from '../agent';
+import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../processors';
 import type { OutputSchema } from '../stream';
 import { getSettings as getToolLoopAgentSettings } from './utils';
 import type { ToolLoopAgentLike } from './utils';
-import { resolveModelConfig } from '../llm/model/resolve-model';
 
 type PrepareCallInput = AgentCallParameters<never> &
   Pick<
