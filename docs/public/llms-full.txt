@@ -4711,7 +4711,7 @@ Studio provides an interactive UI for building and testing your agents, along wi
 
 As your project evolves, Studio's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
 
-To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](https://mastra.ai/docs/mastra-cloud/setting-up) to collaborate with your team.
+To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](/docs/v1/mastra-cloud/setup) to collaborate with your team.
 
 <YouTube id="ojGu6Bi4wYk" />
 
@@ -4934,147 +4934,84 @@ We can't wait to see what you build ✌️
 
 
 ---
-title: "Navigating the Dashboard | Mastra Cloud"
-description: Details of each feature available in Mastra Cloud
+title: "Deployment | Mastra Cloud"
+description: Deploy your Mastra application to production
 ---
 
-# Navigating the Dashboard
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/dashboard
+# Deployment
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/deployment
 
-This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/v1/mastra-cloud/dashboard#studio).
+Deploy your Mastra application to production and expose your agents, tools, and workflows as REST API endpoints.
 
-## Overview
+:::info
+Mastra Cloud is currently in beta, but many teams are already using it to deploy their agents. It's the easiest way to run Mastra agents in a managed environment.
+:::
 
-The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
+## Enable deployments
+
+After [setting up your project](/docs/v1/mastra-cloud/setup), click **Deployment** in the sidebar and select **Enable Deployments**.
+
+Once enabled, your project automatically builds and deploys. Future pushes to your main branch trigger automatic redeployments.
+
+## Dashboard
+
+The **Overview** page shows your project's domain URL, status, latest deployment, and connected agents and workflows.
 
 ![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
 
-Key features:
+Click the **Deployments** menu item to view build logs. Open **Settings** to configure environment variables, branch, storage, and endpoint URLs. 
 
-Each project shows its current deployment status, active domains, and environment variables, so you can quickly understand how your application is running.
+:::note
+Changes to settings require a new deployment to take effect
+:::
 
-## Deployments
+## Using your deployment
 
-The **Deployments** page shows recent builds and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
-
-![Dashboard deployment](/img/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
-
-Key features:
-
-Each deployment includes its current status, the Git branch it was deployed from, and a title generated from the commit hash.
-
-## Logs
-
-The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
-
-![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
-
-Each log includes a severity level and detailed messages showing agent, workflow, and storage activity.
-
-## Settings
-
-On the **Settings** page you can modify the configuration of your application.
-
-![Dashboard settings](/img/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
-
-Key features:
-
-You can manage environment variables, edit key project settings like the name and branch, configure storage with LibSQLStore, and set a stable URL for your endpoints.
-
-> Changes to configuration require a new deployment before taking effect.
-
-## Studio
-
-### Agents
-
-On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
-
-![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
-
-Key features:
-
-Test your agents in real time using the chat interface, review traces of each interaction, and see evaluation scores for every response.
-
-### Workflows
-
-On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
-
-![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
-
-Key features:
-
-Visualize your workflow with a step-by-step graph, view execution traces, and run workflows directly using the built-in runner.
-
-### Tools
-
-On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
-
-![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
-
-Key features:
-
-Test your tools by providing an input that matches the schema and viewing the structured output.
-
-## MCP Servers
-
-The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
-
-![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
-
-Key features:
-
-Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configuration snippets for tools like Cursor and Windsurf.
+After deployment, interact with your agents using the [Mastra Client](/docs/v1/server/mastra-client) or call the REST API endpoints directly.
 
 ## Next steps
 
-- [Understanding Tracing and Logs](/docs/v1/mastra-cloud/observability)
+- [Studio](/docs/v1/mastra-cloud/studio) - Test your agents in the cloud
+- [Observability](/docs/v1/mastra-cloud/observability) - Monitor traces and logs
 
 
 ---
-title: "Understanding Tracing and Logs | Mastra Cloud"
+title: "Observability | Mastra Cloud"
 description: Monitoring and debugging tools for Mastra Cloud deployments
 ---
 
-# Understanding Tracing and Logs
+# Observability
 [EN] Source: https://mastra.ai/en/docs/mastra-cloud/observability
 
-Mastra Cloud provides full observability for production applications, giving you insight into how your agents and workflows behave. Observability can be enabled whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
+Cloud provides observability for production applications, giving you insight into how your agents and workflows behave. Observability works whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
 
 For details on configuring observability, see the [Cloud Exporter](/docs/v1/observability/tracing/exporters/cloud) docs.
 
 ## Traces
 
-More detailed traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of our [supported providers](/docs/v1/observability/tracing/overview#exporters).
+Traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of the [supported providers](/docs/v1/observability/tracing/overview#exporters).
 
 ### Agents
 
-With observability enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
+With observability enabled, you can view detailed outputs from your agents in the **Traces** section in [Studio](/docs/v1/mastra-cloud/studio).
 
 ![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
 
-Key features:
-
-Agent traces break a run into clear steps, model calls, tool calls, and intermediate chunks, each with timing, inputs, outputs, and errors. You can drill into any span to inspect prompts, token usage, and results, making it easy to diagnose issues and understand how the agent produced its output.
+Agent traces break a run into clear steps: model calls, tool calls, and intermediate chunks. Each includes timing, inputs, outputs, and errors. Drill into any span to inspect prompts, token usage, and results.
 
 ### Workflows
 
-With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
+With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in [Studio](/docs/v1/mastra-cloud/studio).
 
 ![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
 
-Key features:
-
-Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls inside the workflow. You can inspect inputs, outputs, and errors for every step, making it easy to debug long-running or multi-step processes and understand how data flows through the workflow.
+Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls. Inspect inputs, outputs, and errors for every step to debug long-running or multi-step processes.
 
 ## Logs
 
-You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page of the Dashboard.
+The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#project-dashboard) displays detailed information for debugging and monitoring your application's behavior.
 
 ![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
 
 Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
 
@@ -5092,169 +5029,135 @@ description: Deployment and monitoring service for Mastra applications
 # Mastra Cloud
 [EN] Source: https://mastra.ai/en/docs/mastra-cloud/overview
 
-[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/v1/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
+[Mastra Cloud](https://cloud.mastra.ai) is a platform for deploying, managing, and monitoring Mastra applications. [Import your project](/docs/v1/mastra-cloud/setup) to get started.
 
-## Platform features
+## Studio
 
-Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
+Run [Studio](/docs/v1/mastra-cloud/studio) in the cloud and share access with your team via a link. Team members can test agents and workflows, tweak system prompts, and give feedback without running the project locally.
 
-![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
+## Deploy
 
-Key features:
+Enable [deployments](/docs/v1/mastra-cloud/deployment) and Mastra Cloud hosts your server for you. Connect your GitHub repository for automatic deployments whenever you push to your configured branch. Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
 
-Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
+Once deployed, the project dashboard gives you visibility into:
 
-## Project Dashboard
+- Deployment status and history
+- Build logs and configuration
+- Environment variables and settings
 
-Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
+## Observability
 
-![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+[Observability](/docs/v1/mastra-cloud/observability) provides insight into how your agents and workflows behave in production. View detailed traces of agent runs, workflow executions, and logs to debug issues and understand performance.
 
-Key features:
+:::info
+You don’t need to deploy to Mastra Cloud to use Observability. You can send traces to Mastra from any environment
+:::
 
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
-
-## Project structure
-
-Use a standard Mastra project structure for proper detection and deployment.
-
-```shell
-src
-└── mastra
-    ├── agents
-    │   └── agent-name.ts
-    ├── tools
-    │   └── tool-name.ts
-    ├── workflows
-    │   └── workflow-name.ts
-    └── index.ts
-package.json
-```
-
-Mastra Cloud scans your repository for:
-
-- **Agents**: Defined using: `new Agent({...})`
-- **Tools**: Defined using: `createTool({...})`
-- **Workflows**: Defined using: `createWorkflow({...})`
-- **Steps**: Defined using: `createStep({...})`
-- **Environment Variables**: API keys and configuration variables
-
-## Technical implementation
-
-Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
-
-## Next steps
-
-- [Setting Up and Deploying](/docs/v1/mastra-cloud/setting-up)
 
 
 ---
-title: "Setting Up and Deploying | Mastra Cloud"
-description: Configuration steps for Mastra Cloud projects
+title: "Setup | Mastra Cloud"
+description: Import your Mastra project to Mastra Cloud
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Setting Up and Deploying
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/setting-up
+# Setup
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/setup
 
-This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
+Import your Mastra project to [Mastra Cloud](https://cloud.mastra.ai) to use [Studio](/docs/v1/mastra-cloud/studio) and optionally [deploy](/docs/v1/mastra-cloud/deployment) your agent.
 
-## Prerequisites
+## Before you begin
 
-- A [Mastra Cloud](https://mastra.ai/cloud) account
-- A GitHub account / repository containing a Mastra application
+- [Sign in](https://cloud.mastra.ai) to Cloud
+- Push your [Mastra project](/docs/v1/getting-started/start) to GitHub
 
-:::info
+## Options
 
-Visit our [Getting started](/guides/v1/getting-started/quickstart) guide to scaffold out a new Mastra project with sensible defaults.
 
-:::
+![Select project type](/img/mastra-cloud/mastra-cloud-select.png)
 
-## Setup and Deploy process
+When you create a new project, you can choose from three options:
+
+1. **Create from GitHub** - Import a Mastra project from GitHub
+2. **Create from your server** - Connect a self-hosted Mastra instance to [Studio](/docs/v1/mastra-cloud/studio)
+3. **Create from template** - Start from a [pre-built template](https://mastra.ai/templates)
+
+
+To create a project from GitHub, follow these steps:
+
+## Create from GitHub
 
 <Steps>
 
 <StepItem>
+Connect to GitHub when prompted
 
-Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
-
-- **GitHub**
-- **Google**
-
+![Deployment details](/img/mastra-cloud/mastra-cloud-connect.png)
 </StepItem>
 
 <StepItem>
+Search for your repository and click **Import**
 
-When prompted, install the Mastra GitHub app.
-
-![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
-
+![Deployment details](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 </StepItem>
 
 <StepItem>
-
-Click the **Create new project** button to create a new project.
-
-![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Search for a repository, then click **Import**.
-
-![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
+Configure your project settings. Mastra Cloud auto-detects most settings, but you'll still need to enter the environment variables for your configured [model provider](/models/v1):
 
 ![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
-
-- **Importing from GitHub**: The GitHub repository name
-- **Project name**: Customize the project name
-- **Branch**: The branch to deploy from
-- **Project root**: The root directory of your project
-- **Mastra directory**: Where Mastra files are located
-- **Environment variables**: Add environment variables used by the application
-- **Build and Store settings**:
-  - **Install command**: Runs pre-build to install project dependencies
-  - **Project setup command**: Runs pre-build to prepare any external dependencies
-  - **Port**: The network port the server will use
-  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/reference/v1/storage/libsql) storage
-- **Deploy Project**: Starts the deployment process
-
 </StepItem>
 
 <StepItem>
 
-Click **Deploy Project** to create and deploy your application using the configuration you've set.
-
+Click **Create Project**
 </StepItem>
-
 </Steps>
-
-## Successful deployment
-
-After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
-
-![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
-
-## Continuous integration
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Testing your application
-
-After a successful deployment you can test your agents and workflows [Studio](/docs/v1/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/v1/server/mastra-client).
 
 ## Next steps
 
-- [Navigating the Dashboard](/docs/v1/mastra-cloud/dashboard)
+Once your project is imported, [Studio](/docs/v1/mastra-cloud/studio) automatically creates a sandbox where you can interact with your agents and share access with your team.
+
+When you're ready for production, enable [Deployment](/docs/v1/mastra-cloud/deployment) settings and hit deploy!
+
+
+---
+title: "Studio | Mastra Cloud"
+description: Run Studio in the cloud for team collaboration
+---
+
+import YouTube from "@site/src/components/YouTube-player";
+
+# Studio
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/studio
+
+<YouTube id="ojGu6Bi4wYk" />
+
+Mastra Cloud provides a hosted version of [Studio](/docs/v1/getting-started/studio) that gives your team a shared environment for interacting with and testing your agents. Team members can chat with agents, review traces, give feedback, and tweak system prompts - without needing to run the project locally.
+
+[Set up your project](/docs/v1/mastra-cloud/setup) to access Studio in the cloud.
+
+See the [Studio documentation](/docs/v1/getting-started/studio) for details on features like the Agents playground, Workflows runner, Tools testing, and MCP Servers.
+
+:::note
+You don't need to deploy your agent to use Studio. Studio runs in a sandbox environment separate from your production deployment
+:::
+
+## Sharing access
+
+To invite team members, go to [Mastra Cloud](https://cloud.mastra.ai), click **Team Settings**, then **Members** to add them. Once invited, they can sign in and access your project's Studio.
+
+![Invite team members](/img/mastra-cloud/mastra-cloud-invite.png)
+
+:::warning
+Team members can view environment variables and delete projects. Only invite people you trust.
+:::
+
+## Next steps
+
+- [Deployment](/docs/v1/mastra-cloud/deployment) - Manage deployments and settings
+- [Observability](/docs/v1/mastra-cloud/observability) - Monitor traces and logs
 
 
 ---
@@ -34750,7 +34653,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 62+ AI providers and 1451+ models through Mastra's model router."
+description: "Access 63+ AI providers and 1465+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34763,7 +34666,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1451 models from 62 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1465 models from 63 providers through a single API.
 
 ## Features
 
@@ -34891,7 +34794,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 55 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 56 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -44119,6 +44022,11 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
+      title="Ollama Cloud"
+      description="12 models"
+      href="/models/v1/providers/ollama-cloud"
+      logo="https://models.dev/logos/ollama-cloud.svg"
+    />    <CardGridItem
       title="OpenCode Zen"
       description="24 models"
       href="/models/v1/providers/opencode"
@@ -44180,7 +44088,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="21 models"
+      description="23 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -47411,6 +47319,240 @@ const agent = new Agent({
     return useAdvanced
       ? "nvidia/qwen/qwen3-next-80b-a3b-thinking"
       : "nvidia/black-forest-labs/flux.1-dev";
+  }
+});
+```
+
+
+
+
+---
+title: "Ollama Cloud | Models | Mastra"
+description: "Use Ollama Cloud models with Mastra. 12 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/ollama-cloud.svg" alt="Ollama Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ollama Cloud
+[EN] Source: https://mastra.ai/en/models/providers/ollama-cloud
+
+Access 12 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
+
+Learn more in the [Ollama Cloud documentation](https://docs.ollama.com/cloud).
+
+```bash
+OLLAMA_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "ollama-cloud/cogito-2.1:671b-cloud"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Ollama Cloud documentation](https://docs.ollama.com/cloud) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "ollama-cloud/cogito-2.1:671b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/deepseek-v3.1:671b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 160000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/gemini-3-pro-preview:latest",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/glm-4.6:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/gpt-oss:120b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/gpt-oss:20b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/kimi-k2-thinking:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/kimi-k2:1t-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/minimax-m2:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/qwen3-coder:480b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/qwen3-vl-235b-cloud",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/qwen3-vl-235b-instruct-cloud",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://ollama.com/v1",
+    id: "ollama-cloud/cogito-2.1:671b-cloud",
+    apiKey: process.env.OLLAMA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "ollama-cloud/qwen3-vl-235b-instruct-cloud"
+      : "ollama-cloud/cogito-2.1:671b-cloud";
   }
 });
 ```
@@ -53711,17 +53853,18 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 21 models available."
+description: "Use Venice AI models with Mastra. 23 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
 
-
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 21 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 23 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -53767,7 +53910,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 6,
     "outputCost": 30
   },
@@ -53777,11 +53920,23 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 8192,
+    "maxOutput": 40960,
     "inputCost": 0.4,
     "outputCost": 1
+  },
+  {
+    "model": "venice/devstral-2-2512",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 0.25
   },
   {
     "model": "venice/gemini-3-flash-preview",
@@ -53790,20 +53945,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256576,
+    "contextWindow": 262144,
     "maxOutput": 65536,
     "inputCost": 0.7,
     "outputCost": 3.75
   },
   {
     "model": "venice/gemini-3-pro-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 2.5,
     "outputCost": 15
   },
@@ -53815,7 +53970,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 0.12,
     "outputCost": 0.2
   },
@@ -53827,7 +53982,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 1.25
   },
@@ -53839,7 +53994,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 1.1,
     "outputCost": 3
   },
@@ -53851,7 +54006,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3.2
   },
@@ -53863,7 +54018,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.6
   },
@@ -53874,8 +54029,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
     "inputCost": 0.7,
     "outputCost": 2.8
   },
@@ -53887,19 +54042,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.5,
     "outputCost": 2
   },
   {
     "model": "venice/openai-gpt-52",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
     "inputCost": 2.19,
     "outputCost": 17.5
   },
@@ -53911,7 +54066,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.07,
     "outputCost": 0.3
   },
@@ -53935,7 +54090,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.75
   },
@@ -53947,7 +54102,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.45,
     "outputCost": 3.5
   },
@@ -53971,7 +54126,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3
   },
@@ -53983,7 +54138,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.35,
     "outputCost": 1.9
   },
@@ -54007,9 +54162,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 0.85,
     "outputCost": 2.75
+  },
+  {
+    "model": "venice/zai-org-glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.39,
+    "outputCost": 1.13
   }
 ]}
 />
@@ -54042,12 +54209,21 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "venice/zai-org-glm-4.6"
+      ? "venice/zai-org-glm-4.6v"
       : "venice/claude-opus-45";
   }
 });
 ```
 
+
+
+## Direct Provider Installation
+
+This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/@openrouter/ai-sdk-provider) for more details.
+
+```bash npm2yarn copy
+npm install @openrouter/ai-sdk-provider
+```
 
 
 
@@ -71169,7 +71345,7 @@ description: Documentation for PinoLogger, which provides methods to record even
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/observability#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Usage example
 

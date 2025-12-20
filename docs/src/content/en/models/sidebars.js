@@ -278,6 +278,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/ollama-cloud",
+          label: "Ollama Cloud",
+        },
+        {
+          type: "doc",
           id: "providers/opencode",
           label: "OpenCode Zen",
         },

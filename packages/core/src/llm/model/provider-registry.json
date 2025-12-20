@@ -48,6 +48,28 @@
       "docUrl": "https://docs.z.ai/devpack/overview",
       "gateway": "models.dev"
     },
+    "ollama-cloud": {
+      "url": "https://ollama.com/v1",
+      "apiKeyEnvVar": "OLLAMA_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Ollama Cloud",
+      "models": [
+        "cogito-2.1:671b-cloud",
+        "deepseek-v3.1:671b-cloud",
+        "gemini-3-pro-preview:latest",
+        "glm-4.6:cloud",
+        "gpt-oss:120b-cloud",
+        "gpt-oss:20b-cloud",
+        "kimi-k2-thinking:cloud",
+        "kimi-k2:1t-cloud",
+        "minimax-m2:cloud",
+        "qwen3-coder:480b-cloud",
+        "qwen3-vl-235b-cloud",
+        "qwen3-vl-235b-instruct-cloud"
+      ],
+      "docUrl": "https://docs.ollama.com/cloud",
+      "gateway": "models.dev"
+    },
     "xiaomi": {
       "url": "https://api.xiaomimimo.com/v1",
       "apiKeyEnvVar": "XIAOMI_API_KEY",
@@ -473,6 +495,7 @@
       "models": [
         "claude-opus-45",
         "deepseek-v3.2",
+        "devstral-2-2512",
         "gemini-3-flash-preview",
         "gemini-3-pro-preview",
         "google-gemma-3-27b-it",
@@ -491,7 +514,8 @@
         "qwen3-coder-480b-a35b-instruct",
         "qwen3-next-80b",
         "venice-uncensored",
-        "zai-org-glm-4.6"
+        "zai-org-glm-4.6",
+        "zai-org-glm-4.6v"
       ],
       "docUrl": "https://docs.venice.ai",
       "gateway": "models.dev"
@@ -1995,6 +2019,20 @@
       "kimi-k2-turbo-preview"
     ],
     "zai-coding-plan": ["glm-4.5", "glm-4.5-air", "glm-4.5-flash", "glm-4.5v", "glm-4.6", "glm-4.6v"],
+    "ollama-cloud": [
+      "cogito-2.1:671b-cloud",
+      "deepseek-v3.1:671b-cloud",
+      "gemini-3-pro-preview:latest",
+      "glm-4.6:cloud",
+      "gpt-oss:120b-cloud",
+      "gpt-oss:20b-cloud",
+      "kimi-k2-thinking:cloud",
+      "kimi-k2:1t-cloud",
+      "minimax-m2:cloud",
+      "qwen3-coder:480b-cloud",
+      "qwen3-vl-235b-cloud",
+      "qwen3-vl-235b-instruct-cloud"
+    ],
     "xiaomi": ["mimo-v2-flash"],
     "alibaba": [
       "qvq-max",
@@ -2315,6 +2353,7 @@
     "venice": [
       "claude-opus-45",
       "deepseek-v3.2",
+      "devstral-2-2512",
       "gemini-3-flash-preview",
       "gemini-3-pro-preview",
       "google-gemma-3-27b-it",
@@ -2333,7 +2372,8 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-next-80b",
       "venice-uncensored",
-      "zai-org-glm-4.6"
+      "zai-org-glm-4.6",
+      "zai-org-glm-4.6v"
     ],
     "siliconflow-cn": [
       "baidu-ernie-4.5-300b-a47b",
