@@ -66,7 +66,14 @@ export function nodeModulesExtensionResolver(): Plugin {
           return null;
         }
 
-        const resolvedImportPath = nodeResolved.id.replace(packageRoot, pkgName);
+        let filePath = nodeResolved.id;
+        console.log({ nodeResolved });
+        if (nodeResolved.resolvedBy === 'commonjs--resolver') {
+          filePath = filePath.substring(1).split('?')[0];
+          console.log({ filePath });
+        }
+
+        const resolvedImportPath = filePath.replace(packageRoot, pkgName);
 
         return {
           id: resolvedImportPath,
