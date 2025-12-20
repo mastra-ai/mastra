@@ -24,6 +24,20 @@ export type ProviderModelsMap = {
     'kimi-k2-turbo-preview',
   ];
   readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly 'ollama-cloud': readonly [
+    'cogito-2.1:671b-cloud',
+    'deepseek-v3.1:671b-cloud',
+    'gemini-3-pro-preview:latest',
+    'glm-4.6:cloud',
+    'gpt-oss:120b-cloud',
+    'gpt-oss:20b-cloud',
+    'kimi-k2-thinking:cloud',
+    'kimi-k2:1t-cloud',
+    'minimax-m2:cloud',
+    'qwen3-coder:480b-cloud',
+    'qwen3-vl-235b-cloud',
+    'qwen3-vl-235b-instruct-cloud',
+  ];
   readonly xiaomi: readonly ['mimo-v2-flash'];
   readonly alibaba: readonly [
     'qvq-max',
@@ -344,6 +358,7 @@ export type ProviderModelsMap = {
   readonly venice: readonly [
     'claude-opus-45',
     'deepseek-v3.2',
+    'devstral-2-2512',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
     'google-gemma-3-27b-it',
@@ -363,6 +378,7 @@ export type ProviderModelsMap = {
     'qwen3-next-80b',
     'venice-uncensored',
     'zai-org-glm-4.6',
+    'zai-org-glm-4.6v',
   ];
   readonly 'siliconflow-cn': readonly [
     'baidu-ernie-4.5-300b-a47b',
