@@ -100,13 +100,15 @@ export function createStep<
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
-  agentOrToolOptions?: (AgentStepOptions & {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  }) | {
-    retries?: number;
-    scorers?: DynamicArgument<MastraScorers>;
-  },
+  agentOrToolOptions?:
+    | (AgentStepOptions & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      })
+    | {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   // Issue #9965: Preserve InngestWorkflow identity when passed to createStep
   // This ensures nested workflows in foreach are properly detected by isNestedWorkflowStep()
@@ -123,7 +125,9 @@ export function createStep<
   }
 
   if (isAgent(params)) {
-    const options = agentOrToolOptions as AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
+    const options = agentOrToolOptions as
+      | (AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+      | undefined;
     // Determine output schema based on structuredOutput option
     const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
 
