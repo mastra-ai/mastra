@@ -1,7 +1,9 @@
 import type { ReadableStream } from 'node:stream/web';
 import type { Agent } from '@mastra/core/agent';
+import type { MastraScorers } from '@mastra/core/evals';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { Tool } from '@mastra/core/tools';
+import type { DynamicArgument } from '@mastra/core/types';
 import type { Step, AgentStepOptions, StepParams, ToolStep } from '@mastra/core/workflows';
 import { Workflow } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
@@ -43,7 +45,11 @@ export function createStep<
 // Overload for agent WITH structured output schema
 export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
   agent: Agent<TStepId, any>,
-  agentOptions: AgentStepOptions<TStepOutput> & { structuredOutput: { schema: TStepOutput } },
+  agentOptions: AgentStepOptions<TStepOutput> & {
+    structuredOutput: { schema: TStepOutput };
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<
   TStepId,
   any,
@@ -63,7 +69,10 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions,
+  agentOptions?: AgentStepOptions & {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
 export function createStep<
@@ -74,6 +83,10 @@ export function createStep<
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
 export function createStep<
   TStepId extends string,
@@ -87,7 +100,13 @@ export function createStep<
     | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
-  agentOptions?: AgentStepOptions,
+  agentOrToolOptions?: (AgentStepOptions & {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  }) | {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
   // Issue #9965: Preserve InngestWorkflow identity when passed to createStep
   // This ensures nested workflows in foreach are properly detected by isNestedWorkflowStep()
@@ -104,8 +123,9 @@ export function createStep<
   }
 
   if (isAgent(params)) {
+    const options = agentOrToolOptions as AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
     // Determine output schema based on structuredOutput option
-    const outputSchema = agentOptions?.structuredOutput?.schema ?? z.object({ text: z.string() });
+    const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
 
     return {
       id: params.name as TStepId,
@@ -116,6 +136,8 @@ export function createStep<
         // threadId: z.string().optional(),
       }) as unknown as TStepInput,
       outputSchema: outputSchema as unknown as TStepOutput,
+      retries: options?.retries,
+      scorers: options?.scorers,
       execute: async ({
         inputData,
         runId,
@@ -150,7 +172,7 @@ export function createStep<
 
         if ((await params.getModel()).specificationVersion === 'v1') {
           const { fullStream } = await params.streamLegacy(inputData.prompt, {
-            ...(agentOptions ?? {}),
+            ...(options ?? {}),
             // resourceId: inputData.resourceId,
             // threadId: inputData.threadId,
             requestContext,
@@ -158,28 +180,28 @@ export function createStep<
             onFinish: result => {
               // Capture structured output if available
               const resultWithObject = result as typeof result & { object?: unknown };
-              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+              if (options?.structuredOutput?.schema && resultWithObject.object) {
                 structuredResult = resultWithObject.object;
               }
               streamPromise.resolve(result.text);
-              void agentOptions?.onFinish?.(result);
+              void options?.onFinish?.(result);
             },
             abortSignal,
           });
           stream = fullStream as any;
         } else {
           const modelOutput = await params.stream(inputData.prompt, {
-            ...(agentOptions ?? {}),
+            ...(options ?? {}),
             requestContext,
             tracingContext,
             onFinish: result => {
               // Capture structured output if available
               const resultWithObject = result as typeof result & { object?: unknown };
-              if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
+              if (options?.structuredOutput?.schema && resultWithObject.object) {
                 structuredResult = resultWithObject.object;
               }
               streamPromise.resolve(result.text);
-              void agentOptions?.onFinish?.(result);
+              void options?.onFinish?.(result);
             },
             abortSignal,
           });
@@ -230,6 +252,7 @@ export function createStep<
   }
 
   if (isTool(params)) {
+    const toolOpts = agentOrToolOptions as { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
@@ -242,6 +265,8 @@ export function createStep<
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
       resumeSchema: params.resumeSchema,
+      retries: toolOpts?.retries,
+      scorers: toolOpts?.scorers,
       execute: async ({
         inputData,
         mastra,

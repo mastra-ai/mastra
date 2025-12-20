@@ -2,9 +2,9 @@
 '@mastra/inngest': patch
 ---
 
-Add support for `retries` and `scorers` parameters in `createStep` for InngestWorkflow
+Add support for `retries` and `scorers` parameters across all `createStep` overloads for InngestWorkflow
 
-The `createStep` function now properly preserves the `retries` and `scorers` fields when creating workflow steps, enabling step-level retry configuration and AI evaluation support.
+The `createStep` function now includes support for the `retries` and `scorers` fields across all step creation patterns, enabling step-level retry configuration and AI evaluation support for regular steps, agent-based steps, and tool-based steps.
 
 ```typescript
 import { init } from '@mastra/inngest';
@@ -12,8 +12,8 @@ import { z } from 'zod';
 
 const { createStep } = init(inngest);
 
-// Create a step with retry configuration
-const resilientStep = createStep({
+// 1. Regular step with retries
+const regularStep = createStep({
   id: 'api-call',
   inputSchema: z.object({ url: z.string() }),
   outputSchema: z.object({ data: z.any() }),
@@ -24,17 +24,24 @@ const resilientStep = createStep({
   },
 });
 
-// Create a step with scorers for AI evaluation
-const evaluatedStep = createStep({
-  id: 'evaluated-step',
-  inputSchema: z.object({ input: z.string() }),
-  outputSchema: z.object({ output: z.string() }),
-  scorers: myScorers, // ← Attach evaluation functions
-  execute: async ({ inputData }) => {
-    return { output: inputData.input };
-  },
+// 2. Agent step with retries and scorers
+const agentStep = createStep(myAgent, {
+  retries: 3,
+  scorers: [
+    { id: 'accuracy-scorer', scorer: myAccuracyScorer }
+  ],
+});
+
+// 3. Tool step with retries and scorers
+const toolStep = createStep(myTool, {
+  retries: 2,
+  scorers: [
+    { id: 'quality-scorer', scorer: myQualityScorer }
+  ],
 });
 ```
+
+This change ensures API consistency across all `createStep` overloads. All step types now support retry and evaluation configurations.
 
 This is a non-breaking change - steps without these parameters continue to work exactly as before.
 
