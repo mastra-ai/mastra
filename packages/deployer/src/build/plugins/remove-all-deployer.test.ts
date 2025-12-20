@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { removeDeployer } from './remove-deployer';
+import { removeAllOptionsFromMastraExceptPlugin } from './remove-all-except';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { rollup } from 'rollup';
@@ -32,7 +32,7 @@ describe('Remove deployer', () => {
             };
           },
         },
-        removeDeployer(file),
+        removeAllOptionsFromMastraExceptPlugin(file, 'deployer', { hasCustomConfig: false }),
         esbuild({
           target: `esnext`,
           platform: 'node',
