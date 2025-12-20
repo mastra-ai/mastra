@@ -1,9 +1,9 @@
 import type { ConnectionOptions } from 'node:tls';
+import type { CreateIndexOptions } from '@mastra/core/storage';
 import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
 import type pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
-import type { CreateIndexOptions } from '@mastra/core/storage';
 
 /**
  * Generic PostgreSQL configuration type.

@@ -118,12 +118,15 @@ export interface PgDBInternalConfig {
   skipDefaultIndexes?: boolean;
 }
 
+// Static map to track schema setup across all PgDB instances
+// Key: schemaName, Value: { promise, complete }
+// This prevents race conditions when multiple domains try to create the same schema concurrently
+const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
+
 export class PgDB extends MastraBase {
   public client: IDatabase<{}>;
   public schemaName?: string;
   public skipDefaultIndexes?: boolean;
-  private setupSchemaPromise: Promise<void> | null = null;
-  private schemaSetupComplete: boolean | undefined = undefined;
 
   constructor(config: PgDBInternalConfig) {
     super({
@@ -204,14 +207,21 @@ export class PgDB extends MastraBase {
   }
 
   private async setupSchema() {
-    if (!this.schemaName || this.schemaSetupComplete) {
+    if (!this.schemaName) {
       return;
     }
 
-    const schemaName = getSchemaName(this.schemaName);
+    // Use static registry to coordinate schema setup across all PgDB instances
+    let registryEntry = schemaSetupRegistry.get(this.schemaName);
+    if (registryEntry?.complete) {
+      return;
+    }
 
-    if (!this.setupSchemaPromise) {
-      this.setupSchemaPromise = (async () => {
+    const quotedSchemaName = getSchemaName(this.schemaName);
+
+    if (!registryEntry?.promise) {
+      const schemaNameCapture = this.schemaName;
+      const setupPromise = (async () => {
         try {
           const schemaExists = await this.client.oneOrNone(
             `
@@ -220,35 +230,41 @@ export class PgDB extends MastraBase {
                   WHERE schema_name = $1
                 )
               `,
-            [this.schemaName],
+            [schemaNameCapture],
           );
 
           if (!schemaExists?.exists) {
             try {
-              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-              this.logger.info(`Schema "${this.schemaName}" created successfully`);
+              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName}`);
+              this.logger.info(`Schema "${schemaNameCapture}" created successfully`);
             } catch (error) {
-              this.logger.error(`Failed to create schema "${this.schemaName}"`, { error });
+              this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
               throw new Error(
-                `Unable to create schema "${this.schemaName}". This requires CREATE privilege on the database. ` +
+                `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
                   `Either create the schema manually or grant CREATE privilege to the user.`,
               );
             }
           }
 
-          this.schemaSetupComplete = true;
-          this.logger.debug(`Schema "${schemaName}" is ready for use`);
+          // Mark as complete in the registry
+          const entry = schemaSetupRegistry.get(schemaNameCapture);
+          if (entry) {
+            entry.complete = true;
+          }
+          this.logger.debug(`Schema "${quotedSchemaName}" is ready for use`);
         } catch (error) {
-          this.schemaSetupComplete = undefined;
-          this.setupSchemaPromise = null;
+          // On error, clear the registry entry so retry is possible
+          schemaSetupRegistry.delete(schemaNameCapture);
           throw error;
-        } finally {
-          this.setupSchemaPromise = null;
         }
       })();
+
+      // Register the promise immediately so concurrent callers can await it
+      schemaSetupRegistry.set(this.schemaName, { promise: setupPromise, complete: false });
+      registryEntry = schemaSetupRegistry.get(this.schemaName);
     }
 
-    await this.setupSchemaPromise;
+    await registryEntry!.promise;
   }
 
   protected getSqlType(type: StorageColumn['type']): string {

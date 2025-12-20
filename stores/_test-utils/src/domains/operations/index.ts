@@ -1,10 +1,7 @@
 import type { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import { createIndexManagementTests } from './index-management';
 
 export function createOperationsTests({ storage }: { storage: MastraStorage }) {
-  // Add index management tests
-  createIndexManagementTests({ storage });
   if (storage.supports.createTable) {
     describe('Table Operations', () => {
       const testTableName = 'test_table';

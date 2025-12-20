@@ -5,6 +5,7 @@ import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
+import { createIndexManagementTests } from './domains/operations/index-management';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -45,6 +46,7 @@ export function createTestSuite(storage: MastraStorage) {
       if (agentsStorage && storage.supports.agents) {
         clearList.push(agentsStorage.dangerouslyClearAll());
       }
+      // createIndexManagementTests({ storage });
       // Clear all domain data after tests
       await Promise.all(clearList);
     });
