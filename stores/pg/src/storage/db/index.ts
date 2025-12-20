@@ -38,6 +38,8 @@ export interface PgDomainClientConfig {
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
   skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
@@ -48,6 +50,8 @@ export type PgDomainRestConfig = {
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
   skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       host: string;
@@ -71,16 +75,27 @@ export function resolvePgConfig(config: PgDomainConfig): {
   client: IDatabase<{}>;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
 } {
   // Existing client
   if ('client' in config) {
-    return { client: config.client, schemaName: config.schemaName, skipDefaultIndexes: config.skipDefaultIndexes };
+    return {
+      client: config.client,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
   }
 
   // Config to create new client
   const pgp = pgPromise();
   const client = pgp(config as any);
-  return { client, schemaName: config.schemaName, skipDefaultIndexes: config.skipDefaultIndexes };
+  return {
+    client,
+    schemaName: config.schemaName,
+    skipDefaultIndexes: config.skipDefaultIndexes,
+    indexes: config.indexes,
+  };
 }
 
 function getSchemaName(schema?: string) {

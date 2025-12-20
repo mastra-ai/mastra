@@ -30,6 +30,8 @@ export interface MssqlDomainPoolConfig {
   pool: sql.ConnectionPool;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
@@ -44,6 +46,8 @@ export interface MssqlDomainRestConfig {
   schemaName?: string;
   options?: sql.IOptions;
   skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
@@ -62,6 +66,7 @@ export function resolveMssqlConfig(config: MssqlDomainConfig): {
   pool: sql.ConnectionPool;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
   needsConnect: boolean;
 } {
   // Existing pool - already connected
@@ -70,6 +75,7 @@ export function resolveMssqlConfig(config: MssqlDomainConfig): {
       pool: config.pool,
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
       needsConnect: false,
     };
   }
@@ -89,6 +95,7 @@ export function resolveMssqlConfig(config: MssqlDomainConfig): {
     pool,
     schemaName: restConfig.schemaName,
     skipDefaultIndexes: restConfig.skipDefaultIndexes,
+    indexes: restConfig.indexes,
     needsConnect: true,
   };
 }

@@ -21,15 +21,21 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
   private schema?: string;
   private needsConnect: boolean;
   private skipDefaultIndexes?: boolean;
+  private indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SPANS] as const;
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, schemaName, skipDefaultIndexes, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schemaName;
     this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
     this.needsConnect = needsConnect;
     this.skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (ObservabilityMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -39,6 +45,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
     await this.db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
     await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   /**
@@ -84,6 +91,24 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       } catch (error) {
         // Log but continue - indexes are performance optimizations
         this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
   }

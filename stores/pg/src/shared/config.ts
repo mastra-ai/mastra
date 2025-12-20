@@ -3,6 +3,7 @@ import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
 import type pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import type { CreateIndexOptions } from '@mastra/core/storage';
 
 /**
  * Generic PostgreSQL configuration type.
@@ -43,6 +44,25 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
    * @default false
    */
   skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which table it belongs to. The store will route each index
+   * to the appropriate domain based on the table name.
+   *
+   * @example
+   * ```typescript
+   * const store = new PostgresStore({
+   *   connectionString: '...',
+   *   indexes: [
+   *     { name: 'my_threads_type_idx', table: 'mastra_threads', columns: ['metadata->>\'type\''] },
+   *     { name: 'my_messages_status_idx', table: 'mastra_messages', columns: ['metadata->>\'status\''] },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       host: string;
@@ -97,6 +117,7 @@ export type PostgresStoreConfig =
       schemaName?: string;
       disableInit?: boolean;
       skipDefaultIndexes?: boolean;
+      indexes?: CreateIndexOptions[];
     };
 
 /**
@@ -142,6 +163,7 @@ export const isClientConfig = (
   schemaName?: string;
   disableInit?: boolean;
   skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
 } => {
   return 'client' in cfg;
 };

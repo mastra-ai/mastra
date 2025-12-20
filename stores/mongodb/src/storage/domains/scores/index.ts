@@ -28,11 +28,19 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 export class ScoresStorageMongoDB extends ScoresStorage {
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_SCORERS] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
     this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (ScoresStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
   }
 
   private async getCollection(name: string) {
@@ -66,8 +74,27 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        console.warn(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
   async init(): Promise<void> {
     await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {

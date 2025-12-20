@@ -60,7 +60,11 @@ export class MongoDBStore extends MastraStorage {
 
     this.#connector = resolveMongoDBConfig(config);
 
-    const domainConfig = { connector: this.#connector, skipDefaultIndexes: config.skipDefaultIndexes };
+    const domainConfig = {
+      connector: this.#connector,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
 
     const memory = new MemoryStorageMongoDB(domainConfig);
 

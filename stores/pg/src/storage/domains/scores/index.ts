@@ -40,18 +40,25 @@ export class ScoresPG extends ScoresStorage {
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
     this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (ScoresPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
     await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   /**
@@ -82,6 +89,24 @@ export class ScoresPG extends ScoresStorage {
       } catch (error) {
         // Log but continue - indexes are performance optimizations
         console.warn(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        console.warn(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
   }

@@ -18,6 +18,7 @@ import type {
   UpdateSpanRecord,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -67,6 +68,24 @@ export type MSSQLConfigType = {
    * @default false
    */
   skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which table it belongs to. The store will route each index
+   * to the appropriate domain based on the table name.
+   *
+   * @example
+   * ```typescript
+   * const store = new MSSQLStore({
+   *   connectionString: '...',
+   *   indexes: [
+   *     { name: 'my_threads_type_idx', table: 'mastra_threads', columns: ['JSON_VALUE(metadata, \'$.type\')'] },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       /**
@@ -161,7 +180,12 @@ export class MSSQLStore extends MastraStorage {
         });
       }
 
-      const domainConfig = { pool: this.pool, schemaName: this.schema, skipDefaultIndexes: config.skipDefaultIndexes };
+      const domainConfig = {
+        pool: this.pool,
+        schemaName: this.schema,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+        indexes: config.indexes,
+      };
       const scores = new ScoresMSSQL(domainConfig);
       const workflows = new WorkflowsMSSQL(domainConfig);
       const memory = new MemoryMSSQL(domainConfig);

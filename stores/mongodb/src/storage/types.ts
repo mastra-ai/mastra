@@ -37,6 +37,26 @@ export type MongoDBBaseConfig = {
    * @default false
    */
   skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which collection it belongs to. The store will route each index
+   * to the appropriate domain based on the collection name.
+   *
+   * @example
+   * ```typescript
+   * const store = new MongoDBStore({
+   *   url: 'mongodb://localhost:27017',
+   *   dbName: 'mastra',
+   *   indexes: [
+   *     { collection: 'mastra_threads', keys: { 'metadata.type': 1 } },
+   *     { collection: 'mastra_messages', keys: { 'metadata.status': 1 }, options: { sparse: true } },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: MongoDBIndexConfig[];
 };
 
 export type MongoDBConfig =
@@ -59,9 +79,21 @@ export type DatabaseConfig = MongoDBBaseConfig & {
  * - Database config (user: standard url/dbName config)
  */
 export type MongoDBDomainConfig =
-  | { connector: MongoDBConnector; skipDefaultIndexes?: boolean }
-  | { connectorHandler: ConnectorHandler; disableInit?: boolean; skipDefaultIndexes?: boolean }
-  | { url: string; dbName: string; options?: MongoClientOptions; disableInit?: boolean; skipDefaultIndexes?: boolean };
+  | { connector: MongoDBConnector; skipDefaultIndexes?: boolean; indexes?: MongoDBIndexConfig[] }
+  | {
+      connectorHandler: ConnectorHandler;
+      disableInit?: boolean;
+      skipDefaultIndexes?: boolean;
+      indexes?: MongoDBIndexConfig[];
+    }
+  | {
+      url: string;
+      dbName: string;
+      options?: MongoClientOptions;
+      disableInit?: boolean;
+      skipDefaultIndexes?: boolean;
+      indexes?: MongoDBIndexConfig[];
+    };
 
 /**
  * MongoDB index definition for the getDefaultIndexDefinitions pattern.

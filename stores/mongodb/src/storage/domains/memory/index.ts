@@ -27,11 +27,19 @@ import { formatDateForMongoDB } from '../utils';
 export class MemoryStorageMongoDB extends MemoryStorage {
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
     this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (MemoryStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
   }
 
   private async getCollection(name: string) {
@@ -40,6 +48,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async init(): Promise<void> {
     await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   /**
@@ -80,6 +89,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       } catch (error) {
         // Log but continue - indexes are performance optimizations
         console.warn(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        console.warn(`Failed to create custom index on ${indexDef.collection}:`, error);
       }
     }
   }

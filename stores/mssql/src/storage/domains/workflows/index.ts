@@ -11,6 +11,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
@@ -23,14 +24,20 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   private db: MssqlDB;
   private schema?: string;
   private needsConnect: boolean;
+  private indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, schemaName, skipDefaultIndexes, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schemaName;
     this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
     this.needsConnect = needsConnect;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -39,6 +46,25 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

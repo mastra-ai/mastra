@@ -102,7 +102,8 @@ export class PostgresStore extends MastraStorage {
       // This is required for Memory to work correctly, as it checks for
       // stores.memory during getInputProcessors() before init() is called
       const skipDefaultIndexes = config.skipDefaultIndexes;
-      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema, skipDefaultIndexes };
+      const indexes = config.indexes;
+      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema, skipDefaultIndexes, indexes };
 
       const scores = new ScoresPG(domainConfig);
       const workflows = new WorkflowsPG(domainConfig);
