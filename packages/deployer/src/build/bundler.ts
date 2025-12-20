@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { slash } from './utils';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
+import { removeDeployer } from './plugins/remove-deployer';
 
 export async function getInputOptions(
   entryFile: string,
@@ -146,7 +147,7 @@ export async function getInputOptions(
       // },
       // },
       json(),
-      removeAllOptionsFromMastraExceptPlugin(entryFile, 'deployer', { hasCustomConfig: false }, { sourcemap }),
+      removeDeployer(entryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({
         include: entryFile,
