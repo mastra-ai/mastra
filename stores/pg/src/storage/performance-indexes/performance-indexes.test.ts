@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryPG } from '../domains/memory';
-import { ScoresPG } from '../domains/scores';
 import { ObservabilityPG } from '../domains/observability';
+import { ScoresPG } from '../domains/scores';
 
 // Mock pg-promise
 const mockClient = {
