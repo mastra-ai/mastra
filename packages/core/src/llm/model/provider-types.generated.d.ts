@@ -793,7 +793,6 @@ export type ProviderModelsMap = {
   readonly opencode: readonly [
     'alpha-doubao-seed-code',
     'alpha-gd4',
-    'alpha-minimax-m2',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -814,6 +813,7 @@ export type ProviderModelsMap = {
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
+    'minimax-m2.1',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
