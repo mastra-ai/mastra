@@ -281,8 +281,6 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
-    retries: params.retries,
-    scorers: params.scorers,
     execute: params.execute,
   };
 }
