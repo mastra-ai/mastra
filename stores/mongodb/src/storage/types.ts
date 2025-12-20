@@ -27,6 +27,16 @@ export type MongoDBBaseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * When true, default indexes will not be created during initialization.
+   * This is useful when:
+   * 1. You want to manage indexes separately or use custom indexes only
+   * 2. Default indexes don't match your query patterns
+   * 3. You want to reduce initialization time in development
+   *
+   * @default false
+   */
+  skipDefaultIndexes?: boolean;
 };
 
 export type MongoDBConfig =
@@ -49,9 +59,9 @@ export type DatabaseConfig = MongoDBBaseConfig & {
  * - Database config (user: standard url/dbName config)
  */
 export type MongoDBDomainConfig =
-  | { connector: MongoDBConnector }
-  | { connectorHandler: ConnectorHandler; disableInit?: boolean }
-  | { url: string; dbName: string; options?: MongoClientOptions; disableInit?: boolean };
+  | { connector: MongoDBConnector; skipDefaultIndexes?: boolean }
+  | { connectorHandler: ConnectorHandler; disableInit?: boolean; skipDefaultIndexes?: boolean }
+  | { url: string; dbName: string; options?: MongoClientOptions; disableInit?: boolean; skipDefaultIndexes?: boolean };
 
 /**
  * MongoDB index definition for the getDefaultIndexDefinitions pattern.

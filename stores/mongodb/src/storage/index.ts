@@ -60,25 +60,17 @@ export class MongoDBStore extends MastraStorage {
 
     this.#connector = resolveMongoDBConfig(config);
 
-    const memory = new MemoryStorageMongoDB({
-      connector: this.#connector,
-    });
+    const domainConfig = { connector: this.#connector, skipDefaultIndexes: config.skipDefaultIndexes };
 
-    const scores = new ScoresStorageMongoDB({
-      connector: this.#connector,
-    });
+    const memory = new MemoryStorageMongoDB(domainConfig);
 
-    const workflows = new WorkflowsStorageMongoDB({
-      connector: this.#connector,
-    });
+    const scores = new ScoresStorageMongoDB(domainConfig);
 
-    const observability = new ObservabilityMongoDB({
-      connector: this.#connector,
-    });
+    const workflows = new WorkflowsStorageMongoDB(domainConfig);
 
-    const agents = new MongoDBAgentsStorage({
-      connector: this.#connector,
-    });
+    const observability = new ObservabilityMongoDB(domainConfig);
+
+    const agents = new MongoDBAgentsStorage(domainConfig);
 
     this.stores = {
       memory,

@@ -50,8 +50,8 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName });
+    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
   }
 

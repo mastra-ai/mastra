@@ -23,12 +23,14 @@ import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTable
 export class ObservabilityPG extends ObservabilityStorage {
   #db: PgDB;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName });
+    const { client, schemaName, skipDefaultIndexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
   }
 
   async init(): Promise<void> {
@@ -69,6 +71,10 @@ export class ObservabilityPG extends ObservabilityStorage {
    * Creates default indexes for optimal query performance.
    */
   async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.#db.createIndex(indexDef);

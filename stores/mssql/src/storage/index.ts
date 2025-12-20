@@ -57,6 +57,16 @@ export type MSSQLConfigType = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * When true, default indexes will not be created during initialization.
+   * This is useful when:
+   * 1. You want to manage indexes separately or use custom indexes only
+   * 2. Default indexes don't match your query patterns
+   * 3. You want to reduce initialization time in development
+   *
+   * @default false
+   */
+  skipDefaultIndexes?: boolean;
 } & (
   | {
       /**
@@ -151,7 +161,7 @@ export class MSSQLStore extends MastraStorage {
         });
       }
 
-      const domainConfig = { pool: this.pool, schemaName: this.schema };
+      const domainConfig = { pool: this.pool, schemaName: this.schema, skipDefaultIndexes: config.skipDefaultIndexes };
       const scores = new ScoresMSSQL(domainConfig);
       const workflows = new WorkflowsMSSQL(domainConfig);
       const memory = new MemoryMSSQL(domainConfig);

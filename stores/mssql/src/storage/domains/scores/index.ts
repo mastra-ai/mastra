@@ -32,14 +32,16 @@ export class ScoresMSSQL extends ScoresStorage {
   private db: MssqlDB;
   private schema?: string;
   private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, schemaName, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, skipDefaultIndexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schemaName;
-    this.db = new MssqlDB({ pool, schemaName });
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
     this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
   }
 
   async init(): Promise<void> {
@@ -70,6 +72,10 @@ export class ScoresMSSQL extends ScoresStorage {
    * Creates default indexes for optimal query performance.
    */
   async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         await this.db.createIndex(indexDef);

@@ -26,10 +26,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
   constructor(config: MssqlDomainConfig) {
     super();
-    const { pool, schemaName, needsConnect } = resolveMssqlConfig(config);
+    const { pool, schemaName, skipDefaultIndexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schemaName;
-    this.db = new MssqlDB({ pool, schemaName });
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
     this.needsConnect = needsConnect;
   }
 

@@ -1,16 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_SCHEMAS,
-  TABLE_THREADS,
-  TABLE_MESSAGES,
-  TABLE_TRACES,
-  TABLE_SCORERS,
-  TABLE_SPANS,
-  getDefaultValue,
-} from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, getDefaultValue } from '@mastra/core/storage';
 import type {
   StorageColumn,
   TABLE_NAMES,
@@ -39,6 +29,7 @@ export type MssqlDomainConfig = MssqlDomainPoolConfig | MssqlDomainRestConfig;
 export interface MssqlDomainPoolConfig {
   pool: sql.ConnectionPool;
   schemaName?: string;
+  skipDefaultIndexes?: boolean;
 }
 
 /**
@@ -52,6 +43,7 @@ export interface MssqlDomainRestConfig {
   password: string;
   schemaName?: string;
   options?: sql.IOptions;
+  skipDefaultIndexes?: boolean;
 }
 
 /**
@@ -59,7 +51,7 @@ export interface MssqlDomainRestConfig {
  * Domain classes create their own MssqlDB instance from the returned pool.
  *
  * @param config - Either an existing connected pool, or connection details to create a new pool
- * @returns Object containing pool, schemaName, and whether the pool needs connection
+ * @returns Object containing pool, schemaName, skipDefaultIndexes, and whether the pool needs connection
  *
  * @remarks
  * When using connection details (not an existing pool), the returned pool is NOT connected.
@@ -69,11 +61,17 @@ export interface MssqlDomainRestConfig {
 export function resolveMssqlConfig(config: MssqlDomainConfig): {
   pool: sql.ConnectionPool;
   schemaName?: string;
+  skipDefaultIndexes?: boolean;
   needsConnect: boolean;
 } {
   // Existing pool - already connected
   if ('pool' in config && !('server' in config)) {
-    return { pool: config.pool, schemaName: config.schemaName, needsConnect: false };
+    return {
+      pool: config.pool,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      needsConnect: false,
+    };
   }
 
   // Config to create new pool - needs to be connected via init()
@@ -87,12 +85,18 @@ export function resolveMssqlConfig(config: MssqlDomainConfig): {
     options: restConfig.options || { encrypt: true, trustServerCertificate: true },
   });
 
-  return { pool, schemaName: restConfig.schemaName, needsConnect: true };
+  return {
+    pool,
+    schemaName: restConfig.schemaName,
+    skipDefaultIndexes: restConfig.skipDefaultIndexes,
+    needsConnect: true,
+  };
 }
 
 export class MssqlDB extends MastraBase {
   public pool: sql.ConnectionPool;
   public schemaName?: string;
+  public skipDefaultIndexes?: boolean;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
@@ -131,10 +135,19 @@ export class MssqlDB extends MastraBase {
     }
   }
 
-  constructor({ pool, schemaName }: { pool: sql.ConnectionPool; schemaName?: string }) {
+  constructor({
+    pool,
+    schemaName,
+    skipDefaultIndexes,
+  }: {
+    pool: sql.ConnectionPool;
+    schemaName?: string;
+    skipDefaultIndexes?: boolean;
+  }) {
     super({ component: 'STORAGE', name: 'MssqlDB' });
     this.pool = pool;
     this.schemaName = schemaName;
+    this.skipDefaultIndexes = skipDefaultIndexes;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -1100,88 +1113,6 @@ export class MssqlDB extends MastraBase {
           details: {
             indexName,
           },
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * Returns definitions for default indexes
-   * IMPORTANT: Uses seq_id DESC instead of createdAt DESC for MSSQL due to millisecond accuracy limitations
-   * NOTE: Using NVARCHAR(400) for text columns (800 bytes) leaves room for composite indexes
-   */
-  protected getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-    return [
-      // Composite indexes for optimal filtering + sorting performance
-      // NVARCHAR(400) = 800 bytes, plus BIGINT (8 bytes) = 808 bytes total (under 900-byte limit)
-      {
-        name: `${schemaPrefix}mastra_threads_resourceid_seqid_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'seq_id DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_messages_thread_id_seqid_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'seq_id DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_traces_name_seqid_idx`,
-        table: TABLE_TRACES,
-        columns: ['name', 'seq_id DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
-        table: TABLE_SCORERS,
-        columns: ['traceId', 'spanId', 'seq_id DESC'],
-      },
-      // Spans indexes for optimal trace querying
-      {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['traceId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['parentSpanId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_SPANS,
-        columns: ['name'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['spanType', 'startedAt DESC'],
-      },
-    ];
-  }
-
-  /**
-   * Creates default indexes for optimal query performance
-   * Uses getDefaultIndexDefinitions() to determine which indexes to create
-   */
-  async createDefaultIndexes(): Promise<void> {
-    try {
-      const indexes = this.getDefaultIndexDefinitions();
-
-      for (const indexOptions of indexes) {
-        try {
-          await this.createIndex(indexOptions);
-        } catch (error) {
-          // Log but continue with other indexes
-          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('MSSQL', 'CREATE_PERFORMANCE_INDEXES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );

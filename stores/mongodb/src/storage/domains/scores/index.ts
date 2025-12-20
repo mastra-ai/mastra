@@ -27,10 +27,12 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class ScoresStorageMongoDB extends ScoresStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
   private async getCollection(name: string) {
@@ -50,6 +52,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }
 
   async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         const collection = await this.getCollection(indexDef.collection);

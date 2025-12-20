@@ -15,10 +15,12 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
   private async getCollection(name: string) {
@@ -37,6 +39,10 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   }
 
   async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
     for (const indexDef of this.getDefaultIndexDefinitions()) {
       try {
         const collection = await this.getCollection(indexDef.collection);

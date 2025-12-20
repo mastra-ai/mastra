@@ -33,8 +33,6 @@ import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { PgDomainConfig, PgDBConfig } from './db';
-
 export class PostgresStore extends MastraStorage {
   #db: pgPromise.IDatabase<{}>;
   #pgp: pgPromise.IMain;
@@ -103,7 +101,8 @@ export class PostgresStore extends MastraStorage {
       // Create all domain instances synchronously in the constructor
       // This is required for Memory to work correctly, as it checks for
       // stores.memory during getInputProcessors() before init() is called
-      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema };
+      const skipDefaultIndexes = config.skipDefaultIndexes;
+      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema, skipDefaultIndexes };
 
       const scores = new ScoresPG(domainConfig);
       const workflows = new WorkflowsPG(domainConfig);
