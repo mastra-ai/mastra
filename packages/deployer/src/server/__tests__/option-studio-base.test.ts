@@ -6,7 +6,7 @@
 
 import { readFile } from 'node:fs/promises';
 import type { Mastra } from '@mastra/core/mastra';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHonoServer } from '../index';
 
 // Mock dependencies
@@ -442,5 +442,54 @@ describe('Mastra Studio "studioBase" functionality', () => {
         expect(response.status).toBe(expectedStatus);
       },
     );
+  });
+
+  describe('MASTRA_STUDIO_PATH environment variable', () => {
+    const originalEnv = process.env.MASTRA_STUDIO_PATH;
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.MASTRA_STUDIO_PATH = originalEnv;
+      } else {
+        delete process.env.MASTRA_STUDIO_PATH;
+      }
+    });
+
+    it('should use MASTRA_STUDIO_PATH when set', async () => {
+      process.env.MASTRA_STUDIO_PATH = '/custom/path/to/playground';
+      vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/', port: 4111, host: 'localhost' });
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('text/html');
+      // readFile should be called with the custom path
+      expect(readFile).toHaveBeenCalledWith('/custom/path/to/playground/index.html', 'utf-8');
+    });
+
+    it('should default to ./playground relative to cwd when MASTRA_STUDIO_PATH is not set', async () => {
+      delete process.env.MASTRA_STUDIO_PATH;
+      vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/', port: 4111, host: 'localhost' });
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('text/html');
+      // readFile should be called with path relative to cwd
+      expect(readFile).toHaveBeenCalledWith(expect.stringContaining('playground/index.html'), 'utf-8');
+    });
+
+    it('should work with custom studioBase and MASTRA_STUDIO_PATH together', async () => {
+      process.env.MASTRA_STUDIO_PATH = '/opt/mastra/studio';
+      vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
+      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+
+      const response = await app.request('/admin');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('text/html');
+      const html = await response.text();
+      expect(html).toContain('<base href="/admin/" />');
+      expect(readFile).toHaveBeenCalledWith('/opt/mastra/studio/index.html', 'utf-8');
+    });
   });
 });
