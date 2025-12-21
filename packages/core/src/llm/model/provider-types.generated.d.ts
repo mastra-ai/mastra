@@ -370,7 +370,6 @@ export type ProviderModelsMap = {
     'mistral-31-24b',
     'openai-gpt-52',
     'openai-gpt-oss-120b',
-    'qwen3-235b',
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-235b-a22b-thinking-2507',
     'qwen3-4b',
