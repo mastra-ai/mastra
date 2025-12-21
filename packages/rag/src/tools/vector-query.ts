@@ -170,7 +170,12 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
             return { relevantContext: relevantChunks, sources };
           } catch (error) {
             rerankSpan?.error({ error: error as Error, endSpan: true });
-            throw error;
+            if (logger) {
+              logger.error('Reranking failed, falling back to non-reranked results',{
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+             // Fall through to return non-reranked results below
           }
         }
 
