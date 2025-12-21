@@ -150,17 +150,12 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
               logger.debug('Reranking complete', { rerankedCount: rerankedResults.length });
             }
 
-            // Update rerank span with results
-            rerankSpan?.update({
-              attributes: {
-                resultCount: rerankedResults.length,
-                success: true,
-              },
-            });
-
             rerankSpan?.end({
               output: {
                 rerankedCount: rerankedResults.length,
+              },
+              attributes: {
+                success: true,
               },
             });
 
