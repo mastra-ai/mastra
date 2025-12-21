@@ -24,6 +24,21 @@ export type ProviderModelsMap = {
     'kimi-k2-turbo-preview',
   ];
   readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly 'ollama-cloud': readonly [
+    'cogito-2.1:671b-cloud',
+    'deepseek-v3.1:671b-cloud',
+    'gemini-3-pro-preview:latest',
+    'glm-4.6:cloud',
+    'gpt-oss:120b-cloud',
+    'gpt-oss:20b-cloud',
+    'kimi-k2-thinking:cloud',
+    'kimi-k2:1t-cloud',
+    'minimax-m2:cloud',
+    'qwen3-coder:480b-cloud',
+    'qwen3-vl-235b-cloud',
+    'qwen3-vl-235b-instruct-cloud',
+  ];
+  readonly xiaomi: readonly ['mimo-v2-flash'];
   readonly alibaba: readonly [
     'qvq-max',
     'qwen-flash',
@@ -113,6 +128,7 @@ export type ProviderModelsMap = {
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
+    'nvidia/nemotron-3-nano-30b-a3b',
     'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
@@ -343,6 +359,7 @@ export type ProviderModelsMap = {
   readonly venice: readonly [
     'claude-opus-45',
     'deepseek-v3.2',
+    'devstral-2-2512',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
     'google-gemma-3-27b-it',
@@ -354,7 +371,6 @@ export type ProviderModelsMap = {
     'mistral-31-24b',
     'openai-gpt-52',
     'openai-gpt-oss-120b',
-    'qwen3-235b',
     'qwen3-235b-a22b-instruct-2507',
     'qwen3-235b-a22b-thinking-2507',
     'qwen3-4b',
@@ -362,6 +378,7 @@ export type ProviderModelsMap = {
     'qwen3-next-80b',
     'venice-uncensored',
     'zai-org-glm-4.6',
+    'zai-org-glm-4.6v',
   ];
   readonly 'siliconflow-cn': readonly [
     'baidu-ernie-4.5-300b-a47b',
@@ -776,7 +793,6 @@ export type ProviderModelsMap = {
   readonly opencode: readonly [
     'alpha-doubao-seed-code',
     'alpha-gd4',
-    'alpha-minimax-m2',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -797,6 +813,7 @@ export type ProviderModelsMap = {
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
+    'minimax-m2.1',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
@@ -1209,9 +1226,11 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-4.6',
   ];
   readonly deepinfra: readonly [
+    'MiniMaxAI/MiniMax-M2',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
+    'moonshotai/Kimi-K2-Thinking',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',

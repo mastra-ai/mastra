@@ -8,21 +8,24 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
 } from '../../types';
+import type { InMemoryDB } from '../inmemory-db';
 import { AgentsStorage } from './base';
 
-export type InMemoryAgents = Map<string, StorageAgentType>;
-
 export class InMemoryAgentsStorage extends AgentsStorage {
-  private collection: InMemoryAgents;
+  private db: InMemoryDB;
 
-  constructor({ collection }: { collection: InMemoryAgents }) {
+  constructor({ db }: { db: InMemoryDB }) {
     super();
-    this.collection = collection;
+    this.db = db;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.db.agents.clear();
   }
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     this.logger.debug(`InMemoryAgentsStorage: getAgentById called for ${id}`);
-    const agent = this.collection.get(id);
+    const agent = this.db.agents.get(id);
     return agent
       ? {
           ...agent,
@@ -39,7 +42,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     this.logger.debug(`InMemoryAgentsStorage: createAgent called for ${agent.id}`);
 
-    if (this.collection.has(agent.id)) {
+    if (this.db.agents.has(agent.id)) {
       throw new Error(`Agent with id ${agent.id} already exists`);
     }
 
@@ -50,14 +53,14 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       updatedAt: now,
     };
 
-    this.collection.set(agent.id, newAgent);
+    this.db.agents.set(agent.id, newAgent);
     return { ...newAgent };
   }
 
   async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
     this.logger.debug(`InMemoryAgentsStorage: updateAgent called for ${id}`);
 
-    const existingAgent = this.collection.get(id);
+    const existingAgent = this.db.agents.get(id);
     if (!existingAgent) {
       throw new Error(`Agent with id ${id} not found`);
     }
@@ -84,14 +87,14 @@ export class InMemoryAgentsStorage extends AgentsStorage {
       updatedAt: new Date(),
     };
 
-    this.collection.set(id, updatedAgent);
+    this.db.agents.set(id, updatedAgent);
     return { ...updatedAgent };
   }
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     this.logger.debug(`InMemoryAgentsStorage: deleteAgent called for ${id}`);
     // Idempotent delete - no-op if agent doesn't exist
-    this.collection.delete(id);
+    this.db.agents.delete(id);
   }
 
   async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
@@ -114,7 +117,7 @@ export class InMemoryAgentsStorage extends AgentsStorage {
     }
 
     // Get all agents and sort them
-    const agents = Array.from(this.collection.values());
+    const agents = Array.from(this.db.agents.values());
     const sortedAgents = this.sortAgents(agents, field, direction);
 
     // Clone agents to avoid mutation

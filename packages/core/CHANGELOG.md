@@ -1,5 +1,175 @@
 # @mastra/core
 
+## 1.0.0-beta.14
+
+### Minor Changes
+
+- Add support for AI SDK v6 (LanguageModelV3) ([#11191](https://github.com/mastra-ai/mastra/pull/11191))
+
+  Agents can now use `LanguageModelV3` models from AI SDK v6 beta providers like `@ai-sdk/openai@^3.0.0-beta`.
+
+  **New features:**
+  - Usage normalization: V3's nested usage format is normalized to Mastra's flat format with `reasoningTokens`, `cachedInputTokens`, and raw data preserved in a `raw` field
+
+  **Backward compatible:** All existing V1 and V2 models continue to work unchanged.
+
+### Patch Changes
+
+- Fix model-level and runtime header support for LLM calls ([#11275](https://github.com/mastra-ai/mastra/pull/11275))
+
+  This fixes a bug where custom headers configured on models (like `anthropic-beta`) were not being passed through to the underlying AI SDK calls. The fix properly handles headers from multiple sources with correct priority:
+
+  **Header Priority (low to high):**
+  1. Model config headers - Headers set in model configuration
+  2. ModelSettings headers - Runtime headers that override model config
+  3. Provider-level headers - Headers baked into AI SDK providers (not overridden)
+
+  **Examples that now work:**
+
+  ```typescript
+  // Model config headers
+  new Agent({
+    model: {
+      id: 'anthropic/claude-4-5-sonnet',
+      headers: { 'anthropic-beta': 'context-1m-2025-08-07' },
+    },
+  });
+
+  // Runtime headers override config
+  agent.generate('...', {
+    modelSettings: { headers: { 'x-custom': 'runtime-value' } },
+  });
+
+  // Provider-level headers preserved
+  const openai = createOpenAI({ headers: { 'openai-organization': 'org-123' } });
+  new Agent({ model: openai('gpt-4o-mini') });
+  ```
+
+- Fixed AbortSignal not propagating from parent workflows to nested sub-workflows in the evented workflow engine. ([#11142](https://github.com/mastra-ai/mastra/pull/11142))
+
+  Previously, canceling a parent workflow did not stop nested sub-workflows, causing them to continue running and consuming resources after the parent was canceled.
+
+  Now, when you cancel a parent workflow, all nested sub-workflows are automatically canceled as well, ensuring clean termination of the entire workflow tree.
+
+  **Example:**
+
+  ```typescript
+  const parentWorkflow = createWorkflow({ id: 'parent-workflow' }).then(someStep).then(nestedChildWorkflow).commit();
+
+  const run = await parentWorkflow.createRun();
+  const resultPromise = run.start({ inputData: { value: 5 } });
+
+  // Cancel the parent workflow - nested workflows will also be canceled
+  await run.cancel();
+  // or use: run.abortController.abort();
+
+  const result = await resultPromise;
+  // result.status === 'canceled'
+  // All nested child workflows are also canceled
+  ```
+
+  Related to #11063
+
+- Fix empty overrideScorers causing error instead of skipping scoring ([#11257](https://github.com/mastra-ai/mastra/pull/11257))
+
+  When `overrideScorers` was passed as an empty object `{}`, the agent would throw a "No scorers found" error. Now an empty object explicitly skips scoring, while `undefined` continues to use default scorers.
+
+- feat: Add field filtering and nested workflow control to workflow execution result endpoint ([#11246](https://github.com/mastra-ai/mastra/pull/11246))
+
+  Adds two optional query parameters to `/api/workflows/:workflowId/runs/:runId/execution-result` endpoint:
+  - `fields`: Request only specific fields (e.g., `status`, `result`, `error`)
+  - `withNestedWorkflows`: Control whether to fetch nested workflow data
+
+  This significantly reduces response payload size and improves response times for large workflows.
+
+  ## Server Endpoint Usage
+
+  ```http
+  # Get only status (minimal payload - fastest)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status
+
+  # Get status and result
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status,result
+
+  # Get all fields but without nested workflow data (faster)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?withNestedWorkflows=false
+
+  # Get only specific fields without nested workflow data
+  GET /api/workflows/:workflowId/runs/:runId/execution-result?fields=status,steps&withNestedWorkflows=false
+
+  # Get full data (default behavior)
+  GET /api/workflows/:workflowId/runs/:runId/execution-result
+  ```
+
+  ## Client SDK Usage
+
+  ```typescript
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const workflow = client.getWorkflow('myWorkflow');
+
+  // Get only status (minimal payload - fastest)
+  const statusOnly = await workflow.runExecutionResult(runId, {
+    fields: ['status'],
+  });
+  console.log(statusOnly.status); // 'success' | 'failed' | 'running' | etc.
+
+  // Get status and result
+  const statusAndResult = await workflow.runExecutionResult(runId, {
+    fields: ['status', 'result'],
+  });
+
+  // Get all fields but without nested workflow data (faster)
+  const resultWithoutNested = await workflow.runExecutionResult(runId, {
+    withNestedWorkflows: false,
+  });
+
+  // Get specific fields without nested workflow data
+  const optimized = await workflow.runExecutionResult(runId, {
+    fields: ['status', 'steps'],
+    withNestedWorkflows: false,
+  });
+
+  // Get full execution result (default behavior)
+  const fullResult = await workflow.runExecutionResult(runId);
+  ```
+
+  ## Core API Changes
+
+  The `Workflow.getWorkflowRunExecutionResult` method now accepts an options object:
+
+  ```typescript
+  await workflow.getWorkflowRunExecutionResult(runId, {
+    withNestedWorkflows: false, // default: true, set to false to skip nested workflow data
+    fields: ['status', 'result'], // optional field filtering
+  });
+  ```
+
+  ## Inngest Compatibility
+
+  The `@mastra/inngest` package has been updated to use the new options object API. This is a non-breaking internal change - no action required from inngest workflow users.
+
+  ## Performance Impact
+
+  For workflows with large step outputs:
+  - Requesting only `status`: ~99% reduction in payload size
+  - Requesting `status,result,error`: ~95% reduction in payload size
+  - Using `withNestedWorkflows=false`: Avoids expensive nested workflow data fetching
+  - Combining both: Maximum performance optimization
+
+- Removed a debug log that printed large Zod schemas, resulting in cleaner console output when using agents with memory enabled. ([#11279](https://github.com/mastra-ai/mastra/pull/11279))
+
+- Set `externals: true` as the default for `mastra build` and cloud-deployer to reduce bundle issues with native dependencies. ([`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119))
+
+  **Note:** If you previously relied on the default bundling behavior (all dependencies bundled), you can explicitly set `externals: false` in your bundler configuration.
+
+- Fix delayed promises rejecting when stream suspends on tool-call-approval ([#11278](https://github.com/mastra-ai/mastra/pull/11278))
+
+  When a stream ends in suspended state (e.g., requiring tool approval), the delayed promises like `toolResults`, `toolCalls`, `text`, etc. now resolve with partial results instead of rejecting with an error. This allows consumers to access data that was produced before the suspension.
+
+  Also improves generic type inference for `LLMStepResult` and related types throughout the streaming infrastructure.
+
 ## 1.0.0-beta.13
 
 ### Patch Changes

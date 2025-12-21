@@ -415,7 +415,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
@@ -440,7 +440,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)

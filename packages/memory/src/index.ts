@@ -70,7 +70,7 @@ export class Memory extends MastraMemory {
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
-    const thread = await this.storage.getThreadById({ threadId });
+    const thread = await this.getThreadById({ threadId });
 
     // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
     // because we're searching across all threads for the resource
@@ -139,12 +139,15 @@ export class Memory extends MastraMemory {
       vector?: number[];
     }[] = [];
 
+    // Log memory recall parameters, excluding potentially large schema objects
     this.logger.debug(`Memory recall() with:`, {
       threadId,
       perPage,
       page,
       orderBy: effectiveOrderBy,
-      threadConfig,
+      hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
+      workingMemoryEnabled: config.workingMemory?.enabled,
+      semanticRecallEnabled: Boolean(config.semanticRecall),
     });
 
     this.checkStorageFeatureSupport(config);
@@ -369,7 +372,7 @@ export class Memory extends MastraMemory {
       });
     } else {
       // Update working memory in thread metadata (existing behavior)
-      const thread = await this.storage.getThreadById({ threadId });
+      const thread = await this.getThreadById({ threadId });
       if (!thread) {
         throw new Error(`Thread ${threadId} not found`);
       }
@@ -484,7 +487,7 @@ ${workingMemory}`;
         }
       } else {
         // Update working memory in thread metadata (existing behavior)
-        const thread = await this.storage.getThreadById({ threadId });
+        const thread = await this.getThreadById({ threadId });
         if (!thread) {
           throw new Error(`Thread ${threadId} not found`);
         }
@@ -796,7 +799,7 @@ ${workingMemory}`;
       workingMemoryData = resource?.workingMemory || null;
     } else {
       // Get working memory from thread metadata (default behavior)
-      const thread = await this.storage.getThreadById({ threadId });
+      const thread = await this.getThreadById({ threadId });
       workingMemoryData = thread?.metadata?.workingMemory as string;
     }
 
