@@ -128,6 +128,7 @@ export type ProviderModelsMap = {
     'nvidia/llama-3.1-nemotron-ultra-253b-v1',
     'nvidia/llama-embed-nemotron-8b',
     'nvidia/nemoretriever-ocr-v1',
+    'nvidia/nemotron-3-nano-30b-a3b',
     'nvidia/nvidia-nemotron-nano-9b-v2',
     'nvidia/parakeet-tdt-0.6b-v2',
     'openai/gpt-oss-120b',
@@ -1225,9 +1226,11 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-4.6',
   ];
   readonly deepinfra: readonly [
+    'MiniMaxAI/MiniMax-M2',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
     'moonshotai/Kimi-K2-Instruct',
+    'moonshotai/Kimi-K2-Thinking',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
