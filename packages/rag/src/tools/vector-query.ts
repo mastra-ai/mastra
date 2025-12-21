@@ -129,7 +129,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           try {
             let rerankedResults: RerankResult[] = [];
 
-            if (typeof reranker?.model === 'object' && 'getRelevanceScore' in reranker?.model) {
+            if (reranker?.model && typeof reranker.model === 'object' && 'getRelevanceScore' in reranker.model) {
               rerankedResults = await rerankWithScorer({
                 results,
                 query: queryText,
