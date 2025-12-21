@@ -59,7 +59,7 @@ export enum SpanType {
 /**
  * Base attributes that all spans can have
  */
-export interface AIBaseAttributes { }
+export interface AIBaseAttributes {}
 
 /**
  * Agent Run attributes
