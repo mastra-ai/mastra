@@ -1,5 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
+import { SpanType } from '@mastra/core/observability';
 import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
@@ -100,6 +101,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           includeVectors,
           databaseConfig,
           providerOptions,
+          tracingContext: context?.tracingContext,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -110,38 +112,70 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
             logger.debug('Reranking results', { rerankerModel: reranker.model, rerankerOptions: reranker.options });
           }
 
-          let rerankedResults: RerankResult[] = [];
+          // Create a child span for reranking if tracing context is available
+          const rerankSpan = context?.tracingContext?.currentSpan?.createChildSpan({
+            type: SpanType.RAG_RETRIEVAL,
+            name: 'rag_reranking',
+            input: { queryText, initialResultCount: results.length },
+            attributes: {
+              queryText,
+              reranked: true,
+              rerankModel: typeof reranker.model === 'string' ? reranker.model : reranker.model?.constructor?.name || 'unknown',
+              topK: reranker.options?.topK || topKValue,
+            },
+          });
 
-          if (typeof reranker?.model === 'object' && 'getRelevanceScore' in reranker?.model) {
-            rerankedResults = await rerankWithScorer({
-              results,
-              query: queryText,
-              scorer: reranker.model,
-              options: {
+          try {
+            let rerankedResults: RerankResult[] = [];
+
+            if (typeof reranker?.model === 'object' && 'getRelevanceScore' in reranker?.model) {
+              rerankedResults = await rerankWithScorer({
+                results,
+                query: queryText,
+                scorer: reranker.model,
+                options: {
+                  ...reranker.options,
+                  topK: reranker.options?.topK || topKValue,
+                },
+              });
+            } else {
+              rerankedResults = await rerank(results, queryText, reranker.model, {
                 ...reranker.options,
                 topK: reranker.options?.topK || topKValue,
+              });
+            }
+
+            if (logger) {
+              logger.debug('Reranking complete', { rerankedCount: rerankedResults.length });
+            }
+
+            // Update rerank span with results
+            rerankSpan?.update({
+              attributes: {
+                resultCount: rerankedResults.length,
+                success: true,
               },
             });
-          } else {
-            rerankedResults = await rerank(results, queryText, reranker.model, {
-              ...reranker.options,
-              topK: reranker.options?.topK || topKValue,
+
+            rerankSpan?.end({
+              output: {
+                rerankedCount: rerankedResults.length,
+              },
             });
+
+            const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
+
+            if (logger) {
+              logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
+            }
+
+            const sources = includeSources ? convertToSources(rerankedResults) : [];
+
+            return { relevantContext: relevantChunks, sources };
+          } catch (error) {
+            rerankSpan?.error({ error: error as Error, endSpan: true });
+            throw error;
           }
-
-          if (logger) {
-            logger.debug('Reranking complete', { rerankedCount: rerankedResults.length });
-          }
-
-          const relevantChunks = rerankedResults.map(({ result }) => result?.metadata);
-
-          if (logger) {
-            logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
-          }
-
-          const sources = includeSources ? convertToSources(rerankedResults) : [];
-
-          return { relevantContext: relevantChunks, sources };
         }
 
         const relevantChunks = results.map(result => result?.metadata);

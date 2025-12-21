@@ -32,6 +32,8 @@ export enum SpanType {
   PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
   TOOL_CALL = 'tool_call',
+  /** RAG retrieval operation with vector search, embedding, reranking */
+  RAG_RETRIEVAL = 'rag_retrieval',
   /** Workflow run - root span for workflow processes */
   WORKFLOW_RUN = 'workflow_run',
   /** Workflow step execution with step status, data flow */
@@ -57,7 +59,7 @@ export enum SpanType {
 /**
  * Base attributes that all spans can have
  */
-export interface AIBaseAttributes {}
+export interface AIBaseAttributes { }
 
 /**
  * Agent Run attributes
@@ -224,6 +226,43 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
 }
 
 /**
+ * RAG Retrieval attributes
+ */
+export interface RAGRetrievalAttributes extends AIBaseAttributes {
+  /** Query text used for retrieval */
+  queryText?: string;
+  /** Embedding model used for query embedding */
+  embeddingModel?: string;
+  /** Vector store name/type (e.g., 'pinecone', 'pgvector', 'chroma') */
+  vectorStore?: string;
+  /** Index name in the vector database */
+  indexName?: string;
+  /** Number of top results requested */
+  topK?: number;
+  /** Number of results actually returned */
+  resultCount?: number;
+  /** Whether filtering was applied */
+  filterApplied?: boolean;
+  /** Filter criteria used (stringified JSON) */
+  filter?: string;
+  /** Whether reranking was performed */
+  reranked?: boolean;
+  /** Reranking model used (if applicable) */
+  rerankModel?: string;
+  /** Average similarity score of retrieved results */
+  avgSimilarityScore?: number;
+  /** Highest similarity score among results */
+  maxSimilarityScore?: number;
+  /** Lowest similarity score among results */
+  minSimilarityScore?: number;
+  /** Database-specific configuration used */
+  databaseConfig?: string;
+  /** Whether operation was successful */
+  success?: boolean;
+}
+
+
+/**
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
@@ -348,6 +387,7 @@ export interface SpanTypeMap {
   [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [SpanType.TOOL_CALL]: ToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  [SpanType.RAG_RETRIEVAL]: RAGRetrievalAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
   [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;

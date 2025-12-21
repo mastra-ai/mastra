@@ -2,6 +2,8 @@ import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams
 import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
+import type { TracingContext } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 
 type VectorQuerySearchParams = {
   indexName: string;
@@ -14,6 +16,8 @@ type VectorQuerySearchParams = {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /** Optional tracing context for creating RAG spans */
+  tracingContext?: TracingContext;
 } & ProviderOptions;
 
 interface VectorQuerySearchResult {
@@ -41,46 +45,95 @@ export const vectorQuerySearch = async ({
   maxRetries = 2,
   databaseConfig = {},
   providerOptions,
+  tracingContext,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  let embeddingResult;
+  // Create RAG retrieval span if tracing context is available
+  const ragSpan = tracingContext?.currentSpan?.createChildSpan({
+    type: SpanType.RAG_RETRIEVAL,
+    name: 'rag_retrieval',
+    input: { queryText, topK, filter: queryFilter },
+    attributes: {
+      queryText,
+      embeddingModel: model.modelId,
+      vectorStore: vectorStore.constructor.name || 'unknown',
+      indexName,
+      topK,
+      filterApplied: !!queryFilter,
+      filter: queryFilter ? JSON.stringify(queryFilter) : undefined,
+      databaseConfig: Object.keys(databaseConfig).length > 0 ? JSON.stringify(databaseConfig) : undefined,
+    },
+  });
 
-  if (model.specificationVersion === 'v3') {
-    embeddingResult = await embedV3({
-      model: model,
-      value: queryText,
-      maxRetries,
-      ...(providerOptions && { providerOptions }),
+  try {
+    let embeddingResult;
+
+    if (model.specificationVersion === 'v3') {
+      embeddingResult = await embedV3({
+        model: model,
+        value: queryText,
+        maxRetries,
+        ...(providerOptions && { providerOptions }),
+      });
+    } else if (model.specificationVersion === 'v2') {
+      embeddingResult = await embedV2({
+        model: model,
+        value: queryText,
+        maxRetries,
+        ...(providerOptions && { providerOptions }),
+      });
+    } else {
+      embeddingResult = await embedV1({
+        value: queryText,
+        model: model,
+        maxRetries,
+      });
+    }
+
+    const embedding = embeddingResult.embedding;
+
+    // Build query parameters with database-specific configurations
+    const queryParams: QueryVectorParams = {
+      indexName,
+      queryVector: embedding,
+      topK,
+      filter: queryFilter,
+      includeVector: includeVectors,
+    };
+
+    // Get relevant chunks from the vector database
+    const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
+
+    // Calculate similarity score statistics
+    const scores = results.map(r => r.score).filter((s): s is number => s !== undefined);
+    const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : undefined;
+    const maxScore = scores.length > 0 ? Math.max(...scores) : undefined;
+    const minScore = scores.length > 0 ? Math.min(...scores) : undefined;
+
+    // Update span with retrieval results
+    ragSpan?.update({
+      attributes: {
+        resultCount: results.length,
+        avgSimilarityScore: avgScore,
+        maxSimilarityScore: maxScore,
+        minSimilarityScore: minScore,
+        success: true,
+      },
     });
-  } else if (model.specificationVersion === 'v2') {
-    embeddingResult = await embedV2({
-      model: model,
-      value: queryText,
-      maxRetries,
-      ...(providerOptions && { providerOptions }),
+
+    // End span with output
+    ragSpan?.end({
+      output: {
+        resultCount: results.length,
+        scores,
+      },
     });
-  } else {
-    embeddingResult = await embedV1({
-      value: queryText,
-      model: model,
-      maxRetries,
-    });
+
+    return { results, queryEmbedding: embedding };
+  } catch (error) {
+    // Report error on span
+    ragSpan?.error({ error: error as Error, endSpan: true });
+    throw error;
   }
-
-  const embedding = embeddingResult.embedding;
-
-  // Build query parameters with database-specific configurations
-  const queryParams: QueryVectorParams = {
-    indexName,
-    queryVector: embedding,
-    topK,
-    filter: queryFilter,
-    includeVector: includeVectors,
-  };
-
-  // Get relevant chunks from the vector database
-  const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
-
-  return { results, queryEmbedding: embedding };
 };
 
 const databaseSpecificParams = (databaseConfig: DatabaseConfig) => {
