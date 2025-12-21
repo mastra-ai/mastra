@@ -261,7 +261,6 @@ export interface RAGRetrievalAttributes extends AIBaseAttributes {
   success?: boolean;
 }
 
-
 /**
  * Processor attributes
  */

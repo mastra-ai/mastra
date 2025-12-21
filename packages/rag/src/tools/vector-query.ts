@@ -120,7 +120,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
             attributes: {
               queryText,
               reranked: true,
-              rerankModel: typeof reranker.model === 'string' ? reranker.model : reranker.model?.constructor?.name || 'unknown',
+              rerankModel:
+                typeof reranker.model === 'string' ? reranker.model : reranker.model?.constructor?.name || 'unknown',
               topK: reranker.options?.topK || topKValue,
             },
           });
