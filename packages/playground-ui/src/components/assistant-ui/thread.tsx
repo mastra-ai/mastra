@@ -20,20 +20,54 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { BranchBanner } from './branch-banner';
+
+export interface BranchInfo {
+  branchedFrom: string;
+  branchMessageCount: number;
+  sourceThreadTitle?: string;
+  branchLastMessageId?: string;
+}
 
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
+  onBranch?: (messageId: string) => void;
+  branchInfo?: BranchInfo;
+  onNavigateToThread?: (threadId: string) => void;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({
+  agentName,
+  agentId,
+  hasMemory,
+  hasModelList,
+  onBranch,
+  branchInfo,
+  onNavigateToThread,
+}: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
+  const handleNavigateBack = () => {
+    if (branchInfo?.branchedFrom && onNavigateToThread) {
+      onNavigateToThread(branchInfo.branchedFrom);
+    }
+  };
+
   const WrappedAssistantMessage = (props: MessagePrimitive.Root.Props) => {
-    return <AssistantMessage {...props} hasModelList={hasModelList} />;
+    return (
+      <AssistantMessage
+        {...props}
+        hasModelList={hasModelList}
+        onBranch={onBranch}
+        branchLastMessageId={branchInfo?.branchLastMessageId}
+        branchInfo={branchInfo}
+        onNavigateBack={handleNavigateBack}
+      />
+    );
   };
 
   return (

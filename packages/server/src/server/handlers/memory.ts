@@ -38,6 +38,9 @@ import {
   searchMemoryResponseSchema,
   deleteThreadResponseSchema,
   deleteMessagesResponseSchema,
+  branchThreadQuerySchema,
+  branchThreadBodySchema,
+  branchThreadResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -736,6 +739,102 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error searching memory');
+    }
+  },
+});
+
+export const BRANCH_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/memory/threads/:threadId/branch',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: branchThreadQuerySchema,
+  bodySchema: branchThreadBodySchema,
+  responseSchema: branchThreadResponseSchema,
+  summary: 'Branch thread',
+  description: 'Creates a new thread by copying messages from an existing thread up to a specific message',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, threadId, messageId, resourceId, newThreadId, requestContext }) => {
+    try {
+      validateBody({ threadId, messageId, resourceId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      // Get source thread
+      const sourceThread = await memory.getThreadById({ threadId: threadId! });
+      if (!sourceThread) {
+        throw new HTTPException(404, { message: 'Source thread not found' });
+      }
+
+      // Get all messages from source thread
+      const { messages: allMessages } = await memory.recall({
+        threadId: threadId!,
+        resourceId,
+      });
+
+      // Find the index of the message to branch at (inclusive)
+      const branchIndex = allMessages.findIndex((m: MastraDBMessage) => m.id === messageId);
+      if (branchIndex === -1) {
+        throw new HTTPException(404, { message: 'Message not found in thread' });
+      }
+
+      // Get messages up to and including the branch point
+      const messagesToCopy = allMessages.slice(0, branchIndex + 1);
+
+      // Generate new thread ID if not provided
+      const finalNewThreadId = newThreadId || memory.generateId();
+
+      // Create new thread with branch metadata
+      const newThread = await memory.createThread({
+        threadId: finalNewThreadId,
+        resourceId: resourceId!,
+        title: sourceThread.title ? `Branch of ${sourceThread.title}` : undefined,
+        metadata: {
+          branchedFrom: threadId,
+          branchedAt: new Date().toISOString(),
+          branchMessageCount: messagesToCopy.length,
+        },
+      });
+
+      // Copy messages to new thread with new IDs
+      let branchLastMessageId: string | undefined;
+      if (messagesToCopy.length > 0) {
+        const copiedMessages = messagesToCopy.map((msg: MastraDBMessage) => ({
+          ...msg,
+          id: memory.generateId(),
+          threadId: finalNewThreadId,
+        }));
+
+        // Store the ID of the last copied message for the divider
+        branchLastMessageId = copiedMessages[copiedMessages.length - 1]?.id;
+
+        await memory.saveMessages({ messages: copiedMessages as any });
+
+        // Update thread metadata with the last message ID
+        if (branchLastMessageId) {
+          const updatedThread = {
+            ...newThread,
+            metadata: {
+              ...newThread.metadata,
+              branchLastMessageId,
+            },
+          };
+          await memory.saveThread({ thread: updatedThread });
+        }
+      }
+
+      // Fetch updated thread with the branchLastMessageId
+      const finalThread = branchLastMessageId ? await memory.getThreadById({ threadId: finalNewThreadId }) : newThread;
+
+      return {
+        thread: finalThread || newThread,
+        messageCount: messagesToCopy.length,
+      };
+    } catch (error) {
+      return handleError(error, 'Error branching thread');
     }
   },
 });
