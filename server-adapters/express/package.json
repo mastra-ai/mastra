@@ -26,7 +26,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.1.1",
+    "@fastify/busboy": "^3.2.0",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
