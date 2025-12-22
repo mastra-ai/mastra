@@ -1,14 +1,11 @@
 ---
 '@mastra/express': patch
 '@mastra/hono': patch
+'@mastra/server': patch
 ---
 
-fix(server-adapters): add multipart/form-data support for voice endpoints
+Fixed voice transcription endpoint 
 
-- Add FormData parsing to `getParams()` in both Hono and Express adapters
-- Map `audio` field to `audioData` to match expected schema for voice listen endpoint
-- Parse JSON string fields (like `options`) from FormData
-- Use `@fastify/busboy` for Express adapter multipart parsing
-- Add error logging for multipart parsing failures
+The voice transcription endpoint (`/api/agents/:agentId/voice/listen`) now correctly handles multipart/form-data requests for audio uploads rather than only parsing JSON request bodies.
 
-This fixes voice transcription (`/api/agents/:agentId/voice/listen`) which was broken after the server adapters migration because the adapters only parsed JSON bodies, not multipart/form-data.
+Both Express and Hono adapters now parse multipart/form-data bodies and handle JSON-encoded form fields. The server schema was also updated to use `audio` instead of `audioData` to match the client SDK.

@@ -168,9 +168,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         file.on('end', () => {
-          // Map 'audio' field to 'audioData' to match the expected schema
-          const fieldName = fieldname === 'audio' ? 'audioData' : fieldname;
-          result[fieldName] = Buffer.concat(chunks);
+          result[fieldname] = Buffer.concat(chunks);
         });
       });
 

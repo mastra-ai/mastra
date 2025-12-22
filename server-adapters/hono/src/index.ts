@@ -171,7 +171,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       } else {
         try {
           body = await request.json();
-        } catch {}
+        } catch (error) {
+          console.error('Failed to parse JSON body:', error);
+        }
       }
     }
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
@@ -179,18 +181,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
   /**
    * Parse FormData into a plain object, converting File objects to Buffers.
-   * This handles the voice listen endpoint which expects audioData as a Buffer.
    */
   private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
     const result: Record<string, unknown> = {};
 
     for (const [key, value] of formData.entries()) {
       if (value instanceof File) {
-        // Convert File to Buffer for audio data
         const arrayBuffer = await value.arrayBuffer();
-        // Map 'audio' field to 'audioData' to match the expected schema
-        const fieldName = key === 'audio' ? 'audioData' : key;
-        result[fieldName] = Buffer.from(arrayBuffer);
+        result[key] = Buffer.from(arrayBuffer);
       } else if (typeof value === 'string') {
         // Try to parse JSON strings (like 'options')
         try {
