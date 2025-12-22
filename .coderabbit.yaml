@@ -43,6 +43,7 @@ reviews:
         - If the change is a breaking change or is adding a new feature, ensure that a code example is provided. This code example should show the public API usage (the before and after). Do not show code examples of internal implementation details.
         - Keep the formatting easy-to-read and scannable. If necessary, use bullet points or multiple paragraphs (Use **bold** text as the heading for these sections, do not use markdown headings).
         - For larger, more substantial changes, also answer the "Why" behind the changes
+        - Each changeset file contains a YAML frontmatter at the top. It will be one or more package names followed by a colon and the type of change (patch, minor, major). Do not modify this frontmatter. Check that the description inside the changeset file only applies to the packages listed in the frontmatter. Do not allow descriptions that mention changes to packages not listed in the frontmatter. In these cases, the user must create a separate changeset file for those packages.
   abort_on_close: true
   disable_cache: false
   auto_review:

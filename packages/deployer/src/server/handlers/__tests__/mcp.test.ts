@@ -1,347 +1,136 @@
-// packages/deployer/src/server/handlers/__tests__/mcp.test.ts
+import type { ServerType } from '@hono/node-server';
+import { serve } from '@hono/node-server';
+import { Mastra } from '@mastra/core/mastra';
+import { createTool } from '@mastra/core/tools';
+import { MCPServer, MCPClient } from '@mastra/mcp';
+import type { Hono } from 'hono';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { z } from 'zod';
+import { createHonoServer } from '../../index';
 
-import type { Mastra } from '@mastra/core/mastra';
-// Consolidate imports from @mastra/core/mcp
-import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo, ServerDetailInfo } from '@mastra/core/mcp';
-import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context } from 'hono';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getMcpServerMessageHandler, listMcpRegistryServersHandler, getMcpRegistryServerDetailHandler } from '../mcp';
+/**
+ * Deployer MCP Smoke Test
+ *
+ * This test verifies that MCP routes work correctly when served through
+ * the full deployer server setup (createHonoServer).
+ *
+ * Detailed MCP route testing is done in:
+ * - server-adapters/hono/src/__tests__/mcp-routes.test.ts (registry routes)
+ * - server-adapters/hono/src/__tests__/mcp-transport.test.ts (transport routes)
+ *
+ * This smoke test ensures the deployer's middleware stack (CORS, timeout,
+ * body limits, etc.) doesn't interfere with MCP functionality.
+ */
+describe('Deployer MCP Smoke Test', () => {
+  let app: Hono;
+  let mastra: Mastra;
+  let mcpServer: MCPServer;
+  let httpServer: ServerType;
+  const PORT = 9500 + Math.floor(Math.random() * 100);
 
-// Mock dependencies
-vi.mock('fetch-to-node', () => ({
-  toReqRes: vi.fn(),
-  toFetchResponse: vi.fn(),
-}));
-
-// Helper to create a mock Hono context
-const createMockContext = (serverId: string, requestUrl: string): Partial<Context> => ({
-  req: {
-    param: vi.fn((key: string) => (key === 'serverId' ? serverId : undefined)),
-    url: requestUrl,
-    raw: {} as any, // Mock raw request
-  } as any,
-  get: vi.fn((key: string) => {
-    if (key === 'mastra') {
-      return mockMastraInstance;
-    }
-    return undefined;
-  }),
-  json: vi.fn(
-    (data, status) =>
-      new Response(JSON.stringify(data), {
-        status: status || 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-  ) as any,
-});
-
-let mockMastraInstance: Partial<Mastra>;
-let mockMCPServer: Partial<MastraMCPServerImplementation>;
-
-describe('getMcpServerMessageHandler', () => {
-  const serverId = 'test-mcp-server';
-  const requestUrl = `http://localhost/api/mcp/${serverId}/mcp`;
-  let mockNodeReq: any;
-  let mockNodeRes: any;
-  let mockFetchRes: Response;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    mockNodeReq = { body: 'test-request-body' };
-    mockNodeRes = {
-      headersSent: false,
-      writeHead: vi.fn(),
-      end: vi.fn(),
-      on: vi.fn(),
-    };
-    mockFetchRes = new Response('test-response', { status: 200 });
-
-    (toReqRes as ReturnType<typeof vi.fn>).mockReturnValue({ req: mockNodeReq, res: mockNodeRes });
-    (toFetchResponse as ReturnType<typeof vi.fn>).mockResolvedValue(mockFetchRes);
-
-    mockMCPServer = {
-      name: serverId,
-      startHTTP: vi.fn().mockResolvedValue(undefined),
-    };
-
-    mockMastraInstance = {
-      getMCPServerById: vi.fn().mockReturnValue(mockMCPServer as MastraMCPServerImplementation),
-    };
-  });
-
-  it('should successfully handle an MCP message and call server.startHTTP', async () => {
-    const mockContext = createMockContext(serverId, requestUrl) as Context;
-    const result = await getMcpServerMessageHandler(mockContext);
-    expect(mockContext.get).toHaveBeenCalledWith('mastra');
-    expect(mockMastraInstance.getMCPServerById).toHaveBeenCalledWith(serverId);
-    expect(toReqRes).toHaveBeenCalledWith(mockContext.req.raw);
-    expect(mockMCPServer.startHTTP).toHaveBeenCalledWith({
-      url: new URL(requestUrl),
-      httpPath: `/api/mcp/${serverId}/mcp`,
-      req: mockNodeReq,
-      res: mockNodeRes,
-    });
-    expect(toFetchResponse).toHaveBeenCalledWith(mockNodeRes);
-    expect(result).toBe(mockFetchRes);
-    expect(mockContext.json).not.toHaveBeenCalled();
-  });
-
-  it('should return 404 if MCP server is not found', async () => {
-    (mockMastraInstance.getMCPServerById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
-    const mockContext = createMockContext(serverId, requestUrl) as Context;
-    await getMcpServerMessageHandler(mockContext);
-    expect(mockMastraInstance.getMCPServerById).toHaveBeenCalledWith(serverId);
-    expect(mockNodeRes.writeHead).toHaveBeenCalledWith(404, { 'Content-Type': 'application/json' });
-    expect(mockNodeRes.end).toHaveBeenCalledWith(JSON.stringify({ error: `MCP server '${serverId}' not found` }));
-    expect(mockMCPServer.startHTTP).not.toHaveBeenCalled();
-  });
-
-  it('should handle errors from server.startHTTP and return JSON-RPC error response', async () => {
-    const errorMessage = 'Failed to start HTTP';
-    const thrownError = new Error(errorMessage);
-    (mockMCPServer.startHTTP as ReturnType<typeof vi.fn>).mockRejectedValue(thrownError);
-
-    const mockContext = createMockContext(serverId, requestUrl) as Context;
-    await getMcpServerMessageHandler(mockContext);
-
-    // Check that we handle the error using Node.js response methods
-    expect(mockNodeRes.writeHead).toHaveBeenCalledWith(500, { 'Content-Type': 'application/json' });
-    expect(mockNodeRes.end).toHaveBeenCalledWith(
-      JSON.stringify({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal server error',
-        },
-        id: null,
-      }),
-    );
-
-    // Make sure we don't use Hono's json method
-    expect(mockContext.json).not.toHaveBeenCalled();
-  });
-
-  it('should pass the correct URL and httpPath to startHTTP', async () => {
-    const actualRequestUrl = `http://localhost/api/mcp/${serverId}/mcp`;
-    const mockContext = createMockContext(serverId, actualRequestUrl) as Context;
-    await getMcpServerMessageHandler(mockContext);
-    expect(mockMCPServer.startHTTP).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: new URL(actualRequestUrl),
-        httpPath: `/api/mcp/${serverId}/mcp`,
-      }),
-    );
-  });
-});
-
-// Updated createMockContext to be more flexible for different handlers
-const createRegistryMockContext = ({
-  serverId,
-  requestUrl,
-  queryParams = {},
-  mastraInstance,
-}: {
-  serverId?: string;
-  requestUrl: string;
-  queryParams?: Record<string, string>;
-  mastraInstance: Partial<Mastra>;
-}): Partial<Context> => ({
-  req: {
-    param: vi.fn((key: string) => (key === 'id' ? serverId : undefined)),
-    url: requestUrl,
-    query: vi.fn((key: string) => queryParams[key]),
-    raw: {} as any,
-  } as any,
-  get: vi.fn((key: string) => {
-    if (key === 'mastra') {
-      return mastraInstance;
-    }
-    if (key === 'logger') {
-      // Mock logger to prevent errors if called
-      return {
-        error: vi.fn(),
-        warn: vi.fn(),
-        info: vi.fn(),
-        debug: vi.fn(),
+  const calculatorTool = createTool({
+    id: 'calculate',
+    description: 'Performs basic calculations',
+    inputSchema: z.object({
+      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+      a: z.number(),
+      b: z.number(),
+    }),
+    execute: async ({ operation, a, b }) => {
+      const ops: Record<string, (a: number, b: number) => number> = {
+        add: (a, b) => a + b,
+        subtract: (a, b) => a - b,
+        multiply: (a, b) => a * b,
+        divide: (a, b) => a / b,
       };
-    }
-    return undefined;
-  }),
-  json: vi.fn(
-    (data, status) =>
-      new Response(JSON.stringify(data), {
-        status: status || 200,
+      return { result: ops[operation](a, b) };
+    },
+  });
+
+  beforeAll(async () => {
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      description: 'Test MCP Server',
+      tools: { calculate: calculatorTool },
+    });
+
+    mastra = new Mastra({
+      mcpServers: { 'test-server': mcpServer },
+    });
+
+    app = await createHonoServer(mastra);
+    httpServer = serve({ fetch: app.fetch, port: PORT });
+  });
+
+  afterAll(async () => {
+    await mcpServer.close();
+    httpServer.close();
+  });
+
+  describe('Registry Routes', () => {
+    it('should list MCP servers', async () => {
+      const res = await fetch(`http://localhost:${PORT}/api/mcp/v0/servers`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.servers).toBeDefined();
+      expect(data.servers.length).toBeGreaterThan(0);
+    });
+
+    it('should get server details', async () => {
+      const res = await fetch(`http://localhost:${PORT}/api/mcp/v0/servers/test-server`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.id).toBe('test-server');
+      expect(data.name).toBe('test-server');
+    });
+
+    it('should list server tools', async () => {
+      const res = await fetch(`http://localhost:${PORT}/api/mcp/test-server/tools`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.tools).toBeDefined();
+      expect(data.tools.some((t: any) => t.name === 'calculate')).toBe(true);
+    });
+
+    it('should execute tool', async () => {
+      const res = await fetch(`http://localhost:${PORT}/api/mcp/test-server/tools/calculate/execute`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-      }),
-  ) as any,
-});
-
-describe('listMcpRegistryServersHandler', () => {
-  let mockMastra: Partial<Mastra>;
-  const server1Info: ServerInfo = {
-    id: 'server1',
-    name: 'Test Server 1',
-    version_detail: { version: '1.0', release_date: '2023-01-01T00:00:00Z', is_latest: true },
-  };
-  const server2Info: ServerInfo = {
-    id: 'server2',
-    name: 'Test Server 2',
-    version_detail: { version: '1.1', release_date: '2023-02-01T00:00:00Z', is_latest: true },
-  };
-
-  const mockServer1: Partial<MastraMCPServerImplementation> = {
-    id: 'server1',
-    getServerInfo: vi.fn(() => server1Info),
-  };
-  const mockServer2: Partial<MastraMCPServerImplementation> = {
-    id: 'server2',
-    getServerInfo: vi.fn(() => server2Info),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockMastra = {
-      listMCPServers: vi.fn(),
-    };
-  });
-
-  it('should list all servers correctly without pagination', async () => {
-    (mockMastra.listMCPServers as ReturnType<typeof vi.fn>).mockReturnValue({
-      server1: mockServer1 as MastraMCPServerImplementation,
-      server2: mockServer2 as MastraMCPServerImplementation,
+        body: JSON.stringify({ args: { operation: 'add', a: 5, b: 3 } }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.result).toBeDefined();
     });
-    const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/mcp/v0/servers',
-      mastraInstance: mockMastra,
-    }) as Context;
-
-    const response = (await listMcpRegistryServersHandler(mockContext)) as Response;
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(mockMastra.listMCPServers).toHaveBeenCalledTimes(1);
-    expect(body.servers).toEqual([server1Info, server2Info]);
-    expect(body.total_count).toBe(2);
-    expect(body.next).toBeNull();
   });
 
-  it('should handle pagination correctly (limit and offset)', async () => {
-    (mockMastra.listMCPServers as ReturnType<typeof vi.fn>).mockReturnValue({
-      server1: mockServer1 as MastraMCPServerImplementation,
-      server2: mockServer2 as MastraMCPServerImplementation,
+  describe('Transport Routes', () => {
+    it('should respond to HTTP transport endpoint', async () => {
+      // Just verify the endpoint exists and responds (404 for non-existent server)
+      const res = await fetch(`http://localhost:${PORT}/api/mcp/non-existent/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.status).toBe(404);
     });
-    const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/mcp/v0/servers?limit=1&offset=0',
-      queryParams: { limit: '1', offset: '0' },
-      mastraInstance: mockMastra,
-    }) as Context;
 
-    const response = (await listMcpRegistryServersHandler(mockContext)) as Response;
-    const body = await response.json();
+    it('should connect via MCPClient and list tools', async () => {
+      const client = new MCPClient({
+        servers: {
+          'test-server': {
+            url: new URL(`http://localhost:${PORT}/api/mcp/test-server/mcp`),
+          },
+        },
+      });
 
-    expect(body.servers).toEqual([server1Info]);
-    expect(body.total_count).toBe(2);
-    expect(body.next).toBe('http://localhost/api/mcp/v0/servers?limit=1&offset=1');
-  });
-
-  it('should return empty list if listMCPServers returns undefined', async () => {
-    (mockMastra.listMCPServers as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
-    const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/mcp/v0/servers',
-      mastraInstance: mockMastra,
-    }) as Context;
-
-    const response = (await listMcpRegistryServersHandler(mockContext)) as Response;
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.servers).toEqual([]);
-    expect(body.total_count).toBe(0);
-    expect(body.next).toBeNull();
-  });
-
-  it('should return 500 if Mastra instance or listMCPServers is not available', async () => {
-    const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/mcp/v0/servers',
-      mastraInstance: {} as Partial<Mastra>, // Simulate missing listMCPServers
-    }) as Context;
-
-    const response = (await listMcpRegistryServersHandler(mockContext)) as Response;
-    expect(response.status).toBe(500);
-    const body = await response.json();
-    expect(body.error).toContain('Mastra instance or listMCPServers method not available');
-  });
-});
-
-describe('getMcpRegistryServerDetailHandler', () => {
-  let mockMastra: Partial<Mastra>;
-  const serverId = 'server1';
-  const serverDetail: ServerDetailInfo = {
-    id: serverId,
-    name: 'Test Server 1',
-    description: 'Detailed description',
-    version_detail: { version: '1.0', release_date: '2023-01-01T00:00:00Z', is_latest: true },
-    package_canonical: 'npm',
-    packages: [],
-    remotes: [],
-  };
-  const mockServer: Partial<MastraMCPServerImplementation> = {
-    id: serverId,
-    getServerDetail: vi.fn(() => serverDetail),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockMastra = {
-      getMCPServerById: vi.fn(),
-    };
-  });
-
-  it('should return server details if server is found', async () => {
-    (mockMastra.getMCPServerById as ReturnType<typeof vi.fn>).mockReturnValue(
-      mockServer as MastraMCPServerImplementation,
-    );
-    const mockContext = createRegistryMockContext({
-      serverId,
-      requestUrl: `http://localhost/api/mcp/v0/servers/${serverId}`,
-      mastraInstance: mockMastra,
-    }) as Context;
-
-    const response = (await getMcpRegistryServerDetailHandler(mockContext)) as Response;
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(mockMastra.getMCPServerById).toHaveBeenCalledWith(serverId);
-    expect(mockServer.getServerDetail).toHaveBeenCalledTimes(1);
-    expect(body).toEqual(serverDetail);
-  });
-
-  it('should return 404 if server is not found', async () => {
-    (mockMastra.getMCPServerById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
-    const mockContext = createRegistryMockContext({
-      serverId,
-      requestUrl: `http://localhost/api/mcp/v0/servers/${serverId}`,
-      mastraInstance: mockMastra,
-    }) as Context;
-
-    const response = (await getMcpRegistryServerDetailHandler(mockContext)) as Response;
-    expect(response.status).toBe(404);
-    const body = await response.json();
-    expect(body.error).toBe(`MCP server with ID '${serverId}' not found`);
-  });
-
-  it('should return 500 if Mastra instance or getMCPServerById is not available', async () => {
-    const mockContext = createRegistryMockContext({
-      serverId,
-      requestUrl: `http://localhost/api/mcp/v0/servers/${serverId}`,
-      mastraInstance: {} as Partial<Mastra>, // Simulate missing getMCPServerById
-    }) as Context;
-
-    const response = (await getMcpRegistryServerDetailHandler(mockContext)) as Response;
-    expect(response.status).toBe(500);
-    const body = await response.json();
-    expect(body.error).toContain('Mastra instance or getMCPServerById method not available');
+      try {
+        const tools = await client.listTools();
+        expect(Object.keys(tools).length).toBeGreaterThan(0);
+        expect(tools['test-server_calculate']).toBeDefined();
+      } finally {
+        await client.disconnect();
+      }
+    });
   });
 });

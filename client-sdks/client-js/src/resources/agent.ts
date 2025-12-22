@@ -45,7 +45,7 @@ async function executeToolCallAndRespond({
   respondFn,
 }: {
   params: StreamParams<any>;
-  response: Awaited<ReturnType<MastraModelOutput['getFullOutput']>>;
+  response: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>>;
   resourceId?: string;
   threadId?: string;
   requestContext?: RequestContext<any>;
@@ -855,7 +855,7 @@ export class Agent extends BaseResource {
           case 'tripwire': {
             message.parts.push({
               type: 'text',
-              text: chunk.payload.tripwireReason,
+              text: chunk.payload.reason,
             });
 
             execUpdate();

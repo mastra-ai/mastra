@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { Agent } from '../agent';
+import { Agent, isSupportedLanguageModel } from '../agent';
 import { tryGenerateWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import type { TracingContext } from '../observability';
 import { InternalSpans } from '../observability';
 import { createWorkflow, createStep } from '../workflows';
@@ -186,6 +187,8 @@ class MastraScorer<
   TRunOutput = any,
   TAccumulatedResults extends Record<string, any> = {},
 > {
+  #mastra?: Mastra;
+
   constructor(
     public config: ScorerConfig<TID, TInput, TRunOutput>,
     private steps: Array<ScorerStepDefinition> = [],
@@ -195,7 +198,9 @@ class MastraScorer<
       | GenerateReasonPromptObject<any, TInput, TRunOutput>
       | GenerateScorePromptObject<any, TInput, TRunOutput>
     > = new Map(),
+    mastra?: Mastra,
   ) {
+    this.#mastra = mastra;
     if (!this.config.id) {
       throw new MastraError({
         id: 'MASTR_SCORER_FAILED_TO_CREATE_MISSING_ID',
@@ -204,6 +209,15 @@ class MastraScorer<
         text: `Scorers must have an ID field. Please provide an ID in the scorer config.`,
       });
     }
+  }
+
+  /**
+   * Registers the Mastra instance with the scorer.
+   * This enables access to custom gateways for model resolution.
+   * @internal
+   */
+  __registerMastra(mastra: Mastra): void {
+    this.#mastra = mastra;
   }
 
   get type() {
@@ -258,6 +272,7 @@ class MastraScorer<
         },
       ],
       new Map(this.originalPromptObjects),
+      this.#mastra,
     );
   }
 
@@ -287,6 +302,7 @@ class MastraScorer<
         },
       ],
       new Map(this.originalPromptObjects),
+      this.#mastra,
     );
   }
 
@@ -316,6 +332,7 @@ class MastraScorer<
         },
       ],
       new Map(this.originalPromptObjects),
+      this.#mastra,
     );
   }
 
@@ -345,6 +362,7 @@ class MastraScorer<
         },
       ],
       new Map(this.originalPromptObjects),
+      this.#mastra,
     );
   }
 
@@ -544,7 +562,8 @@ class MastraScorer<
     }
 
     // Resolve the model configuration to a LanguageModel instance
-    const resolvedModel = await resolveModelConfig(modelConfig);
+    // Pass the Mastra instance to enable custom gateway resolution
+    const resolvedModel = await resolveModelConfig(modelConfig, undefined, this.#mastra);
 
     const judge = new Agent({
       id: 'judge',
@@ -558,7 +577,7 @@ class MastraScorer<
     if (scorerStep.name === 'generateScore') {
       const schema = z.object({ score: z.number() });
       let result;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema,
@@ -576,7 +595,7 @@ class MastraScorer<
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         result = await judge.generate(prompt, { tracingContext });
       } else {
         result = await judge.generateLegacy(prompt, { tracingContext });
@@ -585,7 +604,7 @@ class MastraScorer<
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       let result;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         result = await tryGenerateWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: promptStep.outputSchema,

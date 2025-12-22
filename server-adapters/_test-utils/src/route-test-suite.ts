@@ -37,6 +37,11 @@ export function createRouteTestSuite(config: RouteTestConfig) {
 
     it('should have OpenAPI specs for all routes', () => {
       routes.forEach(route => {
+        // Skip 'ALL' method routes - they can't have OpenAPI specs (no standard HTTP method mapping)
+        // MCP transport routes use 'ALL' and are tested separately via mcp-transport-test-suite
+        if (route.method === 'ALL') {
+          return;
+        }
         expect(route.openapi).toBeDefined();
         expect(route.openapi?.summary).toBeDefined();
         expect(route.openapi?.description).toBeDefined();

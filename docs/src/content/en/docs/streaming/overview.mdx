@@ -22,7 +22,7 @@ You can pass a single string for simple prompts, an array of strings when provid
 
 A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
 
-```typescript {3,7} showLineNumbers copy
+```typescript {3,7}
 const testAgent = mastra.getAgent("testAgent");
 
 const stream = await testAgent.stream([
@@ -34,7 +34,11 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-> See [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ### Output from `Agent.stream()`
 
@@ -62,7 +66,7 @@ AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an 
 
 For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
-```typescript {2,9-12} showLineNumbers copy
+```typescript {2,9-12}
 import { toAISdkV5Stream } from "@mastra/ai-sdk";
 
 const testAgent = mastra.getAgent("testAgent");
@@ -79,7 +83,7 @@ const aiSDKStream = toAISdkV5Stream(stream, { from: "agent" });
 
 For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
-```typescript {1,4} showLineNumbers copy
+```typescript {1,4}
 import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
 
 const messages = [{ role: "user", content: "Hello" }];
@@ -92,7 +96,7 @@ The `network()` method enables multi-agent collaboration by executing a network 
 
 > **Note**: This method is experimental and requires memory to be configured on the agent.
 
-```typescript {3,5-7} showLineNumbers copy
+```typescript {3,5-7}
 const testAgent = mastra.getAgent("testAgent");
 
 const networkStream = await testAgent.network("Help me organize my day");
@@ -102,7 +106,11 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](/reference/v1/agents/network) for more information.
+:::info
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+:::
 
 #### Network stream properties
 
@@ -112,7 +120,7 @@ The network stream provides access to execution information:
 - **`networkStream.result`**: Promise resolving to the complete execution results
 - **`networkStream.usage`**: Promise resolving to token usage information
 
-```typescript {9-11} showLineNumbers copy
+```typescript {9-11}
 const testAgent = mastra.getAgent("testAgent");
 
 const networkStream = await testAgent.network(
@@ -132,14 +140,14 @@ console.log("Token usage:", await networkStream.usage);
 
 Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRun()`.
 
-### Using `Run.streamVNext()`
+### Using `Run.stream()`
 
-This is the experimental API. It returns a `ReadableStream` of events directly.
+The `stream()` method returns a `ReadableStream` of events directly.
 
-```typescript {3,9} showLineNumbers copy
+```typescript {3,9}
 const run = await testWorkflow.createRun();
 
-const stream = await run.streamVNext({
+const stream = await run.stream({
   inputData: {
     value: "initial data",
   },
@@ -150,16 +158,19 @@ for await (const chunk of stream) {
 }
 ```
 
-> See Run.streamVNext() method documentation for more information.
+:::info
+
+Visit [Run.stream()](/reference/v1/streaming/workflows/stream) for more information.
+
+:::
 
 ### Output from `Run.stream()`
 
-The experimental API event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
+The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
 ```typescript
-// ...
 {
-  type: 'step-start',
+  type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
   from: 'WORKFLOW',
   payload: {

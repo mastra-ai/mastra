@@ -15,6 +15,7 @@ import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
+import { studio } from './commands/studio';
 import { parseComponents, parseLlmProvider, parseMcp } from './commands/utils';
 
 const mastraPkg = pkgJson as PackageJson;
@@ -134,6 +135,16 @@ program
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to include in the start')
   .action(startProject);
+
+program
+  .command('studio')
+  .description('Start the Mastra studio')
+  .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
+  .option('-e, --env <env>', 'Custom env file to include in the studio')
+  .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
+  .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
+  .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
+  .action(studio);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
 

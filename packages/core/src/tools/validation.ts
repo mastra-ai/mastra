@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { ZodLikeSchema } from '../types/zod-compat';
 
 export interface ValidationError<T = any> {
@@ -65,6 +65,34 @@ export async function validateToolSuspendData<T = any>(
 }
 
 /**
+ * Normalizes undefined/null input to an appropriate default value based on schema type.
+ * This handles LLMs (Claude Sonnet 4.5, Gemini 2.4, etc.) that send undefined/null
+ * instead of {} or [] when all parameters are optional.
+ *
+ * @param schema The Zod schema to check
+ * @param input The input to normalize
+ * @returns The normalized input (original value, {}, or [])
+ */
+function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
+  if (input !== undefined && input !== null) {
+    return input;
+  }
+
+  // Check if schema is an array type
+  if (schema instanceof z.ZodArray) {
+    return [];
+  }
+
+  // Check if schema is an object type
+  if (schema instanceof z.ZodObject) {
+    return {};
+  }
+
+  // For other schema types, return the original input and let Zod validate
+  return input;
+}
+
+/**
  * Validates raw input data against a Zod schema.
  *
  * @param schema The Zod schema to validate against
@@ -82,8 +110,12 @@ export async function validateToolInput<T = any>(
     return { data: input };
   }
 
-  // Validate the input directly - no unwrapping needed in v1.0
-  const validation = await schema.safeParseAsync(input);
+  // Normalize undefined/null input to appropriate default for the schema type
+  // This handles LLMs that send undefined instead of {} or [] for optional parameters
+  const normalizedInput = normalizeNullishInput(schema, input);
+
+  // Validate the normalized input
+  const validation = await schema.safeParseAsync(normalizedInput);
 
   if (validation.success) {
     return { data: validation.data };

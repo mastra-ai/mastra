@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -113,7 +114,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, dimension, metric },
@@ -146,7 +147,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPSERT_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'UPSERT', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -197,7 +198,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -231,7 +232,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_QUERY_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'QUERY', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -262,7 +263,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -279,7 +280,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -312,7 +313,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -330,7 +331,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -355,7 +356,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     // Validate mutually exclusive parameters
     if (id && filter) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'id and filter are mutually exclusive',
@@ -365,7 +366,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
 
     if (!id && !filter) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either id or filter must be provided',
@@ -375,7 +376,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No update data provided',
@@ -396,7 +397,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -414,7 +415,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         // Validate filter is not empty
         if (Object.keys(filter).length === 0) {
           throw new MastraError({
-            id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+            id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             text: 'Filter cannot be an empty object',
@@ -486,7 +487,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -514,7 +515,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -528,7 +529,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'ids and filter are mutually exclusive',
@@ -538,7 +539,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'NO_TARGET'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Either filter or ids must be provided',
@@ -549,7 +550,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     // Validate non-empty arrays and objects
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'EMPTY_IDS'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'ids array cannot be empty',
@@ -559,7 +560,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
 
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_INVALID_ARGS',
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'Filter cannot be an empty object',
@@ -610,7 +611,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

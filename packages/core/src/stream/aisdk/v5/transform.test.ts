@@ -186,7 +186,7 @@ describe('convertFullStreamChunkToMastra', () => {
     it('should handle text-delta chunks correctly', () => {
       const chunk: StreamPart = {
         type: 'text-delta',
-        id: '1',
+        id: 'text-1',
         delta: 'Hello',
       };
 
@@ -197,7 +197,7 @@ describe('convertFullStreamChunkToMastra', () => {
         runId: 'test-run-123',
         from: ChunkFrom.AGENT,
         payload: {
-          id: '1',
+          id: 'text-1',
           providerMetadata: undefined,
           text: 'Hello',
         },

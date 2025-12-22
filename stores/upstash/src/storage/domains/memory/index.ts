@@ -9,6 +9,8 @@ import {
   TABLE_MESSAGES,
   normalizePerPage,
   calculatePagination,
+  createStorageErrorId,
+  ensureDate,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -20,8 +22,9 @@ import type {
   ThreadSortDirection,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
-import { ensureDate, getKey, processRecord } from '../utils';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
+import { getKey, processRecord } from '../utils';
 
 function getThreadMessagesKey(threadId: string): string {
   return `thread:${threadId}:messages`;
@@ -32,18 +35,30 @@ function getMessageKey(threadId: string, messageId: string): string {
   return key;
 }
 
+// Index key for fast message ID -> threadId lookup (backwards compatible)
+function getMessageIndexKey(messageId: string): string {
+  return `msg-idx:${messageId}`;
+}
+
 export class StoreMemoryUpstash extends MemoryStorage {
   private client: Redis;
-  private operations: StoreOperationsUpstash;
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  #db: UpstashDB;
+  constructor(config: UpstashDomainConfig) {
     super();
+    const client = resolveUpstashConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new UpstashDB({ client });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_THREADS });
+    await this.#db.deleteData({ tableName: TABLE_MESSAGES });
+    await this.#db.deleteData({ tableName: TABLE_RESOURCES });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load<StorageThreadType>({
+      const thread = await this.#db.get<StorageThreadType>({
         tableName: TABLE_THREADS,
         keys: { id: threadId },
       });
@@ -59,7 +74,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -81,7 +96,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_LIST_THREADS_BY_RESOURCE_ID_INVALID_PAGE',
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -95,7 +110,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     try {
       let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.#db.scanKeys(pattern);
 
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
@@ -132,7 +147,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_THREADS_BY_RESOURCE_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -157,7 +172,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_THREADS,
         record: thread,
       });
@@ -165,7 +180,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -192,7 +207,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const thread = await this.getThreadById({ threadId: id });
     if (!thread) {
       throw new MastraError({
-        id: 'STORAGE_UPSTASH_STORAGE_UPDATE_THREAD_FAILED',
+        id: createStorageErrorId('UPSTASH', 'UPDATE_THREAD', 'FAILED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: `Thread ${id} not found`,
@@ -217,7 +232,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -249,11 +264,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
       await pipeline.exec();
 
       // Bulk delete all message keys for this thread if any remain
-      await this.operations.scanAndDelete(getMessageKey(threadId, '*'));
+      await this.#db.scanAndDelete(getMessageKey(threadId, '*'));
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('UPSTASH', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -283,7 +298,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_MESSAGES_INVALID_ARGS',
+          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -326,7 +341,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
           // Check if this message id exists in another thread
           const existingKeyPattern = getMessageKey('*', message.id);
-          const keys = await this.operations.scanKeys(existingKeyPattern);
+          const keys = await this.#db.scanKeys(existingKeyPattern);
 
           if (keys.length > 0) {
             const pipeline2 = this.client.pipeline();
@@ -345,6 +360,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
           // Store the message data
           pipeline.set(key, message);
+
+          // Store the message ID -> threadId index for fast lookups
+          pipeline.set(getMessageIndexKey(message.id), message.threadId!);
 
           // Add to sorted set for this thread
           pipeline.zadd(getThreadMessagesKey(message.threadId!), {
@@ -370,7 +388,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -382,59 +400,81 @@ export class StoreMemoryUpstash extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages(
-    threadId: string,
-    include: StorageListMessagesInput['include'],
-  ): Promise<MastraDBMessage[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+  /**
+   * Lookup threadId for a message - tries index first (O(1)), falls back to scan (backwards compatible)
+   */
+  private async _getThreadIdForMessage(messageId: string): Promise<string | null> {
+    // Try the index first (fast path for new messages)
+    const indexedThreadId = await this.client.get<string>(getMessageIndexKey(messageId));
+    if (indexedThreadId) {
+      return indexedThreadId;
+    }
+
+    // Fall back to scan for backwards compatibility (old messages without index)
+    const existingKeyPattern = getMessageKey('*', messageId);
+    const keys = await this.#db.scanKeys(existingKeyPattern);
+    if (keys.length === 0) return null;
+
+    // Get the message to find its threadId
+    const messageData = await this.client.get<MastraDBMessage>(keys[0] as string);
+    if (!messageData) return null;
+
+    // Backfill the index for future lookups
+    if (messageData.threadId) {
+      await this.client.set(getMessageIndexKey(messageId), messageData.threadId);
+    }
+
+    return messageData.threadId || null;
+  }
+
+  private async _getIncludedMessages(include: StorageListMessagesInput['include']): Promise<MastraDBMessage[]> {
+    if (!include?.length) return [];
 
     const messageIds = new Set<string>();
     const messageIdToThreadIds: Record<string, string> = {};
 
-    // First, get specifically included messages and their context
-    if (include?.length) {
-      for (const item of include) {
-        messageIds.add(item.id);
+    for (const item of include) {
+      // Step 1: Find the threadId for this message (index first, then scan)
+      const itemThreadId = await this._getThreadIdForMessage(item.id);
+      if (!itemThreadId) continue;
 
-        // Use per-include threadId if present, else fallback to main threadId
-        const itemThreadId = item.threadId || threadId;
-        messageIdToThreadIds[item.id] = itemThreadId;
-        const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
+      messageIds.add(item.id);
+      messageIdToThreadIds[item.id] = itemThreadId;
+      const itemThreadMessagesKey = getThreadMessagesKey(itemThreadId);
 
-        // Get the rank of this message in the sorted set
-        const rank = await this.client.zrank(itemThreadMessagesKey, item.id);
-        if (rank === null) continue;
+      // Get the rank of this message in the sorted set
+      const rank = await this.client.zrank(itemThreadMessagesKey, item.id);
+      if (rank === null) continue;
 
-        // Get previous messages if requested
-        if (item.withPreviousMessages) {
-          const start = Math.max(0, rank - item.withPreviousMessages);
-          const prevIds = rank === 0 ? [] : await this.client.zrange(itemThreadMessagesKey, start, rank - 1);
-          prevIds.forEach(id => {
-            messageIds.add(id as string);
-            messageIdToThreadIds[id as string] = itemThreadId;
-          });
-        }
-
-        // Get next messages if requested
-        if (item.withNextMessages) {
-          const nextIds = await this.client.zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
-          nextIds.forEach(id => {
-            messageIds.add(id as string);
-            messageIdToThreadIds[id as string] = itemThreadId;
-          });
-        }
+      // Get previous messages if requested
+      if (item.withPreviousMessages) {
+        const start = Math.max(0, rank - item.withPreviousMessages);
+        const prevIds = rank === 0 ? [] : await this.client.zrange(itemThreadMessagesKey, start, rank - 1);
+        prevIds.forEach(id => {
+          messageIds.add(id as string);
+          messageIdToThreadIds[id as string] = itemThreadId;
+        });
       }
 
-      const pipeline = this.client.pipeline();
-      Array.from(messageIds).forEach(id => {
-        const tId = messageIdToThreadIds[id] || threadId;
-        pipeline.get(getMessageKey(tId, id as string));
-      });
-      const results = await pipeline.exec();
-      return results.filter(result => result !== null) as MastraDBMessage[];
+      // Get next messages if requested
+      if (item.withNextMessages) {
+        const nextIds = await this.client.zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
+        nextIds.forEach(id => {
+          messageIds.add(id as string);
+          messageIdToThreadIds[id as string] = itemThreadId;
+        });
+      }
     }
 
-    return [];
+    if (messageIds.size === 0) return [];
+
+    const pipeline = this.client.pipeline();
+    Array.from(messageIds).forEach(id => {
+      const tId = messageIdToThreadIds[id]!;
+      pipeline.get(getMessageKey(tId, id as string));
+    });
+    const results = await pipeline.exec();
+    return results.filter(result => result !== null) as MastraDBMessage[];
   }
 
   private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
@@ -451,27 +491,68 @@ export class StoreMemoryUpstash extends MemoryStorage {
     if (messageIds.length === 0) return { messages: [] };
 
     try {
-      // Search in all threads in parallel
-      const threadKeys = await this.client.keys('thread:*');
+      const rawMessages: (MastraDBMessage & { _index?: number })[] = [];
 
-      const result = await Promise.all(
-        threadKeys.map(threadKey => {
-          const threadId = threadKey.split(':')[1];
-          if (!threadId) throw new Error(`Failed to parse thread ID from thread key "${threadKey}"`);
-          return this.client.mget<(MastraDBMessage & { _index?: number })[]>(
-            messageIds.map(id => getMessageKey(threadId, id)),
-          );
-        }),
-      );
+      // Try to get threadIds from index first (fast path)
+      const indexPipeline = this.client.pipeline();
+      messageIds.forEach(id => indexPipeline.get(getMessageIndexKey(id)));
+      const indexResults = await indexPipeline.exec();
 
-      const rawMessages = result.flat(1).filter(msg => !!msg) as (MastraDBMessage & { _index?: number })[];
+      const indexedIds: { messageId: string; threadId: string }[] = [];
+      const unindexedIds: string[] = [];
+
+      messageIds.forEach((id, i) => {
+        const threadId = indexResults[i] as string | null;
+        if (threadId) {
+          indexedIds.push({ messageId: id, threadId });
+        } else {
+          unindexedIds.push(id);
+        }
+      });
+
+      // Fetch indexed messages directly (O(1) per message)
+      if (indexedIds.length > 0) {
+        const messagePipeline = this.client.pipeline();
+        indexedIds.forEach(({ messageId, threadId }) => messagePipeline.get(getMessageKey(threadId, messageId)));
+        const messageResults = await messagePipeline.exec();
+        rawMessages.push(...(messageResults.filter(msg => msg !== null) as (MastraDBMessage & { _index?: number })[]));
+      }
+
+      // Fall back to scan for unindexed messages (backwards compatibility)
+      if (unindexedIds.length > 0) {
+        const threadKeys = await this.client.keys('thread:*');
+
+        const result = await Promise.all(
+          threadKeys.map(threadKey => {
+            const threadId = threadKey.split(':')[1];
+            if (!threadId) throw new Error(`Failed to parse thread ID from thread key "${threadKey}"`);
+            return this.client.mget<(MastraDBMessage & { _index?: number })[]>(
+              unindexedIds.map(id => getMessageKey(threadId, id)),
+            );
+          }),
+        );
+
+        const foundMessages = result.flat(1).filter(msg => !!msg) as (MastraDBMessage & { _index?: number })[];
+        rawMessages.push(...foundMessages);
+
+        // Backfill index for found messages
+        if (foundMessages.length > 0) {
+          const backfillPipeline = this.client.pipeline();
+          foundMessages.forEach(msg => {
+            if (msg.threadId) {
+              backfillPipeline.set(getMessageIndexKey(msg.id), msg.threadId);
+            }
+          });
+          await backfillPipeline.exec();
+        }
+      }
 
       const list = new MessageList().add(rawMessages.map(this.parseStoredMessage), 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -486,19 +567,21 @@ export class StoreMemoryUpstash extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    if (!threadId.trim()) {
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_THREAD_ID',
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId },
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
         },
-        new Error('threadId must be a non-empty string'),
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
     }
 
-    const threadMessagesKey = getThreadMessagesKey(threadId);
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -507,7 +590,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       if (page < 0) {
         throw new MastraError(
           {
-            id: 'STORAGE_UPSTASH_LIST_MESSAGES_INVALID_PAGE',
+            id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'INVALID_PAGE'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { page },
@@ -519,13 +602,21 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Get included messages with context if specified
       let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
-        const included = (await this._getIncludedMessages(threadId, include)) as MastraDBMessage[];
+        const included = (await this._getIncludedMessages(include)) as MastraDBMessage[];
         includedMessages = included.map(this.parseStoredMessage);
       }
 
-      // Get all message IDs from the sorted set
-      const allMessageIds = await this.client.zrange(threadMessagesKey, 0, -1);
-      if (allMessageIds.length === 0) {
+      // Get all message IDs from all thread sorted sets
+      const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
+      for (const tid of threadIds) {
+        const threadMessagesKey = getThreadMessagesKey(tid);
+        const messageIds = await this.client.zrange(threadMessagesKey, 0, -1);
+        for (const mid of messageIds) {
+          allMessageIdsWithThreads.push({ threadId: tid, messageId: mid as string });
+        }
+      }
+
+      if (allMessageIdsWithThreads.length === 0) {
         return {
           messages: [],
           total: 0,
@@ -537,7 +628,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Use pipeline to fetch all messages efficiently
       const pipeline = this.client.pipeline();
-      allMessageIds.forEach(id => pipeline.get(getMessageKey(threadId, id as string)));
+      allMessageIdsWithThreads.forEach(({ threadId: tid, messageId }) => pipeline.get(getMessageKey(tid, messageId)));
       const results = await pipeline.exec();
 
       // Process messages and apply filters
@@ -648,11 +739,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LIST_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
           },
         },
@@ -777,7 +868,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Scan for all message keys that match any of the IDs
       for (const messageId of messageIds) {
         const pattern = getMessageKey('*', messageId);
-        const keys = await this.operations.scanKeys(pattern);
+        const keys = await this.#db.scanKeys(pattern);
 
         for (const key of keys) {
           const message = await this.client.get<MastraDBMessage>(key);
@@ -904,7 +995,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -924,16 +1015,42 @@ export class StoreMemoryUpstash extends MemoryStorage {
     try {
       const threadIds = new Set<string>();
       const messageKeys: string[] = [];
+      const foundMessageIds: string[] = [];
 
-      // Find all message keys and collect thread IDs
-      for (const messageId of messageIds) {
+      // Try index first for each message (fast path)
+      const indexPipeline = this.client.pipeline();
+      messageIds.forEach(id => indexPipeline.get(getMessageIndexKey(id)));
+      const indexResults = await indexPipeline.exec();
+
+      const indexedMessages: { messageId: string; threadId: string }[] = [];
+      const unindexedMessageIds: string[] = [];
+
+      messageIds.forEach((id, i) => {
+        const threadId = indexResults[i] as string | null;
+        if (threadId) {
+          indexedMessages.push({ messageId: id, threadId });
+        } else {
+          unindexedMessageIds.push(id);
+        }
+      });
+
+      // Process indexed messages (fast path)
+      for (const { messageId, threadId } of indexedMessages) {
+        messageKeys.push(getMessageKey(threadId, messageId));
+        foundMessageIds.push(messageId);
+        threadIds.add(threadId);
+      }
+
+      // Fall back to scan for unindexed messages (backwards compatibility)
+      for (const messageId of unindexedMessageIds) {
         const pattern = getMessageKey('*', messageId);
-        const keys = await this.operations.scanKeys(pattern);
+        const keys = await this.#db.scanKeys(pattern);
 
         for (const key of keys) {
           const message = await this.client.get<MastraDBMessage>(key);
           if (message && message.id === messageId) {
             messageKeys.push(key);
+            foundMessageIds.push(messageId);
             if (message.threadId) {
               threadIds.add(message.threadId);
             }
@@ -952,6 +1069,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Delete all messages
       for (const key of messageKeys) {
         pipeline.del(key);
+      }
+
+      // Delete all message index entries
+      for (const messageId of foundMessageIds) {
+        pipeline.del(getMessageIndexKey(messageId));
       }
 
       // Update thread timestamps
@@ -976,7 +1098,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_DELETE_MESSAGES_FAILED',
+          id: createStorageErrorId('UPSTASH', 'DELETE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: messageIds.join(', ') },

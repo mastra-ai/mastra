@@ -9,12 +9,11 @@ The `MastraAuthClerk` class provides authentication for Mastra applications usin
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthClerk({
       jwksUri: process.env.CLERK_JWKS_URI,
@@ -71,4 +70,4 @@ export const mastra = new Mastra({
 
 ## Related
 
-[MastraAuthClerk Class](/docs/v1/auth/clerk)
+[MastraAuthClerk Class](/docs/v1/server/auth/clerk)

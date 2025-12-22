@@ -1,15 +1,13 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
 export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
@@ -22,19 +20,75 @@ import type {
   IndexInfo,
   StorageIndexStats,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
+import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
-import { StoreOperationsMSSQL } from './domains/operations';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
+/**
+ * MSSQL configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured connection pool: `{ id, pool, schemaName? }`
+ * - Connection string: `{ id, connectionString, ... }`
+ * - Server/port config: `{ id, server, port, database, user, password, ... }`
+ */
 export type MSSQLConfigType = {
   id: string;
   schemaName?: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new MSSQLStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new MSSQLStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
 } & (
+  | {
+      /**
+       * Pre-configured mssql ConnectionPool.
+       * Use this when you need to configure the pool before initialization,
+       * e.g., to add pool listeners or set connection-level settings.
+       *
+       * @example
+       * ```typescript
+       * import sql from 'mssql';
+       *
+       * const pool = new sql.ConnectionPool({
+       *   server: 'localhost',
+       *   database: 'mydb',
+       *   user: 'user',
+       *   password: 'password',
+       * });
+       *
+       * // Custom setup before using
+       * pool.on('connect', () => {
+       *   console.log('Pool connected');
+       * });
+       *
+       * const store = new MSSQLStore({ id: 'my-store', pool });
+       * ```
+       */
+      pool: sql.ConnectionPool;
+    }
   | {
       server: string;
       port: number;
@@ -50,19 +104,33 @@ export type MSSQLConfigType = {
 
 export type MSSQLConfig = MSSQLConfigType;
 
+/**
+ * Type guard for pre-configured pool config
+ */
+const isPoolConfig = (config: MSSQLConfigType): config is MSSQLConfigType & { pool: sql.ConnectionPool } => {
+  return 'pool' in config;
+};
+
 export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
+  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('MSSQLStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: 'MSSQLStore' });
+    super({ id: config.id, name: 'MSSQLStore', disableInit: config.disableInit });
     try {
-      if ('connectionString' in config) {
+      this.schema = config.schemaName || 'dbo';
+
+      // Handle pre-configured pool vs creating new connection
+      if (isPoolConfig(config)) {
+        // User provided a pre-configured ConnectionPool
+        this.pool = config.pool;
+      } else if ('connectionString' in config) {
         if (
           !config.connectionString ||
           typeof config.connectionString !== 'string' ||
@@ -70,6 +138,7 @@ export class MSSQLStore extends MastraStorage {
         ) {
           throw new Error('MSSQLStore: connectionString must be provided and cannot be empty.');
         }
+        this.pool = new sql.ConnectionPool(config.connectionString);
       } else {
         const required = ['server', 'database', 'user', 'password'];
         for (const key of required) {
@@ -77,29 +146,24 @@ export class MSSQLStore extends MastraStorage {
             throw new Error(`MSSQLStore: ${key} must be provided and cannot be empty.`);
           }
         }
+        this.pool = new sql.ConnectionPool({
+          server: config.server,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          port: config.port,
+          options: config.options || { encrypt: true, trustServerCertificate: true },
+        });
       }
 
-      this.schema = config.schemaName || 'dbo';
-      this.pool =
-        'connectionString' in config
-          ? new sql.ConnectionPool(config.connectionString)
-          : new sql.ConnectionPool({
-              server: config.server,
-              database: config.database,
-              user: config.user,
-              password: config.password,
-              port: config.port,
-              options: config.options || { encrypt: true, trustServerCertificate: true },
-            });
-
-      const operations = new StoreOperationsMSSQL({ pool: this.pool, schemaName: this.schema });
-      const scores = new ScoresMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const workflows = new WorkflowsMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const memory = new MemoryMSSQL({ pool: this.pool, schema: this.schema, operations });
-      const observability = new ObservabilityMSSQL({ pool: this.pool, operations, schema: this.schema });
+      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
+      const domainConfig = { pool: this.pool, db: this.#db, schema: this.schema };
+      const scores = new ScoresMSSQL(domainConfig);
+      const workflows = new WorkflowsMSSQL(domainConfig);
+      const memory = new MemoryMSSQL(domainConfig);
+      const observability = new ObservabilityMSSQL(domainConfig);
 
       this.stores = {
-        operations,
         scores,
         workflows,
         memory,
@@ -108,7 +172,7 @@ export class MSSQLStore extends MastraStorage {
     } catch (e) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INITIALIZATION_FAILED',
+          id: createStorageErrorId('MSSQL', 'INITIALIZATION', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -128,7 +192,7 @@ export class MSSQLStore extends MastraStorage {
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
-        await (this.stores.operations as StoreOperationsMSSQL).createAutomaticIndexes();
+        await this.#db.createAutomaticIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
@@ -138,7 +202,7 @@ export class MSSQLStore extends MastraStorage {
       this.isConnected = null;
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_INIT_FAILED',
+          id: createStorageErrorId('MSSQL', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -156,16 +220,7 @@ export class MSSQLStore extends MastraStorage {
     }
   }
 
-  public get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    listScoresBySpan: boolean;
-    observabilityInstance: boolean;
-    indexManagement: boolean;
-  } {
+  public get supports() {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
@@ -176,48 +231,6 @@ export class MSSQLStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   /**
@@ -320,13 +333,7 @@ export class MSSQLStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -369,6 +376,10 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async close(): Promise<void> {
     await this.pool.close();
   }
@@ -377,19 +388,19 @@ export class MSSQLStore extends MastraStorage {
    * Index Management
    */
   async createIndex(options: CreateIndexOptions): Promise<void> {
-    return (this.stores.operations as StoreOperationsMSSQL).createIndex(options);
+    return this.#db.createIndex(options);
   }
 
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return (this.stores.operations as StoreOperationsMSSQL).listIndexes(tableName);
+    return this.#db.listIndexes(tableName);
   }
 
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    return (this.stores.operations as StoreOperationsMSSQL).describeIndex(indexName);
+    return this.#db.describeIndex(indexName);
   }
 
   async dropIndex(indexName: string): Promise<void> {
-    return (this.stores.operations as StoreOperationsMSSQL).dropIndex(indexName);
+    return this.#db.dropIndex(indexName);
   }
 
   /**
@@ -398,7 +409,7 @@ export class MSSQLStore extends MastraStorage {
   private getObservabilityStore(): ObservabilityMSSQL {
     if (!this.stores.observability) {
       throw new MastraError({
-        id: 'MSSQL_STORE_OBSERVABILITY_NOT_INITIALIZED',
+        id: createStorageErrorId('MSSQL', 'OBSERVABILITY', 'NOT_INITIALIZED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.SYSTEM,
         text: 'Observability storage is not initialized',
@@ -478,8 +489,8 @@ export class MSSQLStore extends MastraStorage {
     });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

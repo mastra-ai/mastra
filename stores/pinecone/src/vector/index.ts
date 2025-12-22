@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -113,7 +114,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (validationError) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('PINECONE', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, dimension, metric },
@@ -149,7 +150,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
       // For any other errors, wrap in MastraError
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('PINECONE', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, dimension, metric },
@@ -191,7 +192,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('PINECONE', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, vectorCount: vectors.length },
@@ -244,7 +245,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('PINECONE', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName, topK },
@@ -261,7 +262,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('PINECONE', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -291,7 +292,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('PINECONE', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -307,7 +308,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('PINECONE', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -334,7 +335,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate mutually exclusive parameters
     if ('id' in params && params.id && 'filter' in params && params.filter) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_UPDATE_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both id and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -344,7 +345,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!('id' in params && params.id) && !('filter' in params && params.filter)) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_UPDATE_NO_TARGET',
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'NO_TARGET'),
         text: 'Either id or filter must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -354,7 +355,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!update.vector && !update.metadata) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text: 'No updates provided',
@@ -387,7 +388,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
         // Validate filter is not empty
         if (Object.keys(params.filter).length === 0) {
           throw new MastraError({
-            id: 'STORAGE_PINECONE_VECTOR_UPDATE_EMPTY_FILTER',
+            id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
             text: 'Filter cannot be an empty filter object',
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
@@ -434,7 +435,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('PINECONE', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -463,7 +464,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('PINECONE', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -492,7 +493,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate mutually exclusive parameters
     if (ids && filter) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_MUTUALLY_EXCLUSIVE',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
         text: 'Cannot specify both ids and filter - they are mutually exclusive',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -502,7 +503,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
 
     if (!ids && !filter) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_NO_TARGET',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'NO_TARGET'),
         text: 'Either filter or ids must be provided',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -513,7 +514,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate ids array is not empty
     if (ids && ids.length === 0) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_EMPTY_IDS',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'EMPTY_IDS'),
         text: 'Cannot delete with empty ids array',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -524,7 +525,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     // Validate filter is not empty
     if (filter && Object.keys(filter).length === 0) {
       throw new MastraError({
-        id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_EMPTY_FILTER',
+        id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'EMPTY_FILTER'),
         text: 'Cannot delete with empty filter object',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -570,7 +571,7 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_PINECONE_VECTOR_DELETE_VECTORS_FAILED',
+          id: createVectorErrorId('PINECONE', 'DELETE_VECTORS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

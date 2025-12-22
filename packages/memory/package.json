@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.6",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +24,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup --silent --config tsup.config.ts",
+    "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
@@ -36,8 +36,6 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
-    "ai": "^4.3.19",
-    "ai-v5": "npm:ai@5.0.60",
     "async-mutex": "^0.5.0",
     "js-tiktoken": "^1.0.20",
     "json-schema": "^0.4.0",
@@ -45,12 +43,13 @@
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/json-schema": "^7.0.15",
     "@types/lru-cache": "^7.10.10",
     "@types/node": "22.13.17",

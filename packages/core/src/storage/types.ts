@@ -1,6 +1,7 @@
+import type { SerializedError } from '../error';
 import type { MastraDBMessage, StorageThreadType } from '../memory/types';
 import type { SpanType } from '../observability';
-import type { WorkflowRunState, WorkflowRunStatus } from '../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
   page: number;
@@ -61,7 +62,7 @@ export type PaginationInfo = {
 export type MastraMessageFormat = 'v1' | 'v2';
 
 export type StorageListMessagesInput = {
-  threadId: string;
+  threadId: string | string[];
   resourceId?: string;
   include?: {
     id: string;
@@ -85,7 +86,7 @@ export type StorageListMessagesInput = {
       end?: Date;
     };
   };
-  orderBy?: StorageOrderBy;
+  orderBy?: StorageOrderBy<'createdAt'>;
 };
 
 export type StorageListMessagesOutput = PaginationInfo & {
@@ -149,8 +150,8 @@ export type StorageMessageType = {
   resourceId: string | null;
 };
 
-export interface StorageOrderBy {
-  field?: ThreadOrderBy;
+export interface StorageOrderBy<TField extends ThreadOrderBy = ThreadOrderBy> {
+  field?: TField;
   direction?: ThreadSortDirection;
 }
 
@@ -201,6 +202,96 @@ export interface TracesPaginatedArg {
   pagination?: PaginationArgs;
 }
 
+// Agent Storage Types
+
+/**
+ * Scorer reference with optional sampling configuration
+ */
+export interface StorageScorerConfig {
+  /** Sampling configuration for this scorer */
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+}
+
+/**
+ * Stored agent configuration type.
+ * Primitives (tools, workflows, agents, memory, scorers) are stored as references
+ * that get resolved from Mastra's registries at runtime.
+ */
+export interface StorageAgentType {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  /** Model configuration (provider, name, etc.) */
+  model: Record<string, unknown>;
+  /** Array of tool keys to resolve from Mastra's tool registry */
+  tools?: string[];
+  /** Default options for generate/stream calls */
+  defaultOptions?: Record<string, unknown>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry */
+  workflows?: string[];
+  /** Array of agent keys to resolve from Mastra's agent registry */
+  agents?: string[];
+  /** Input processor configurations */
+  inputProcessors?: Record<string, unknown>[];
+  /** Output processor configurations */
+  outputProcessors?: Record<string, unknown>[];
+  /** Memory key to resolve from Mastra's memory registry */
+  memory?: string;
+  /** Scorer keys with optional sampling config, to resolve from Mastra's scorer registry */
+  scorers?: Record<string, StorageScorerConfig>;
+  /** Additional metadata for the agent */
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type StorageCreateAgentInput = Omit<StorageAgentType, 'createdAt' | 'updatedAt'>;
+
+export type StorageUpdateAgentInput = {
+  id: string;
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: Record<string, unknown>;
+  /** Array of tool keys to resolve from Mastra's tool registry */
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  /** Array of workflow keys to resolve from Mastra's workflow registry */
+  workflows?: string[];
+  /** Array of agent keys to resolve from Mastra's agent registry */
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  /** Memory key to resolve from Mastra's memory registry */
+  memory?: string;
+  /** Scorer keys with optional sampling config */
+  scorers?: Record<string, StorageScorerConfig>;
+  metadata?: Record<string, unknown>;
+};
+
+export type StorageListAgentsInput = {
+  /**
+   * Number of items per page, or `false` to fetch all records without pagination limit.
+   * Defaults to 100 if not specified.
+   */
+  perPage?: number | false;
+  /**
+   * Zero-indexed page number for pagination.
+   * Defaults to 0 if not specified.
+   */
+  page?: number;
+  orderBy?: StorageOrderBy;
+};
+
+export type StorageListAgentsOutput = PaginationInfo & {
+  agents: StorageAgentType[];
+};
+
 // Basic Index Management Types
 export interface CreateIndexOptions {
   name: string;
@@ -208,6 +299,12 @@ export interface CreateIndexOptions {
   columns: string[];
   unique?: boolean;
   concurrent?: boolean;
+  /**
+   * SQL WHERE clause for creating partial indexes.
+   * @internal Reserved for internal use only. Callers must pre-validate this value.
+   * DDL statements cannot use parameterized queries for WHERE clauses, so this value
+   * is concatenated directly into the SQL. Any user-facing usage must validate input.
+   */
   where?: string;
   method?: 'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin';
   opclass?: string; // Operator class for GIN/GIST indexes
@@ -230,4 +327,14 @@ export interface StorageIndexStats extends IndexInfo {
   tuples_fetched: number; // Number of tuples fetched
   last_used?: Date; // Last time index was used
   method?: string; // Index method (btree, hash, etc)
+}
+
+// Workflow Storage Types
+
+export interface UpdateWorkflowStateOptions {
+  status: WorkflowRunStatus;
+  result?: StepResult<any, any, any, any>;
+  error?: SerializedError;
+  suspendedPaths?: Record<string, number[]>;
+  waitingPaths?: Record<string, number[]>;
 }

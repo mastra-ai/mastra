@@ -106,6 +106,7 @@ interface ComposerProps {
 
 const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -113,16 +114,22 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2">
+        <div
+          className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
+          onClick={() => {
+            textareaRef.current?.focus();
+          }}
+        >
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
+              ref={textareaRef}
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
               autoFocus={document.activeElement === document.body}
               placeholder="Enter your message..."
               name=""
               id=""
               onChange={e => setThreadInput?.(e.target.value)}
-            ></textarea>
+            />
           </ComposerPrimitive.Input>
           <div className="flex justify-end gap-2">
             <SpeechInput agentId={agentId} />

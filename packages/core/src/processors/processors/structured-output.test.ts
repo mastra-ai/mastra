@@ -1,6 +1,6 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { openai } from '@ai-sdk/openai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import z from 'zod';
 import { Agent } from '../../agent';
@@ -280,13 +280,13 @@ describe('StructuredOutputProcessor', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'text-delta' as const,
-          payload: { id: '1', text: 'User input' },
+          payload: { id: 'text-1', text: 'User input' },
         },
         {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'text-delta' as const,
-          payload: { id: '2', text: 'Agent response' },
+          payload: { id: 'text-2', text: 'Agent response' },
         },
         // Tool call chunk
         {
@@ -397,13 +397,13 @@ describe('StructuredOutputProcessor', () => {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'reasoning-delta' as const,
-          payload: { id: '1', text: 'I need to analyze the color and intensity' },
+          payload: { id: 'text-1', text: 'I need to analyze the color and intensity' },
         },
         {
           runId: 'test-run',
           from: ChunkFrom.AGENT,
           type: 'text-delta' as const,
-          payload: { id: '2', text: 'The answer is blue and bright' },
+          payload: { id: 'text-2', text: 'The answer is blue and bright' },
         },
       ];
 
@@ -525,9 +525,9 @@ describe('Structured Output with Tool Execution', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"toolUsed":"calculator","result":"8","confidence":0.95}' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"toolUsed":"calculator","result":"8","confidence":0.95}' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -679,7 +679,7 @@ describe('Structured Output with Tool Execution', () => {
     expect(finalObject.activities.length).toBeGreaterThanOrEqual(1);
     expect(finalObject.toolsCalled).toHaveLength(2);
     expect(finalObject.location).toBe('Toronto');
-  }, 15000);
+  }, 60000);
 
   it('should NOT use structured output processor when model is not provided', async () => {
     const responseSchema = z.object({

@@ -91,6 +91,8 @@ export type ScoreRowData = ScoringInputWithExtractStepResultAndScoreAndReason &
     generateReasonPrompt?: string;
   };
 
+export type SaveScorePayload = Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
+
 export type ExtractionStepFn = (input: ScoringInput) => Promise<Record<string, any>>;
 
 export type AnalyzeStepFn = (input: ScoringInputWithExtractStepResult) => Promise<ScoringAnalyzeStepResult>;

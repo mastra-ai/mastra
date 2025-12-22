@@ -1,46 +1,81 @@
 import type { Connection } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import { ScoresStorage, TABLE_SCORERS, calculatePagination, normalizePerPage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  ScoresStorage,
+  TABLE_SCORERS,
+  SCORERS_SCHEMA,
+  calculatePagination,
+  normalizePerPage,
+} from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { getTableSchema, processResultWithTypeConversion } from '../utils';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
+import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
 export class StoreScoresLance extends ScoresStorage {
   private client: Connection;
-  constructor({ client }: { client: Connection }) {
+  #db: LanceDB;
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
+    this.#db = new LanceDB({ client });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: SCORERS_SCHEMA });
+    // Add columns for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: SCORERS_SCHEMA,
+      ifNotExists: ['spanId', 'requestContext'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
+  }
+
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     let validatedScore: ValidatedSaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           text: 'Failed to save score in LanceStorage',
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: score.scorer?.id ?? 'unknown',
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
+    const id = crypto.randomUUID();
+    const now = new Date();
+
     try {
-      const id = crypto.randomUUID();
       const table = await this.client.openTable(TABLE_SCORERS);
       // Fetch schema fields for mastra_scorers
       const schema = await getTableSchema({ tableName: TABLE_SCORERS, client: this.client });
       const allowedFields = new Set(schema.fields.map((f: any) => f.name));
       // Filter out fields not in schema
       const filteredScore: Record<string, any> = {};
-      (Object.keys(validatedScore) as (keyof ScoreRowData)[]).forEach(key => {
+      for (const key of Object.keys(validatedScore)) {
         if (allowedFields.has(key)) {
-          filteredScore[key] = score[key];
+          filteredScore[key] = validatedScore[key as keyof typeof validatedScore];
         }
-      });
+      }
       // Convert any object fields to JSON strings for storage
       for (const key in filteredScore) {
         if (
@@ -52,16 +87,16 @@ export class StoreScoresLance extends ScoresStorage {
         }
       }
 
-      filteredScore.createdAt = new Date();
-      filteredScore.updatedAt = new Date();
-
       filteredScore.id = id;
+      filteredScore.createdAt = now;
+      filteredScore.updatedAt = now;
+
       await table.add([filteredScore], { mode: 'append' });
-      return { score };
+      return { score: { ...validatedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('LANCE', 'SAVE_SCORE', 'FAILED'),
           text: 'Failed to save score in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -85,7 +120,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_SCORE_BY_ID', 'FAILED'),
           text: 'Failed to get score by id in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -183,7 +218,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           text: 'Failed to get scores by scorerId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -238,7 +273,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           text: 'Failed to get scores by runId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -298,7 +333,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           text: 'Failed to get scores by entityId and entityType in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
@@ -355,7 +390,7 @@ export class StoreScoresLance extends ScoresStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORAGE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           text: 'Failed to get scores by traceId and spanId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,

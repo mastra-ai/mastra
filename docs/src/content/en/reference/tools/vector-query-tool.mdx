@@ -326,7 +326,7 @@ This agent-driven approach:
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
-For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](/examples/v1/rag/usage/filter-rag) example.
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag) example.
 
 ## Example with Reranking
 
@@ -567,14 +567,14 @@ const response = await agent.generate(
 
 For more information on request context, please see:
 
-- [Agent Request Context](/docs/v1/server-db/request-context)
-- [Request Context](/docs/v1/server-db/request-context#accessing-values-with-tools)
+- [Agent Request Context](/docs/v1/server/request-context)
+- [Request Context](/docs/v1/server/request-context#accessing-values-with-tools)
 
 ## Usage Without a Mastra Server
 
 The tool can be used by itself to retrieve documents matching a query:
 
-```typescript copy showLineNumbers title="src/index.ts"
+```typescript title="src/index.ts"
 import { RequestContext } from "@mastra/core/request-context";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";

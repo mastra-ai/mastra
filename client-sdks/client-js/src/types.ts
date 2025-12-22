@@ -34,7 +34,13 @@ import type {
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
-import type { TimeTravelContext, Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+import type {
+  TimeTravelContext,
+  Workflow,
+  WorkflowResult,
+  WorkflowRunStatus,
+  WorkflowState,
+} from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -54,6 +60,8 @@ export interface ClientOptions {
   abortSignal?: AbortSignal;
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
+  /** Custom fetch function to use for HTTP requests. Useful for environments like Tauri that require custom fetch implementations. */
+  fetch?: typeof fetch;
 }
 
 export interface RequestOptions {
@@ -77,6 +85,7 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
 } & MultiPrimitiveExecutionOptions;
 
 export interface GetAgentResponse {
@@ -129,6 +138,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
 
 export type StreamParams<OUTPUT extends OutputSchema = undefined> = {
   messages: MessageListInput;
+  tracingOptions?: TracingOptions;
   structuredOutput?: SerializableStructuredOutputOptions<OUTPUT>;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
@@ -165,16 +175,21 @@ export interface GetToolResponse {
 export interface ListWorkflowRunsParams {
   fromDate?: Date;
   toDate?: Date;
-  perPage?: number | false;
   page?: number;
+  perPage?: number;
   resourceId?: string;
+  status?: WorkflowRunStatus;
+  /** @deprecated Use page instead */
+  offset?: number;
+  /** @deprecated Use perPage instead */
+  limit?: number | false;
 }
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WorkflowState;
+export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -203,6 +218,8 @@ export interface GetWorkflowResponse {
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -247,7 +264,9 @@ export interface SaveNetworkMessageToMemoryParams {
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
+export type SaveMessageToMemoryResponse = {
+  messages: (MastraMessageV1 | MastraDBMessage)[];
+};
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -531,7 +550,6 @@ export interface MemorySearchResult {
 }
 
 export interface TimeTravelParams {
-  runId: string;
   step: string | string[];
   inputData?: Record<string, any>;
   resumeData?: Record<string, any>;
@@ -540,6 +558,113 @@ export interface TimeTravelParams {
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
   requestContext?: RequestContext | Record<string, any>;
   tracingOptions?: TracingOptions;
+}
+
+// ============================================================================
+// Stored Agents Types
+// ============================================================================
+
+/**
+ * Scorer config for stored agents
+ */
+export interface StoredAgentScorerConfig {
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+}
+
+/**
+ * Stored agent data returned from API
+ */
+export interface StoredAgentResponse {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Parameters for listing stored agents
+ */
+export interface ListStoredAgentsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+}
+
+/**
+ * Response for listing stored agents
+ */
+export interface ListStoredAgentsResponse {
+  agents: StoredAgentResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored agent
+ */
+export interface CreateStoredAgentParams {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a stored agent
+ */
+export interface UpdateStoredAgentParams {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for deleting a stored agent
+ */
+export interface DeleteStoredAgentResponse {
+  success: boolean;
+  message: string;
 }
 
 export interface ListAgentsModelProvidersResponse {
@@ -553,4 +678,17 @@ export interface Provider {
   connected: boolean;
   docUrl?: string;
   models: string[];
+}
+
+// ============================================================================
+// System Types
+// ============================================================================
+
+export interface MastraPackage {
+  name: string;
+  version: string;
+}
+
+export interface GetSystemPackagesResponse {
+  packages: MastraPackage[];
 }

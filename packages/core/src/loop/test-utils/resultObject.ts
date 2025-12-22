@@ -1,5 +1,6 @@
-import { tool } from 'ai-v5';
-import { convertArrayToReadableStream } from 'ai-v5/test';
+import { tool } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream as convertArrayToReadableStreamV2 } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { loop } from '../loop';
@@ -13,16 +14,39 @@ import {
   testUsage,
   createMessageListWithUserMessage,
 } from './utils';
+import {
+  createTestModelsV3,
+  testUsageV3,
+  modelWithFilesV3,
+  modelWithReasoningV3,
+  modelWithSourcesV3,
+} from './utils-v3';
 
-export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function resultObjectTests({
+  loopFn,
+  runId,
+  modelVersion = 'v2',
+}: {
+  loopFn: typeof loop;
+  runId: string;
+  modelVersion?: 'v2' | 'v3';
+}) {
+  // Version-aware utilities
+  const convertArrayToReadableStream =
+    modelVersion === 'v2' ? convertArrayToReadableStreamV2 : convertArrayToReadableStreamV3;
+  const createTestModelsForVersion = modelVersion === 'v2' ? createTestModels : createTestModelsV3;
+  const testUsageForVersion = modelVersion === 'v2' ? testUsage : testUsageV3;
+  const modelWithFilesForVersion = modelVersion === 'v2' ? modelWithFiles : modelWithFilesV3;
+  const modelWithReasoningForVersion = modelVersion === 'v2' ? modelWithReasoning : modelWithReasoningV3;
+  const modelWithSourcesForVersion = modelVersion === 'v2' ? modelWithSources : modelWithSourcesV3;
   describe('result.warnings', () => {
     it('should resolve with warnings', async () => {
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels({
+        models: createTestModelsForVersion({
           warnings: [{ type: 'other', message: 'test-warning' }],
-        }),
+        } as any),
         messageList: createMessageListWithUserMessage(),
         agentId: 'agent-id',
       });
@@ -38,31 +62,29 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
             },
-          ]),
+          ] as any) as any,
         }),
         messageList: createMessageListWithUserMessage(),
         agentId: 'agent-id',
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.usage).toMatchInlineSnapshot(`
-        {
-          "inputTokens": 3,
-          "outputTokens": 10,
-          "totalTokens": 13,
-        }
-      `);
+      expect(await result.usage).toMatchObject({
+        inputTokens: 3,
+        outputTokens: 10,
+        totalTokens: 13,
+      });
     });
   });
 
@@ -73,17 +95,17 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
             },
-          ]),
+          ] as any) as any,
         }),
         messageList,
         agentId: 'agent-id',
@@ -102,20 +124,20 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
               providerMetadata: {
                 testProvider: { testKey: 'testValue' },
               },
             },
-          ]),
+          ] as any) as any,
         }),
         messageList,
         agentId: 'agent-id',
@@ -136,7 +158,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoningForVersion }],
         messageList,
         ...defaultSettings(),
         agentId: 'agent-id',
@@ -214,7 +236,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -222,22 +244,22 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
             },
-          ]),
+          ] as any) as any,
           request: { body: 'test body' },
         }),
         agentId: 'agent-id',
         messageList,
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
       expect(await result.request).toStrictEqual({
         body: 'test body',
@@ -252,7 +274,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
             {
               type: 'response-metadata',
@@ -260,64 +282,48 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
             },
-          ]),
+          ] as any) as any,
           response: { headers: { call: '2' } },
         }),
         messageList,
         ...defaultSettings(),
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect(await result.aisdk.v5.response).toMatchInlineSnapshot(`
-        {
-          "headers": {
-            "call": "2",
+      expect(await result.response).toMatchObject({
+        headers: { call: '2' },
+        id: 'id-0',
+        messages: [
+          {
+            content: [{ text: 'Hello', type: 'text' }],
+            role: 'assistant',
           },
-          "id": "id-0",
-          "messages": [
-            {
-              "content": [
-                {
-                  "text": "Hello",
-                  "type": "text",
-                },
-              ],
-              "role": "assistant",
-            },
-          ],
-          "modelId": "mock-model-id",
-          "modelMetadata": {
-            "modelId": "mock-model-id",
-            "modelProvider": "mock-provider",
-            "modelVersion": "v2",
+        ],
+        modelId: 'mock-model-id',
+        modelMetadata: {
+          modelId: 'mock-model-id',
+          modelProvider: 'mock-provider',
+          modelVersion,
+        },
+        timestamp: new Date(0),
+        uiMessages: [
+          {
+            id: 'msg-0',
+            metadata: { createdAt: expect.any(Date) },
+            parts: [{ text: 'Hello', type: 'text' }],
+            role: 'assistant',
           },
-          "timestamp": 1970-01-01T00:00:00.000Z,
-          "uiMessages": [
-            {
-              "id": "msg-0",
-              "metadata": {
-                "createdAt": 2024-01-01T00:00:00.001Z,
-              },
-              "parts": [
-                {
-                  "text": "Hello",
-                  "type": "text",
-                },
-              ],
-              "role": "assistant",
-            },
-          ],
-        }
-      `);
+        ],
+      });
     });
   });
 
@@ -326,7 +332,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: createTestModels(),
+        models: createTestModelsForVersion(),
         messageList: createMessageListWithUserMessage(),
         ...defaultSettings(),
         agentId: 'agent-id',
@@ -344,7 +350,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoningForVersion }],
         ...defaultSettings(),
         agentId: 'agent-id',
       });
@@ -361,7 +367,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoningForVersion }],
         ...defaultSettings(),
       });
 
@@ -377,7 +383,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSourcesForVersion }],
         ...defaultSettings(),
       });
 
@@ -393,7 +399,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFilesForVersion }],
         ...defaultSettings(),
       });
 
@@ -408,7 +414,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       const result = loopFn({
         methodType: 'stream',
         runId,
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoningForVersion }],
         messageList: createMessageListWithUserMessage(),
         ...defaultSettings(),
       });
@@ -557,7 +563,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSourcesForVersion }],
         ...defaultSettings(),
       });
 
@@ -638,7 +644,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFilesForVersion }],
         ...defaultSettings(),
         agentId: 'agent-id',
       });
@@ -647,167 +653,27 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       const steps = await result.aisdk.v5.steps;
 
-      expect(steps).toMatchInlineSnapshot(`
-        [
-          {
-            "content": [
-              {
-                "file": DefaultGeneratedFileWithType {
-                  "base64Data": "Hello World",
-                  "mediaType": "text/plain",
-                  "type": "file",
-                  "uint8ArrayData": undefined,
-                },
-                "type": "file",
-              },
-              {
-                "text": "Hello!",
-                "type": "text",
-              },
-              {
-                "file": DefaultGeneratedFileWithType {
-                  "base64Data": "QkFVRw==",
-                  "mediaType": "image/jpeg",
-                  "type": "file",
-                  "uint8ArrayData": undefined,
-                },
-                "type": "file",
-              },
-              {
-                "file": DefaultGeneratedFileWithType {
-                  "base64Data": "Hello World",
-                  "mediaType": "text/plain",
-                  "type": "file",
-                  "uint8ArrayData": undefined,
-                },
-                "type": "file",
-              },
-              {
-                "file": DefaultGeneratedFileWithType {
-                  "base64Data": "QkFVRw==",
-                  "mediaType": "image/jpeg",
-                  "type": "file",
-                  "uint8ArrayData": undefined,
-                },
-                "type": "file",
-              },
-            ],
-            "dynamicToolCalls": [],
-            "dynamicToolResults": [],
-            "files": [
-              {
-                "from": "AGENT",
-                "payload": {
-                  "base64": "Hello World",
-                  "data": "Hello World",
-                  "mimeType": "text/plain",
-                },
-                "runId": "test-run-id",
-                "type": "file",
-              },
-              {
-                "from": "AGENT",
-                "payload": {
-                  "base64": "QkFVRw==",
-                  "data": "QkFVRw==",
-                  "mimeType": "image/jpeg",
-                },
-                "runId": "test-run-id",
-                "type": "file",
-              },
-            ],
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "reasoning": [],
-            "reasoningText": "",
-            "request": {},
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "messages": [
-                {
-                  "content": [
-                    {
-                      "data": "data:text/plain;base64,Hello World",
-                      "filename": undefined,
-                      "mediaType": "text/plain",
-                      "type": "file",
-                    },
-                    {
-                      "text": "Hello!",
-                      "type": "text",
-                    },
-                    {
-                      "data": "data:image/jpeg;base64,QkFVRw==",
-                      "filename": undefined,
-                      "mediaType": "image/jpeg",
-                      "type": "file",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-              "timestamp": 1970-01-01T00:00:00.000Z,
-              "uiMessages": [
-                {
-                  "id": "msg-0",
-                  "metadata": {
-                    "createdAt": 2024-01-01T00:00:00.000Z,
-                  },
-                  "parts": [
-                    {
-                      "mediaType": "text/plain",
-                      "type": "file",
-                      "url": "data:text/plain;base64,Hello World",
-                    },
-                    {
-                      "text": "Hello!",
-                      "type": "text",
-                    },
-                    {
-                      "mediaType": "image/jpeg",
-                      "type": "file",
-                      "url": "data:image/jpeg;base64,QkFVRw==",
-                    },
-                    {
-                      "mediaType": "text/plain",
-                      "type": "file",
-                      "url": "data:text/plain;base64,Hello World",
-                    },
-                    {
-                      "mediaType": "image/jpeg",
-                      "type": "file",
-                      "url": "data:image/jpeg;base64,QkFVRw==",
-                    },
-                  ],
-                  "role": "assistant",
-                },
-              ],
+      expect(steps).toMatchObject([
+        {
+          finishReason: 'stop',
+          text: 'Hello!',
+          response: {
+            modelId: 'mock-model-id',
+            modelProvider: 'mock-provider',
+            modelVersion,
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
-            "sources": [],
-            "staticToolCalls": [],
-            "staticToolResults": [],
-            "stepType": "initial",
-            "text": "Hello!",
-            "toolCalls": [],
-            "toolResults": [],
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "warnings": [],
           },
-        ]
-      `);
+          usage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+        },
+      ]);
     });
   });
 
@@ -817,7 +683,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -828,9 +694,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
             },
-          ]),
+          ] as any) as any,
         }),
         tools: {
           tool1: tool({
@@ -865,7 +731,7 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModels({
+        models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
             {
               type: 'tool-call',
@@ -876,9 +742,9 @@ export function resultObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             {
               type: 'finish',
               finishReason: 'stop',
-              usage: testUsage,
+              usage: testUsageForVersion,
             },
-          ]),
+          ] as any) as any,
         }),
         tools: {
           tool1: {

@@ -1,16 +1,26 @@
-import { MastraStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import type { MastraStorage, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { randomUUID } from 'node:crypto';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { checkWorkflowSnapshot, createSampleWorkflowSnapshot } from './data';
 
 export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
+  let workflowsStorage: WorkflowsStorage;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('workflows');
+    if (!store) {
+      throw new Error('Workflows storage not found');
+    }
+    workflowsStorage = store;
+  });
+
   describe('listWorkflowRuns', () => {
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      await workflowsStorage.dangerouslyClearAll();
     });
     it('returns empty array when no workflows exist', async () => {
-      const { runs, total } = await storage.listWorkflowRuns();
+      const { runs, total } = await workflowsStorage.listWorkflowRuns();
       expect(runs).toEqual([]);
       expect(total).toBe(0);
     });
@@ -22,11 +32,19 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
 
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
 
-      const { runs, total } = await storage.listWorkflowRuns();
+      const { runs, total } = await workflowsStorage.listWorkflowRuns();
 
       const wfRun2 = runs.find(r => r.workflowName === workflowName2);
       const wfRun1 = runs.find(r => r.workflowName === workflowName1);
@@ -49,11 +67,19 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('completed');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
 
-      const { runs, total } = await storage.listWorkflowRuns({ workflowName: workflowName1 });
+      const { runs, total } = await workflowsStorage.listWorkflowRuns({ workflowName: workflowName1 });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -68,11 +94,19 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
       const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
 
-      const { runs, total } = await storage.listWorkflowRuns({ status: 'success' });
+      const { runs, total } = await workflowsStorage.listWorkflowRuns({ status: 'success' });
       expect(runs).toHaveLength(1);
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
@@ -92,38 +126,29 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
       const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
 
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName1,
-          run_id: runId1,
-          snapshot: workflow1,
-          createdAt: twoDaysAgo,
-          updatedAt: twoDaysAgo,
-        },
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+        createdAt: twoDaysAgo,
+        updatedAt: twoDaysAgo,
       });
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName2,
-          run_id: runId2,
-          snapshot: workflow2,
-          createdAt: yesterday,
-          updatedAt: yesterday,
-        },
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+        createdAt: yesterday,
+        updatedAt: yesterday,
       });
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName3,
-          run_id: runId3,
-          snapshot: workflow3,
-          createdAt: now,
-          updatedAt: now,
-        },
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName3,
+        runId: runId3,
+        snapshot: workflow3,
+        createdAt: now,
+        updatedAt: now,
       });
 
-      const { runs } = await storage.listWorkflowRuns({
+      const { runs } = await workflowsStorage.listWorkflowRuns({
         fromDate: yesterday,
         toDate: now,
       });
@@ -148,26 +173,38 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('running');
       const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('waiting');
 
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
-      await storage.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName: workflowName3,
+        runId: runId3,
+        snapshot: workflow3,
+      });
 
       // Get first page
-      const page1 = await storage.listWorkflowRuns({ perPage: 2, page: 0 });
+      const page1 = await workflowsStorage.listWorkflowRuns({ perPage: 2, page: 0 });
 
       expect(page1.runs).toHaveLength(2);
       expect(page1.total).toBe(3); // Total count of all records
 
       // Get second page
-      const page2 = await storage.listWorkflowRuns({ perPage: 2, page: 1 });
+      const page2 = await workflowsStorage.listWorkflowRuns({ perPage: 2, page: 1 });
       expect(page2.runs).toHaveLength(1);
       expect(page2.total).toBe(3);
     });
   });
 
-  describe('getWorkflowRunById', () => {
+  describe('getWorkflowRunById and deleteWorkflowRunById', () => {
     const workflowName = 'workflow-id-test';
     let runId: string;
     let stepId: string;
@@ -177,7 +214,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       const sample = createSampleWorkflowSnapshot('success');
       runId = sample.runId;
       stepId = sample.stepId;
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: sample.snapshot,
@@ -185,7 +222,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should retrieve a workflow run by ID', async () => {
-      const found = await storage.getWorkflowRunById({
+      const found = await workflowsStorage.getWorkflowRunById({
         runId,
         workflowName,
       });
@@ -194,8 +231,28 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
     });
 
+    it('should delete a workflow run by ID', async () => {
+      const found = await workflowsStorage.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
+
+      await workflowsStorage.deleteWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      const deleted = await workflowsStorage.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      expect(deleted).toBeNull();
+    });
+
     it('should return null for non-existent workflow run ID', async () => {
-      const notFound = await storage.getWorkflowRunById({
+      const notFound = await workflowsStorage.getWorkflowRunById({
         runId: 'non-existent-id',
         workflowName,
       });
@@ -214,35 +271,25 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       for (const status of ['success', 'failed']) {
         const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context'][string]['status']);
         runIds.push(sample.runId);
-        await storage.insert({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          record: {
-            workflow_name: workflowName,
-            run_id: sample.runId,
-            resourceId,
-            snapshot: sample.snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          },
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId: sample.runId,
+          resourceId,
+          snapshot: sample.snapshot,
         });
       }
       // Insert a run with a different resourceId
       const other = createSampleWorkflowSnapshot('waiting');
-      await storage.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          workflow_name: workflowName,
-          run_id: other.runId,
-          resourceId: 'resource-other',
-          snapshot: other.snapshot,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId: other.runId,
+        resourceId: 'resource-other',
+        snapshot: other.snapshot,
       });
     });
 
     it('should retrieve all workflow runs by resourceId', async () => {
-      const { runs } = await storage.listWorkflowRuns({
+      const { runs } = await workflowsStorage.listWorkflowRuns({
         resourceId,
         workflowName,
       });
@@ -255,7 +302,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return an empty array if no workflow runs match resourceId', async () => {
-      const { runs } = await storage.listWorkflowRuns({
+      const { runs } = await workflowsStorage.listWorkflowRuns({
         resourceId: 'non-existent-resource',
         workflowName,
       });
@@ -281,13 +328,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       waitingPaths: {},
       timestamp: Date.now(),
     };
-    await storage.persistWorkflowSnapshot({
+    await workflowsStorage.persistWorkflowSnapshot({
       workflowName,
       runId,
       snapshot,
     });
     // Fetch the row directly from the database
-    const run = await storage.getWorkflowRunById({ workflowName, runId });
+    const run = await workflowsStorage.getWorkflowRunById({ workflowName, runId });
     expect(run).toBeTruthy();
     // Check that these are valid Date objects
     expect(run?.createdAt instanceof Date).toBe(true);
@@ -313,13 +360,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       waitingPaths: {},
       timestamp: Date.now(),
     };
-    await storage.persistWorkflowSnapshot({
+    await workflowsStorage.persistWorkflowSnapshot({
       workflowName,
       runId,
       snapshot,
     });
 
-    const { runs } = await storage.listWorkflowRuns({ workflowName });
+    const { runs } = await workflowsStorage.listWorkflowRuns({ workflowName });
     expect(runs.length).toBeGreaterThan(0);
     const run = runs.find(r => r.runId === runId);
     expect(run).toBeTruthy();
@@ -342,13 +389,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         },
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot,
       });
 
-      const loadedSnapshot = await storage.loadWorkflowSnapshot({
+      const loadedSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
@@ -357,7 +404,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
     });
 
     it('should return null for non-existent workflow snapshot', async () => {
-      const result = await storage.loadWorkflowSnapshot({
+      const result = await workflowsStorage.loadWorkflowSnapshot({
         workflowName: 'non-existent',
         runId: 'non-existent',
       });
@@ -377,7 +424,7 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         },
       };
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: initialSnapshot as any,
@@ -394,13 +441,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         },
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: updatedSnapshot,
       });
 
-      const loadedSnapshot = await storage.loadWorkflowSnapshot({
+      const loadedSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
@@ -455,13 +502,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         timestamp: Date.now(),
       };
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot: complexSnapshot as unknown as WorkflowRunState,
       });
 
-      const loadedSnapshot = await storage.loadWorkflowSnapshot({
+      const loadedSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
@@ -478,14 +525,14 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         context: {},
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         resourceId,
         snapshot,
       });
 
-      const run = await storage.getWorkflowRunById({
+      const run = await workflowsStorage.getWorkflowRunById({
         runId,
         workflowName,
       });
@@ -506,13 +553,13 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         context: {},
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot,
       });
 
-      const updatedSnapshot = await storage.updateWorkflowResults({
+      const updatedSnapshot = await workflowsStorage.updateWorkflowResults({
         workflowName,
         runId,
         stepId: 'step-1',
@@ -538,36 +585,35 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         },
       });
 
-      await Promise.all([
-        storage.updateWorkflowResults({
-          workflowName,
-          runId,
-          stepId: 'step-1',
-          result: {
-            status: 'success',
-            output: { data: 'test!' },
-            payload: { data: 'test' },
-            startedAt: Date.now(),
-            endedAt: Date.now(),
-          },
-          requestContext: { test: 'test' },
-        }),
-        storage.updateWorkflowResults({
-          workflowName,
-          runId,
-          stepId: 'step-2',
-          result: {
-            status: 'success',
-            output: { data: 'test2' },
-            payload: { data: 'test' },
-            startedAt: Date.now(),
-            endedAt: Date.now(),
-          },
-          requestContext: { test2: 'test' },
-        }),
-      ]);
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: {
+          status: 'success',
+          output: { data: 'test!' },
+          payload: { data: 'test' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        requestContext: { test: 'test' },
+      });
 
-      const finalSnapshot = await storage.loadWorkflowSnapshot({
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-2',
+        result: {
+          status: 'success',
+          output: { data: 'test2' },
+          payload: { data: 'test' },
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        },
+        requestContext: { test2: 'test' },
+      });
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
         runId,
       });
@@ -590,7 +636,8 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
       });
     });
 
-    // implement on other stores
+    // TODO: This test requires atomic transactions for concurrent updates.
+    // Stores without transaction support (e.g., Upstash) will fail this test.
     it.todo('should update workflow state in snapshot', async () => {
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
@@ -599,40 +646,39 @@ export function createWorkflowsTests({ storage }: { storage: MastraStorage }) {
         context: {},
       } as any;
 
-      await storage.persistWorkflowSnapshot({
+      await workflowsStorage.persistWorkflowSnapshot({
         workflowName,
         runId,
         snapshot,
       });
 
-      await Promise.all([
-        storage.updateWorkflowState({
-          workflowName,
-          runId,
-          opts: {
-            status: 'success',
-            waitingPaths: {
-              test: [0],
-            },
+      await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: {
+          status: 'success',
+          waitingPaths: {
+            test: [0],
           },
-        }),
-        storage.updateWorkflowState({
-          workflowName,
-          runId,
-          opts: {
-            status: 'success',
-            result: {
-              status: 'success',
-              output: { data: 'test2' },
-              payload: { data: 'test' },
-              startedAt: Date.now(),
-              endedAt: Date.now(),
-            },
-          },
-        }),
-      ]);
+        },
+      });
 
-      const finalSnapshot = await storage.loadWorkflowSnapshot({
+      await workflowsStorage.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: {
+          status: 'success',
+          result: {
+            status: 'success',
+            output: { data: 'test2' },
+            payload: { data: 'test' },
+            startedAt: Date.now(),
+            endedAt: Date.now(),
+          },
+        },
+      });
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({
         workflowName,
         runId,
       });

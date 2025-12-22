@@ -1,0 +1,46 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  height: 18px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 9px;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* New badge - Green */
+.badge--new {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: rgb(34, 197, 94);
+}
+
+[data-theme="dark"] .badge--new {
+  background-color: rgba(34, 197, 94, 0.2);
+  color: rgb(74, 222, 128);
+}
+
+/* Advanced badge - Blue */
+.badge--advanced {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: rgb(59, 130, 246);
+}
+
+[data-theme="dark"] .badge--advanced {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: rgb(96, 165, 250);
+}
+
+/* Beta badge - Orange */
+.badge--beta {
+  background-color: rgba(251, 146, 60, 0.1);
+  color: rgb(251, 146, 60);
+}
+
+[data-theme="dark"] .badge--beta {
+  background-color: rgba(251, 146, 60, 0.2);
+  color: rgb(254, 215, 170);
+}

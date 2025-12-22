@@ -143,6 +143,33 @@ The OtelBridge requires an active OpenTelemetry SDK to function. The bridge read
 
 See the [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
 
+## Tags Support
+
+The OtelBridge supports trace tagging for categorization and filtering. Tags are only applied to root spans and are included as the `mastra.tags` attribute on native OTEL spans.
+
+### Usage
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### How Tags Are Stored
+
+Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute:
+
+```json
+{
+  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+}
+```
+
+This format ensures compatibility with all OTEL-compatible backends and collectors.
+
 ## Related
 
 - [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel) - Setup guide with examples

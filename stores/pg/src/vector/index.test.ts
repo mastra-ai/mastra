@@ -641,6 +641,7 @@ describe('PgVector', () => {
           dimension: 3,
           count: 2,
           metric: 'cosine',
+          vectorType: 'vector',
         });
       });
 
@@ -2601,6 +2602,268 @@ describe('PgVector', () => {
       expect(['hnsw', 'ivfflat']).toContain(stats.type);
 
       await vectorDB.deleteIndex({ indexName });
+    });
+  });
+
+  // Tests for halfvec type support (Issue #10999)
+  // Note: halfvec requires pgvector >= 0.7.0
+  describe('PgVector halfvec Type Support', () => {
+    const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+    let halfvecVectorDB: PgVector;
+    let halfvecSupported = false;
+
+    beforeAll(async () => {
+      halfvecVectorDB = new PgVector({
+        connectionString,
+        id: 'pg-vector-halfvec-test',
+      });
+
+      // Check if halfvec is supported (pgvector >= 0.7.0)
+      const client = await halfvecVectorDB.pool.connect();
+      try {
+        const result = await client.query(`
+        SELECT extversion FROM pg_extension WHERE extname = 'vector'
+      `);
+        if (result.rows.length > 0) {
+          const version = result.rows[0].extversion;
+          const [major, minor] = version.split('.').map(Number);
+          // halfvec was introduced in pgvector 0.7.0
+          halfvecSupported = major > 0 || (major === 0 && minor >= 7);
+        }
+      } catch {
+        // If we can't check, assume not supported
+        halfvecSupported = false;
+      } finally {
+        client.release();
+      }
+    });
+
+    afterAll(async () => {
+      await halfvecVectorDB.disconnect();
+    });
+
+    describe('halfvec type for large dimensions', () => {
+      const testIndexName = 'test_halfvec_index';
+
+      afterEach(async () => {
+        try {
+          await halfvecVectorDB.deleteIndex({ indexName: testIndexName });
+        } catch {
+          // Ignore if doesn't exist
+        }
+      });
+
+      it('should create index with halfvec type for large dimensions (>2000)', async () => {
+        if (!halfvecSupported) {
+          console.log('Skipping test: halfvec requires pgvector >= 0.7.0');
+          return;
+        }
+
+        // pgvector recommends halfvec for dimensions > 2000
+        // halfvec uses 2 bytes per dimension vs 4 bytes for vector
+        const largeDimension = 3072; // Common for text-embedding-3-large
+
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: largeDimension,
+          metric: 'cosine',
+          vectorType: 'halfvec',
+        });
+
+        const stats = await halfvecVectorDB.describeIndex({ indexName: testIndexName });
+        expect(stats.dimension).toBe(largeDimension);
+        expect(stats.vectorType).toBe('halfvec');
+      });
+
+      it('should upsert and query vectors using halfvec type', async () => {
+        if (!halfvecSupported) {
+          console.log('Skipping test: halfvec requires pgvector >= 0.7.0');
+          return;
+        }
+
+        const largeDimension = 3072;
+
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: largeDimension,
+          metric: 'cosine',
+          vectorType: 'halfvec',
+        });
+
+        // Create a test vector with large dimension
+        const testVector = new Array(largeDimension).fill(0).map((_, i) => i / largeDimension);
+
+        const ids = await halfvecVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: [testVector],
+          metadata: [{ test: 'halfvec' }],
+        });
+
+        expect(ids).toHaveLength(1);
+
+        // Query the vector
+        const results = await halfvecVectorDB.query({
+          indexName: testIndexName,
+          queryVector: testVector,
+          topK: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0]?.metadata?.test).toBe('halfvec');
+        expect(results[0]?.score).toBeCloseTo(1, 3);
+      });
+
+      it('should support halfvec with HNSW index', async () => {
+        if (!halfvecSupported) {
+          console.log('Skipping test: halfvec requires pgvector >= 0.7.0');
+          return;
+        }
+
+        const largeDimension = 3072;
+
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: largeDimension,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'hnsw',
+            hnsw: { m: 16, efConstruction: 64 },
+          },
+          vectorType: 'halfvec',
+        });
+
+        const stats = await halfvecVectorDB.describeIndex({ indexName: testIndexName });
+        expect(stats.type).toBe('hnsw');
+        expect(stats.vectorType).toBe('halfvec');
+        expect(stats.dimension).toBe(largeDimension);
+      });
+
+      it('should support halfvec with IVFFlat index', async () => {
+        if (!halfvecSupported) {
+          console.log('Skipping test: halfvec requires pgvector >= 0.7.0');
+          return;
+        }
+
+        const largeDimension = 3072;
+
+        // First create index with some vectors (IVFFlat requires data for training)
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: largeDimension,
+          metric: 'cosine',
+          vectorType: 'halfvec',
+          buildIndex: false, // Don't build index yet
+        });
+
+        // Insert some test vectors for IVFFlat training
+        const testVectors = Array.from({ length: 100 }, (_, i) =>
+          Array.from({ length: largeDimension }, (_, j) => (i + j) / (largeDimension * 100)),
+        );
+
+        await halfvecVectorDB.upsert({
+          indexName: testIndexName,
+          vectors: testVectors,
+          metadata: testVectors.map((_, i) => ({ index: i })),
+        });
+
+        // Now build the IVFFlat index
+        await halfvecVectorDB.buildIndex({
+          indexName: testIndexName,
+          metric: 'cosine',
+          indexConfig: {
+            type: 'ivfflat',
+            ivf: { lists: 10 },
+          },
+        });
+
+        const stats = await halfvecVectorDB.describeIndex({ indexName: testIndexName });
+        expect(stats.type).toBe('ivfflat');
+        expect(stats.vectorType).toBe('halfvec');
+        expect(stats.dimension).toBe(largeDimension);
+      });
+
+      it('should default to vector type when vectorType is not specified', async () => {
+        const smallDimension = 384;
+
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: smallDimension,
+          metric: 'cosine',
+        });
+
+        // Verify the table was created with vector type (not halfvec)
+        const client = await halfvecVectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `
+          SELECT data_type, udt_name
+          FROM information_schema.columns 
+          WHERE table_name = $1 AND column_name = 'embedding'
+        `,
+            [testIndexName],
+          );
+
+          expect(result.rows[0]?.udt_name).toBe('vector');
+
+          // Also verify vectorType is returned as 'vector' from describeIndex
+          const stats = await halfvecVectorDB.describeIndex({ indexName: testIndexName });
+          expect(stats.vectorType).toBe('vector');
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should verify halfvec column type in database', async () => {
+        if (!halfvecSupported) {
+          console.log('Skipping test: halfvec requires pgvector >= 0.7.0');
+          return;
+        }
+
+        const largeDimension = 3072;
+
+        await halfvecVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: largeDimension,
+          metric: 'cosine',
+          vectorType: 'halfvec',
+        });
+
+        // Verify the table was created with halfvec type
+        const client = await halfvecVectorDB.pool.connect();
+        try {
+          const result = await client.query(
+            `
+          SELECT data_type, udt_name
+          FROM information_schema.columns 
+          WHERE table_name = $1 AND column_name = 'embedding'
+        `,
+            [testIndexName],
+          );
+
+          expect(result.rows[0]?.udt_name).toBe('halfvec');
+        } finally {
+          client.release();
+        }
+      });
+
+      it('should throw helpful error when halfvec requested but not supported', async () => {
+        if (halfvecSupported) {
+          // If halfvec is supported, we can't test the error case
+          // Instead, verify that createIndex works (already covered by other tests)
+          console.log('Skipping test: halfvec is supported in this environment');
+          return;
+        }
+
+        // When halfvec is not supported, createIndex should throw a helpful error
+        await expect(
+          halfvecVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 3072,
+            metric: 'cosine',
+            vectorType: 'halfvec',
+          }),
+        ).rejects.toThrow(/halfvec type requires pgvector >= 0\.7\.0/);
+      });
     });
   });
 

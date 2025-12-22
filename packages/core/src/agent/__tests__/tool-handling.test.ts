@@ -1,5 +1,5 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import z from 'zod';
 import { RequestContext } from '../../request-context';
@@ -57,9 +57,9 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -138,9 +138,9 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -213,9 +213,9 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -288,9 +288,9 @@ function toolhandlingTests(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'ok' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'ok' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -322,6 +322,46 @@ function toolhandlingTests(version: 'v1' | 'v2') {
   });
 
   describe('agents as tools', () => {
+    it('should pass requestContext to sub-agent getModel when determining model version', async () => {
+      let receivedRequestContext: RequestContext | undefined;
+
+      // Create a sub-agent with a function-based model that captures the requestContext
+      const subAgent = new Agent({
+        id: 'sub-agent',
+        name: 'sub-agent',
+        instructions: 'You are a sub-agent.',
+        model: ({ requestContext }) => {
+          receivedRequestContext = requestContext;
+          return dummyModel;
+        },
+      });
+
+      // Create an orchestrator agent with the sub-agent
+      const orchestratorAgent = new Agent({
+        id: 'orchestrator-agent',
+        name: 'orchestrator-agent',
+        instructions: 'You can delegate to sub-agents.',
+        model: openaiModel,
+        agents: {
+          subAgent,
+        },
+      });
+
+      // Create a requestContext with a specific value to track
+      const testRequestContext = new RequestContext();
+      testRequestContext.set('test-key', 'test-value');
+
+      // Call convertTools which internally calls listAgentTools -> agent.getModel()
+      await orchestratorAgent['convertTools']({
+        requestContext: testRequestContext,
+        methodType: 'generate',
+      });
+
+      // Verify that the sub-agent's model function received the correct requestContext
+      expect(receivedRequestContext).toBeDefined();
+      expect(receivedRequestContext?.get('test-key')).toBe('test-value');
+    });
+
     it('should expose sub-agents as tools when using generate/stream', async () => {
       // Create a research agent that will be used as a tool
       const researchAgent = new Agent({

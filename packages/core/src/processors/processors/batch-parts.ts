@@ -130,7 +130,7 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       // Create a new combined text part
       const combinedChunk: ChunkType = {
         type: 'text-delta',
-        payload: { text: combinedText, id: '1' },
+        payload: { text: combinedText, id: 'text-1' },
         runId: '1',
         from: ChunkFrom.AGENT,
       };

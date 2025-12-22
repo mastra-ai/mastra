@@ -16,12 +16,14 @@ import { MastraUIMessage } from '@mastra/react';
 import { LoadingBadge } from './loading-badge';
 import { useWorkflow } from '@/hooks';
 import { ToolApprovalButtons, ToolApprovalButtonsProps } from './tool-approval-buttons';
+import { SyntaxHighlighter } from '@/components/syntax-highlighter';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
   result?: any;
   isStreaming?: boolean;
   metadata?: MastraUIMessage['metadata'];
+  suspendPayload?: any;
 }
 
 export const WorkflowBadge = ({
@@ -31,19 +33,27 @@ export const WorkflowBadge = ({
   metadata,
   toolCallId,
   toolApprovalMetadata,
+  suspendPayload,
 }: WorkflowBadgeProps) => {
   const { runId, status } = result || {};
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runs, isLoading: isRunsLoading } = useWorkflowRuns(workflowId, {
     enabled: Boolean(runId) && !isStreaming,
   });
-  const run = runs?.runs.find(run => run.runId === runId);
+  const run = runs?.find(run => run.runId === runId);
   const isLoading = isRunsLoading || !run;
 
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
   const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
   const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+
+  let suspendPayloadSlot =
+    typeof suspendPayload === 'string' ? (
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+    ) : (
+      <SyntaxHighlighter data={suspendPayload} data-testid="tool-suspend-payload" />
+    );
 
   if (isWorkflowLoading || !workflow) return <LoadingBadge />;
 
@@ -62,6 +72,13 @@ export const WorkflowBadge = ({
         )
       }
     >
+      {suspendPayloadSlot !== undefined && suspendPayload && (
+        <div>
+          <p className="font-medium pb-2">Tool suspend payload</p>
+          {suspendPayloadSlot}
+        </div>
+      )}
+
       {!isStreaming && !isLoading && (
         <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId} withoutTimeTravel>
           <WorkflowBadgeExtended workflowId={workflowId} workflow={workflow} runId={runId} />

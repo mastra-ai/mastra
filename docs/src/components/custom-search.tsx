@@ -384,8 +384,8 @@ export const CustomSearch: FC<SearchProps> = ({
                         className={cn(
                           "flex flex-col gap-1 p-2 rounded-md cursor-pointer",
                           isSelected
-                            ? "dark:bg-surface-5 bg-(--mastra-surface-2)"
-                            : "bg-(--ifm-background-color) dark:bg-surface-4",
+                            ? "dark:bg-(--mastra-surface-5) bg-(--mastra-surface-2)"
+                            : "bg-(--ifm-background-color) dark:bg-transparent",
                         )}
                         onClick={() => handleSelect(subResult)}
                         onMouseEnter={() => setSelectedIndex(virtualItem.index)}
@@ -396,7 +396,7 @@ export const CustomSearch: FC<SearchProps> = ({
                         <div className="flex gap-2 items-center">
                           <IconComponent className="w-4 h-4 text-(--mastra-icons-3) shrink-0" />
                           <span
-                            className="text-sm font-medium truncate dark:text-white text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-3)! [&_mark]:bg-transparent"
+                            className="text-sm font-medium truncate dark:text-white text-(--mastra-text-tertiary) [&_mark]:text-(--mastra-green-accent-3)! dark:[&_mark]:text-(--mastra-green-accent-2)! [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.title,
                             }}

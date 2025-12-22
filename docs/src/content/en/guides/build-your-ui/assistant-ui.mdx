@@ -44,7 +44,7 @@ project-root
 
 Bootstrap your Mastra server:
 
-```bash copy
+```bash
 npx create-mastra@beta
 ```
 
@@ -52,7 +52,7 @@ This command will launch an interactive wizard to help you scaffold a new Mastra
 
 Navigate to your newly created Mastra server directory:
 
-```bash copy
+```bash
 cd mastra-server # Replace with the actual directory name you provided
 ```
 
@@ -84,13 +84,13 @@ Ensure that you have set the appropriate environment variables for your LLM prov
 
 Create a chat route for the Assistant UI frontend by using the `chatRoute()` helper from `@mastra/ai-sdk`. Add it to your Mastra project:
 
-```bash copy
+```bash
 npm install @mastra/ai-sdk@beta
 ```
 
 In your `src/mastra/index.ts` file, register the chat route:
 
-```typescript copy title="src/mastra/index.ts" {2,7-13}
+```typescript title="src/mastra/index.ts" {2,7-13}
 import { Mastra } from '@mastra/core/mastra';
 import { chatRoute } from '@mastra/ai-sdk';
 // Rest of the imports...
@@ -115,7 +115,7 @@ This will make all agents available in AI SDK-compatible formats, including the 
 
 Run the Mastra server using the following command:
 
-```bash copy
+```bash
 npm run dev
 ```
 
@@ -127,13 +127,13 @@ By default, the Mastra server will run on `http://localhost:4111`. Keep this ser
 
 Go up one directory to your project root.
 
-```bash copy
+```bash
 cd ..
 ```
 
 Create a new `assistant-ui` project with the following command.
 
-```bash copy
+```bash
 npx assistant-ui@latest create
 ```
 
@@ -175,7 +175,7 @@ Now, the Assistant UI frontend will send chat requests directly to your running 
 
 You're ready to connect the pieces! Make sure both the Mastra server and the Assistant UI frontend are running. Start the Next.js development server:
 
-```bash copy
+```bash
 npm run dev
 ```
 

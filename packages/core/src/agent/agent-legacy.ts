@@ -23,8 +23,8 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, TracingContext, TracingOptions, TracingProperties } from '../observability';
 import { SpanType, getOrCreateSpan } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors/index';
-import { RequestContext } from '../request-context';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
@@ -103,11 +103,15 @@ export interface AgentLegacyCapabilities {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    inputProcessorOverrides?: InputProcessor[];
+    inputProcessorOverrides?: InputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }>;
   /** Get most recent user message */
   getMostRecentUserMessage(
@@ -141,17 +145,21 @@ export interface AgentLegacyCapabilities {
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
-  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessor[]>;
+  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   /** Run output processors */
   __runOutputProcessors(args: {
     requestContext: RequestContext;
     tracingContext: TracingContext;
     messageList: MessageList;
-    outputProcessorOverrides?: OutputProcessor[];
+    outputProcessorOverrides?: OutputProcessorOrWorkflow[];
   }): Promise<{
     messageList: MessageList;
-    tripwireTriggered: boolean;
-    tripwireReason: string;
+    tripwire?: {
+      reason: string;
+      retry?: boolean;
+      metadata?: unknown;
+      processorId?: string;
+    };
   }>;
   /** Run scorers */
   runScorers(args: {
@@ -223,6 +231,7 @@ export class AgentLegacyHandler {
           },
           attributes: {
             agentId: this.capabilities.id,
+            agentName: this.capabilities.name,
             instructions: this.capabilities.convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
@@ -291,22 +300,19 @@ export class AgentLegacyHandler {
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
-          const { tripwireTriggered, tripwireReason } = await this.capabilities.__runInputProcessors({
+          const { tripwire } = await this.capabilities.__runInputProcessors({
             requestContext,
             tracingContext: innerTracingContext,
             messageList,
           });
           return {
-            messageObjects: tripwireTriggered ? [] : messageList.get.all.prompt(),
+            messageObjects: tripwire ? [] : messageList.get.all.prompt(),
             convertedTools,
             threadExists: false,
             thread: undefined,
             messageList,
             agentSpan,
-            ...(tripwireTriggered && {
-              tripwire: true,
-              tripwireReason,
-            }),
+            tripwire,
           };
         }
         if (!threadId || !resourceId) {
@@ -373,11 +379,7 @@ export class AgentLegacyHandler {
         // Historical messages, semantic recall, and working memory will be added by input processors
         messageList.add(messages, 'user');
 
-        const {
-          messageList: processedMessageList,
-          tripwireTriggered,
-          tripwireReason,
-        } = await this.capabilities.__runInputProcessors({
+        const { messageList: processedMessageList, tripwire } = await this.capabilities.__runInputProcessors({
           requestContext,
           tracingContext: innerTracingContext,
           messageList,
@@ -395,10 +397,7 @@ export class AgentLegacyHandler {
           // add old processed messages + new input messages
           messageObjects: processedList,
           agentSpan,
-          ...(tripwireTriggered && {
-            tripwire: true,
-            tripwireReason,
-          }),
+          tripwire,
           threadExists: !!existingThread,
         };
       },
@@ -685,8 +684,16 @@ export class AgentLegacyHandler {
       ...args
     } = options;
 
-    const threadFromArgs = resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
-    const resourceId = (args.memory as any)?.resource || resourceIdFromArgs;
+    // Reserved keys from requestContext take precedence for security.
+    // This allows middleware to securely set resourceId/threadId based on authenticated user,
+    // preventing attackers from hijacking another user's memory by passing different values in the body.
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+
+    const threadFromArgs = threadIdFromContext
+      ? { id: threadIdFromContext }
+      : resolveThreadIdFromArgs({ threadId: args.threadId, memory: args.memory });
+    const resourceId = resourceIdFromContext || (args.memory as any)?.resource || resourceIdFromArgs;
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
     if (resourceId && threadFromArgs && !this.capabilities.hasOwnMemory()) {
@@ -765,10 +772,7 @@ export class AgentLegacyHandler {
 
             return onStepFinish?.({ ...props, runId });
           },
-          ...(beforeResult.tripwire && {
-            tripwire: beforeResult.tripwire,
-            tripwireReason: beforeResult.tripwireReason,
-          }),
+          tripwire: beforeResult.tripwire,
           ...args,
           agentSpan,
         } as any;
@@ -886,8 +890,7 @@ export class AgentLegacyHandler {
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
+        tripwire: beforeResult.tripwire,
         traceId,
       };
 
@@ -926,7 +929,7 @@ export class AgentLegacyHandler {
       });
 
       // Handle tripwire for output processors
-      if (outputProcessorResult.tripwireTriggered) {
+      if (outputProcessorResult.tripwire) {
         const tripwireResult = {
           text: '',
           object: undefined,
@@ -948,8 +951,7 @@ export class AgentLegacyHandler {
           experimental_output: undefined,
           steps: undefined,
           experimental_providerMetadata: undefined,
-          tripwire: true,
-          tripwireReason: outputProcessorResult.tripwireReason,
+          tripwire: outputProcessorResult.tripwire,
           traceId,
         };
 
@@ -1042,7 +1044,7 @@ export class AgentLegacyHandler {
     });
 
     // Handle tripwire for output processors
-    if (outputProcessorResult.tripwireTriggered) {
+    if (outputProcessorResult.tripwire) {
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -1064,8 +1066,7 @@ export class AgentLegacyHandler {
         experimental_output: undefined,
         steps: undefined,
         experimental_providerMetadata: undefined,
-        tripwire: true,
-        tripwireReason: outputProcessorResult.tripwireReason,
+        tripwire: outputProcessorResult.tripwire,
         traceId,
       };
 
@@ -1172,8 +1173,7 @@ export class AgentLegacyHandler {
         text: Promise.resolve(''),
         usage: Promise.resolve({ totalTokens: 0, promptTokens: 0, completionTokens: 0 }),
         finishReason: Promise.resolve('other'),
-        tripwire: true,
-        tripwireReason: beforeResult.tripwireReason,
+        tripwire: beforeResult.tripwire,
         response: {
           id: randomUUID(),
           timestamp: new Date(),

@@ -1,0 +1,241 @@
+---
+title: "Reference: Hono Adapter | Server"
+description: "API reference for the @mastra/hono server adapter."
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Hono Adapter
+
+The `@mastra/hono` package provides a server adapter for running Mastra with [Hono](https://hono.dev).
+
+:::info
+
+For general adapter concepts (constructor options, initialization flow, etc.), see [Server Adapters](/docs/v1/server/server-adapters).
+
+:::
+
+## Installation
+
+<Steps>
+
+<StepItem>
+
+Install the Hono adapter and Hono framework:
+
+```bash
+npm install @mastra/hono@beta hono
+```
+
+</StepItem>
+
+<StepItem>
+
+Create your server file:
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+import { mastra } from './mastra';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+export default app;
+```
+
+</StepItem>
+
+</Steps>
+
+## Full example
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+import { mastra } from './mastra';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+const server = new MastraServer({
+  app,
+  mastra,
+  prefix: '/api/v2',
+  openapiPath: '/openapi.json',
+  bodyLimitOptions: {
+    maxSize: 10 * 1024 * 1024, // 10MB
+    onError: (err) => ({ error: 'Payload too large', maxSize: '10MB' }),
+  },
+  streamOptions: { redact: true },
+});
+
+await server.init();
+
+export default app;
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "app",
+      type: "Hono",
+      description: "Hono app instance",
+      isOptional: false,
+    },
+    {
+      name: "mastra",
+      type: "Mastra",
+      description: "Mastra instance",
+      isOptional: false,
+    },
+    {
+      name: "prefix",
+      type: "string",
+      description: "Route path prefix (e.g., `/api/v2`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "openapiPath",
+      type: "string",
+      description: "Path to serve OpenAPI spec (e.g., `/openapi.json`)",
+      isOptional: true,
+      defaultValue: "''",
+    },
+    {
+      name: "bodyLimitOptions",
+      type: "{ maxSize: number, onError: (err) => unknown }",
+      description: "Request body size limits",
+      isOptional: true,
+    },
+    {
+      name: "streamOptions",
+      type: "{ redact?: boolean }",
+      description: "Stream redaction config. When true, redacts sensitive data from streams.",
+      isOptional: true,
+      defaultValue: "{ redact: true }",
+    },
+    {
+      name: "customRouteAuthConfig",
+      type: "Map<string, boolean>",
+      description: "Per-route auth overrides. Keys are `METHOD:PATH` (e.g., `GET:/api/health`). Value `false` makes route public, `true` requires auth.",
+      isOptional: true,
+    },
+    {
+      name: "tools",
+      type: "Record<string, Tool>",
+      description: "Available tools for the server",
+      isOptional: true,
+    },
+    {
+      name: "taskStore",
+      type: "InMemoryTaskStore",
+      description: "Task store for A2A (Agent-to-Agent) operations",
+      isOptional: true,
+    },
+  ]}
+/>
+
+
+## Adding custom routes
+
+Add routes directly to the Hono app:
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const server = new MastraServer({ app, mastra });
+
+// Before init - runs before Mastra middleware
+app.get('/early-health', (c) => c.json({ status: 'ok' }));
+
+await server.init();
+
+// After init - has access to Mastra context
+app.get('/custom', (c) => {
+  const mastraInstance = c.get('mastra');
+  return c.json({ agents: Object.keys(mastraInstance.listAgents()) });
+});
+```
+
+:::tip
+
+Routes added before `init()` run without Mastra context. Add routes after `init()` to access the Mastra instance and request context.
+
+:::
+
+## Accessing context
+
+In Hono middleware and route handlers, access Mastra context via `c.get()`:
+
+```typescript
+app.get('/custom', async (c) => {
+  const mastra = c.get('mastra');
+  const requestContext = c.get('requestContext');
+  const abortSignal = c.get('abortSignal');
+
+  const agent = mastra.getAgent('myAgent');
+  return c.json({ agent: agent.name });
+});
+```
+
+Available context keys:
+
+| Key | Description |
+|-----|-------------|
+| `mastra` | Mastra instance |
+| `requestContext` | Request context map |
+| `abortSignal` | Request cancellation signal |
+| `tools` | Available tools |
+| `taskStore` | Task store for A2A operations |
+| `customRouteAuthConfig` | Per-route auth overrides |
+| `user` | Authenticated user (if auth configured) |
+
+## Adding middleware
+
+Add Hono middleware before or after `init()`:
+
+```typescript title="server.ts"
+import { Hono } from 'hono';
+import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+// Middleware before init
+app.use('*', async (c, next) => {
+  console.log(`${c.req.method} ${c.req.url}`);
+  await next();
+});
+
+const server = new MastraServer({ app, mastra });
+await server.init();
+
+// Middleware after init has access to Mastra context
+app.use('*', async (c, next) => {
+  const mastra = c.get('mastra');
+  await next();
+});
+```
+
+## Manual initialization
+
+For custom middleware ordering, call each method separately instead of `init()`. See [Server Adapters: Manual initialization](/docs/v1/server/server-adapters#manual-initialization) for details.
+
+## Examples
+
+- [Hono Adapter](https://github.com/mastra-ai/mastra/tree/main/examples/server-hono-adapter) - Basic Hono server setup
+
+## Related
+
+- [Server Adapters](/docs/v1/server/server-adapters) - Shared adapter concepts
+- [Express Adapter](/reference/v1/server/express-adapter) - Alternative adapter
+- [MastraServer Reference](/reference/v1/server/mastra-server) - Full API reference
+- [createRoute() Reference](/reference/v1/server/create-route) - Creating type-safe custom routes

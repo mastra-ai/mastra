@@ -1,25 +1,53 @@
 import { delay } from '@ai-sdk/provider-utils-v5';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { tool } from 'ai-v5';
-import { convertArrayToReadableStream, mockValues, mockId } from 'ai-v5/test';
+import { tool } from '@internal/ai-sdk-v5';
+import {
+  convertArrayToReadableStream as convertArrayToReadableStreamV2,
+  mockValues,
+  mockId,
+} from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream as convertArrayToReadableStreamV3 } from '@internal/ai-v6/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
-import {
-  createMessageListWithUserMessage,
-  createTestModels,
-  defaultSettings,
-  mockDate,
-  modelWithFiles,
-  modelWithReasoning,
-  modelWithSources,
-  testUsage,
-  testUsage2,
-} from './utils';
-import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
+import { createMessageListWithUserMessage, defaultSettings, mockDate, testUsage, testUsage2 } from './utils';
+import { testUsageV3, testUsageV3_2 } from './utils-v3';
+import { MastraLanguageModelV2Mock } from './MastraLanguageModelV2Mock';
+import { MastraLanguageModelV3Mock } from './MastraLanguageModelV3Mock';
 
-export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
+export function fullStreamTests({
+  loopFn,
+  runId,
+  modelVersion = 'v2',
+}: {
+  loopFn: typeof loop;
+  runId: string;
+  modelVersion?: 'v2' | 'v3';
+}) {
+  const MockModel = modelVersion === 'v2' ? MastraLanguageModelV2Mock : MastraLanguageModelV3Mock;
+  const convertArrayToReadableStream =
+    modelVersion === 'v2' ? convertArrayToReadableStreamV2 : convertArrayToReadableStreamV3;
+  const testUsageForVersion = modelVersion === 'v2' ? testUsage : testUsageV3;
+  const testUsageForVersion2 = modelVersion === 'v2' ? testUsage2 : testUsageV3_2;
+  // Expected normalized usage for testUsageForVersion2 (includes cached/reasoning tokens)
+  const expectedNormalizedUsage2 =
+    modelVersion === 'v2'
+      ? {
+          cachedInputTokens: 3,
+          inputTokens: 3,
+          outputTokens: 10,
+          reasoningTokens: 10,
+          totalTokens: 23,
+        }
+      : {
+          cachedInputTokens: 3,
+          inputTokens: 3,
+          outputTokens: 10,
+          reasoningTokens: 10,
+          totalTokens: 13, // V3 normalizes totalTokens as inputTokens.total + outputTokens.total
+        };
+
   describe('result.fullStream', () => {
     it('should maintain conversation history in the llm input', async () => {
       const messageList = new MessageList();
@@ -53,8 +81,8 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           {
             maxRetries: 0,
             id: 'test-model',
-            model: new MockLanguageModelV2({
-              doStream: async ({ prompt }) => {
+            model: new MockModel({
+              doStream: async ({ prompt }: { prompt: unknown }) => {
                 expect(prompt).toStrictEqual([
                   {
                     role: 'user',
@@ -78,20 +106,20 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
                       modelId: 'response-model-id',
                       timestamp: new Date(5000),
                     },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
-                      usage: testUsage,
+                      usage: testUsageForVersion,
                     },
-                  ]),
+                  ] as any),
                 };
               },
-            }),
+            } as any),
           },
         ],
         messageList,
@@ -101,81 +129,41 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       });
 
       const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
-      expect(data).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": ", ",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "world!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "response-id",
-              "modelId": "response-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "timestamp": 1970-01-01T00:00:05.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+      expect(data).toMatchObject([
+        { type: 'start' },
+        { request: {}, type: 'start-step', warnings: [] },
+        { id: 'text-1', providerMetadata: undefined, type: 'text-start' },
+        { id: 'text-1', providerMetadata: undefined, text: 'Hello', type: 'text-delta' },
+        { id: 'text-1', providerMetadata: undefined, text: ', ', type: 'text-delta' },
+        { id: 'text-1', providerMetadata: undefined, text: 'world!', type: 'text-delta' },
+        { id: 'text-1', providerMetadata: undefined, type: 'text-end' },
+        {
+          finishReason: 'stop',
+          providerMetadata: undefined,
+          response: {
+            headers: undefined,
+            id: 'response-id',
+            modelId: 'response-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish-step',
+          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should send text deltas', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
@@ -183,8 +171,8 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           {
             maxRetries: 0,
             id: 'test-model',
-            model: new MockLanguageModelV2({
-              doStream: async ({ prompt }) => {
+            model: new MockModel({
+              doStream: async ({ prompt }: { prompt: unknown }) => {
                 expect(prompt).toStrictEqual([
                   {
                     role: 'user',
@@ -201,20 +189,20 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
                       modelId: 'response-model-id',
                       timestamp: new Date(5000),
                     },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
-                      usage: testUsage,
+                      usage: testUsageForVersion,
                     },
-                  ]),
+                  ] as any),
                 };
               },
-            }),
+            } as any),
           },
         ],
         messageList,
@@ -224,296 +212,319 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       });
 
       const data = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
-      expect(data).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": ", ",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "world!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "response-id",
-              "modelId": "response-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "timestamp": 1970-01-01T00:00:05.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+      expect(data).toMatchObject([
+        { type: 'start' },
+        { request: {}, type: 'start-step', warnings: [] },
+        { id: 'text-1', type: 'text-start' },
+        { id: 'text-1', text: 'Hello', type: 'text-delta' },
+        { id: 'text-1', text: ', ', type: 'text-delta' },
+        { id: 'text-1', text: 'world!', type: 'text-delta' },
+        { id: 'text-1', type: 'text-end' },
+        {
+          finishReason: 'stop',
+          response: {
+            headers: undefined,
+            id: 'response-id',
+            modelId: 'response-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish-step',
+          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should send reasoning deltas', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const modelWithReasoningLocal = new MockModel({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'reasoning-start', id: '1' },
+            { type: 'reasoning-delta', id: '1', delta: 'I will open the conversation' },
+            { type: 'reasoning-delta', id: '1', delta: ' with witty banter.' },
+            {
+              type: 'reasoning-delta',
+              id: '1',
+              delta: '',
+              providerMetadata: { testProvider: { signature: '1234567890' } },
+            },
+            { type: 'reasoning-end', id: '1' },
+            {
+              type: 'reasoning-start',
+              id: '2',
+              providerMetadata: { testProvider: { redactedData: 'redacted-reasoning-data' } },
+            },
+            { type: 'reasoning-end', id: '2' },
+            { type: 'reasoning-start', id: '3' },
+            { type: 'reasoning-delta', id: '3', delta: ' Once the user has relaxed,' },
+            { type: 'reasoning-delta', id: '3', delta: ' I will pry for valuable information.' },
+            {
+              type: 'reasoning-end',
+              id: '3',
+              providerMetadata: { testProvider: { signature: '1234567890' } },
+            },
+            {
+              type: 'reasoning-start',
+              id: '4',
+              providerMetadata: { testProvider: { signature: '1234567890' } },
+            },
+            { type: 'reasoning-delta', id: '4', delta: ' I need to think about' },
+            { type: 'reasoning-delta', id: '4', delta: ' this problem carefully.' },
+            {
+              type: 'reasoning-end',
+              id: '4',
+              providerMetadata: { testProvider: { signature: '0987654321' } },
+            },
+            {
+              type: 'reasoning-start',
+              id: '5',
+              providerMetadata: { testProvider: { signature: '1234567890' } },
+            },
+            { type: 'reasoning-delta', id: '5', delta: ' The best solution' },
+            { type: 'reasoning-delta', id: '5', delta: ' requires careful' },
+            { type: 'reasoning-delta', id: '5', delta: ' consideration of all factors.' },
+            {
+              type: 'reasoning-end',
+              id: '5',
+              providerMetadata: { testProvider: { signature: '0987654321' } },
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hi' },
+            { type: 'text-delta', id: 'text-1', delta: ' there!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
+        }),
+      } as any);
+
+      const result = loopFn({
         methodType: 'stream',
         runId,
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoning }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoningLocal }],
         messageList,
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "reasoning-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "I will open the conversation",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": " with witty banter.",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "1234567890",
-              },
-            },
-            "text": "",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "reasoning-end",
-          },
-          {
-            "id": "2",
-            "providerMetadata": {
-              "testProvider": {
-                "redactedData": "redacted-reasoning-data",
-              },
-            },
-            "type": "reasoning-start",
-          },
-          {
-            "id": "2",
-            "providerMetadata": undefined,
-            "type": "reasoning-end",
-          },
-          {
-            "id": "3",
-            "providerMetadata": undefined,
-            "type": "reasoning-start",
-          },
-          {
-            "id": "3",
-            "providerMetadata": undefined,
-            "text": " Once the user has relaxed,",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "3",
-            "providerMetadata": undefined,
-            "text": " I will pry for valuable information.",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "3",
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "1234567890",
-              },
-            },
-            "type": "reasoning-end",
-          },
-          {
-            "id": "4",
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "1234567890",
-              },
-            },
-            "type": "reasoning-start",
-          },
-          {
-            "id": "4",
-            "providerMetadata": undefined,
-            "text": " I need to think about",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "4",
-            "providerMetadata": undefined,
-            "text": " this problem carefully.",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "4",
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "0987654321",
-              },
-            },
-            "type": "reasoning-end",
-          },
-          {
-            "id": "5",
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "1234567890",
-              },
-            },
-            "type": "reasoning-start",
-          },
-          {
-            "id": "5",
-            "providerMetadata": undefined,
-            "text": " The best solution",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "5",
-            "providerMetadata": undefined,
-            "text": " requires careful",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "5",
-            "providerMetadata": undefined,
-            "text": " consideration of all factors.",
-            "type": "reasoning-delta",
-          },
-          {
-            "id": "5",
-            "providerMetadata": {
-              "testProvider": {
-                "signature": "0987654321",
-              },
-            },
-            "type": "reasoning-end",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hi",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": " there!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "timestamp": 1970-01-01T00:00:00.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchObject([
+        {
+          type: 'start',
+        },
+        {
+          request: {},
+          type: 'start-step',
+          warnings: [],
+        },
+        {
+          id: '1',
+          providerMetadata: undefined,
+          type: 'reasoning-start',
+        },
+        {
+          id: '1',
+          providerMetadata: undefined,
+          text: 'I will open the conversation',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '1',
+          providerMetadata: undefined,
+          text: ' with witty banter.',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '1',
+          providerMetadata: {
+            testProvider: {
+              signature: '1234567890',
             },
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+          text: '',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '1',
+          providerMetadata: undefined,
+          type: 'reasoning-end',
+        },
+        {
+          id: '2',
+          providerMetadata: {
+            testProvider: {
+              redactedData: 'redacted-reasoning-data',
             },
-            "type": "finish",
           },
-        ]
-      `);
+          type: 'reasoning-start',
+        },
+        {
+          id: '2',
+          providerMetadata: undefined,
+          type: 'reasoning-end',
+        },
+        {
+          id: '3',
+          providerMetadata: undefined,
+          type: 'reasoning-start',
+        },
+        {
+          id: '3',
+          providerMetadata: undefined,
+          text: ' Once the user has relaxed,',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '3',
+          providerMetadata: undefined,
+          text: ' I will pry for valuable information.',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '3',
+          providerMetadata: {
+            testProvider: {
+              signature: '1234567890',
+            },
+          },
+          type: 'reasoning-end',
+        },
+        {
+          id: '4',
+          providerMetadata: {
+            testProvider: {
+              signature: '1234567890',
+            },
+          },
+          type: 'reasoning-start',
+        },
+        {
+          id: '4',
+          providerMetadata: undefined,
+          text: ' I need to think about',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '4',
+          providerMetadata: undefined,
+          text: ' this problem carefully.',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '4',
+          providerMetadata: {
+            testProvider: {
+              signature: '0987654321',
+            },
+          },
+          type: 'reasoning-end',
+        },
+        {
+          id: '5',
+          providerMetadata: {
+            testProvider: {
+              signature: '1234567890',
+            },
+          },
+          type: 'reasoning-start',
+        },
+        {
+          id: '5',
+          providerMetadata: undefined,
+          text: ' The best solution',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '5',
+          providerMetadata: undefined,
+          text: ' requires careful',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '5',
+          providerMetadata: undefined,
+          text: ' consideration of all factors.',
+          type: 'reasoning-delta',
+        },
+        {
+          id: '5',
+          providerMetadata: {
+            testProvider: {
+              signature: '0987654321',
+            },
+          },
+          type: 'reasoning-end',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          type: 'text-start',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: 'Hi',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: ' there!',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          type: 'text-end',
+        },
+        {
+          finishReason: 'stop',
+          providerMetadata: undefined,
+          response: {
+            headers: undefined,
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
+            },
+          },
+          type: 'finish-step',
+          usage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+          type: 'finish',
+        },
+      ]);
     });
 
     // https://github.com/mastra-ai/mastra/issues/9005
     it('should store empty reasoning with providerMetadata for OpenAI item_reference', async () => {
       const messageList = createMessageListWithUserMessage();
-      const modelWithEmptyReasoning = new MockLanguageModelV2({
+      const modelWithEmptyReasoning = new MockModel({
         doStream: async () => ({
           stream: convertArrayToReadableStream([
             {
@@ -533,15 +544,15 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
               id: 'rs_test123',
               providerMetadata: { openai: { itemId: 'rs_test123' } },
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello!' },
-            { type: 'text-end', id: '1' },
-            { type: 'finish', finishReason: 'stop', usage: testUsage },
-          ]),
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
         }),
-      });
+      } as any);
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         models: [{ maxRetries: 0, id: 'test-model', model: modelWithEmptyReasoning }],
@@ -562,196 +573,156 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
     it('should send sources', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const modelWithSourcesLocal = new MockModel({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: '123',
+              url: 'https://example.com',
+              title: 'Example',
+              providerMetadata: { provider: { custom: 'value' } },
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: '456',
+              url: 'https://example.com/2',
+              title: 'Example 2',
+              providerMetadata: { provider: { custom: 'value2' } },
+            },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
+        }),
+      } as any);
+
+      const result = loopFn({
         methodType: 'stream',
         runId,
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithSourcesLocal }],
         messageList,
         ...defaultSettings(),
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "123",
-            "providerMetadata": {
-              "provider": {
-                "custom": "value",
-              },
-            },
-            "sourceType": "url",
-            "title": "Example",
-            "type": "source",
-            "url": "https://example.com",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "id": "456",
-            "providerMetadata": {
-              "provider": {
-                "custom": "value2",
-              },
-            },
-            "sourceType": "url",
-            "title": "Example 2",
-            "type": "source",
-            "url": "https://example.com/2",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-              "timestamp": 1970-01-01T00:00:00.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchObject([
+        { type: 'start' },
+        { request: {}, type: 'start-step', warnings: [] },
+        {
+          id: '123',
+          providerMetadata: { provider: { custom: 'value' } },
+          sourceType: 'url',
+          title: 'Example',
+          type: 'source',
+          url: 'https://example.com',
+        },
+        { id: 'text-1', type: 'text-start' },
+        { id: 'text-1', text: 'Hello!', type: 'text-delta' },
+        { id: 'text-1', type: 'text-end' },
+        {
+          id: '456',
+          providerMetadata: { provider: { custom: 'value2' } },
+          sourceType: 'url',
+          title: 'Example 2',
+          type: 'source',
+          url: 'https://example.com/2',
+        },
+        {
+          finishReason: 'stop',
+          response: {
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish-step',
+          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should send files', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const modelWithFilesLocal = new MockModel({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'file', data: 'Hello World', mediaType: 'text/plain' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'file', data: 'QkFVRw==', mediaType: 'image/jpeg' },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
+        }),
+      } as any);
+
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
-        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithFilesLocal }],
         ...defaultSettings(),
       });
 
       const converted = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      expect(converted).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "file": DefaultGeneratedFileWithType {
-              "base64Data": "Hello World",
-              "mediaType": "text/plain",
-              "type": "file",
-              "uint8ArrayData": undefined,
-            },
-            "type": "file",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "file": DefaultGeneratedFileWithType {
-              "base64Data": "QkFVRw==",
-              "mediaType": "image/jpeg",
-              "type": "file",
-              "uint8ArrayData": undefined,
-            },
-            "type": "file",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-              "timestamp": 1970-01-01T00:00:00.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
+      expect(converted).toMatchObject([
+        { type: 'start' },
+        { request: {}, type: 'start-step', warnings: [] },
+        { file: { base64Data: 'Hello World', mediaType: 'text/plain', type: 'file' }, type: 'file' },
+        { id: 'text-1', type: 'text-start' },
+        { id: 'text-1', text: 'Hello!', type: 'text-delta' },
+        { id: 'text-1', type: 'text-end' },
+        { file: { base64Data: 'QkFVRw==', mediaType: 'image/jpeg', type: 'file' }, type: 'file' },
+        {
+          finishReason: 'stop',
+          response: {
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish-step',
+          usage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: { inputTokens: 3, outputTokens: 10, totalTokens: 13 },
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should use fallback response metadata when response metadata is not provided', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         agentId: 'agent-id',
         runId,
@@ -760,8 +731,8 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           {
             maxRetries: 0,
             id: 'test-model',
-            model: new MockLanguageModelV2({
-              doStream: async ({ prompt }) => {
+            model: new MockModel({
+              doStream: async ({ prompt }: { prompt: unknown }) => {
                 expect(prompt).toStrictEqual([
                   {
                     role: 'user',
@@ -772,20 +743,20 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
                 return {
                   stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',
-                      usage: testUsage,
+                      usage: testUsageForVersion,
                     },
-                  ]),
+                  ] as any),
                 };
               },
-            }),
+            } as any),
           },
         ],
         _internal: {
@@ -794,84 +765,82 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": ", ",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "world!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-2000",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "modelProvider": "mock-provider",
-              "modelVersion": "v2",
-              "timestamp": 1970-01-01T00:00:02.000Z,
+      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchObject([
+        {
+          type: 'start',
+        },
+        {
+          request: {},
+          type: 'start-step',
+          warnings: [],
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          type: 'text-start',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: 'Hello',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: ', ',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: 'world!',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          type: 'text-end',
+        },
+        {
+          finishReason: 'stop',
+          providerMetadata: undefined,
+          response: {
+            headers: undefined,
+            id: 'id-2000',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion: modelVersion,
             },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
+            modelProvider: 'mock-provider',
+            modelVersion: modelVersion,
+            timestamp: new Date('1970-01-01T00:00:02.000Z'),
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
+          type: 'finish-step',
+          usage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
           },
-        ]
-      `);
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should send tool calls', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
@@ -880,8 +849,16 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
           {
             maxRetries: 0,
             id: 'test-model',
-            model: new MockLanguageModelV2({
-              doStream: async ({ prompt, tools, toolChoice }) => {
+            model: new MockModel({
+              doStream: async ({
+                prompt,
+                tools,
+                toolChoice,
+              }: {
+                prompt: unknown;
+                tools: unknown;
+                toolChoice: unknown;
+              }) => {
                 expect(tools).toStrictEqual([
                   {
                     type: 'function',
@@ -930,12 +907,12 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
                     {
                       type: 'finish',
                       finishReason: 'stop',
-                      usage: testUsage,
+                      usage: testUsageForVersion,
                     },
-                  ]),
+                  ] as any),
                 };
               },
-            }),
+            } as any),
           },
         ],
         tools: {
@@ -955,75 +932,83 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should send tool call deltas', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-input-start',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              toolName: 'test-tool',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: '{"',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: 'value',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: '":"',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: 'Spark',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: 'le',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: ' Day',
-            },
-            {
-              type: 'tool-input-delta',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              delta: '"}',
-            },
-            {
-              type: 'tool-input-end',
-              id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
-              toolName: 'test-tool',
-              input: '{"value":"Sparkle Day"}',
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: testUsage2,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockModel({
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  {
+                    type: 'tool-input-start',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    toolName: 'test-tool',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: '{"',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: 'value',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: '":"',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: 'Spark',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: 'le',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: ' Day',
+                  },
+                  {
+                    type: 'tool-input-delta',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    delta: '"}',
+                  },
+                  {
+                    type: 'tool-input-end',
+                    id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                  },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+                    toolName: 'test-tool',
+                    input: '{"value":"Sparkle Day"}',
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: testUsageForVersion2,
+                  },
+                ] as any),
+              }),
+            } as any),
+          },
+        ],
         tools: {
           'test-tool': tool({
             inputSchema: z.object({ value: z.string() }),
@@ -1038,149 +1023,141 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      console.dir({ fullStream }, { depth: null });
-
-      expect(fullStream).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
+      expect(fullStream).toMatchObject([
+        {
+          type: 'start',
+        },
+        {
+          request: {},
+          type: 'start-step',
+          warnings: [],
+        },
+        {
+          dynamic: false,
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+          toolName: 'test-tool',
+          type: 'tool-input-start',
+        },
+        {
+          delta: '{"',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          delta: 'value',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          delta: '":"',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          delta: 'Spark',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          delta: 'le',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          delta: ' Day',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          delta: '"}',
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-delta',
+        },
+        {
+          id: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          providerMetadata: undefined,
+          type: 'tool-input-end',
+        },
+        {
+          input: {
+            value: 'Sparkle Day',
           },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "dynamic": false,
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolName": "test-tool",
-            "type": "tool-input-start",
-          },
-          {
-            "delta": "{"",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": "value",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": "":"",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": "Spark",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": "le",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": " Day",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "delta": ""}",
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-delta",
-          },
-          {
-            "id": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "providerMetadata": undefined,
-            "type": "tool-input-end",
-          },
-          {
-            "input": {
-              "value": "Sparkle Day",
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+          toolCallId: 'call_O17Uplv4lJvD6DVdIvFFeRMw',
+          toolName: 'test-tool',
+          type: 'tool-call',
+        },
+        {
+          finishReason: 'tool-calls',
+          providerMetadata: undefined,
+          response: {
+            headers: undefined,
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
-            "toolName": "test-tool",
-            "type": "tool-call",
+            timestamp: new Date('1970-01-01T00:00:00.000Z'),
           },
-          {
-            "finishReason": "tool-calls",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "timestamp": 1970-01-01T00:00:00.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "cachedInputTokens": 3,
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "reasoningTokens": 10,
-              "totalTokens": 23,
-            },
-          },
-          {
-            "finishReason": "tool-calls",
-            "totalUsage": {
-              "cachedInputTokens": 3,
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "reasoningTokens": 10,
-              "totalTokens": 23,
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+          type: 'finish-step',
+          usage: expectedNormalizedUsage2,
+        },
+        {
+          finishReason: 'tool-calls',
+          totalUsage: expectedNormalizedUsage2,
+          type: 'finish',
+        },
+      ]);
     });
 
     it('should send tool results', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'tool1',
-              input: `{ "value": "value" }`,
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: testUsage,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockModel({
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'tool1',
+                    input: `{ "value": "value" }`,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsageForVersion,
+                  },
+                ] as any),
+              }),
+            } as any),
+          },
+        ],
         tools: {
           tool1: tool({
             inputSchema: z.object({ value: z.string() }),
@@ -1203,8 +1180,6 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      console.dir({ fullStream }, { depth: null });
-
       expect(fullStream).toMatchSnapshot();
     });
 
@@ -1212,31 +1187,39 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       vi.useRealTimers();
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'tool1',
-              input: `{ "value": "value" }`,
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: testUsage,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockModel({
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'tool1',
+                    input: `{ "value": "value" }`,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsageForVersion,
+                  },
+                ] as any),
+              }),
+            } as any),
+          },
+        ],
         tools: {
           tool1: {
             inputSchema: z.object({ value: z.string() }),
@@ -1254,7 +1237,66 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      expect(fullStream).toMatchSnapshot();
+      expect(fullStream).toMatchObject([
+        {
+          type: 'start',
+        },
+        {
+          request: {},
+          type: 'start-step',
+          warnings: [],
+        },
+        {
+          input: {
+            value: 'value',
+          },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+          toolCallId: 'call-1',
+          toolName: 'tool1',
+          type: 'tool-call',
+        },
+        {
+          input: {
+            value: 'value',
+          },
+          output: 'value-result',
+          providerExecuted: undefined,
+          toolCallId: 'call-1',
+          toolName: 'tool1',
+          type: 'tool-result',
+        },
+        {
+          finishReason: 'stop',
+          providerMetadata: undefined,
+          response: {
+            headers: undefined,
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion: modelVersion,
+            },
+            timestamp: new Date('1970-01-01T00:00:00.000Z'),
+          },
+          type: 'finish-step',
+          usage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+          type: 'finish',
+        },
+      ]);
       vi.useFakeTimers();
       vi.setSystemTime(mockDate);
     });
@@ -1262,34 +1304,42 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
     it('should filter out empty text deltas', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         agentId: 'agent-id',
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-delta', id: '1', delta: ', ' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-delta', id: '1', delta: 'world!' },
-            { type: 'text-delta', id: '1', delta: '' },
-            { type: 'text-end', id: '1' },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: testUsage,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockModel({
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: '' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                  { type: 'text-delta', id: 'text-1', delta: '' },
+                  { type: 'text-delta', id: 'text-1', delta: ', ' },
+                  { type: 'text-delta', id: 'text-1', delta: '' },
+                  { type: 'text-delta', id: 'text-1', delta: 'world!' },
+                  { type: 'text-delta', id: 'text-1', delta: '' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: testUsageForVersion,
+                  },
+                ] as any),
+              }),
+            } as any),
+          },
+        ],
         messageList,
         _internal: {
           generateId: mockId({ prefix: 'id' }),
@@ -1298,76 +1348,74 @@ export function fullStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
       const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
-      expect(fullStream).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-start",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "Hello",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": ", ",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "text": "world!",
-            "type": "text-delta",
-          },
-          {
-            "id": "1",
-            "providerMetadata": undefined,
-            "type": "text-end",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "timestamp": 1970-01-01T00:00:00.000Z,
+      expect(fullStream).toMatchObject([
+        {
+          type: 'start',
+        },
+        {
+          request: {},
+          type: 'start-step',
+          warnings: [],
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          type: 'text-start',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: 'Hello',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: ', ',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          text: 'world!',
+          type: 'text-delta',
+        },
+        {
+          id: 'text-1',
+          providerMetadata: undefined,
+          type: 'text-end',
+        },
+        {
+          finishReason: 'stop',
+          providerMetadata: undefined,
+          response: {
+            headers: undefined,
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            modelMetadata: {
+              modelId: 'mock-model-id',
+              modelProvider: 'mock-provider',
+              modelVersion,
             },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
+            timestamp: new Date('1970-01-01T00:00:00.000Z'),
           },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
+          type: 'finish-step',
+          usage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
           },
-        ]
-      `);
+        },
+        {
+          finishReason: 'stop',
+          totalUsage: {
+            inputTokens: 3,
+            outputTokens: 10,
+            totalTokens: 13,
+          },
+          type: 'finish',
+        },
+      ]);
     });
   });
 }

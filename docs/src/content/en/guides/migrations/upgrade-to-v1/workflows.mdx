@@ -153,12 +153,120 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
 -       return suspend({ reason: "Suspension reason" }); // Missing otherReason
 +       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
       }
-      //... continue execution logic
     },
   });
 ```
 
+### Branch result fields are now optional
+
+The `.branch()` method now returns a schema where all branch output fields are optional. This reflects the runtime behavior where each branch only executes if its condition is truthy, so outputs from any branch may be undefined.
+
+To migrate, update any code that consumes branch outputs to handle optional values.
+
+```diff
+  const workflow = createWorkflow({...})
+    .branch([
+      [condition1, stepA],  // outputSchema: { result: z.string() }
+      [condition2, stepB],  // outputSchema: { data: z.number() }
+    ])
+-   // Previously: stepA.result typed as string, stepB.data typed as number
++   // Now: stepA.result typed as string | undefined, stepB.data typed as number | undefined
+    .then(nextStep);
+```
+
+If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
+
+### `writableStream` to `outputWriter` in `Run.start()` & `Run.timeTravel()`
+
+The `writableStream` parameter in `Run.start()` and `Run.timeTravel()` has been replaced with `outputWriter`. Instead of passing a `WritableStream`, you now pass an async callback function that receives each workflow event chunk directly.
+
+This change simplifies the API - rather than creating a `WritableStream` wrapper, you handle chunks directly in the callback.
+
+**Example:** Streaming workflow events to an HTTP response (SSE):
+
+```diff
+  const run = await workflow.createRun();
+
+- const stream = new WritableStream({
+-   write(chunk) {
+-     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+-   }
+- });
+- await run.start({ inputData, writableStream: stream });
+
++ await run.start({
++   inputData,
++   outputWriter: async (chunk) => {
++     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
++   },
++ });
+```
+
+:::note
+
+The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+
+```ts
+createStep({
+  id: 'my-step',
+  execute: async ({ writer }) => {
+    // This API is unchanged
+    await writer.write({ data: 'some output' });
+    await writer.custom({ type: 'custom-event', payload: {} });
+  },
+});
+```
+
+:::
+
+### `setState()` is now async and the data passed is validated
+
+The `setState()` function is now async. The data passed is now validated against the `stateSchema` defined in the step. The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not. Also, when calling `setState()`, you can now pass only the state data being updated, instead of adding the previous state spread `(...state)`.
+
+To migrate, update the `setState()` function to be async.
+
+```diff
+- setState({ ...state, sharedCounter: state.sharedCounter + 1 });
++ await setState({ sharedCounter: state.sharedCounter + 1 });
++ // await setState({ ...state, sharedCounter: state.sharedCounter + 1 }); 
++ // this also works, as the previous state spread remains supported
+```
+
 ## Removed
+
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
+
+See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/workflow-stream-vnext .
+```
+
+:::
+
+### `suspend` and `setState` are not available in step condition functions parameters
+
+The `suspend` and `setState` functions are not available in step condition functions parameters.
+
+To migrate, use the `suspend` function in the step execute function instead.
+
+```diff
+.dowhile(step, async ({ suspend, state, setState }) => {
+- setState({...state, updatedState: "updated state"})
+- await suspend({ reason: "Suspension reason" });
++ // Use the suspend/setState in the step execute function instead
+});
+```
+
+This is the same for `dountil` and `branch` condition functions parameters.
 
 ### Legacy workflows export
 
@@ -225,7 +333,6 @@ createStep({
 +   if (!context.resumeData) {
 +     return context.suspend({})
 +   }
-+   //..continue execution logic
 + }
 });
 +

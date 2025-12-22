@@ -80,7 +80,6 @@ export async function writeAgentSample(
   const content = `
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
@@ -117,12 +116,7 @@ export const weatherAgent = new Agent({
   },`
       : ''
   }
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: "memory-storage",
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory
-    })
-  })
+  memory: new Memory()
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -516,7 +510,7 @@ export const mastra = new Mastra({
   observability: new Observability({
     // Enables DefaultExporter and CloudExporter for tracing
     default: { enabled: true },
-    }),
+  }),
 });
 `,
     );
@@ -534,9 +528,10 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async (addExample: boolean) => {
+export const checkAndInstallCoreDeps = async (addExample: boolean, versionTag?: string) => {
   const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
   let packages: Array<{ name: string; version: string }> = [];
+  const mastraVersionTag = versionTag || 'latest';
 
   try {
     const depService = new DepsService();
@@ -548,11 +543,11 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
-      packages.push({ name: '@mastra/core', version: 'latest' });
+      packages.push({ name: '@mastra/core', version: mastraVersionTag });
     }
 
     if (needsCli) {
-      packages.push({ name: 'mastra', version: 'latest' });
+      packages.push({ name: 'mastra', version: mastraVersionTag });
     }
 
     if (needsZod) {
@@ -563,7 +558,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
 
       if (needsLibsql) {
-        packages.push({ name: '@mastra/libsql', version: 'latest' });
+        packages.push({ name: '@mastra/libsql', version: mastraVersionTag });
       }
     }
 
@@ -659,6 +654,7 @@ interface InteractivePromptArgs {
   skip?: {
     llmProvider?: boolean;
     llmApiKey?: boolean;
+    gitInit?: boolean;
   };
 }
 
@@ -768,6 +764,8 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return editor;
       },
       initGit: async () => {
+        if (skip?.gitInit) return false;
+
         return p.confirm({
           message: 'Initialize a new git repository?',
           initialValue: true,

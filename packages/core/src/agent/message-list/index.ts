@@ -2,7 +2,6 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-sdk-v4';
 import type {
-  LanguageModelV1Message,
   IdGenerator,
   LanguageModelV1Prompt,
   CoreMessage as CoreMessageV4,
@@ -10,8 +9,8 @@ import type {
   ToolInvocation as ToolInvocationV4,
 } from '@internal/ai-sdk-v4';
 import type * as AIV4Type from '@internal/ai-sdk-v4';
+import * as AIV5 from '@internal/ai-sdk-v5';
 import { v4 as randomUUID } from '@lukeed/uuid';
-import * as AIV5 from 'ai-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
@@ -33,6 +32,8 @@ import { getToolName } from './utils/ai-v5/tool';
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
 export type AIV5ResponseMessage = AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage;
 
+type LanguageModelV1Message = LanguageModelV1Prompt[0];
+
 type MastraMessageShared = {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -42,9 +43,26 @@ type MastraMessageShared = {
   type?: string;
 };
 
+// Extended part type that includes both AI SDK parts and Mastra custom parts
+// add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
+type MastraMessagePart =
+  | (UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata })
+  | AIV5Type.DataUIPart<AIV5.UIDataTypes>;
+
+// V4-compatible part type (excludes DataUIPart which V4 doesn't support)
+type UIMessageV4Part = UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata };
+
+/**
+ * Filter out data-* parts from MastraMessagePart[] to get V4-compatible parts.
+ * Data parts are a Mastra extension for custom streaming data and aren't supported by AI SDK V4.
+ */
+function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
+  return parts.filter((part): part is UIMessageV4Part => !part.type.startsWith('data-'));
+}
+
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
-  parts: (UIMessageV4['parts'][number] & { providerMetadata?: AIV5Type.ProviderMetadata })[]; // add optional prov meta for AIV5 - v4 doesn't track this, and we're storing mmv2 in the db, so we need to extend
+  parts: MastraMessagePart[];
   experimental_attachments?: UIMessageV4['experimental_attachments'];
   content?: UIMessageV4['content'];
   toolInvocations?: UIMessageV4['toolInvocations'];
@@ -271,12 +289,14 @@ export class MessageList {
     memory: Set<string>;
     input: Set<string>;
     output: Set<string>;
+    context: Set<string>;
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     const sources = {
       memory: new Set(Array.from(this.memoryMessages.values()).map(m => m.id)),
       output: new Set(Array.from(this.newResponseMessages.values()).map(m => m.id)),
       input: new Set(Array.from(this.newUserMessages.values()).map(m => m.id)),
+      context: new Set(Array.from(this.userContextMessages.values()).map(m => m.id)),
     };
 
     return {
@@ -285,6 +305,7 @@ export class MessageList {
         if (sources.memory.has(msg.id)) return 'memory';
         if (sources.input.has(msg.id)) return 'input';
         if (sources.output.has(msg.id)) return 'response';
+        if (sources.context.has(msg.id)) return 'context';
         return null;
       },
     };
@@ -1061,13 +1082,16 @@ export class MessageList {
       parts.push({ type: 'text', text: '' });
     }
 
+    // Filter out data-* parts when converting to UIMessageV4 (V4 doesn't support them)
+    const v4Parts = filterDataParts(parts);
+
     if (m.role === `user`) {
       const uiMessage: UIMessageWithMetadata = {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
         createdAt: m.createdAt,
-        parts,
+        parts: v4Parts,
         experimental_attachments: experimentalAttachments,
       };
       // Preserve metadata if present
@@ -1084,7 +1108,7 @@ export class MessageList {
         role: m.role,
         content: isSingleTextContentArray ? contentString : m.content.content || contentString,
         createdAt: m.createdAt,
-        parts,
+        parts: v4Parts,
         reasoning: undefined,
         toolInvocations:
           `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
@@ -1101,7 +1125,7 @@ export class MessageList {
       role: m.role,
       content: m.content.content || contentString,
       createdAt: m.createdAt,
-      parts,
+      parts: v4Parts,
       experimental_attachments: experimentalAttachments,
     };
     // Preserve metadata if present
@@ -1367,13 +1391,11 @@ export class MessageList {
     part: MastraMessageContentV2['parts'][number];
     insertAt?: number;
   }) {
-    const partKey = MessageList.cacheKeyFromAIV4Parts([part]);
+    const partKey = MessageList.cacheKeyFromDBParts([part]);
     const latestPartCount = latestMessage.content.parts.filter(
-      p => MessageList.cacheKeyFromAIV4Parts([p]) === partKey,
+      p => MessageList.cacheKeyFromDBParts([p]) === partKey,
     ).length;
-    const newPartCount = newMessage.content.parts.filter(
-      p => MessageList.cacheKeyFromAIV4Parts([p]) === partKey,
-    ).length;
+    const newPartCount = newMessage.content.parts.filter(p => MessageList.cacheKeyFromDBParts([p]) === partKey).length;
     // If the number of parts in the latest message is less than the number of parts in the new message, insert the part
     if (latestPartCount < newPartCount) {
       // Check if we need to add a step-start before text parts when merging assistant messages
@@ -1426,7 +1448,7 @@ export class MessageList {
     for (let i = 0; i < messageV2.content.parts.length; ++i) {
       const part = messageV2.content.parts[i];
       if (!part) continue;
-      const key = MessageList.cacheKeyFromAIV4Parts([part]);
+      const key = MessageList.cacheKeyFromDBParts([part]);
       const partToAdd = partsToAdd.get(i);
       if (!key || !partToAdd) continue;
       if (anchorMap.size > 0) {
@@ -1453,7 +1475,7 @@ export class MessageList {
           insertAt <= rightAnchorLatest &&
           !latestMessage.content.parts
             .slice(insertAt, rightAnchorLatest)
-            .some(p => MessageList.cacheKeyFromAIV4Parts([p]) === MessageList.cacheKeyFromAIV4Parts([part]))
+            .some(p => MessageList.cacheKeyFromDBParts([p]) === MessageList.cacheKeyFromDBParts([part]))
         ) {
           this.pushNewMessagePart({
             latestMessage,
@@ -1518,8 +1540,18 @@ export class MessageList {
 
     if (MessageList.isAIV5CoreMessage(message)) {
       const dbMsg = MessageList.aiV5ModelMessageToMastraDBMessage(message, messageSource);
+      // Only use the original createdAt from input message metadata, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt =
+        'metadata' in message &&
+        message.metadata &&
+        typeof message.metadata === 'object' &&
+        'createdAt' in message.metadata
+          ? message.metadata.createdAt
+          : undefined;
       const result = {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1527,8 +1559,12 @@ export class MessageList {
     }
     if (MessageList.isAIV5UIMessage(message)) {
       const dbMsg = MessageList.aiV5UIMessageToMastraDBMessage(message);
+      // Only use the original createdAt from input message, not the generated one from the static method
+      // This fixes issue #10683 where messages without createdAt would get shuffled
+      const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
       return {
         ...dbMsg,
+        createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
         threadId: this.memoryInfo?.threadId,
         resourceId: this.memoryInfo?.resourceId,
       };
@@ -1539,21 +1575,28 @@ export class MessageList {
 
   private lastCreatedAt?: number;
   // this makes sure messages added in order will always have a date atleast 1ms apart.
-  private generateCreatedAt(messageSource: MessageSource, start?: Date | number): Date {
-    start = start instanceof Date ? start : start ? new Date(start) : undefined;
+  private generateCreatedAt(messageSource: MessageSource, start?: unknown): Date {
+    // Normalize timestamp
+    const startDate: Date | undefined =
+      start instanceof Date
+        ? start
+        : typeof start === 'string' || typeof start === 'number'
+          ? new Date(start)
+          : undefined;
 
-    if (start && !this.lastCreatedAt) {
-      this.lastCreatedAt = start.getTime();
-      return start;
+    if (startDate && !this.lastCreatedAt) {
+      this.lastCreatedAt = startDate.getTime();
+      return startDate;
     }
 
-    if (start && messageSource === `memory`) {
-      // we don't want to modify start time if the message came from memory or we may accidentally re-order old messages
-      return start;
+    if (startDate && messageSource === `memory`) {
+      // Preserve user-provided timestamps for memory messages to avoid re-ordering
+      // Messages without timestamps will fall through to get generated incrementing timestamps
+      return startDate;
     }
 
     const now = new Date();
-    const nowTime = start?.getTime() || now.getTime();
+    const nowTime = startDate?.getTime() || now.getTime();
     // find the latest createdAt in all stored messages
     const lastTime = this.messages.reduce((p, m) => {
       if (m.createdAt.getTime() > p) return m.createdAt.getTime();
@@ -1910,10 +1953,20 @@ export class MessageList {
       content.metadata = coreMessage.metadata as Record<string, unknown>;
     }
 
+    // Extract createdAt from metadata if provided
+    // This fixes issue #10683 where messages without createdAt would get shuffled
+    const rawCreatedAt =
+      'metadata' in coreMessage &&
+      coreMessage.metadata &&
+      typeof coreMessage.metadata === 'object' &&
+      'createdAt' in coreMessage.metadata
+        ? coreMessage.metadata.createdAt
+        : undefined;
+
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt: this.generateCreatedAt(messageSource),
+      createdAt: this.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
@@ -1979,25 +2032,78 @@ export class MessageList {
     let key = ``;
     for (const part of parts) {
       key += part.type;
-      if (part.type === `text`) {
-        key += part.text;
+      key += MessageList.cacheKeyFromAIV4Part(part);
+    }
+    return key;
+  }
+
+  private static cacheKeyFromAIV4Part(part: UIMessageV4['parts'][number]): string {
+    let cacheKey = '';
+    if (part.type === `text`) {
+      cacheKey += part.text;
+    }
+    if (part.type === `tool-invocation`) {
+      cacheKey += part.toolInvocation.toolCallId;
+      cacheKey += part.toolInvocation.state;
+    }
+    if (part.type === `reasoning`) {
+      cacheKey += part.reasoning;
+      cacheKey += part.details.reduce((prev, current) => {
+        if (current.type === `text`) {
+          return prev + current.text.length + (current.signature?.length || 0);
+        }
+        return prev;
+      }, 0);
+
+      // OpenAI sends reasoning items (rs_...) inside part.providerMetadata.openai.itemId.
+      // When the reasoning text is empty, the default cache key logic produces "reasoning0"
+      // for *all* reasoning parts. This makes distinct rs_ entries appear identical, so the
+      // message-merging logic drops the latest reasoning item. The result is that subsequent
+      // OpenAI calls fail with:
+      //
+      //   "Item 'fc_...' was provided without its required 'reasoning' item"
+      //
+      // To fix this, we incorporate the OpenAI itemId into the cache key so each rs_ entry
+      // is treated as distinct.
+      //
+      // Note: We cast `part` to `any` here because the AI SDK’s ReasoningUIPart V4 type does
+      // NOT declare `providerMetadata` (even though Mastra attaches it at runtime). This
+      // access is safe in JavaScript, but TypeScript cannot type it without augmentation,
+      // so we intentionally narrow to `any` only for this metadata lookup.
+
+      const partAny = part as any;
+
+      if (
+        partAny &&
+        Object.hasOwn(partAny, 'providerMetadata') &&
+        partAny.providerMetadata &&
+        Object.hasOwn(partAny.providerMetadata, 'openai') &&
+        partAny.providerMetadata.openai &&
+        Object.hasOwn(partAny.providerMetadata.openai, 'itemId')
+      ) {
+        const itemId = partAny.providerMetadata.openai.itemId;
+        cacheKey += `|${itemId}`;
       }
-      if (part.type === `tool-invocation`) {
-        key += part.toolInvocation.toolCallId;
-        key += part.toolInvocation.state;
-      }
-      if (part.type === `reasoning`) {
-        key += part.reasoning;
-        key += part.details.reduce((prev, current) => {
-          if (current.type === `text`) {
-            return prev + current.text.length + (current.signature?.length || 0);
-          }
-          return prev;
-        }, 0);
-      }
-      if (part.type === `file`) {
-        key += part.data;
-        key += part.mimeType;
+    }
+    if (part.type === `file`) {
+      cacheKey += part.data;
+      cacheKey += part.mimeType;
+    }
+
+    return cacheKey;
+  }
+
+  private static cacheKeyFromDBParts(parts: MastraMessagePart[]): string {
+    let key = ``;
+    for (const part of parts) {
+      key += part.type;
+      if (part.type.startsWith('data-')) {
+        // Stringify data for proper cache key comparison since data can be any type
+        const data = (part as AIV5Type.DataUIPart<AIV5.UIDataTypes>).data;
+        key += JSON.stringify(data);
+      } else {
+        // Cast to UIMessageV4Part since we've already handled data-* parts above
+        key += MessageList.cacheKeyFromAIV4Part(part as UIMessageV4Part);
       }
     }
     return key;
@@ -2083,8 +2189,7 @@ export class MessageList {
     if (oneMM2 && twoMM2) {
       return (
         oneMM2.id === twoMM2.id &&
-        MessageList.cacheKeyFromAIV4Parts(oneMM2.content.parts) ===
-          MessageList.cacheKeyFromAIV4Parts(twoMM2.content.parts)
+        MessageList.cacheKeyFromDBParts(oneMM2.content.parts) === MessageList.cacheKeyFromDBParts(twoMM2.content.parts)
       );
     }
 
@@ -2774,6 +2879,15 @@ export class MessageList {
 
         if (p.type === 'step-start') {
           return p;
+        }
+
+        // Handle data-* parts (custom parts emitted by tools via writer.custom())
+        // These are preserved as-is to allow roundtripping through storage
+        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+          return {
+            type: p.type,
+            data: 'data' in p ? (p as any).data : undefined,
+          };
         }
 
         return null;

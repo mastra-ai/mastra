@@ -3,6 +3,8 @@ import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
+import { PgDB } from './db';
+import { MemoryPG } from './domains/memory';
 import { PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
@@ -18,11 +20,14 @@ export const connectionString = `postgresql://${(TEST_CONFIG as any).user}:${(TE
 
 export function pgTests() {
   let store: PostgresStore;
+  let dbOps: PgDB;
 
   describe('PG specific tests', () => {
     beforeAll(async () => {
       store = new PostgresStore(TEST_CONFIG);
       await store.init();
+      // Create PgDB instance for low-level operations (not exposed on main store)
+      dbOps = new PgDB({ client: store.db });
     });
     afterAll(async () => {
       try {
@@ -72,6 +77,8 @@ export function pgTests() {
         await expect(store.db.connect()).rejects.toThrow();
         store = new PostgresStore(TEST_CONFIG);
         await store.init();
+        // Recreate dbOps with new store connection
+        dbOps = new PgDB({ client: store.db });
       });
     });
 
@@ -89,8 +96,8 @@ export function pgTests() {
         // Only clear tables if store is initialized
         try {
           // Clear tables before each test
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
           // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
@@ -101,8 +108,8 @@ export function pgTests() {
         // Only clear tables if store is initialized
         try {
           // Clear tables before each test
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
           // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
@@ -111,18 +118,18 @@ export function pgTests() {
 
       it('should create and upsert to a camelCase table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: camelCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: camelCaseTable as TABLE_NAMES,
           record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: camelCaseTable as TABLE_NAMES,
           keys: { id: '1' },
         });
@@ -131,18 +138,18 @@ export function pgTests() {
 
       it('should create and upsert to a snake_case table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: snakeCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
           record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: snakeCaseTable as TABLE_NAMES,
           keys: { id: '2' },
         });
@@ -380,7 +387,9 @@ export function pgTests() {
           updatedAt: { type: 'timestamp', nullable: false },
         } as Record<string, StorageColumn>;
 
-        await testStore.createTable({
+        // Create PgDB instance for low-level operations
+        const testDbOps = new PgDB({ client: testStore.db, schemaName: testSchema });
+        await testDbOps.createTable({
           tableName: 'mastra_ai_spans' as TABLE_NAMES,
           schema: SpansSchema,
         });
@@ -598,183 +607,98 @@ export function pgTests() {
       });
     });
 
-    describe('Validation', () => {
-      const validConfig = TEST_CONFIG as any;
-
-      describe('Connection String Config', () => {
-        it('throws if connectionString is empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', connectionString: '' })).toThrow();
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, connectionString: '' })).toThrow();
-        });
-        it('does not throw on non-empty connection string', () => {
-          expect(() => new PostgresStore({ id: 'test-store', connectionString })).not.toThrow();
-        });
+    // PG-specific: Cloud SQL Connector configuration tests (not covered by factory)
+    describe('Cloud SQL Connector Config', () => {
+      it('accepts config with stream property (Cloud SQL connector)', () => {
+        const connectorConfig = {
+          id: 'cloud-sql-connector-store',
+          user: 'test-user',
+          database: 'test-db',
+          ssl: { rejectUnauthorized: false },
+          stream: () => ({}), // Mock stream function
+        };
+        expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
       });
 
-      describe('TCP Host Config', () => {
-        it('throws if host is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, host: '' })).toThrow();
-          const { host, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if database is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, database: '' })).toThrow();
-          const { database, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if user is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, user: '' })).toThrow();
-          const { user, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('throws if password is missing or empty', () => {
-          expect(() => new PostgresStore({ id: 'test-store', ...validConfig, password: '' })).toThrow();
-          const { password, ...rest } = validConfig;
-          expect(() => new PostgresStore({ id: 'test-store', ...rest } as any)).toThrow();
-        });
-        it('does not throw on valid config (host-based)', () => {
-          expect(() => new PostgresStore(validConfig)).not.toThrow();
-        });
+      it('accepts config with password function (IAM auth)', () => {
+        const iamConfig = {
+          id: 'iam-auth-store',
+          user: 'test-user',
+          database: 'test-db',
+          host: 'localhost', // This could be present but ignored when password is a function
+          port: 5432,
+          password: () => Promise.resolve('dynamic-token'), // Mock password function
+          ssl: { rejectUnauthorized: false },
+        };
+        expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
       });
 
-      describe('Cloud SQL Connector Config', () => {
-        it('accepts config with stream property (Cloud SQL connector)', () => {
-          const connectorConfig = {
-            id: 'cloud-sql-connector-store',
-            user: 'test-user',
-            database: 'test-db',
-            ssl: { rejectUnauthorized: false },
-            stream: () => ({}), // Mock stream function
-          };
-          expect(() => new PostgresStore(connectorConfig as any)).not.toThrow();
-        });
-
-        it('accepts config with password function (IAM auth)', () => {
-          const iamConfig = {
-            id: 'iam-auth-store',
-            user: 'test-user',
-            database: 'test-db',
-            host: 'localhost', // This could be present but ignored when password is a function
-            port: 5432,
-            password: () => Promise.resolve('dynamic-token'), // Mock password function
-            ssl: { rejectUnauthorized: false },
-          };
-          expect(() => new PostgresStore(iamConfig as any)).not.toThrow();
-        });
-
-        it('accepts generic pg ClientConfig', () => {
-          const clientConfig = {
-            id: 'generic-client-config-store',
-            user: 'test-user',
-            database: 'test-db',
-            application_name: 'test-app',
-            ssl: { rejectUnauthorized: false },
-            stream: () => ({}), // Mock stream
-          };
-          expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
-        });
+      it('accepts generic pg ClientConfig', () => {
+        const clientConfig = {
+          id: 'generic-client-config-store',
+          user: 'test-user',
+          database: 'test-db',
+          application_name: 'test-app',
+          ssl: { rejectUnauthorized: false },
+          stream: () => ({}), // Mock stream
+        };
+        expect(() => new PostgresStore(clientConfig as any)).not.toThrow();
       });
+    });
 
-      describe('SSL Configuration', () => {
-        it('accepts connectionString with ssl: true', () => {
-          expect(() => new PostgresStore({ id: 'ssl-true-store', connectionString, ssl: true })).not.toThrow();
+    // PG-specific: db and pgp field exposure with pre-configured client
+    describe('Pre-configured Client Field Exposure', () => {
+      it('should expose db and pgp fields with pre-configured client', () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
+
+        const clientStore = new PostgresStore({
+          id: 'pre-configured-client-fields-store',
+          client,
         });
 
-        it('accepts connectionString with ssl object', () => {
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'ssl-object-store',
-                connectionString,
-                ssl: { rejectUnauthorized: false },
-              }),
-          ).not.toThrow();
-        });
+        // db should be the same client we passed in
+        expect(clientStore.db).toBe(client);
+        // pgp should be defined (may be a new instance or the one used internally)
+        expect(clientStore.pgp).toBeDefined();
 
-        it('accepts host config with ssl: true', () => {
-          const config = {
-            id: 'host-ssl-true-store',
-            ...validConfig,
-            ssl: true,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-
-        it('accepts host config with ssl object', () => {
-          const config = {
-            id: 'host-ssl-object-store',
-            ...validConfig,
-            ssl: { rejectUnauthorized: false },
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
+        // Clean up
+        pgp.end();
       });
+    });
 
-      describe('Pool Options', () => {
-        it('accepts max and idleTimeoutMillis with connectionString', () => {
-          const config = {
-            id: 'pool-options-connection-store',
-            connectionString,
-            max: 30,
-            idleTimeoutMillis: 60000,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
+    // PG-specific: Domain schemaName verification with pre-configured client
+    describe('Domain schemaName with Pre-configured Client', () => {
+      it('should allow domains to use custom schemaName with pre-configured client', async () => {
+        const pgp = pgPromise();
+        const client = pgp(connectionString);
 
-        it('accepts max and idleTimeoutMillis with host config', () => {
-          const config = {
-            id: 'pool-options-host-store',
-            ...validConfig,
-            max: 30,
-            idleTimeoutMillis: 60000,
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
+        // Create schema for test
+        await client.none('CREATE SCHEMA IF NOT EXISTS domain_test_schema');
 
-      describe('Schema Configuration', () => {
-        it('accepts schemaName with connectionString', () => {
-          expect(
-            () =>
-              new PostgresStore({
-                id: 'custom-schema-connection-store',
-                connectionString,
-                schemaName: 'custom_schema',
-              }),
-          ).not.toThrow();
-        });
+        try {
+          const memoryDomain = new MemoryPG({
+            client,
+            schemaName: 'domain_test_schema',
+          });
 
-        it('accepts schemaName with host config', () => {
-          const config = {
-            id: 'custom-schema-host-store',
-            ...validConfig,
-            schemaName: 'custom_schema',
-          };
-          expect(() => new PostgresStore(config)).not.toThrow();
-        });
-      });
+          expect(memoryDomain).toBeDefined();
+          await memoryDomain.init();
 
-      describe('Invalid Config', () => {
-        it('throws on invalid config (missing required fields)', () => {
-          expect(() => new PostgresStore({ id: 'test-store', user: 'test' } as any)).toThrow(
-            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
+          // Verify tables were created in the custom schema
+          const tableExists = await client.oneOrNone(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'domain_test_schema'
+              AND table_name = 'mastra_threads'
+            )`,
           );
-        });
-
-        it('throws on completely empty config', () => {
-          expect(() => new PostgresStore({ id: 'test-store' } as any)).toThrow(
-            /invalid config.*Provide either.*connectionString.*host.*ClientConfig/,
-          );
-        });
-      });
-
-      describe('Store Initialization', () => {
-        it('throws if store is not initialized', () => {
-          expect(() => new PostgresStore(validConfig).db.any('SELECT 1')).toThrow(
-            /PostgresStore: Store is not initialized/,
-          );
-          expect(() => new PostgresStore(validConfig).pgp).toThrow(/PostgresStore: Store is not initialized/);
-        });
+          expect(tableExists?.exists).toBe(true);
+        } finally {
+          // Clean up
+          await client.none('DROP SCHEMA IF EXISTS domain_test_schema CASCADE');
+          pgp.end();
+        }
       });
     });
   });

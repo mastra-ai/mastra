@@ -1,6 +1,7 @@
 import type { RequestContext } from '@mastra/core/di';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
   ClientCapabilities,
   ElicitRequest,
@@ -130,6 +131,7 @@ export type StdioServerDefinition = BaseServerOptions & {
   reconnectionOptions?: never;
   sessionId?: never;
   connectTimeout?: never;
+  fetch?: never;
 };
 
 /**
@@ -137,6 +139,9 @@ export type StdioServerDefinition = BaseServerOptions & {
  *
  * Used when connecting to remote MCP servers over HTTP. The client will attempt Streamable HTTP
  * transport first and fall back to SSE if that fails.
+ *
+ * When `fetch` is provided, all other HTTP-related options (`requestInit`, `eventSourceInit`, `authProvider`)
+ * become optional, as the custom fetch function can handle authentication and request customization.
  */
 export type HttpServerDefinition = BaseServerOptions & {
   /** URL of the MCP server endpoint */
@@ -146,11 +151,40 @@ export type HttpServerDefinition = BaseServerOptions & {
   args?: never;
   env?: never;
 
-  /** Optional request configuration for HTTP requests */
+  /**
+   * Custom fetch implementation used for all network requests.
+   *
+   * When provided, this function will be used for all HTTP requests, allowing you to:
+   * - Add dynamic authentication headers (e.g., refreshing bearer tokens)
+   * - Customize request behavior per-request
+   * - Intercept and modify requests/responses
+   *
+   * When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional,
+   * as you can handle these concerns within your custom fetch function.
+   *
+   * @example
+   * ```typescript
+   * {
+   *   url: new URL('https://api.example.com/mcp'),
+   *   fetch: async (url, init) => {
+   *     const token = await getAuthToken(); // Your token refresh logic
+   *     return fetch(url, {
+   *       ...init,
+   *       headers: {
+   *         ...init?.headers,
+   *         Authorization: `Bearer ${token}`,
+   *       },
+   *     });
+   *   },
+   * }
+   * ```
+   */
+  fetch?: FetchLike;
+  /** Optional request configuration for HTTP requests (optional when `fetch` is provided) */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
-  /** Optional configuration for SSE fallback (required when using custom headers with SSE) */
+  /** Optional configuration for SSE fallback (required when using custom headers with SSE, optional when `fetch` is provided) */
   eventSourceInit?: SSEClientTransportOptions['eventSourceInit'];
-  /** Optional authentication provider for HTTP requests */
+  /** Optional authentication provider for HTTP requests (optional when `fetch` is provided) */
   authProvider?: StreamableHTTPClientTransportOptions['authProvider'];
   /** Optional reconnection configuration for Streamable HTTP */
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
@@ -178,12 +212,27 @@ export type HttpServerDefinition = BaseServerOptions & {
  *   env: { API_KEY: 'secret' }
  * };
  *
- * // HTTP server
+ * // HTTP server with static headers
  * const httpServer: MastraMCPServerDefinition = {
  *   url: new URL('http://localhost:8080/mcp'),
  *   requestInit: {
  *     headers: { Authorization: 'Bearer token' }
  *   }
+ * };
+ *
+ * // HTTP server with custom fetch for dynamic auth
+ * const httpServerWithFetch: MastraMCPServerDefinition = {
+ *   url: new URL('http://localhost:8080/mcp'),
+ *   fetch: async (url, init) => {
+ *     const token = await getAuthToken(); // Refresh token on each request
+ *     return fetch(url, {
+ *       ...init,
+ *       headers: {
+ *         ...init?.headers,
+ *         Authorization: `Bearer ${token}`,
+ *       },
+ *     });
+ *   },
  * };
  * ```
  */

@@ -18,7 +18,7 @@ export default function MobileSidebarToggle(): ReactNode {
       })}
       type="button"
       aria-expanded={shown}
-      className="grid rounded-full w-8  h-8 p-2 shrink-0 place-items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--mastra-green-accent) lg:hidden"
+      className="grid rounded-full w-8  h-8 p-2 shrink-0 place-items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-(--mastra-green-accent) min-[996px]:hidden"
     >
       <span className="sr-only">Open main menu</span>
       <HamburgerDefault />

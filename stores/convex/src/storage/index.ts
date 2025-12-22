@@ -1,7 +1,6 @@
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
-  StorageColumn,
   StorageResourceType,
   PaginationInfo,
   StorageListMessagesInput,
@@ -12,40 +11,95 @@ import type {
   StoragePagination,
   WorkflowRun,
   WorkflowRuns,
-  TABLE_NAMES,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { ConvexAdminClientConfig } from './client';
 import { ConvexAdminClient } from './client';
 import { MemoryConvex } from './domains/memory';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
-import { StoreOperationsConvex } from './operations';
 
-export type ConvexStoreConfig = ConvexAdminClientConfig & {
+/**
+ * Convex configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured ConvexAdminClient: `{ id, client }`
+ * - Deployment config: `{ id, deploymentUrl, adminAuthToken, storageFunction? }`
+ */
+export type ConvexStoreConfig = {
   id: string;
   name?: string;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new ConvexStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new ConvexStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+} & (
+  | {
+      /**
+       * Pre-configured ConvexAdminClient.
+       * Use this when you need to configure the client before initialization.
+       *
+       * @example
+       * ```typescript
+       * import { ConvexAdminClient } from '@mastra/convex/storage/client';
+       *
+       * const client = new ConvexAdminClient({
+       *   deploymentUrl: 'https://your-deployment.convex.cloud',
+       *   adminAuthToken: 'your-token',
+       *   storageFunction: 'custom/storage:handle',
+       * });
+       *
+       * const store = new ConvexStore({ id: 'my-store', client });
+       * ```
+       */
+      client: ConvexAdminClient;
+    }
+  | ConvexAdminClientConfig
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (config: ConvexStoreConfig): config is ConvexStoreConfig & { client: ConvexAdminClient } => {
+  return 'client' in config;
 };
 
 export class ConvexStore extends MastraStorage {
-  private readonly operations: StoreOperationsConvex;
   private readonly memory: MemoryConvex;
   private readonly workflows: WorkflowsConvex;
   private readonly scores: ScoresConvex;
 
   constructor(config: ConvexStoreConfig) {
-    super({ id: config.id, name: config.name ?? 'ConvexStore' });
+    super({ id: config.id, name: config.name ?? 'ConvexStore', disableInit: config.disableInit });
 
-    const client = new ConvexAdminClient(config);
-    this.operations = new StoreOperationsConvex(client);
-    this.memory = new MemoryConvex(this.operations);
-    this.workflows = new WorkflowsConvex(this.operations);
-    this.scores = new ScoresConvex(this.operations);
+    // Handle pre-configured client vs creating new one
+    const client = isClientConfig(config) ? config.client : new ConvexAdminClient(config);
+
+    const domainConfig = { client };
+    this.memory = new MemoryConvex(domainConfig);
+    this.workflows = new WorkflowsConvex(domainConfig);
+    this.scores = new ScoresConvex(domainConfig);
 
     this.stores = {
-      operations: this.operations,
       memory: this.memory,
       workflows: this.workflows,
       scores: this.scores,
@@ -62,38 +116,6 @@ export class ConvexStore extends MastraStorage {
       observabilityInstance: false,
       listScoresBySpan: false,
     };
-  }
-
-  async createTable(_args: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void> {
-    // No-op
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.operations.dropTable({ tableName });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    // No-op
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    await this.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    await this.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null> {
-    return this.operations.load<R>({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -185,13 +207,7 @@ export class ConvexStore extends MastraStorage {
   async updateWorkflowState(params: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: WorkflowRunStatus;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.workflows.updateWorkflowState(params);
   }
@@ -234,11 +250,15 @@ export class ConvexStore extends MastraStorage {
     return this.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.scores.saveScore(score);
   }
 

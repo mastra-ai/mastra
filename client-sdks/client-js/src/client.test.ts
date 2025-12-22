@@ -106,6 +106,36 @@ describe('MastraClient', () => {
         }),
       );
     });
+
+    it('should use custom fetch function when provided', async () => {
+      // Arrange: Create a custom fetch that tracks usage
+      let customFetchCalled = false;
+      const customFetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+        customFetchCalled = true;
+        return {
+          ok: true,
+          headers: {
+            get: () => 'application/json',
+          },
+          json: async () => ({ customFetchUsed: true }),
+        } as Response;
+      });
+
+      const customClient = new MastraClient({
+        baseUrl: 'http://localhost:4111',
+        fetch: customFetch,
+      });
+
+      // Act: Make request
+      const result = await customClient.request('/test');
+
+      // Assert: Verify custom fetch was used instead of global fetch
+      expect(customFetchCalled).toBe(true);
+      expect(customFetch).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ customFetchUsed: true });
+      // Verify global fetch was NOT called
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('Integration Tests', () => {

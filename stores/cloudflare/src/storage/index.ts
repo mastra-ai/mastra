@@ -1,9 +1,10 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   MastraStorage,
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -12,7 +13,6 @@ import {
 } from '@mastra/core/storage';
 import type {
   TABLE_NAMES,
-  StorageColumn,
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
@@ -20,15 +20,15 @@ import type {
   StorageDomains,
   StorageResourceType,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageCloudflare } from './domains/memory';
-import { StoreOperationsCloudflare } from './domains/operations';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
-import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig, RecordTypes } from './types';
+import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './types';
 
 export class CloudflareStore extends MastraStorage {
   stores: StorageDomains;
@@ -72,18 +72,31 @@ export class CloudflareStore extends MastraStorage {
     supports.listScoresBySpan = true;
     supports.resourceWorkingMemory = true;
     supports.selectByIncludeResourceScope = true;
+    supports.deleteMessages = true;
     return supports;
   }
 
   constructor(config: CloudflareStoreConfig) {
-    super({ id: config.id, name: 'Cloudflare' });
+    super({ id: config.id, name: 'Cloudflare', disableInit: config.disableInit });
 
     try {
+      let workflows: WorkflowsStorageCloudflare;
+      let memory: MemoryStorageCloudflare;
+      let scores: ScoresStorageCloudflare;
+
       if (isWorkersConfig(config)) {
         this.validateWorkersConfig(config);
         this.bindings = config.bindings;
         this.namespacePrefix = config.keyPrefix?.trim() || '';
         this.logger.info('Using Cloudflare KV Workers Binding API');
+
+        const domainConfig = {
+          bindings: this.bindings,
+          keyPrefix: this.namespacePrefix,
+        };
+        workflows = new WorkflowsStorageCloudflare(domainConfig);
+        memory = new MemoryStorageCloudflare(domainConfig);
+        scores = new ScoresStorageCloudflare(domainConfig);
       } else {
         this.validateRestConfig(config);
         this.accountId = config.accountId.trim();
@@ -92,29 +105,18 @@ export class CloudflareStore extends MastraStorage {
           apiToken: config.apiToken.trim(),
         });
         this.logger.info('Using Cloudflare KV REST API');
+
+        const domainConfig = {
+          client: this.client,
+          accountId: this.accountId,
+          namespacePrefix: this.namespacePrefix,
+        };
+        workflows = new WorkflowsStorageCloudflare(domainConfig);
+        memory = new MemoryStorageCloudflare(domainConfig);
+        scores = new ScoresStorageCloudflare(domainConfig);
       }
 
-      const operations = new StoreOperationsCloudflare({
-        accountId: this.accountId,
-        client: this.client,
-        namespacePrefix: this.namespacePrefix,
-        bindings: this.bindings,
-      });
-
-      const workflows = new WorkflowsStorageCloudflare({
-        operations,
-      });
-
-      const memory = new MemoryStorageCloudflare({
-        operations,
-      });
-
-      const scores = new ScoresStorageCloudflare({
-        operations,
-      });
-
       this.stores = {
-        operations,
         workflows,
         memory,
         scores,
@@ -122,53 +124,13 @@ export class CloudflareStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_INIT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
     }
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(_args);
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert<T extends TABLE_NAMES>({
-    tableName,
-    record,
-  }: {
-    tableName: T;
-    record: Record<string, any>;
-  }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -222,13 +184,7 @@ export class CloudflareStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -248,10 +204,6 @@ export class CloudflareStore extends MastraStorage {
 
   async loadWorkflowSnapshot(params: { workflowName: string; runId: string }): Promise<WorkflowRunState | null> {
     return this.stores.workflows.loadWorkflowSnapshot(params);
-  }
-
-  async batchInsert<T extends TABLE_NAMES>(input: { tableName: T; records: Partial<RecordTypes[T]>[] }): Promise<void> {
-    return this.stores.operations.batchInsert(input);
   }
 
   async listWorkflowRuns({
@@ -284,6 +236,10 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -293,11 +249,15 @@ export class CloudflareStore extends MastraStorage {
     return this.stores.memory.updateMessages(args);
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: ScoreRowData): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 

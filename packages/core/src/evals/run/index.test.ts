@@ -1,5 +1,5 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -68,10 +68,10 @@ const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
       warnings: [],
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
-        { type: 'text-start', id: '1' },
-        { type: 'text-delta', id: '1', delta: response },
-        { type: 'text-delta', id: '1', delta: `sup` },
-        { type: 'text-end', id: '1' },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: response },
+        { type: 'text-delta', id: 'text-1', delta: `sup` },
+        { type: 'text-end', id: 'text-1' },
         { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
       ]),
     }),
@@ -487,9 +487,9 @@ describe('runEvals', () => {
           warnings: [],
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Response' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response' },
+            { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
           ]),
         }),

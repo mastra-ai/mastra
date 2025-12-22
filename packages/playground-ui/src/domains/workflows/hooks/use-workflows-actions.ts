@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { mapWorkflowStreamChunkToWatchResult, useMastraClient } from '@mastra/react';
 import type { ReadableStreamDefaultReader } from 'stream/web';
 import { toast } from '@/lib/toast';
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
 export const useExecuteWorkflow = () => {
   const client = useMastraClient();
@@ -41,8 +42,8 @@ export const useExecuteWorkflow = () => {
         });
 
         const workflow = client.getWorkflow(workflowId);
-
-        await workflow.start({ runId, inputData: input || {}, requestContext });
+        const run = await workflow.createRun({ runId });
+        await run.start({ inputData: input || {}, requestContext });
       } catch (error) {
         console.error('Error starting workflow run:', error);
         throw error;
@@ -68,7 +69,8 @@ export const useExecuteWorkflow = () => {
           requestContext.set(key, value);
         });
         const workflow = client.getWorkflow(workflowId);
-        const result = await workflow.startAsync({ runId, inputData: input || {}, requestContext });
+        const run = await workflow.createRun({ runId });
+        const result = await run.startAsync({ inputData: input || {}, requestContext });
         return result;
       } catch (error) {
         console.error('Error starting workflow run:', error);
@@ -88,6 +90,7 @@ type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
 
 export const useStreamWorkflow = () => {
   const client = useMastraClient();
+  const { settings } = useTracingSettings();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
   const [isStreaming, setIsStreaming] = useState(false);
   const readerRef = useRef<ReadableStreamDefaultReader<StreamVNextChunkType> | null>(null);
@@ -153,6 +156,8 @@ export const useStreamWorkflow = () => {
       if (streamStatus === 'failed') {
         throw new Error(metadata?.errorMessage || 'Workflow execution failed');
       }
+      // Tripwire status is not an error - it's handled separately in the UI
+      // Don't throw an error for tripwire status
     }
   };
 
@@ -182,7 +187,13 @@ export const useStreamWorkflow = () => {
         requestContext.set(key as keyof RequestContext, value);
       });
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.streamVNext({ runId, inputData, requestContext, closeOnSuspend: true });
+      const run = await workflow.createRun({ runId });
+      const stream = await run.streamVNext({
+        inputData,
+        requestContext,
+        closeOnSuspend: true,
+        tracingOptions: settings?.tracingOptions,
+      });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -258,7 +269,8 @@ export const useStreamWorkflow = () => {
         return;
       }
       const workflow = client.getWorkflow(workflowId);
-      const stream = await workflow.observeStreamVNext({ runId });
+      const run = await workflow.createRun({ runId });
+      const stream = await run.observeStreamVNext();
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -336,7 +348,13 @@ export const useStreamWorkflow = () => {
       Object.entries(playgroundRequestContext).forEach(([key, value]) => {
         requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.resumeStreamVNext({ runId, step, resumeData, requestContext });
+      const run = await workflow.createRun({ runId });
+      const stream = await run.resumeStreamVNext({
+        step,
+        resumeData,
+        requestContext,
+        tracingOptions: settings?.tracingOptions,
+      });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -391,8 +409,10 @@ export const useStreamWorkflow = () => {
     mutationFn: async ({
       workflowId,
       requestContext: playgroundRequestContext,
+      runId,
       ...params
     }: {
+      runId: string;
       workflowId: string;
       requestContext: Record<string, unknown>;
     } & Omit<TimeTravelParams, 'requestContext'>) => {
@@ -409,7 +429,12 @@ export const useStreamWorkflow = () => {
       Object.entries(playgroundRequestContext).forEach(([key, value]) => {
         requestContext.set(key as keyof RequestContext, value);
       });
-      const stream = await workflow.timeTravelStream({ ...params, requestContext });
+      const run = await workflow.createRun({ runId });
+      const stream = await run.timeTravelStream({
+        ...params,
+        requestContext,
+        tracingOptions: settings?.tracingOptions,
+      });
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -513,7 +538,9 @@ export const useCancelWorkflowRun = () => {
   const cancelWorkflowRun = useMutation({
     mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
       try {
-        const response = await client.getWorkflow(workflowId).cancelRun(runId);
+        const workflow = client.getWorkflow(workflowId);
+        const run = await workflow.createRun({ runId });
+        const response = await run.cancelRun();
         return response;
       } catch (error) {
         console.error('Error canceling workflow run:', error);

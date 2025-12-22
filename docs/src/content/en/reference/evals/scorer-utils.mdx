@@ -1,0 +1,362 @@
+---
+title: "Reference: Scorer Utils | Evals"
+description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+---
+
+# Scorer Utils
+
+Mastra provides utility functions to help extract and process data from scorer run inputs and outputs. These utilities are particularly useful in the `preprocess` step of custom scorers.
+
+## Import
+
+```typescript
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getSystemMessagesFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+  extractInputMessages,
+  extractAgentResponseMessages,
+} from "@mastra/evals/scorers/utils";
+```
+
+## Message Extraction
+
+### getAssistantMessageFromRunOutput
+
+Extracts the text content from the first assistant message in the run output.
+
+```typescript
+const scorer = createScorer({
+  id: "my-scorer",
+  description: "My scorer",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { response };
+  })
+  .generateScore(({ results }) => {
+    return results.preprocessStepResult?.response ? 1 : 0;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The assistant message text, or undefined if no assistant message is found.
+
+### getUserMessageFromRunInput
+
+Extracts the text content from the first user message in the run input.
+
+```typescript
+.preprocess(({ run }) => {
+  const userMessage = getUserMessageFromRunInput(run.input);
+  return { userMessage };
+})
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "input",
+      type: "ScorerRunInputForAgent",
+      isOptional: true,
+      description: "The scorer run input containing input messages",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The user message text, or undefined if no user message is found.
+
+### extractInputMessages
+
+Extracts text content from all input messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allUserMessages = extractInputMessages(run.input);
+  return { conversationHistory: allUserMessages.join("\n") };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each input message.
+
+### extractAgentResponseMessages
+
+Extracts text content from all assistant response messages as an array.
+
+```typescript
+.preprocess(({ run }) => {
+  const allResponses = extractAgentResponseMessages(run.output);
+  return { allResponses };
+})
+```
+
+**Returns:** `string[]` - Array of text strings from each assistant message.
+
+## Reasoning Extraction
+
+### getReasoningFromRunOutput
+
+Extracts reasoning text from the run output. This is particularly useful when evaluating responses from reasoning models like `deepseek-reasoner` that produce chain-of-thought reasoning.
+
+Reasoning can be stored in two places:
+1. `content.reasoning` - a string field on the message content
+2. `content.parts` - as parts with `type: 'reasoning'` containing `details`
+
+```typescript
+import { 
+  getReasoningFromRunOutput, 
+  getAssistantMessageFromRunOutput 
+} from "@mastra/evals/scorers/utils";
+
+const reasoningQualityScorer = createScorer({
+  id: "reasoning-quality",
+  name: "Reasoning Quality",
+  description: "Evaluates the quality of model reasoning",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    return { reasoning, response };
+  })
+  .analyze(({ results }) => {
+    const { reasoning } = results.preprocessStepResult || {};
+    return {
+      hasReasoning: !!reasoning,
+      reasoningLength: reasoning?.length || 0,
+      hasStepByStep: reasoning?.includes("step") || false,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) return 0;
+    // Score based on reasoning length (normalized to 0-1)
+    return Math.min(reasoningLength / 500, 1);
+  })
+  .generateReason(({ results, score }) => {
+    const { hasReasoning, reasoningLength } = results.analyzeStepResult || {};
+    if (!hasReasoning) {
+      return "No reasoning was provided by the model.";
+    }
+    return `Model provided ${reasoningLength} characters of reasoning. Score: ${score}`;
+  });
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "output",
+      type: "ScorerRunOutputForAgent",
+      isOptional: true,
+      description: "The scorer run output (array of MastraDBMessage)",
+    },
+  ]}
+/>
+
+**Returns:** `string | undefined` - The reasoning text, or undefined if no reasoning is present.
+
+## System Message Extraction
+
+### getSystemMessagesFromRunInput
+
+Extracts all system messages from the run input, including both standard system messages and tagged system messages (specialized prompts like memory instructions).
+
+```typescript
+.preprocess(({ run }) => {
+  const systemMessages = getSystemMessagesFromRunInput(run.input);
+  return { 
+    systemPromptCount: systemMessages.length,
+    systemPrompts: systemMessages 
+  };
+})
+```
+
+**Returns:** `string[]` - Array of system message strings.
+
+### getCombinedSystemPrompt
+
+Combines all system messages into a single prompt string, joined with double newlines.
+
+```typescript
+.preprocess(({ run }) => {
+  const fullSystemPrompt = getCombinedSystemPrompt(run.input);
+  return { fullSystemPrompt };
+})
+```
+
+**Returns:** `string` - Combined system prompt string.
+
+## Tool Call Extraction
+
+### extractToolCalls
+
+Extracts information about all tool calls from the run output, including tool names, call IDs, and their positions in the message array.
+
+```typescript
+const toolUsageScorer = createScorer({
+  id: "tool-usage",
+  description: "Evaluates tool usage patterns",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+    return {
+      toolsUsed: tools,
+      toolCount: tools.length,
+      toolDetails: toolCallInfos,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { toolCount } = results.preprocessStepResult || {};
+    // Score based on appropriate tool usage
+    return toolCount > 0 ? 1 : 0;
+  });
+```
+
+**Returns:**
+
+```typescript
+{
+  tools: string[];           // Array of tool names
+  toolCallInfos: ToolCallInfo[];  // Detailed tool call information
+}
+```
+
+Where `ToolCallInfo` is:
+
+```typescript
+type ToolCallInfo = {
+  toolName: string;      // Name of the tool
+  toolCallId: string;    // Unique call identifier
+  messageIndex: number;  // Index in the output array
+  invocationIndex: number; // Index within message's tool invocations
+};
+```
+
+## Test Utilities
+
+These utilities help create test data for scorer development.
+
+### createTestMessage
+
+Creates a `MastraDBMessage` object for testing purposes.
+
+```typescript
+import { createTestMessage } from "@mastra/evals/scorers/utils";
+
+const userMessage = createTestMessage({
+  content: "What is the weather?",
+  role: "user",
+});
+
+const assistantMessage = createTestMessage({
+  content: "The weather is sunny.",
+  role: "assistant",
+  toolInvocations: [
+    {
+      toolCallId: "call-1",
+      toolName: "weatherTool",
+      args: { location: "London" },
+      result: { temp: 20 },
+      state: "result",
+    },
+  ],
+});
+```
+
+### createAgentTestRun
+
+Creates a complete test run object for testing scorers.
+
+```typescript
+import { createAgentTestRun, createTestMessage } from "@mastra/evals/scorers/utils";
+
+const testRun = createAgentTestRun({
+  inputMessages: [
+    createTestMessage({ content: "Hello", role: "user" }),
+  ],
+  output: [
+    createTestMessage({ content: "Hi there!", role: "assistant" }),
+  ],
+});
+
+// Run your scorer with the test data
+const result = await myScorer.run({
+  input: testRun.input,
+  output: testRun.output,
+});
+```
+
+## Complete Example
+
+Here's a complete example showing how to use multiple utilities together:
+
+```typescript
+import { createScorer } from "@mastra/core/evals";
+import {
+  getAssistantMessageFromRunOutput,
+  getReasoningFromRunOutput,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
+  extractToolCalls,
+} from "@mastra/evals/scorers/utils";
+
+const comprehensiveScorer = createScorer({
+  id: "comprehensive-analysis",
+  name: "Comprehensive Analysis",
+  description: "Analyzes all aspects of an agent response",
+  type: "agent",
+})
+  .preprocess(({ run }) => {
+    // Extract all relevant data
+    const userMessage = getUserMessageFromRunInput(run.input);
+    const response = getAssistantMessageFromRunOutput(run.output);
+    const reasoning = getReasoningFromRunOutput(run.output);
+    const systemPrompt = getCombinedSystemPrompt(run.input);
+    const { tools, toolCallInfos } = extractToolCalls(run.output);
+
+    return {
+      userMessage,
+      response,
+      reasoning,
+      systemPrompt,
+      toolsUsed: tools,
+      toolCount: tools.length,
+    };
+  })
+  .generateScore(({ results }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    let score = 0;
+    if (response && response.length > 0) score += 0.4;
+    if (reasoning) score += 0.3;
+    if (toolCount > 0) score += 0.3;
+    
+    return score;
+  })
+  .generateReason(({ results, score }) => {
+    const { response, reasoning, toolCount } = results.preprocessStepResult || {};
+    
+    const parts = [];
+    if (response) parts.push("provided a response");
+    if (reasoning) parts.push("included reasoning");
+    if (toolCount > 0) parts.push(`used ${toolCount} tool(s)`);
+    
+    return `Score: ${score}. The agent ${parts.join(", ")}.`;
+  });
+```
+

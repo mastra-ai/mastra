@@ -794,8 +794,8 @@ describe('Guardrails + Memory interaction', () => {
     });
 
     // Verify the guardrail triggered
-    expect(result.tripwire).toBe(true);
-    expect(result.tripwireReason).toBe('Content blocked by guardrail');
+    expect(result.tripwire).toBeDefined();
+    expect(result.tripwire?.reason).toBe('Content blocked by guardrail');
 
     // CRITICAL: Verify NO messages were saved to memory
     // Because the guardrail aborted BEFORE memory processors ran
@@ -841,7 +841,7 @@ describe('Guardrails + Memory interaction', () => {
     });
 
     // Verify no tripwire
-    expect(result.tripwire).toBeFalsy();
+    expect(result.tripwire).toBeUndefined();
 
     // Verify messages WERE saved to memory
     const { messages } = await memory.recall({ threadId });
@@ -894,8 +894,8 @@ describe('Guardrails + Memory interaction', () => {
     });
 
     // Verify the guardrail triggered
-    expect(result.tripwire).toBe(true);
-    expect(result.tripwireReason).toBe('Input blocked by guardrail');
+    expect(result.tripwire).toBeDefined();
+    expect(result.tripwire?.reason).toBe('Input blocked by guardrail');
 
     // Verify NO messages were saved - LLM was never called, output processors never ran
     const { messages } = await memory.recall({ threadId });

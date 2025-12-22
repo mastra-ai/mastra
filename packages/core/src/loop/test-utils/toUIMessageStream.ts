@@ -5,7 +5,7 @@ import {
   convertResponseStreamToArray,
   mockId,
 } from '@ai-sdk/provider-utils-v5/test';
-import { mockValues } from 'ai-v5/test';
+import { mockValues } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';
@@ -25,7 +25,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should create a ui message stream', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -45,26 +45,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -80,7 +80,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should create a ui message stream with provider metadata', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -200,7 +200,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "reasoning-end",
           },
           {
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "1",
@@ -210,7 +210,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "2",
@@ -220,7 +220,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "3",
@@ -230,7 +230,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "4",
@@ -239,7 +239,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "id-1",
             "providerMetadata": {
               "testProvider": {
                 "signature": "5",
@@ -260,7 +260,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should send tool call, tool call stream start, tool call deltas, and tool result stream parts', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -298,7 +298,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should send message metadata as defined in the metadata function', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -338,7 +338,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "message-metadata",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
@@ -349,7 +349,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
@@ -360,7 +360,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
@@ -371,7 +371,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
@@ -381,7 +381,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "message-metadata",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -411,7 +411,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should mask error messages by default', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -431,7 +431,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should support custom error messages', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -453,16 +453,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should omit message finish event when sendFinish is false', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
         models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, World!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, World!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -485,16 +485,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello, World!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -506,16 +506,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should omit message start event when sendStart is false', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
         models: createTestModels({
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, World!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, World!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -534,16 +534,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello, World!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -558,7 +558,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should send reasoning content when sendReasoning is true', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -703,21 +703,21 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "reasoning-end",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hi",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": " there!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -732,7 +732,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should send source content when sendSources is true', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -763,16 +763,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "url": "https://example.com",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -798,7 +798,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should send document source content when sendSources is true', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -830,16 +830,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "source-document",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello from document!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -866,7 +866,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
 
     it('should send file content', async () => {
       const messageList = createMessageListWithUserMessage();
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -891,16 +891,16 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "url": "data:text/plain;base64,Hello World",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -921,7 +921,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should not generate a new message id when onFinish is provided and generateMessageId is not provided', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -943,26 +943,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -978,7 +978,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should generate a new message id when generateMessageId is provided', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -1000,26 +1000,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
             "type": "start-step",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-start",
           },
           {
             "delta": "Hello",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": ", ",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
             "delta": "world!",
-            "id": "1",
+            "id": "text-1",
             "type": "text-delta",
           },
           {
-            "id": "1",
+            "id": "text-1",
             "type": "text-end",
           },
           {
@@ -1037,7 +1037,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should create a Response with a data stream', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -1066,19 +1066,19 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           "data: {"type":"start-step"}
 
         ",
-          "data: {"type":"text-start","id":"1"}
+          "data: {"type":"text-start","id":"text-1"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"Hello"}
+          "data: {"type":"text-delta","id":"text-1","delta":"Hello"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":", "}
+          "data: {"type":"text-delta","id":"text-1","delta":", "}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"world!"}
+          "data: {"type":"text-delta","id":"text-1","delta":"world!"}
 
         ",
-          "data: {"type":"text-end","id":"1"}
+          "data: {"type":"text-end","id":"text-1"}
 
         ",
           "data: {"type":"finish-step"}
@@ -1097,7 +1097,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should create a Response with a data stream and custom headers', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         messageList,
@@ -1136,19 +1136,19 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
           "data: {"type":"start-step"}
 
         ",
-          "data: {"type":"text-start","id":"1"}
+          "data: {"type":"text-start","id":"text-1"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"Hello"}
+          "data: {"type":"text-delta","id":"text-1","delta":"Hello"}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":", "}
+          "data: {"type":"text-delta","id":"text-1","delta":", "}
 
         ",
-          "data: {"type":"text-delta","id":"1","delta":"world!"}
+          "data: {"type":"text-delta","id":"text-1","delta":"world!"}
 
         ",
-          "data: {"type":"text-end","id":"1"}
+          "data: {"type":"text-end","id":"text-1"}
 
         ",
           "data: {"type":"finish-step"}
@@ -1167,7 +1167,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should mask error messages by default', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         messageList,
@@ -1191,7 +1191,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should support custom error messages', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         messageList,
@@ -1219,7 +1219,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should create a Response with a text stream', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         models: createTestModels(),
@@ -1241,13 +1241,13 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should ignore AbortError during stream consumption', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1273,13 +1273,13 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should ignore ResponseAborted error during stream consumption', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1305,13 +1305,13 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should ignore any errors during stream consumption', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1334,13 +1334,13 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
       const messageList = createMessageListWithUserMessage();
 
       const onErrorCallback = vi.fn();
-      const result = await loopFn({
+      const result = loopFn({
         runId,
         methodType: 'stream',
         models: createTestModels({
           stream: new ReadableStream({
             start(controller) {
-              controller.enqueue({ type: 'text-start', id: '1' });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
               controller.enqueue({
                 type: 'text-delta',
                 id: '1',
@@ -1365,7 +1365,7 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
     it('should support text stream, ai stream, full stream on single result object', async () => {
       const messageList = createMessageListWithUserMessage();
 
-      const result = await loopFn({
+      const result = loopFn({
         methodType: 'stream',
         runId,
         messageList,
@@ -1377,11 +1377,11 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               modelId: 'mock-model-id',
               timestamp: new Date(0),
             },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello' },
-            { type: 'text-delta', id: '1', delta: ', ' },
-            { type: 'text-delta', id: '1', delta: 'world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+            { type: 'text-delta', id: 'text-1', delta: ', ' },
+            { type: 'text-delta', id: 'text-1', delta: 'world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -1411,30 +1411,30 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               "warnings": [],
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-start",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "Hello",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": ", ",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "text": "world!",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "providerMetadata": undefined,
               "type": "text-end",
             },
@@ -1483,26 +1483,26 @@ export function toUIMessageStreamTests({ loopFn, runId }: { loopFn: typeof loop;
               "type": "start-step",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "type": "text-start",
             },
             {
               "delta": "Hello",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
               "delta": ", ",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
               "delta": "world!",
-              "id": "1",
+              "id": "text-1",
               "type": "text-delta",
             },
             {
-              "id": "1",
+              "id": "text-1",
               "type": "text-end",
             },
             {

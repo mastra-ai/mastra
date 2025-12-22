@@ -2,39 +2,105 @@ import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 
-import { MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   WorkflowRun,
   WorkflowRuns,
-  TABLE_NAMES,
   PaginationInfo,
-  StorageColumn,
   StoragePagination,
   StorageDomains,
   StorageResourceType,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 import { MemoryStorageDynamoDB } from './domains/memory';
-import { StoreOperationsDynamoDB } from './domains/operations';
-import { ScoresStorageDynamoDB } from './domains/score';
+import { ScoresStorageDynamoDB } from './domains/scores';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
-export interface DynamoDBStoreConfig {
+/**
+ * DynamoDB configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured DynamoDB client: `{ id, client, tableName }`
+ * - AWS config: `{ id, tableName, region?, endpoint?, credentials? }`
+ */
+export type DynamoDBStoreConfig = {
   id: string;
-  region?: string;
   tableName: string;
-  endpoint?: string;
-  credentials?: {
-    accessKeyId: string;
-    secretAccessKey: string;
-  };
-}
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new DynamoDBStore({ name: 'my-store', config: { ...config, disableInit: false } });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new DynamoDBStore({ name: 'my-store', config: { ...config, disableInit: true } });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+} & (
+  | {
+      /**
+       * Pre-configured DynamoDB Document client.
+       * Use this when you need to configure the client before initialization,
+       * e.g., to set custom middleware or retry strategies.
+       *
+       * @example
+       * ```typescript
+       * import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+       * import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+       *
+       * const dynamoClient = new DynamoDBClient({
+       *   region: 'us-east-1',
+       *   // Custom settings
+       *   maxAttempts: 5,
+       * });
+       *
+       * const client = DynamoDBDocumentClient.from(dynamoClient, {
+       *   marshallOptions: { removeUndefinedValues: true },
+       * });
+       *
+       * const store = new DynamoDBStore({
+       *   name: 'my-store',
+       *   config: { id: 'my-id', client, tableName: 'my-table' }
+       * });
+       * ```
+       */
+      client: DynamoDBDocumentClient;
+    }
+  | {
+      region?: string;
+      endpoint?: string;
+      credentials?: {
+        accessKeyId: string;
+        secretAccessKey: string;
+      };
+    }
+);
+
+/**
+ * Type guard for pre-configured client config
+ */
+const isClientConfig = (
+  config: DynamoDBStoreConfig,
+): config is DynamoDBStoreConfig & { client: DynamoDBDocumentClient } => {
+  return 'client' in config;
+};
 
 // Define a type for our service that allows string indexing
 type MastraService = Service<Record<string, any>> & {
@@ -49,7 +115,7 @@ export class DynamoDBStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor({ name, config }: { name: string; config: DynamoDBStoreConfig }) {
-    super({ id: config.id, name });
+    super({ id: config.id, name, disableInit: config.disableInit });
 
     // Validate required config
     try {
@@ -63,30 +129,30 @@ export class DynamoDBStore extends MastraStorage {
         );
       }
 
-      const dynamoClient = new DynamoDBClient({
-        region: config.region || 'us-east-1',
-        endpoint: config.endpoint,
-        credentials: config.credentials,
-      });
-
       this.tableName = config.tableName;
-      this.client = DynamoDBDocumentClient.from(dynamoClient);
+
+      // Handle pre-configured client vs creating new connection
+      if (isClientConfig(config)) {
+        // User provided a pre-configured DynamoDBDocumentClient
+        this.client = config.client;
+      } else {
+        // Create client from AWS config
+        const dynamoClient = new DynamoDBClient({
+          region: config.region || 'us-east-1',
+          endpoint: config.endpoint,
+          credentials: config.credentials,
+        });
+        this.client = DynamoDBDocumentClient.from(dynamoClient);
+      }
+
       this.service = getElectroDbService(this.client, this.tableName) as MastraService;
 
-      const operations = new StoreOperationsDynamoDB({
-        service: this.service,
-        tableName: this.tableName,
-        client: this.client,
-      });
-
-      const workflows = new WorkflowStorageDynamoDB({ service: this.service });
-
-      const memory = new MemoryStorageDynamoDB({ service: this.service });
-
-      const scores = new ScoresStorageDynamoDB({ service: this.service });
+      const domainConfig = { service: this.service };
+      const workflows = new WorkflowStorageDynamoDB(domainConfig);
+      const memory = new MemoryStorageDynamoDB(domainConfig);
+      const scores = new ScoresStorageDynamoDB(domainConfig);
 
       this.stores = {
-        operations,
         workflows,
         memory,
         scores,
@@ -94,7 +160,7 @@ export class DynamoDBStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CONSTRUCTOR_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CONSTRUCTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -112,7 +178,7 @@ export class DynamoDBStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
     };
   }
@@ -141,7 +207,7 @@ export class DynamoDBStore extends MastraStorage {
       // For other errors (like permissions issues), we should throw
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_VALIDATE_TABLE_EXISTS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'VALIDATE_TABLE_EXISTS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -176,7 +242,7 @@ export class DynamoDBStore extends MastraStorage {
       // the caller of init() is aware of the failure.
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_INIT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'INIT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { tableName: this.tableName },
@@ -207,38 +273,6 @@ export class DynamoDBStore extends MastraStorage {
         // Re-throw the error so it can be caught by the awaiter in init()
         throw err;
       });
-  }
-
-  async createTable({ tableName, schema }: { tableName: TABLE_NAMES; schema: Record<string, any> }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(_args);
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   // Thread operations
@@ -283,6 +317,10 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.memory.updateMessages(_args);
   }
 
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
   // Workflow operations
   async updateWorkflowResults({
     workflowName,
@@ -307,13 +345,7 @@ export class DynamoDBStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -350,6 +382,10 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.workflows.getWorkflowRunById(args);
   }
 
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
+  }
+
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
     return this.stores.memory.getResourceById({ resourceId });
   }
@@ -382,7 +418,7 @@ export class DynamoDBStore extends MastraStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_CLOSE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'CLOSE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -397,8 +433,8 @@ export class DynamoDBStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id: _id });
   }
 
-  async saveScore(_score: ScoreRowData): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(_score);
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    return this.stores.scores.saveScore(score);
   }
 
   async listScoresByRunId({

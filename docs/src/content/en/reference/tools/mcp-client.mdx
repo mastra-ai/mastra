@@ -100,6 +100,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
         "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
+      name: "fetch",
+      type: "FetchLike",
+      isOptional: true,
+      description:
+        "For HTTP servers: Custom fetch implementation used for all network requests. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers (e.g., refreshing bearer tokens), customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
+    },
+    {
       name: "logger",
       type: "LogHandler",
       isOptional: true,
@@ -854,11 +861,40 @@ MCPClient handles server connections gracefully:
 2. Graceful server shutdown to prevent error messages during development
 3. Proper cleanup of resources when disconnecting
 
+## Using Custom Fetch for Dynamic Authentication
+
+For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or customize request behavior.
+
+When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL("https://api.example.com/mcp"),
+      fetch: async (url, init) => {
+        // Refresh token on each request
+        const token = await getAuthToken(); // Your token refresh logic
+        
+        return fetch(url, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      },
+    },
+  },
+});
+```
+
 ## Using SSE Request Headers
 
-When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK:
+When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
 
 ```ts
+// Option 1: Using requestInit and eventSourceInit (required for SSE)
 const sseClient = new MCPClient({
   servers: {
     exampleServer: {
@@ -879,6 +915,23 @@ const sseClient = new MCPClient({
             headers,
           });
         },
+      },
+    },
+  },
+});
+
+// Option 2: Using custom fetch (simpler, works for both Streamable HTTP and SSE)
+const sseClientWithFetch = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      fetch: async (url, init) => {
+        const headers = new Headers(init?.headers || {});
+        headers.set("Authorization", "Bearer your-token");
+        return fetch(url, {
+          ...init,
+          headers,
+        });
       },
     },
   },

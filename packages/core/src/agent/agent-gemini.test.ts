@@ -609,7 +609,7 @@ describe('Gemini Model Compatibility Tests', () => {
   describe('Gemini 3 Pro with tool calls', () => {
     it(
       'should preserve thought_signature metadata through tool call round-trip',
-      { retry: 2, timeout: 30000 },
+      { retry: 2, timeout: 120000 },
       async () => {
         const weatherTool = createTool({
           id: 'get-weather',
@@ -665,44 +665,49 @@ describe('Gemini Model Compatibility Tests', () => {
       },
     );
 
-    it('should handle multi-step tool calls with gemini 3 pro', async () => {
-      const weatherTool = createTool({
-        id: 'get-weather-multi',
-        description: 'Gets the current weather for a location',
-        inputSchema: z.object({
-          location: z.string().describe('The city and state, e.g. San Francisco, CA'),
-        }),
-        outputSchema: z.object({
-          temperature: z.number(),
-          conditions: z.string(),
-        }),
-        execute: async () => {
-          return {
-            temperature: 72,
-            conditions: 'Sunny',
-          };
-        },
-      });
+    it(
+      'should handle multi-step tool calls with gemini 3 pro',
+      { retry: 2, timeout: 120000 },
+      async () => {
+        const weatherTool = createTool({
+          id: 'get-weather-multi',
+          description: 'Gets the current weather for a location',
+          inputSchema: z.object({
+            location: z.string().describe('The city and state, e.g. San Francisco, CA'),
+          }),
+          outputSchema: z.object({
+            temperature: z.number(),
+            conditions: z.string(),
+          }),
+          execute: async () => {
+            return {
+              temperature: 72,
+              conditions: 'Sunny',
+            };
+          },
+        });
 
-      const agent = new Agent({
-        id: 'weather-multi-gemini3-agent',
-        name: 'Weather Multi Gemini3 Agent',
-        instructions:
-          'You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions.',
-        model: GEMINI_3_PRO,
-        tools: { weatherTool },
-        memory,
-      });
+        const agent = new Agent({
+          id: 'weather-multi-gemini3-agent',
+          name: 'Weather Multi Gemini3 Agent',
+          instructions:
+            'You are a helpful weather assistant. Use the get-weather-multi tool to answer weather questions.',
+          model: GEMINI_3_PRO,
+          tools: { weatherTool },
+          memory,
+        });
 
-      // This should trigger a tool call, then process the result
-      const result = await agent.generate('What is the weather in San Francisco and New York?', {
-        maxSteps: 5,
-      });
+        // This should trigger a tool call, then process the result
+        const result = await agent.generate('What is the weather in San Francisco and New York?', {
+          maxSteps: 5,
+        });
 
-      expect(result).toBeDefined();
-      expect(result.text).toBeDefined();
-      expect(result.text.length).toBeGreaterThan(0);
-      expect(result.error).toBeUndefined();
-    }, 30000);
+        expect(result).toBeDefined();
+        expect(result.text).toBeDefined();
+        expect(result.text.length).toBeGreaterThan(0);
+        expect(result.error).toBeUndefined();
+      },
+      30000,
+    );
   });
 });

@@ -168,7 +168,7 @@ The following files are created:
 - **hybrid-question.mp3** – Hybrid agent's spoken question.
 - **unified-response.mp3** – Unified agent's spoken response.
 
-```typescript title="src/test-voice-agents.ts" showLineNumbers copy
+```typescript title="src/test-voice-agents.ts"
 import "dotenv/config";
 
 import path from "path";
@@ -232,7 +232,6 @@ export const unifiedVoiceAgent = new Agent({
 });
 
 export const mastra = new Mastra({
-  // ...
   agents: { hybridVoiceAgent, unifiedVoiceAgent },
 });
 
@@ -297,7 +296,7 @@ export const agent = new Agent({
   id: "aisdk-voice-agent",
   name: "AI SDK Voice Agent",
   instructions: `You are a helpful assistant with voice capabilities.`,
-  model: openai("gpt-5.1"),
+  model: "openai/gpt-5.1",
 
   // Pass AI SDK models directly to CompositeVoice
   voice: new CompositeVoice({

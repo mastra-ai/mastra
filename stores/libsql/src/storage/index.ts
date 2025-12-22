@@ -1,15 +1,13 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
-  StorageColumn,
   StoragePagination,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StorageDomains,
@@ -17,38 +15,62 @@ import type {
   TraceRecord,
   TracesPaginatedArg,
   StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { AgentsLibSQL } from './domains/agents';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
-import { StoreOperationsLibSQL } from './domains/operations';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
 
+/**
+ * Base configuration options shared across LibSQL configurations
+ */
+export type LibSQLBaseConfig = {
+  id: string;
+  /**
+   * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
+   * @default 5
+   */
+  maxRetries?: number;
+  /**
+   * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
+   * The backoff time will double with each retry (exponential backoff).
+   * @default 100
+   */
+  initialBackoffMs?: number;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new LibSQLStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new LibSQLStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+};
+
 export type LibSQLConfig =
-  | {
-      id: string;
+  | (LibSQLBaseConfig & {
       url: string;
       authToken?: string;
-      /**
-       * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
-       * @default 5
-       */
-      maxRetries?: number;
-      /**
-       * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
-       * The backoff time will double with each retry (exponential backoff).
-       * @default 100
-       */
-      initialBackoffMs?: number;
-    }
-  | {
-      id: string;
+    })
+  | (LibSQLBaseConfig & {
       client: Client;
-      maxRetries?: number;
-      initialBackoffMs?: number;
-    };
+    });
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;
@@ -61,7 +83,7 @@ export class LibSQLStore extends MastraStorage {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('LibSQLStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: `LibSQLStore` });
+    super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit });
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
@@ -92,23 +114,24 @@ export class LibSQLStore extends MastraStorage {
       this.client = config.client;
     }
 
-    const operations = new StoreOperationsLibSQL({
+    const domainConfig = {
       client: this.client,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
-    });
+    };
 
-    const scores = new ScoresLibSQL({ client: this.client, operations });
-    const workflows = new WorkflowsLibSQL({ client: this.client, operations });
-    const memory = new MemoryLibSQL({ client: this.client, operations });
-    const observability = new ObservabilityLibSQL({ operations });
+    const scores = new ScoresLibSQL(domainConfig);
+    const workflows = new WorkflowsLibSQL(domainConfig);
+    const memory = new MemoryLibSQL(domainConfig);
+    const observability = new ObservabilityLibSQL(domainConfig);
+    const agents = new AgentsLibSQL(domainConfig);
 
     this.stores = {
-      operations,
       scores,
       workflows,
       memory,
       observability,
+      agents,
     };
   }
 
@@ -121,55 +144,8 @@ export class LibSQLStore extends MastraStorage {
       deleteMessages: true,
       observabilityInstance: true,
       listScoresBySpan: true,
+      agents: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    await this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    await this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.dropTable({ tableName });
-  }
-
-  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert(args);
-  }
-
-  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert(args);
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -224,7 +200,7 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.scores.getScoreById({ id });
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     return this.stores.scores.saveScore(score);
   }
 
@@ -293,13 +269,7 @@ export class LibSQLStore extends MastraStorage {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
   }
@@ -340,6 +310,10 @@ export class LibSQLStore extends MastraStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

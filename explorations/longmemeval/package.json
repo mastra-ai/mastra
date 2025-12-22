@@ -1,6 +1,6 @@
 {
   "name": "@mastra/longmemeval",
-  "version": "1.0.0-beta.5",
+  "version": "1.0.0-beta.14",
   "description": "LongMemEval benchmark implementation for Mastra Memory",
   "scripts": {
     "test": "vitest",
@@ -33,7 +33,7 @@
     "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@mastra/rag": "^1.0.2",
+    "@mastra/rag": "workspace:*",
     "@node-rs/xxhash": "^1.7.6",
     "ai": "^4.3.17",
     "async-mutex": "^0.5.0",

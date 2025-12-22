@@ -4,15 +4,9 @@
  * This exporter sends observability data to Langfuse.
  * Root spans start traces in Langfuse.
  * MODEL_GENERATION spans become Langfuse generations, all others become spans.
- *
- * Compatible with both AI SDK v4 and v5:
- * - Handles both legacy token usage format (promptTokens/completionTokens)
- *   and v5 format (inputTokens/outputTokens)
- * - Supports v5 reasoning tokens and cache-related metrics
- * - Adapts to v5 streaming protocol changes
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
@@ -33,9 +27,17 @@ export interface LangfuseExporterConfig extends BaseExporterConfig {
   options?: any;
 }
 
+type LangfusePromptData = { name?: string; version?: number; id?: string };
+
+type SpanMetadata = {
+  parentSpanId?: string;
+  langfusePrompt?: LangfusePromptData;
+};
+
 type TraceData = {
   trace: LangfuseTraceClient; // Langfuse trace object
   spans: Map<string, LangfuseSpanClient | LangfuseGenerationClient>; // Maps span.id to Langfuse span/generation
+  spanMetadata: Map<string, SpanMetadata>; // Maps span.id to span metadata for prompt inheritance
   events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
   activeSpans: Set<string>; // Tracks which spans haven't ended yet
   rootSpanId?: string; // Track the root span ID
@@ -44,66 +46,54 @@ type TraceData = {
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
 
 /**
- * Normalized token usage format compatible with Langfuse.
- * This unified format supports both AI SDK v4 and v5 token structures.
- *
- * @example
- * ```typescript
- * // AI SDK v4 format normalizes to:
- * { input: 100, output: 50, total: 150 }
- *
- * // AI SDK v5 format normalizes to:
- * { input: 120, output: 60, total: 180, reasoning: 1000, cachedInput: 50 }
- * ```
+ * Token usage format compatible with Langfuse.
  */
-interface NormalizedUsage {
-  /**
-   * Input tokens sent to the model
-   * @source AI SDK v5: `inputTokens` | AI SDK v4: `promptTokens`
-   */
+export interface LangfuseUsageMetrics {
   input?: number;
-
-  /**
-   * Output tokens received from the model
-   * @source AI SDK v5: `outputTokens` | AI SDK v4: `completionTokens`
-   */
   output?: number;
-
-  /**
-   * Total tokens (input + output + reasoning if applicable)
-   * @source AI SDK v4 & v5: `totalTokens`
-   */
   total?: number;
-
-  /**
-   * Reasoning tokens used by reasoning models
-   * @source AI SDK v5: `reasoningTokens`
-   * @since AI SDK v5.0.0
-   * @example Models like o1-preview, o1-mini
-   */
   reasoning?: number;
+  cache_read_input_tokens?: number;
+  cache_write_input_tokens?: number;
+}
 
-  /**
-   * Cached input tokens (prompt cache hit)
-   * @source AI SDK v5: `cachedInputTokens`
-   * @since AI SDK v5.0.0
-   * @example Anthropic's prompt caching, OpenAI prompt caching
-   */
-  cachedInput?: number;
+/**
+ * Formats UsageStats to Langfuse's expected format.
+ */
+export function formatUsageMetrics(usage?: UsageStats): LangfuseUsageMetrics {
+  if (!usage) return {};
 
-  /**
-   * Prompt cache hit tokens (legacy format)
-   * @source AI SDK v4: `promptCacheHitTokens`
-   * @deprecated Prefer `cachedInput` from v5 format
-   */
-  promptCacheHit?: number;
+  const metrics: LangfuseUsageMetrics = {};
 
-  /**
-   * Prompt cache miss tokens (legacy format)
-   * @source AI SDK v4: `promptCacheMissTokens`
-   * @deprecated Prefer v5 format which uses `cachedInputTokens`
-   */
-  promptCacheMiss?: number;
+  if (usage.inputTokens !== undefined) {
+    metrics.input = usage.inputTokens;
+
+    if (usage.inputDetails?.cacheWrite !== undefined) {
+      metrics.cache_write_input_tokens = usage.inputDetails.cacheWrite;
+      metrics.input -= metrics.cache_write_input_tokens;
+    }
+  }
+
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    metrics.cache_read_input_tokens = usage.inputDetails.cacheRead;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    metrics.output = usage.outputTokens;
+  }
+
+  if (usage.outputDetails?.reasoning !== undefined) {
+    metrics.reasoning = usage.outputDetails.reasoning;
+  }
+
+  if (metrics.input && metrics.output) {
+    metrics.total = metrics.input + metrics.output;
+    if (metrics.cache_write_input_tokens) {
+      metrics.total += metrics.cache_write_input_tokens;
+    }
+  }
+
+  return metrics;
 }
 
 export class LangfuseExporter extends BaseExporter {
@@ -169,12 +159,21 @@ export class LangfuseExporter extends BaseExporter {
       return;
     }
 
+    // Store span metadata for prompt inheritance lookup (for non-root spans)
+    if (!span.isRootSpan) {
+      const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
+      traceData.spanMetadata.set(span.id, {
+        parentSpanId: span.parentSpanId,
+        langfusePrompt: langfuseData?.prompt,
+      });
+    }
+
     const langfuseParent = this.getLangfuseParent({ traceData, span, method });
     if (!langfuseParent) {
       return;
     }
 
-    const payload = this.buildSpanPayload(span, true);
+    const payload = this.buildSpanPayload(span, true, traceData);
 
     const langfuseSpan =
       span.type === SpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
@@ -217,7 +216,7 @@ export class LangfuseExporter extends BaseExporter {
 
     // use update for both update & end, so that we can use the
     // end time we set when ending the span.
-    langfuseSpan.update(this.buildSpanPayload(span, false));
+    langfuseSpan.update(this.buildSpanPayload(span, false, traceData));
 
     if (isEnd) {
       // Remove from active spans
@@ -256,7 +255,7 @@ export class LangfuseExporter extends BaseExporter {
       return;
     }
 
-    const payload = this.buildSpanPayload(span, true);
+    const payload = this.buildSpanPayload(span, true, traceData);
 
     const langfuseEvent = langfuseParent.event(payload);
 
@@ -269,10 +268,39 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   private initTrace(span: AnyExportedSpan): void {
+    // Check if trace already exists in our local traceMap
+    // This allows multiple root spans (e.g., from multiple agent.stream calls)
+    // to be grouped under the same Langfuse trace
+    if (this.traceMap.has(span.traceId)) {
+      this.logger.debug('Langfuse exporter: Reusing existing trace from local map', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+      });
+      return; // Reuse existing trace
+    }
+
+    // Note: If the traceId already exists in Langfuse (e.g., from a previous server instance
+    // or session), the Langfuse SDK handles this gracefully. Calling client.trace() with
+    // an existing ID is idempotent - it will update/continue the existing trace rather than
+    // failing or creating a duplicate. This is by design for distributed tracing scenarios.
+    // See: https://langfuse.com/docs/tracing-features/trace-ids
     const trace = this.client.trace(this.buildTracePayload(span));
+
+    // Extract langfuse prompt data from root span
+    const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
+    const spanMetadata = new Map<string, SpanMetadata>();
+
+    // Store root span metadata for prompt inheritance
+    spanMetadata.set(span.id, {
+      parentSpanId: undefined,
+      langfusePrompt: langfuseData?.prompt,
+    });
+
     this.traceMap.set(span.traceId, {
       trace,
       spans: new Map(),
+      spanMetadata,
       events: new Map(),
       activeSpans: new Set(),
       rootSpanId: span.id,
@@ -336,6 +364,8 @@ export class LangfuseExporter extends BaseExporter {
     if (userId) payload.userId = userId;
     if (sessionId) payload.sessionId = sessionId;
     if (span.input) payload.input = span.input;
+    // Include tags if present (only for root spans, which is always the case here)
+    if (span.tags?.length) payload.tags = span.tags;
 
     payload.metadata = {
       spanType: span.type,
@@ -347,64 +377,25 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Normalize usage data to handle both AI SDK v4 and v5 formats.
-   *
-   * AI SDK v4 uses: promptTokens, completionTokens
-   * AI SDK v5 uses: inputTokens, outputTokens
-   *
-   * This function normalizes to a unified format that Langfuse can consume,
-   * prioritizing v5 format while maintaining backward compatibility.
-   *
-   * @param usage - Token usage data from AI SDK (v4 or v5 format)
-   * @returns Normalized usage object, or undefined if no usage data available
+   * Look up the Langfuse prompt from the closest parent span that has one.
+   * This enables prompt inheritance for MODEL_GENERATION spans when the prompt
+   * is set on a parent span (e.g., AGENT_RUN) rather than directly on the generation.
    */
-  private normalizeUsage(usage: ModelGenerationAttributes['usage']): NormalizedUsage | undefined {
-    if (!usage) return undefined;
+  private findParentLangfusePrompt(traceData: TraceData, span: AnyExportedSpan): LangfusePromptData | undefined {
+    let currentSpanId = span.parentSpanId;
 
-    const normalized: NormalizedUsage = {};
-
-    // Handle input tokens (v5 'inputTokens' or v4 'promptTokens')
-    // Using ?? to prioritize v5 format while falling back to v4
-    const inputTokens = usage.inputTokens ?? usage.promptTokens;
-    if (inputTokens !== undefined) {
-      normalized.input = inputTokens;
+    while (currentSpanId) {
+      const parentMetadata = traceData.spanMetadata.get(currentSpanId);
+      if (parentMetadata?.langfusePrompt) {
+        return parentMetadata.langfusePrompt;
+      }
+      currentSpanId = parentMetadata?.parentSpanId;
     }
 
-    // Handle output tokens (v5 'outputTokens' or v4 'completionTokens')
-    const outputTokens = usage.outputTokens ?? usage.completionTokens;
-    if (outputTokens !== undefined) {
-      normalized.output = outputTokens;
-    }
-
-    // Total tokens - calculate if not provided
-    if (usage.totalTokens !== undefined) {
-      normalized.total = usage.totalTokens;
-    } else if (normalized.input !== undefined && normalized.output !== undefined) {
-      normalized.total = normalized.input + normalized.output;
-    }
-
-    // AI SDK v5-specific: reasoning tokens
-    if (usage.reasoningTokens !== undefined) {
-      normalized.reasoning = usage.reasoningTokens;
-    }
-
-    // AI SDK v5-specific: cached tokens (cache hit)
-    if (usage.cachedInputTokens !== undefined) {
-      normalized.cachedInput = usage.cachedInputTokens;
-    }
-
-    // Legacy cache metrics (promptCacheHitTokens/promptCacheMissTokens)
-    if (usage.promptCacheHitTokens !== undefined) {
-      normalized.promptCacheHit = usage.promptCacheHitTokens;
-    }
-    if (usage.promptCacheMissTokens !== undefined) {
-      normalized.promptCacheMiss = usage.promptCacheMissTokens;
-    }
-
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
+    return undefined;
   }
 
-  private buildSpanPayload(span: AnyExportedSpan, isCreate: boolean): Record<string, any> {
+  private buildSpanPayload(span: AnyExportedSpan, isCreate: boolean, traceData?: TraceData): Record<string, any> {
     const payload: Record<string, any> = {};
 
     if (isCreate) {
@@ -419,8 +410,26 @@ export class LangfuseExporter extends BaseExporter {
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
+    // For MODEL_GENERATION spans without langfuse metadata, look up the closest
+    // parent span that has langfuse prompt data. This enables prompt linking when:
+    // - A workflow calls multiple agents, each with different prompts
+    // - Nested agents have different prompts
+    // - The prompt is set on AGENT_RUN but MODEL_GENERATION inherits it
+    const resolvedTraceData = traceData ?? this.traceMap.get(span.traceId);
+    let inheritedLangfusePrompt: LangfusePromptData | undefined;
+
+    if (span.type === SpanType.MODEL_GENERATION && !span.metadata?.langfuse && resolvedTraceData) {
+      inheritedLangfusePrompt = this.findParentLangfusePrompt(resolvedTraceData, span);
+    }
+
+    const metadata: Record<string, any> = {
+      ...span.metadata,
+      ...(inheritedLangfusePrompt ? { langfuse: { prompt: inheritedLangfusePrompt } } : {}),
+    };
+
     // Strip special fields from metadata if used in top-level keys
     const attributesToOmit: string[] = [];
+    const metadataToOmit: string[] = [];
 
     if (span.type === SpanType.MODEL_GENERATION) {
       const modelAttr = attributes as ModelGenerationAttributes;
@@ -431,11 +440,7 @@ export class LangfuseExporter extends BaseExporter {
       }
 
       if (modelAttr.usage !== undefined) {
-        // Normalize usage to handle both v4 and v5 formats
-        const normalizedUsage = this.normalizeUsage(modelAttr.usage);
-        if (normalizedUsage) {
-          payload.usage = normalizedUsage;
-        }
+        payload.usageDetails = formatUsageMetrics(modelAttr.usage);
         attributesToOmit.push('usage');
       }
 
@@ -443,12 +448,41 @@ export class LangfuseExporter extends BaseExporter {
         payload.modelParameters = modelAttr.parameters;
         attributesToOmit.push('parameters');
       }
+
+      // Handle Langfuse prompt linking
+      // Users can set metadata.langfuse.prompt to link generations to Langfuse Prompt Management
+      // Supported formats:
+      // - { id } - link by prompt UUID alone
+      // - { name, version } - link by name and version
+      // - { name, version, id } - link with all fields
+      const langfuseData = metadata.langfuse as
+        | { prompt?: { name?: string; version?: number; id?: string } }
+        | undefined;
+      const promptData = langfuseData?.prompt;
+      const hasNameAndVersion = promptData?.name !== undefined && promptData?.version !== undefined;
+      const hasId = promptData?.id !== undefined;
+
+      if (hasNameAndVersion || hasId) {
+        payload.prompt = {};
+
+        if (promptData?.name !== undefined) payload.prompt.name = promptData.name;
+        if (promptData?.version !== undefined) payload.prompt.version = promptData.version;
+        if (promptData?.id !== undefined) payload.prompt.id = promptData.id;
+
+        metadataToOmit.push('langfuse');
+      }
+
+      // completionStartTime is used by Langfuse to calculate time-to-first-token (TTFT)
+      if (modelAttr.completionStartTime !== undefined) {
+        payload.completionStartTime = modelAttr.completionStartTime;
+        attributesToOmit.push('completionStartTime');
+      }
     }
 
     payload.metadata = {
       spanType: span.type,
       ...omitKeys(attributes, attributesToOmit),
-      ...span.metadata,
+      ...omitKeys(metadata, metadataToOmit),
     };
 
     if (span.errorInfo) {

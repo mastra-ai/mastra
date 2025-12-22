@@ -20,6 +20,7 @@ new LangSmithExporter(config: LangSmithExporterConfig)
 ```typescript
 interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
   client?: Client;
+  projectName?: string;
 }
 ```
 
@@ -32,7 +33,13 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
     {
       name: "apiKey",
       type: "string",
-      description: "LangSmith API key",
+      description: "LangSmith API key. Defaults to LANGSMITH_API_KEY env var.",
+      required: false,
+    },
+    {
+      name: "projectName",
+      type: "string",
+      description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
       required: false,
     },
     {
@@ -99,10 +106,19 @@ import { LangSmithExporter } from "@mastra/langsmith";
 
 const exporter = new LangSmithExporter({
   apiKey: process.env.LANGSMITH_API_KEY,
+  projectName: "my-project", // Optional: specify which project to send traces to
   apiUrl: "https://api.smith.langchain.com",
   logLevel: "info",
 });
 ```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `LANGSMITH_API_KEY` | Your LangSmith API key |
+| `LANGCHAIN_PROJECT` | Default project name for traces (used if `projectName` not specified) |
+| `LANGSMITH_BASE_URL` | API URL for self-hosted instances |
 
 ## Span Type Mapping
 

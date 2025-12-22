@@ -7,12 +7,13 @@ import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
 import resolveFrom from 'resolve-from';
 import { esbuild } from '../plugins/esbuild';
 import { isNodeBuiltin } from '../isNodeBuiltin';
-import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, getPackageRootPath, slash } from '../utils';
+import { getPackageName, slash } from '../utils';
+import { getPackageRootPath } from '../package-info';
 import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
 import { DEPS_TO_IGNORE } from './constants';
+import { removeDeployer } from '../plugins/remove-deployer';
 
 /**
  * Configures and returns the Rollup plugins needed for analyzing entry files.
@@ -62,7 +63,9 @@ function getInputPlugins(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(mastraEntry, { sourcemap: sourcemapEnabled }),
+      removeDeployer(mastraEntry, {
+        sourcemap: sourcemapEnabled,
+      }),
       esbuild(),
     ],
   );
@@ -102,7 +105,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
+    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
       continue;
     }
 

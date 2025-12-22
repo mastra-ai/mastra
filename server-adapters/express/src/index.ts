@@ -1,10 +1,13 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Tool } from '@mastra/core/tools';
-import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { ServerRoute, BodyLimitOptions } from '@mastra/server/server-adapter';
-import { MastraServerAdapter } from '@mastra/server/server-adapter';
+import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
+
+import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
 // Extend Express types to include Mastra context
 declare global {
@@ -13,45 +16,14 @@ declare global {
       mastra: Mastra;
       requestContext: RequestContext;
       abortSignal: AbortSignal;
-      tools: Record<string, Tool>;
+      tools: ToolsInput;
       taskStore: InMemoryTaskStore;
       customRouteAuthConfig?: Map<string, boolean>;
-      playground?: boolean;
-      isDev?: boolean;
     }
   }
 }
 
-export class ExpressServerAdapter extends MastraServerAdapter<Application, Request, Response> {
-  private taskStore: InMemoryTaskStore;
-  private customRouteAuthConfig?: Map<string, boolean>;
-  private playground?: boolean;
-  private isDev?: boolean;
-
-  constructor({
-    mastra,
-    tools,
-    taskStore,
-    customRouteAuthConfig,
-    playground,
-    isDev,
-    bodyLimitOptions,
-  }: {
-    mastra: Mastra;
-    tools?: Record<string, Tool>;
-    taskStore?: InMemoryTaskStore;
-    customRouteAuthConfig?: Map<string, boolean>;
-    playground?: boolean;
-    isDev?: boolean;
-    bodyLimitOptions?: BodyLimitOptions;
-  }) {
-    super({ mastra, bodyLimitOptions, tools });
-    this.taskStore = taskStore || new InMemoryTaskStore();
-    this.customRouteAuthConfig = customRouteAuthConfig;
-    this.playground = playground;
-    this.isDev = isDev;
-  }
-
+export class MastraServer extends MastraServerBase<Application, Request, Response> {
   createContextMiddleware(): (req: Request, res: Response, next: NextFunction) => Promise<void> {
     return async (req: Request, res: Response, next: NextFunction) => {
       // Parse request context from request body and add to context
@@ -97,13 +69,20 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
       res.locals.requestContext = requestContext;
       res.locals.mastra = this.mastra;
       res.locals.tools = this.tools || {};
-      res.locals.taskStore = this.taskStore;
-      res.locals.playground = this.playground === true;
-      res.locals.isDev = this.isDev === true;
+      if (this.taskStore) {
+        res.locals.taskStore = this.taskStore;
+      }
       res.locals.customRouteAuthConfig = this.customRouteAuthConfig;
       const controller = new AbortController();
-      req.on('close', () => {
-        controller.abort();
+      // Use res.on('close') instead of req.on('close') because the request's 'close' event
+      // fires when the request body is fully consumed (e.g., after express.json() parses it),
+      // NOT when the client disconnects. The response's 'close' event fires when the underlying
+      // connection is actually closed, which is the correct signal for client disconnection.
+      res.on('close', () => {
+        // Only abort if the response wasn't successfully completed
+        if (!res.writableFinished) {
+          controller.abort();
+        }
       });
       res.locals.abortSignal = controller.signal;
       next();
@@ -124,10 +103,13 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         if (done) break;
 
         if (value) {
+          // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
+          const shouldRedact = this.streamOptions?.redact ?? true;
+          const outputValue = shouldRedact ? redactStreamChunk(value) : value;
           if (streamFormat === 'sse') {
-            res.write(`data: ${JSON.stringify(value)}\n\n`);
+            res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
           } else {
-            res.write(JSON.stringify(value) + '\x1E');
+            res.write(JSON.stringify(outputValue) + '\x1E');
           }
         }
       }
@@ -148,7 +130,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
   }
 
-  async sendResponse(route: ServerRoute, response: Response, result: unknown): Promise<void> {
+  async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -171,6 +153,55 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
         }
       } else {
         response.end();
+      }
+    } else if (route.responseType === 'mcp-http') {
+      // MCP Streamable HTTP transport - request is required
+      if (!request) {
+        response.status(500).json({ error: 'Request object required for MCP transport' });
+        return;
+      }
+
+      const { server, httpPath } = result as MCPHttpTransportResult;
+
+      try {
+        await server.startHTTP({
+          url: new URL(request.url, `http://${request.headers.host}`),
+          httpPath,
+          req: request,
+          res: response,
+        });
+        // Response handled by startHTTP
+      } catch {
+        if (!response.headersSent) {
+          response.status(500).json({
+            jsonrpc: '2.0',
+            error: { code: -32603, message: 'Internal server error' },
+            id: null,
+          });
+        }
+      }
+    } else if (route.responseType === 'mcp-sse') {
+      // MCP SSE transport - request is required
+      if (!request) {
+        response.status(500).json({ error: 'Request object required for MCP transport' });
+        return;
+      }
+
+      const { server, ssePath, messagePath } = result as MCPSseTransportResult;
+
+      try {
+        await server.startSSE({
+          url: new URL(request.url, `http://${request.headers.host}`),
+          ssePath,
+          messagePath,
+          req: request,
+          res: response,
+        });
+        // Response handled by startSSE
+      } catch {
+        if (!response.headersSent) {
+          response.status(500).json({ error: 'Error handling MCP SSE request' });
+        }
       }
     } else {
       response.sendStatus(500);
@@ -227,7 +258,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
           try {
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
-            console.error('Error parsing body', error);
+            console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
             // Zod validation errors should return 400 Bad Request, not 500
             return res.status(400).json({
               error: 'Invalid request body',
@@ -249,7 +280,7 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
 
         try {
           const result = await route.handler(handlerParams);
-          await this.sendResponse(route, res, result);
+          await this.sendResponse(route, res, result, req);
         } catch (error) {
           console.error('Error calling handler', error);
           // Check if it's an HTTPException or MastraError with a status code
@@ -275,14 +306,18 @@ export class ExpressServerAdapter extends MastraServerAdapter<Application, Reque
     );
   }
 
-  registerContextMiddleware(app: Application): void {
-    app.use(this.createContextMiddleware());
+  registerContextMiddleware(): void {
+    this.app.use(this.createContextMiddleware());
   }
 
-  async registerRoutes(
-    app: Application,
-    { prefix, openapiPath }: { prefix?: string; openapiPath?: string },
-  ): Promise<void> {
-    await super.registerRoutes(app, { prefix, openapiPath });
+  registerAuthMiddleware(): void {
+    const authConfig = this.mastra.getServer()?.auth;
+    if (!authConfig) {
+      // No auth config, skip registration
+      return;
+    }
+
+    this.app.use(authenticationMiddleware);
+    this.app.use(authorizationMiddleware);
   }
 }

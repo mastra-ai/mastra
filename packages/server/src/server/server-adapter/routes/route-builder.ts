@@ -1,13 +1,13 @@
 import type z from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
-import type { InferParams, ServerRoute, ServerRouteHandler } from './index';
+import type { InferParams, ResponseType, ServerRoute, ServerRouteHandler } from './index';
 
 interface RouteConfig<
   TPathSchema extends z.ZodTypeAny | undefined = undefined,
   TQuerySchema extends z.ZodTypeAny | undefined = undefined,
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
-  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
+  TResponseType extends ResponseType = 'json',
 > {
   method: ServerRoute['method'];
   path: string;
@@ -65,7 +65,7 @@ export function createRoute<
   TQuerySchema extends z.ZodTypeAny | undefined = undefined,
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
-  TResponseType extends 'stream' | 'json' | 'datastream-response' = 'json',
+  TResponseType extends ResponseType = 'json',
 >(
   config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>,
 ): ServerRoute<

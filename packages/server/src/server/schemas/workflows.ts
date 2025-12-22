@@ -1,5 +1,5 @@
 import z from 'zod';
-import { createOffsetPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
+import { createCombinedPaginationSchema, tracingOptionsSchema, messageResponseSchema } from './common';
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -10,6 +10,8 @@ export const workflowRunStatusSchema = z.enum([
   'canceled',
   'pending',
   'bailed',
+  'tripwire',
+  'paused',
 ]);
 
 // Path parameter schemas
@@ -51,6 +53,7 @@ export const workflowInfoSchema = z.object({
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
   options: z.object({}).optional(),
+  isProcessorWorkflow: z.boolean().optional(),
 });
 
 /**
@@ -87,9 +90,10 @@ export const workflowRunResponseSchema = workflowRunSchema;
 
 /**
  * Schema for query parameters when listing workflow runs
- * All query params come as strings from URL
+ * Supports both page/perPage and limit/offset for backwards compatibility
+ * If page/perPage provided, use directly; otherwise convert from limit/offset
  */
-export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend({
+export const listWorkflowRunsQuerySchema = createCombinedPaginationSchema().extend({
   fromDate: z.coerce.date().optional(),
   toDate: z.coerce.date().optional(),
   resourceId: z.string().optional(),
@@ -100,10 +104,12 @@ export const listWorkflowRunsQuerySchema = createOffsetPaginationSchema().extend
  * Base schema for workflow execution with input data and tracing
  */
 const workflowExecutionBodySchema = z.object({
+  resourceId: z.string().optional(),
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
+  perStep: z.boolean().optional(),
 });
 
 /**
@@ -129,6 +135,7 @@ export const resumeBodySchema = z.object({
   resumeData: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
+  perStep: z.boolean().optional(),
 });
 
 /**
@@ -153,6 +160,7 @@ export const timeTravelBodySchema = z.object({
   nestedStepsContext: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
+  perStep: z.boolean().optional(),
 });
 
 /**
@@ -169,12 +177,56 @@ export const sendWorkflowRunEventBodySchema = z.object({
 });
 
 /**
+ * Schema for workflow execution result query parameters
+ * Allows filtering which fields to return to reduce payload size
+ */
+export const workflowExecutionResultQuerySchema = z.object({
+  fields: z
+    .string()
+    .optional()
+    .refine(
+      value => {
+        if (!value) return true;
+        const validFields = new Set([
+          'status',
+          'result',
+          'error',
+          'payload',
+          'steps',
+          'activeStepsPath',
+          'serializedStepGraph',
+        ]);
+        const requestedFields = value.split(',').map(f => f.trim());
+        return requestedFields.every(field => validFields.has(field));
+      },
+      {
+        message:
+          'Invalid field name. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph',
+      },
+    )
+    .describe(
+      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
+    ),
+  withNestedWorkflows: z
+    .enum(['true', 'false'])
+    .optional()
+    .describe(
+      'Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.',
+    ),
+});
+
+/**
  * Schema for workflow execution result
+ * All fields are optional since field filtering allows requesting specific fields only
  */
 export const workflowExecutionResultSchema = z.object({
-  status: workflowRunStatusSchema,
+  status: workflowRunStatusSchema.optional(),
   result: z.unknown().optional(),
   error: z.unknown().optional(),
+  payload: z.unknown().optional(),
+  steps: z.record(z.string(), z.any()).optional(),
+  activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
+  serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
 });
 
 /**
@@ -188,4 +240,13 @@ export const workflowControlResponseSchema = messageResponseSchema;
  */
 export const createWorkflowRunResponseSchema = z.object({
   runId: z.string(),
+});
+
+/**
+ * Schema for create workflow run body
+ * Used by /create-run endpoint
+ */
+export const createWorkflowRunBodySchema = z.object({
+  resourceId: z.string().optional(),
+  disableScorers: z.boolean().optional(),
 });

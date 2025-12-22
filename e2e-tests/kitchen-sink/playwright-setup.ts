@@ -8,24 +8,31 @@ async function setup() {
   const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-kitchen-sink-test'));
   const projectPath = join(fixturePath, 'project');
 
-  const { shutdown, registryUrl } = await setupVerdaccio();
+  const { shutdown: shutdownVerdaccio, registryUrl } = await setupVerdaccio();
 
-  await setupTestProject(projectPath, registryUrl);
+  const stopDevServer = await setupTestProject(projectPath, registryUrl);
   await ping();
 
-  shutdown();
+  // Return teardown function for Playwright globalTeardown
+  // This function will be called after all tests complete
+  return () => {
+    console.log('[Teardown] Stopping dev server');
+    stopDevServer();
+    console.log('[Teardown] Cleaning up Verdaccio and git state');
+    shutdownVerdaccio();
+  };
 }
 
 const ping = async () => {
   let counter = 0;
 
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     const intervalId = setInterval(() => {
       fetch('http://localhost:4111')
         .then(res => {
           if (res.ok) {
             clearInterval(intervalId);
-            resolve(undefined);
+            resolve();
           } else if (counter > 10) {
             clearInterval(intervalId);
             reject(new Error(`Failed after ${counter} attempts`));

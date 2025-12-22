@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { config } from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -22,13 +24,15 @@ import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } f
 
 config();
 
-function runStreamTest(version: 'v1' | 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+function runStreamTest(version: 'v1' | 'v2' | 'v3') {
+  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;
 
   if (version === 'v1') {
     openaiModel = openai('gpt-4o-mini');
-  } else {
+  } else if (version === 'v2') {
     openaiModel = openai_v5('gpt-4o-mini');
+  } else {
+    openaiModel = openai_v6('gpt-4o-mini');
   }
 
   const dummyResponseModel = getDummyResponseModel(version);
@@ -347,7 +351,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       ).toBe(true);
     });
 
-    it.skipIf(version === 'v2')(
+    it.skipIf(version === 'v2' || version === 'v3')(
       'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
       async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
@@ -507,9 +511,17 @@ function runStreamTest(version: 'v1' | 'v2') {
       }
     });
 
-    it('should not save thread if error occurs after starting response but before completion', async () => {
+    it('should save thread but not messages if error occurs during streaming', async () => {
+      // v2: Threads are now created upfront to prevent race conditions with storage backends
+      // like PostgresStore that validate thread existence before saving messages.
+      // When an error occurs during streaming, the thread will exist but no messages
+      // will be saved since the response never completed.
+      //
+      // v1 (legacy): Does not use memory processors, so the old behavior applies where
+      // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
       const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
+      const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
       if (version === 'v1') {
@@ -583,9 +595,19 @@ function runStreamTest(version: 'v1' | 'v2') {
 
       expect(errorCaught).toBe(true);
 
-      expect(saveThreadSpy).not.toHaveBeenCalled();
       const thread = await mockMemory.getThreadById({ threadId: 'thread-err-stream' });
-      expect(thread).toBeNull();
+
+      if (version === 'v1') {
+        // v1 (legacy): Thread should NOT exist - old behavior preserved
+        expect(saveThreadSpy).not.toHaveBeenCalled();
+        expect(thread).toBeNull();
+      } else {
+        // v2: Thread should exist (created upfront to prevent race condition)
+        expect(thread).not.toBeNull();
+        expect(thread?.id).toBe('thread-err-stream');
+        // But no messages should be saved since the stream failed
+        expect(saveMessagesSpy).not.toHaveBeenCalled();
+      }
     });
   });
 
@@ -970,8 +992,8 @@ function runStreamTest(version: 'v1' | 'v2') {
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: '1', delta: 'Hello! ' },
-            { type: 'text-delta', id: '2', delta: 'Nice to meet you!' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+            { type: 'text-delta', id: 'text-2', delta: 'Nice to meet you!' },
             {
               type: 'finish',
               id: '3',
@@ -1039,3 +1061,4 @@ function runStreamTest(version: 'v1' | 'v2') {
 
 runStreamTest('v1');
 runStreamTest('v2');
+runStreamTest('v3');

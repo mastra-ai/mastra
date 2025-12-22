@@ -1,5 +1,6 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
@@ -32,7 +33,7 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           stream: convertArrayToReadableStream([
-            { type: 'text-delta', id: '1', delta: 'Dummy response' },
+            { type: 'text-delta', id: 'text-1', delta: 'Dummy response' },
             {
               type: 'finish',
               id: '2',
@@ -224,11 +225,11 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                 modelId: 'mock-model-id',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Dynamic' },
-              { type: 'text-delta', id: '1', delta: ' memory' },
-              { type: 'text-delta', id: '1', delta: ' response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Dynamic' },
+              { type: 'text-delta', id: 'text-1', delta: ' memory' },
+              { type: 'text-delta', id: 'text-1', delta: ' response' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -338,9 +339,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -444,9 +445,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -555,9 +556,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -657,9 +658,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response with jokes! Super!!!!' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Test response with jokes! Super!!!!' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -749,9 +750,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -839,9 +840,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Test response' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -927,9 +928,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                   modelId: 'mock-model-v2',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Response' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Response' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -998,9 +999,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                 modelId: 'mock-model-v2',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -1059,10 +1060,10 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                 modelId: 'mock-model-v2',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test' },
-              { type: 'text-delta', id: '1', delta: ' response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Test' },
+              { type: 'text-delta', id: 'text-1', delta: ' response' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -1136,9 +1137,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                 modelId: 'mock-model-v2',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -1227,9 +1228,9 @@ function dynamicMemoryTest(version: 'v1' | 'v2') {
                 modelId: 'mock-model-v2',
                 timestamp: new Date(0),
               },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Test response' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Test response' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',

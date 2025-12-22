@@ -7,7 +7,7 @@ export const useWorkflows = () => {
   const { requestContext } = usePlaygroundStore();
 
   return useQuery({
-    queryKey: ['workflows', JSON.stringify(requestContext)],
+    queryKey: ['workflows', requestContext],
     queryFn: () => client.listWorkflows(requestContext),
   });
 };

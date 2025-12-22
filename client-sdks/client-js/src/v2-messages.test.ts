@@ -28,7 +28,7 @@ describe('V2 Message Format Support', () => {
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => v1Messages,
+      json: async () => ({ messages: v1Messages }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -36,7 +36,7 @@ describe('V2 Message Format Support', () => {
       messages: v1Messages,
     });
 
-    expect(result).toEqual(v1Messages);
+    expect(result).toEqual({ messages: v1Messages });
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/memory/save-messages'),
       expect.objectContaining({
@@ -64,7 +64,7 @@ describe('V2 Message Format Support', () => {
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => v2Messages,
+      json: async () => ({ messages: v2Messages }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -72,7 +72,7 @@ describe('V2 Message Format Support', () => {
       messages: v2Messages,
     });
 
-    expect(result).toEqual(v2Messages);
+    expect(result).toEqual({ messages: v2Messages });
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/memory/save-messages'),
       expect.objectContaining({
@@ -129,7 +129,7 @@ describe('V2 Message Format Support', () => {
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => mixedMessages,
+      json: async () => ({ messages: mixedMessages }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -137,7 +137,7 @@ describe('V2 Message Format Support', () => {
       messages: mixedMessages,
     });
 
-    expect(result).toEqual(mixedMessages);
+    expect(result).toEqual({ messages: mixedMessages });
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/memory/save-messages'),
       expect.objectContaining({
@@ -166,7 +166,7 @@ describe('V2 Message Format Support', () => {
 
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => [v2MessageWithAttachments],
+      json: async () => ({ messages: [v2MessageWithAttachments] }),
     });
 
     const result = await client.saveMessageToMemory({
@@ -174,7 +174,7 @@ describe('V2 Message Format Support', () => {
       messages: [v2MessageWithAttachments],
     });
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual(v2MessageWithAttachments);
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toEqual(v2MessageWithAttachments);
   });
 });

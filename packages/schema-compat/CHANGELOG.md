@@ -1,5 +1,17 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.3
+
+### Patch Changes
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Fix discriminatedUnion schema information lost when json schema is converted to zod ([#10500](https://github.com/mastra-ai/mastra/pull/10500))
+
 ## 1.0.0-beta.1
 
 ### Patch Changes

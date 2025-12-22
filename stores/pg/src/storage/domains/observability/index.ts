@@ -1,6 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  SPAN_SCHEMA,
+  ObservabilityStorage,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -9,28 +15,27 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
+import { PgDB, resolvePgConfig } from '../../db';
+import type { PgDomainConfig } from '../../db';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema?: string;
+  #db: PgDB;
+  #schema: string;
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema?: string;
-  }) {
+  constructor(config: PgDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    const { client, schemaName } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName });
+    this.#schema = schemaName || 'public';
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SPANS });
   }
 
   public override get tracingStrategy(): {
@@ -57,11 +62,11 @@ export class ObservabilityPG extends ObservabilityStorage {
         // Note: createdAt/updatedAt will be set by database triggers
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.#db.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_CREATE_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -80,10 +85,10 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -111,7 +116,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_GET_TRACE_FAILED',
+          id: createStorageErrorId('PG', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -142,7 +147,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
       // Note: updatedAt will be set by database trigger automatically
 
-      await this.operations.update({
+      await this.#db.update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -150,7 +155,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_UPDATE_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -191,7 +196,7 @@ export class ObservabilityPG extends ObservabilityStorage {
         name = `agent run: '${entityId}'`;
       } else {
         const error = new MastraError({
-          id: 'PG_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('PG', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -215,12 +220,12 @@ export class ObservabilityPG extends ObservabilityStorage {
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.#schema),
     });
 
     try {
       // Get total count
-      const countResult = await this.client.oneOrNone<{ count: string }>(
+      const countResult = await this.#db.client.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`,
         whereClause.args,
       );
@@ -239,7 +244,7 @@ export class ObservabilityPG extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
           "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
           "attributes", "metadata", "links", "input", "output", "error", "isEvent",
@@ -268,7 +273,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('PG', 'GET_TRACES_PAGINATED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -293,14 +298,14 @@ export class ObservabilityPG extends ObservabilityStorage {
         };
       });
 
-      return this.operations.batchInsert({
+      return this.#db.batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_BATCH_CREATE_SPANS_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -317,7 +322,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
+      return this.#db.batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
           const data: Partial<UpdateSpanRecord> & {
@@ -347,7 +352,7 @@ export class ObservabilityPG extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_BATCH_UPDATE_SPANS_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -360,15 +365,15 @@ export class ObservabilityPG extends ObservabilityStorage {
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.#schema),
       });
 
       const placeholders = args.traceIds.map((_, i) => `$${i + 1}`).join(', ');
-      await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, args.traceIds);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'PG_STORE_BATCH_DELETE_TRACES_FAILED',
+          id: createStorageErrorId('PG', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

@@ -12,6 +12,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
+  if (field === 'fields') return 'status'; // For workflow execution result field filtering
 
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
@@ -75,6 +76,13 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     const obj: any = {};
     for (const [key, fieldSchema] of Object.entries(shape)) {
       if (fieldSchema instanceof z.ZodOptional) {
+        // Special case: workflow routes need inputData field even when optional
+        // because _run.start() expects { inputData?, ... } structure, not just {}
+        // Without this, z.object({}).safeParse(undefined) fails with "Required" error
+        if (key === 'inputData') {
+          const innerType = fieldSchema._def.innerType;
+          obj[key] = generateValidDataFromSchema(innerType, key);
+        }
         continue;
       }
       obj[key] = generateValidDataFromSchema(fieldSchema as z.ZodTypeAny, key);
@@ -109,6 +117,21 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     if (fieldName === 'content') {
       return [{ type: 'text', text: 'test message content' }];
     }
+    // Special case: workflow inputData is z.unknown() but needs to be an object
+    // to match the workflow's inputSchema (typically z.object({}))
+    if (fieldName === 'inputData') {
+      return {};
+    }
+    // Special case: memory messages are z.any() but handler validates they have threadId/resourceId
+    // Note: This assumes we're generating a single message in an array context
+    if (fieldName === 'messages') {
+      return {
+        role: 'user',
+        content: [{ type: 'text', text: 'test message' }],
+        threadId: 'test-thread',
+        resourceId: 'test-resource',
+      };
+    }
     return 'test-value';
   }
 
@@ -136,6 +159,12 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityType')) params.entityType = 'AGENT';
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
+  if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+
+  // MCP route params - need to get actual server ID from test context
+  if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
+  if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
+  if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
 
   return params;
 }

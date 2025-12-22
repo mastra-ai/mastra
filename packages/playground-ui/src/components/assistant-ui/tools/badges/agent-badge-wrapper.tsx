@@ -18,7 +18,7 @@ export const AgentBadgeWrapper = ({
   toolApprovalMetadata,
 }: AgentBadgeWrapperProps) => {
   const { data } = useAgentMessages({
-    threadId: result?.subAgentThreadId ?? '',
+    threadId: result?.subAgentThreadId,
     agentId,
     memory: true,
   });

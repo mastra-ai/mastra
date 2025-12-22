@@ -2356,6 +2356,127 @@ describe('MCPServer - Elicitation', () => {
     expect(client1Handler).toHaveBeenCalled();
     expect(client2Handler).not.toHaveBeenCalled();
   }, 10000);
+
+  it('should support custom timeout in elicitation request options', async () => {
+    let elicitationStartTime: number | undefined;
+    let elicitationEndTime: number | undefined;
+
+    // Create a tool that uses custom timeout for elicitation
+    const toolWithCustomTimeout: ToolsInput = {
+      customTimeoutTool: {
+        description: 'A tool that uses custom timeout for elicitation',
+        parameters: z.object({
+          message: z.string().describe('Message to show to user'),
+          customTimeout: z.number().optional().describe('Custom timeout in milliseconds'),
+        }),
+        execute: async (inputData, context) => {
+          try {
+            const elicitation = context?.mcp?.elicitation;
+            elicitationStartTime = Date.now();
+            const result = await elicitation.sendRequest(
+              {
+                message: inputData.message,
+                requestedSchema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'string' },
+                  },
+                },
+              },
+              { timeout: inputData.customTimeout || 5000 },
+            );
+            elicitationEndTime = Date.now();
+            return result;
+          } catch (error) {
+            elicitationEndTime = Date.now();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        },
+      },
+    };
+
+    const customTimeoutPort = 9600 + Math.floor(Math.random() * 1000);
+    const customTimeoutServer = new MCPServer({
+      name: 'CustomTimeoutServer',
+      version: '1.0.0',
+      tools: toolWithCustomTimeout,
+    });
+
+    const customTimeoutHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = new URL(req.url || '', `http://localhost:${customTimeoutPort}`);
+      await customTimeoutServer.startHTTP({
+        url,
+        httpPath: '/http',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => customTimeoutHttpServer.listen(customTimeoutPort, () => resolve()));
+
+    try {
+      // Create a client that responds after a delay but within the custom timeout
+      const mockElicitationHandler = vi.fn(async () => {
+        // Simulate a slow response that takes 200ms
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return {
+          action: 'accept' as const,
+          content: { data: 'response data' },
+        };
+      });
+
+      const customTimeoutClient = new InternalMastraMCPClient({
+        name: 'custom-timeout-client',
+        server: {
+          url: new URL(`http://localhost:${customTimeoutPort}/http`),
+        },
+      });
+      customTimeoutClient.elicitation.onRequest(mockElicitationHandler);
+      await customTimeoutClient.connect();
+
+      const tools = await customTimeoutClient.tools();
+      const tool = tools['customTimeoutTool'];
+      expect(tool).toBeDefined();
+
+      // Execute with a custom timeout of 5000ms (plenty of time for 200ms response)
+      const result = await tool.execute!({
+        message: 'Test with custom timeout',
+        customTimeout: 5000,
+      });
+
+      // Should succeed because the response (200ms) is well within the timeout (5000ms)
+      expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+      expect(result.isError).toBeFalsy();
+
+      // Verify the timing shows it completed successfully
+      expect(elicitationStartTime).toBeDefined();
+      expect(elicitationEndTime).toBeDefined();
+      const duration = elicitationEndTime! - elicitationStartTime!;
+      // Should take at least 200ms (the simulated delay)
+      expect(duration).toBeGreaterThanOrEqual(200);
+      // But should complete well before the timeout
+      expect(duration).toBeLessThan(5000);
+
+      await customTimeoutClient.disconnect();
+    } finally {
+      customTimeoutHttpServer.closeAllConnections?.();
+      await new Promise<void>((resolve, reject) => {
+        customTimeoutHttpServer.close(err => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      await customTimeoutServer.close();
+    }
+  }, 15000);
 });
 
 describe('MCPServer with Tool Output Schema', () => {
@@ -2703,5 +2824,292 @@ describe('MCPServer - Tool Input Validation', () => {
     expect(invalidResult.error).toBe(true);
     expect(invalidResult.message).toContain('Tool input validation failed');
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
+  });
+});
+
+/**
+ * Tests for readJsonBody functionality
+ *
+ * These tests verify that MCP server correctly handles request bodies
+ * from both pre-parsed middleware (like express.json()) and raw streams.
+ */
+describe('MCPServer readJsonBody compatibility', () => {
+  const READ_JSON_BODY_PORT = 9400 + Math.floor(Math.random() * 100);
+  let readJsonServer: MCPServer;
+  let readJsonHttpServer: http.Server;
+
+  const echoTool = createTool({
+    id: 'echo',
+    description: 'Echoes the input back',
+    inputSchema: z.object({
+      message: z.string(),
+    }),
+    execute: async ({ message }) => ({ echo: message }),
+  });
+
+  beforeAll(async () => {
+    readJsonServer = new MCPServer({
+      name: 'readJsonBodyTestServer',
+      version: '1.0.0',
+      tools: { echo: echoTool },
+    });
+
+    readJsonHttpServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '', `http://localhost:${READ_JSON_BODY_PORT}`);
+      await readJsonServer.startHTTP({
+        url,
+        httpPath: '/mcp',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => {
+      readJsonHttpServer.listen(READ_JSON_BODY_PORT, resolve);
+    });
+  });
+
+  afterAll(async () => {
+    await readJsonServer.close();
+    readJsonHttpServer.close();
+  });
+
+  describe('HTTP transport with raw stream (no middleware)', () => {
+    it('should read body from stream when no middleware has parsed it', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${READ_JSON_BODY_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from stream');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('HTTP transport with pre-parsed body (simulating express.json())', () => {
+    const PREPARSED_PORT = 9500 + Math.floor(Math.random() * 100);
+    let preParsedServer: MCPServer;
+    let preParsedHttpServer: http.Server;
+
+    beforeAll(async () => {
+      preParsedServer = new MCPServer({
+        name: 'preParsedBodyTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body
+      preParsedHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${PREPARSED_PORT}`);
+
+        // Simulate express.json() middleware by reading and parsing body first
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors, let handler deal with it
+            }
+          }
+        }
+
+        await preParsedServer.startHTTP({
+          url,
+          httpPath: '/mcp',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        preParsedHttpServer.listen(PREPARSED_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await preParsedServer.close();
+      preParsedHttpServer.close();
+    });
+
+    it('should use pre-parsed body from req.body when available', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from pre-parsed');
+
+      await client.disconnect();
+    });
+
+    it('should handle multiple sequential requests with pre-parsed bodies', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+
+      // Multiple calls to ensure session handling works
+      for (let i = 0; i < 3; i++) {
+        const result = await tools['test_echo'].execute!({ message: `request ${i}` });
+        const parsed = JSON.parse((result.content[0] as any).text);
+        expect(parsed.echo).toBe(`request ${i}`);
+      }
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with pre-parsed body', () => {
+    const SSE_PORT = 9600 + Math.floor(Math.random() * 100);
+    let sseServer: MCPServer;
+    let sseHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseServer = new MCPServer({
+        name: 'ssePreParsedTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body for POST requests
+      sseHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_PORT}`);
+
+        // Simulate express.json() middleware
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+
+        await sseServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseHttpServer.listen(SSE_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseServer.close();
+      sseHttpServer.close();
+    });
+
+    it('should work with SSE transport when body is pre-parsed', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE pre-parsed');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with raw stream (no middleware)', () => {
+    const SSE_RAW_PORT = 9700 + Math.floor(Math.random() * 100);
+    let sseRawServer: MCPServer;
+    let sseRawHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseRawServer = new MCPServer({
+        name: 'sseRawTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // No body parsing - raw stream
+      sseRawHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_RAW_PORT}`);
+        await sseRawServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseRawHttpServer.listen(SSE_RAW_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseRawServer.close();
+      sseRawHttpServer.close();
+    });
+
+    it('should work with SSE transport when reading from raw stream', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_RAW_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE raw stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE raw stream');
+
+      await client.disconnect();
+    });
   });
 });

@@ -148,5 +148,13 @@ export const mastra = new Mastra({
       isOptional: true,
       defaultValue: "{}",
     },
+    {
+      name: "memory",
+      type: "Record<string, MastraMemory>",
+      description:
+        "Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.",
+      isOptional: true,
+      defaultValue: "{}",
+    },
   ]}
 />

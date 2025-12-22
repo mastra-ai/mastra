@@ -7,6 +7,7 @@ export const TABLE_TRACES = 'mastra_traces';
 export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
+export const TABLE_AGENTS = 'mastra_agents';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -15,7 +16,8 @@ export type TABLE_NAMES =
   | typeof TABLE_TRACES
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
-  | typeof TABLE_SPANS;
+  | typeof TABLE_SPANS
+  | typeof TABLE_AGENTS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -74,6 +76,25 @@ export const SPAN_SCHEMA: Record<string, StorageColumn> = {
   createdAt: { type: 'timestamp', nullable: false }, // The time the database record was created
   updatedAt: { type: 'timestamp', nullable: true }, // The time the database record was last updated
   isEvent: { type: 'boolean', nullable: false },
+};
+
+export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  description: { type: 'text', nullable: true },
+  instructions: { type: 'text', nullable: false }, // System instructions for the agent
+  model: { type: 'jsonb', nullable: false }, // Model configuration (provider, name, etc.)
+  tools: { type: 'jsonb', nullable: true }, // Serialized tool references/configurations
+  defaultOptions: { type: 'jsonb', nullable: true }, // Default options for generate/stream calls
+  workflows: { type: 'jsonb', nullable: true }, // Workflow references (IDs or configurations)
+  agents: { type: 'jsonb', nullable: true }, // Sub-agent references (IDs or configurations)
+  inputProcessors: { type: 'jsonb', nullable: true }, // Input processor configurations
+  outputProcessors: { type: 'jsonb', nullable: true }, // Output processor configurations
+  memory: { type: 'jsonb', nullable: true }, // Memory configuration
+  scorers: { type: 'jsonb', nullable: true }, // Scorer configurations
+  metadata: { type: 'jsonb', nullable: true }, // Additional metadata for the agent
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
 };
 
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
@@ -137,4 +158,5 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     createdAt: { type: 'timestamp', nullable: false },
     updatedAt: { type: 'timestamp', nullable: false },
   },
+  [TABLE_AGENTS]: AGENTS_SCHEMA,
 };

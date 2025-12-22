@@ -6,21 +6,9 @@ import type { StorageThreadType } from '../memory/types';
 import type { TracingStorageStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
-import {
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_TRACES,
-  TABLE_RESOURCES,
-  TABLE_SCORERS,
-  TABLE_SCHEMAS,
-  TABLE_SPANS,
-} from './constants';
-import type { TABLE_NAMES } from './constants';
-import type { ScoresStorage, StoreOperations, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
+import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
   StoragePagination,
   WorkflowRun,
@@ -28,9 +16,6 @@ import type {
   SpanRecord,
   TraceRecord,
   TracesPaginatedArg,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
   UpdateSpanRecord,
   CreateSpanRecord,
   StorageListMessagesInput,
@@ -38,26 +23,21 @@ import type {
   StorageListWorkflowRunsInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageAgentType,
+  StorageCreateAgentInput,
+  StorageUpdateAgentInput,
+  StorageListAgentsInput,
+  StorageListAgentsOutput,
+  UpdateWorkflowStateOptions,
 } from './types';
 
 export type StorageDomains = {
-  operations: StoreOperations;
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
+  agents?: AgentsStorage;
 };
-
-export function ensureDate(date: Date | string | undefined): Date | undefined {
-  if (!date) return undefined;
-  return date instanceof Date ? date : new Date(date);
-}
-
-export function serializeDate(date: Date | string | undefined): string | undefined {
-  if (!date) return undefined;
-  const dateObj = ensureDate(date);
-  return dateObj?.toISOString();
-}
 
 /**
  * Normalizes perPage input for pagination queries.
@@ -105,7 +85,28 @@ export abstract class MastraStorage extends MastraBase {
   id: string;
   stores?: StorageDomains;
 
-  constructor({ id, name }: { id: string; name: string }) {
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new PostgresStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new PostgresStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit: boolean = false;
+
+  constructor({ id, name, disableInit }: { id: string; name: string; disableInit?: boolean }) {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       throw new Error(`${name}: id must be provided and cannot be empty.`);
     }
@@ -114,6 +115,7 @@ export abstract class MastraStorage extends MastraBase {
       name,
     });
     this.id = id;
+    this.disableInit = disableInit ?? false;
   }
 
   public get supports(): {
@@ -125,6 +127,7 @@ export abstract class MastraStorage extends MastraBase {
     observabilityInstance?: boolean;
     indexManagement?: boolean;
     listScoresBySpan?: boolean;
+    agents?: boolean;
   } {
     return {
       selectByIncludeResourceScope: false,
@@ -135,78 +138,13 @@ export abstract class MastraStorage extends MastraBase {
       observabilityInstance: false,
       indexManagement: false,
       listScoresBySpan: false,
+      agents: false,
     };
   }
 
-  protected ensureDate(date: Date | string | undefined): Date | undefined {
-    return ensureDate(date);
+  async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
+    return this.stores?.[storeName];
   }
-
-  protected serializeDate(date: Date | string | undefined): string | undefined {
-    return serializeDate(date);
-  }
-
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
-      case 'float':
-        return 'FLOAT';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'BIGINT';
-      case 'jsonb':
-        return 'JSONB';
-      default:
-        return 'TEXT';
-    }
-  }
-
-  protected getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'text':
-      case 'uuid':
-        return "DEFAULT ''";
-      case 'timestamp':
-        return "DEFAULT '1970-01-01 00:00:00'";
-      case 'integer':
-      case 'float':
-      case 'bigint':
-        return 'DEFAULT 0';
-      case 'jsonb':
-        return "DEFAULT '{}'";
-      default:
-        return "DEFAULT ''";
-    }
-  }
-
-  abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
-
-  abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
-
-  abstract dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
-
-  abstract alterTable(args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void>;
-
-  abstract insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void>;
-
-  abstract batchInsert({
-    tableName,
-    records,
-  }: {
-    tableName: TABLE_NAMES;
-    records: Record<string, any>[];
-  }): Promise<void>;
-
-  abstract load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<R | null>;
-
   abstract getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null>;
 
   abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
@@ -324,71 +262,32 @@ export abstract class MastraStorage extends MastraBase {
       return;
     }
 
-    const tableCreationTasks = [
-      this.createTable({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-      }),
+    // Initialize all domain stores
+    const initTasks: Promise<void>[] = [];
 
-      this.createTable({
-        tableName: TABLE_THREADS,
-        schema: TABLE_SCHEMAS[TABLE_THREADS],
-      }),
-
-      this.createTable({
-        tableName: TABLE_MESSAGES,
-        schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      }),
-
-      this.createTable({
-        tableName: TABLE_TRACES,
-        schema: TABLE_SCHEMAS[TABLE_TRACES],
-      }),
-
-      this.createTable({
-        tableName: TABLE_SCORERS,
-        schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      }),
-    ];
-
-    // Only create resources table for storage adapters that support it
-    if (this.supports.resourceWorkingMemory) {
-      tableCreationTasks.push(
-        this.createTable({
-          tableName: TABLE_RESOURCES,
-          schema: TABLE_SCHEMAS[TABLE_RESOURCES],
-        }),
-      );
+    if (this.stores?.memory) {
+      initTasks.push(this.stores.memory.init());
     }
 
-    if (this.supports.observabilityInstance) {
-      tableCreationTasks.push(
-        this.createTable({
-          tableName: TABLE_SPANS,
-          schema: TABLE_SCHEMAS[TABLE_SPANS],
-        }),
-      );
+    if (this.stores?.workflows) {
+      initTasks.push(this.stores.workflows.init());
     }
 
-    this.hasInitialized = Promise.all(tableCreationTasks).then(() => true);
+    if (this.stores?.scores) {
+      initTasks.push(this.stores.scores.init());
+    }
+
+    if (this.stores?.observability) {
+      initTasks.push(this.stores.observability.init());
+    }
+
+    if (this.stores?.agents) {
+      initTasks.push(this.stores.agents.init());
+    }
+
+    this.hasInitialized = Promise.all(initTasks).then(() => true);
 
     await this.hasInitialized;
-
-    await this?.alterTable?.({
-      tableName: TABLE_MESSAGES,
-      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
-    });
-    await this?.alterTable?.({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-      ifNotExists: ['resourceId'],
-    });
-    await this?.alterTable?.({
-      tableName: TABLE_SCORERS,
-      schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId', 'requestContext'],
-    });
   }
 
   async persistWorkflowSnapshot({
@@ -404,18 +303,15 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<void> {
     await this.init();
 
-    const data = {
-      workflow_name: workflowName,
-      run_id: runId,
-      resourceId,
-      snapshot,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
-    await this.insert({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      record: data,
+    if (this.stores?.workflows) {
+      return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
+    }
+
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Workflow storage is not configured for this storage adapter (${this.constructor.name})`,
     });
   }
 
@@ -439,13 +335,7 @@ export abstract class MastraStorage extends MastraBase {
   }: {
     workflowName: string;
     runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
+    opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined>;
 
   async loadWorkflowSnapshot({
@@ -458,13 +348,17 @@ export abstract class MastraStorage extends MastraBase {
     if (!this.hasInitialized) {
       await this.init();
     }
-    this.logger.debug('Loading workflow snapshot', { workflowName, runId });
-    const d = await this.load<{ snapshot: WorkflowRunState }>({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
-    });
 
-    return d ? d.snapshot : null;
+    if (this.stores?.workflows) {
+      return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
+    }
+
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LOAD_WORKFLOW_SNAPSHOT_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Workflow storage is not configured for this storage adapter (${this.constructor.name})`,
+    });
   }
 
   /**
@@ -525,6 +419,8 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+
+  abstract deleteWorkflowRunById(args: { runId: string; workflowName: string }): Promise<void>;
 
   /**
    * OBSERVABILITY
@@ -661,72 +557,98 @@ export abstract class MastraStorage extends MastraBase {
   }
 
   /**
-   * DATABASE INDEX MANAGEMENT
-   * These methods delegate to the operations store for index management.
-   * Storage adapters that support indexes should implement these in their operations class.
+   * AGENTS STORAGE
+   * These methods delegate to the agents store for agent CRUD operations.
+   * This enables dynamic creation of agents via Mastra Studio.
    */
 
   /**
-   * Creates a database index on specified columns
+   * Retrieves an agent by its unique identifier.
+   * @param id - The unique identifier of the agent
+   * @returns The agent if found, null otherwise
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async createIndex(options: CreateIndexOptions): Promise<void> {
-    if (this.stores?.operations) {
-      return this.stores.operations.createIndex(options);
+  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+    if (this.stores?.agents) {
+      return this.stores.agents.getAgentById({ id });
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_CREATE_INDEX_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_GET_AGENT_BY_ID_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 
   /**
-   * Drops a database index by name
+   * Creates a new agent in storage.
+   * @param agent - The agent data to create
+   * @returns The created agent with timestamps
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async dropIndex(indexName: string): Promise<void> {
-    if (this.stores?.operations) {
-      return this.stores.operations.dropIndex(indexName);
+  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    if (this.stores?.agents) {
+      return this.stores.agents.createAgent({ agent });
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_DROP_INDEX_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_CREATE_AGENT_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 
   /**
-   * Lists database indexes for a table or all tables
+   * Updates an existing agent in storage.
+   * @param id - The unique identifier of the agent to update
+   * @param updates - The fields to update
+   * @returns The updated agent
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    if (this.stores?.operations) {
-      return this.stores.operations.listIndexes(tableName);
+  async updateAgent(args: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    if (this.stores?.agents) {
+      return this.stores.agents.updateAgent(args);
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_LIST_INDEXES_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_UPDATE_AGENT_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 
   /**
-   * Gets detailed statistics for a specific index
+   * Deletes an agent from storage.
+   * @param id - The unique identifier of the agent to delete
    * @throws {MastraError} if not supported by the storage adapter
    */
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    if (this.stores?.operations) {
-      return this.stores.operations.describeIndex(indexName);
+  async deleteAgent({ id }: { id: string }): Promise<void> {
+    if (this.stores?.agents) {
+      return this.stores.agents.deleteAgent({ id });
     }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_DESCRIBE_INDEX_NOT_SUPPORTED',
+      id: 'MASTRA_STORAGE_DELETE_AGENT_NOT_SUPPORTED',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      text: `Index management is not supported by this storage adapter (${this.constructor.name})`,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
+    });
+  }
+
+  /**
+   * Lists all agents with optional pagination.
+   * @param args - Pagination and ordering options
+   * @returns Paginated list of agents
+   * @throws {MastraError} if not supported by the storage adapter
+   */
+  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+    if (this.stores?.agents) {
+      return this.stores.agents.listAgents(args);
+    }
+    throw new MastraError({
+      id: 'MASTRA_STORAGE_LIST_AGENTS_NOT_SUPPORTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent storage is not supported by this storage adapter (${this.constructor.name})`,
     });
   }
 }

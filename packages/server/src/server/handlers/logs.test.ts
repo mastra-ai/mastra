@@ -5,7 +5,7 @@ import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { LIST_LOGS_ROUTE, LIST_LOGS_BY_RUN_ID_ROUTE, LIST_LOG_TRANSPORTS_ROUTE } from './logs';
-import { createTestRuntimeContext } from './test-utils';
+import { createTestServerContext } from './test-utils';
 
 type MockedLogger = {
   listLogsByRunId: Mock<IMastraLogger['listLogsByRunId']>;
@@ -59,7 +59,7 @@ describe('Logs Handlers', () => {
   describe('listLogsHandler', () => {
     it('should throw error when transportId is not provided', async () => {
       await expect(
-        LIST_LOGS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }), page: 1, transportId: undefined as any }),
+        LIST_LOGS_ROUTE.handler({ ...createTestServerContext({ mastra }), page: 1, transportId: undefined as any }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "transportId" is required' }));
     });
 
@@ -68,7 +68,7 @@ describe('Logs Handlers', () => {
 
       mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
       const result = await LIST_LOGS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         page: 0,
         transportId: 'test-transport',
       });
@@ -82,7 +82,7 @@ describe('Logs Handlers', () => {
 
       mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
       const result = await LIST_LOGS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         transportId: 'test-transport',
         logLevel: LogLevel.INFO,
         page: 0,
@@ -99,7 +99,7 @@ describe('Logs Handlers', () => {
 
       mockLogger.listLogs.mockResolvedValue({ logs: mockLogs, total: 1, page: 1, perPage: 100, hasMore: false });
       const result = await LIST_LOGS_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         transportId: 'test-transport',
         filters: ['timestamp:2024-01-01T10:30:00', 'url:https://example.com'],
         page: 0,
@@ -119,7 +119,7 @@ describe('Logs Handlers', () => {
     it('should throw error when runId is not provided', async () => {
       await expect(
         LIST_LOGS_BY_RUN_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           runId: undefined as any,
           transportId: 'test-transport',
           page: 1,
@@ -130,7 +130,7 @@ describe('Logs Handlers', () => {
     it('should throw error when transportId is not provided', async () => {
       await expect(
         LIST_LOGS_BY_RUN_ID_ROUTE.handler({
-          ...createTestRuntimeContext({ mastra }),
+          ...createTestServerContext({ mastra }),
           runId: 'test-run',
           page: 1,
           transportId: undefined as any,
@@ -149,7 +149,7 @@ describe('Logs Handlers', () => {
         hasMore: false,
       });
       const result = await LIST_LOGS_BY_RUN_ID_ROUTE.handler({
-        ...createTestRuntimeContext({ mastra }),
+        ...createTestServerContext({ mastra }),
         runId: 'test-run',
         transportId: 'test-transport',
         page: 0,
@@ -170,7 +170,7 @@ describe('Logs Handlers', () => {
         ['file', {}],
       ]) as unknown as Record<string, unknown>;
 
-      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }) });
+      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ ...createTestServerContext({ mastra }) });
 
       expect(result).toEqual({
         transports: ['console', 'file'],
@@ -180,7 +180,7 @@ describe('Logs Handlers', () => {
     it('should handle empty transports', async () => {
       mockLogger.transports = new Map<string, unknown>() as unknown as Record<string, unknown>;
 
-      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ ...createTestRuntimeContext({ mastra }) });
+      const result = await LIST_LOG_TRANSPORTS_ROUTE.handler({ ...createTestServerContext({ mastra }) });
 
       expect(result).toEqual({
         transports: [],

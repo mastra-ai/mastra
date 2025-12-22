@@ -15,7 +15,7 @@ import { toAssistantUIMessage, useMastraClient } from '@mastra/react';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { MastraClient, UIMessageWithMetadata } from '@mastra/client-js';
 import { useAdapters } from '@/components/assistant-ui/hooks/use-adapters';
-
+import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { ModelSettings, MastraUIMessage, useChat } from '@mastra/react';
 import { ToolCallProvider } from './tool-call-provider';
 import { useAgentPromptExperiment } from '@/domains/agents/context';
@@ -114,18 +114,19 @@ const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
             } else if (part.toolInvocation.state === 'call') {
               // Only return pending tool calls that are legitimately awaiting approval
               const toolCallId = part.toolInvocation.toolCallId;
+              const toolName = part.toolInvocation.toolName;
               const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
               const suspensionData = pendingToolApprovals?.[toolCallId];
               if (suspensionData) {
                 return {
                   type: 'tool-call',
                   toolCallId,
-                  toolName: part.toolInvocation.toolName,
+                  toolName,
                   args: part.toolInvocation.args,
                   metadata: {
                     mode: 'stream',
                     requireApprovalMetadata: {
-                      [toolCallId]: suspensionData,
+                      [toolName]: suspensionData,
                     },
                   },
                 };
@@ -176,6 +177,7 @@ export function MastraRuntimeProvider({
 }> &
   ChatProps) {
   const { prompt: instructions } = useAgentPromptExperiment();
+  const { settings: tracingSettings } = useTracingSettings();
   const [isLegacyRunning, setIsLegacyRunning] = useState(false);
   const [legacyMessages, setLegacyMessages] = useState<ThreadMessageLike[]>(() =>
     memory ? initializeMessageState(initialLegacyMessages || []) : [],
@@ -207,6 +209,7 @@ export function MastraRuntimeProvider({
     temperature,
     topK,
     topP,
+    seed,
     chatWithGenerateLegacy,
     chatWithGenerate,
     chatWithNetwork,
@@ -220,14 +223,15 @@ export function MastraRuntimeProvider({
     requestContextInstance.set(key, value);
   });
 
-  const modelSettingsArgs: ModelSettings = {
+  const modelSettingsArgs = {
     frequencyPenalty,
     presencePenalty,
     maxRetries,
     temperature,
     topK,
     topP,
-    maxTokens,
+    seed,
+    maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
     instructions,
     providerOptions,
     maxSteps,
@@ -236,7 +240,7 @@ export function MastraRuntimeProvider({
 
   const baseClient = useMastraClient();
 
-  const isVNext = modelVersion === 'v2';
+  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
@@ -244,7 +248,7 @@ export function MastraRuntimeProvider({
     const attachments = await convertToAIAttachments(message.attachments);
 
     const input = message.content[0].text;
-    if (!isVNext) {
+    if (!isSupportedModel) {
       setLegacyMessages(s => [...s, { role: 'user', content: input, attachments: message.attachments }]);
     }
 
@@ -261,7 +265,7 @@ export function MastraRuntimeProvider({
     const agent = clientWithAbort.getAgent(agentId);
 
     try {
-      if (isVNext) {
+      if (isSupportedModel) {
         if (chatWithNetwork) {
           await sendMessage({
             message: input,
@@ -271,6 +275,7 @@ export function MastraRuntimeProvider({
             threadId,
             modelSettings: modelSettingsArgs,
             signal: controller.signal,
+            tracingOptions: tracingSettings?.tracingOptions,
             onNetworkChunk: async chunk => {
               if (
                 chunk.type === 'tool-execution-end' &&
@@ -297,6 +302,7 @@ export function MastraRuntimeProvider({
               threadId,
               modelSettings: modelSettingsArgs,
               signal: controller.signal,
+              tracingOptions: tracingSettings?.tracingOptions,
             });
 
             await refreshThreadList?.();
@@ -310,6 +316,7 @@ export function MastraRuntimeProvider({
               requestContext: requestContextInstance,
               threadId,
               modelSettings: modelSettingsArgs,
+              tracingOptions: tracingSettings?.tracingOptions,
               onChunk: async chunk => {
                 if (chunk.type === 'finish') {
                   await refreshThreadList?.();
@@ -351,6 +358,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -468,6 +476,7 @@ export function MastraRuntimeProvider({
             temperature,
             topK,
             topP,
+            seed,
             instructions,
             requestContext: requestContextInstance,
             ...(memory ? { threadId, resourceId: agentId } : {}),
@@ -682,7 +691,7 @@ export function MastraRuntimeProvider({
         return;
       }
 
-      if (isVNext) {
+      if (isSupportedModel) {
         setMessages(currentConversation => [
           ...currentConversation,
           { role: 'assistant', parts: [{ type: 'text', text: `${error}` }] } as MastraUIMessage,
@@ -714,7 +723,7 @@ export function MastraRuntimeProvider({
 
   const runtime = useExternalStoreRuntime({
     isRunning: isLegacyRunning || isRunningStream,
-    messages: isVNext ? vnextmessages : legacyMessages,
+    messages: isSupportedModel ? vnextmessages : legacyMessages,
     convertMessage: x => x,
     onNew,
     onCancel,

@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
 import type {
   SpanRecord,
   TraceRecord,
@@ -10,27 +10,35 @@ import type {
   UpdateSpanRecord,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { resolveMssqlConfig } from '../../db';
+import type { MssqlDB, MssqlDomainConfig } from '../../db';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityMSSQL extends ObservabilityStorage {
   public pool: ConnectionPool;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
   private schema?: string;
+  private needsConnect: boolean;
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema?: string;
-  }) {
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
+    this.db = db;
     this.schema = schema;
+    this.needsConnect = needsConnect;
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_SPANS });
   }
 
   public get tracingStrategy(): {
@@ -55,11 +63,11 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         // Note: createdAt/updatedAt will be set by default values
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.db.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_CREATE_SPAN_FAILED',
+          id: createStorageErrorId('MSSQL', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -110,7 +118,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_GET_TRACE_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -141,7 +149,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       }
       // Note: updatedAt will be set automatically
 
-      await this.operations.update({
+      await this.db.update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -149,7 +157,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_UPDATE_SPAN_FAILED',
+          id: createStorageErrorId('MSSQL', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -191,7 +199,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         name = `agent run: '${entityId}'`;
       } else {
         const error = new MastraError({
-          id: 'MSSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -272,7 +280,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_TRACES_PAGINATED', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -287,7 +295,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
 
     try {
-      await this.operations.batchInsert({
+      await this.db.batchInsert({
         tableName: TABLE_SPANS,
         records: args.records.map(span => ({
           ...span,
@@ -298,7 +306,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_BATCH_CREATE_SPANS_FAILED',
+          id: createStorageErrorId('MSSQL', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -337,14 +345,14 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         };
       });
 
-      await this.operations.batchUpdate({
+      await this.db.batchUpdate({
         tableName: TABLE_SPANS,
         updates,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_BATCH_UPDATE_SPANS_FAILED',
+          id: createStorageErrorId('MSSQL', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -364,14 +372,14 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     try {
       const keys = args.traceIds.map(traceId => ({ traceId }));
 
-      await this.operations.batchDelete({
+      await this.db.batchDelete({
         tableName: TABLE_SPANS,
         keys,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MSSQL_STORE_BATCH_DELETE_TRACES_FAILED',
+          id: createStorageErrorId('MSSQL', 'BATCH_DELETE_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
