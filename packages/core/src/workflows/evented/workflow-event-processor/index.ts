@@ -247,10 +247,21 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowName: workflowId,
       runId,
       opts: {
-        status: perStep ? 'paused' : status,
+        status: perStep && status === 'success' ? 'paused' : status,
         result: prevResult,
       },
     });
+
+    if (perStep) {
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-paused',
+          payload: {},
+        },
+      });
+    }
 
     await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
       type: 'watch',
@@ -701,6 +712,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           nestedStepsContext: (timeTravel.nestedStepResults ?? {}) as any,
           snapshot,
           graph: step.step.buildExecutionGraph(),
+          perStep,
         });
 
         const nestedPrevStep = getStep(step.step, timeTravelParams.executionPath);

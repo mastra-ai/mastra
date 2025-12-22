@@ -3412,6 +3412,7 @@ export class Run<
       snapshot,
       initialState,
       graph: this.executionGraph,
+      perStep,
     });
 
     const requestContextToUse = requestContext ?? new RequestContext();

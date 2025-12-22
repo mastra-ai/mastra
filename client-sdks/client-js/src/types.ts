@@ -558,6 +558,7 @@ export interface TimeTravelParams {
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
   requestContext?: RequestContext | Record<string, any>;
   tracingOptions?: TracingOptions;
+  perStep?: boolean;
 }
 
 // ============================================================================
