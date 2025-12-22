@@ -88,6 +88,7 @@ export class Run extends BaseResource {
     initialState?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
+    perStep?: boolean;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/start?runId=${this.runId}`, {
@@ -97,6 +98,7 @@ export class Run extends BaseResource {
         initialState: params?.initialState,
         requestContext,
         tracingOptions: params.tracingOptions,
+        perStep: params.perStep,
       },
     });
   }
@@ -110,12 +112,14 @@ export class Run extends BaseResource {
     step,
     resumeData,
     tracingOptions,
+    perStep,
     ...rest
   }: {
     step?: string | string[];
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
+    perStep?: boolean;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(rest.requestContext);
     return this.request(`/api/workflows/${this.workflowId}/resume?runId=${this.runId}`, {
@@ -125,6 +129,7 @@ export class Run extends BaseResource {
         resumeData,
         requestContext,
         tracingOptions,
+        perStep,
       },
     });
   }
@@ -140,6 +145,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     resourceId?: string;
+    perStep?: boolean;
   }): Promise<WorkflowRunResult> {
     const searchParams = new URLSearchParams();
 
@@ -155,6 +161,7 @@ export class Run extends BaseResource {
         requestContext,
         tracingOptions: params.tracingOptions,
         resourceId: params.resourceId,
+        perStep: params.perStep,
       },
     }).then(deserializeWorkflowError);
   }
@@ -170,6 +177,7 @@ export class Run extends BaseResource {
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
     resourceId?: string;
+    perStep?: boolean;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -186,6 +194,7 @@ export class Run extends BaseResource {
           requestContext,
           tracingOptions: params.tracingOptions,
           resourceId: params.resourceId,
+          perStep: params.perStep,
         },
         stream: true,
       },
@@ -242,6 +251,7 @@ export class Run extends BaseResource {
     closeOnSuspend?: boolean;
     tracingOptions?: TracingOptions;
     resourceId?: string;
+    perStep?: boolean;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -259,6 +269,7 @@ export class Run extends BaseResource {
           closeOnSuspend: params.closeOnSuspend,
           tracingOptions: params.tracingOptions,
           resourceId: params.resourceId,
+          perStep: params.perStep,
         },
         stream: true,
       },
@@ -314,6 +325,7 @@ export class Run extends BaseResource {
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
+    perStep?: boolean;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params.requestContext);
     return this.request<WorkflowRunResult>(`/api/workflows/${this.workflowId}/resume-async?runId=${this.runId}`, {
@@ -323,6 +335,7 @@ export class Run extends BaseResource {
         resumeData: params.resumeData,
         requestContext,
         tracingOptions: params.tracingOptions,
+        perStep: params.perStep,
       },
     }).then(deserializeWorkflowError);
   }
@@ -337,6 +350,7 @@ export class Run extends BaseResource {
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;
     tracingOptions?: TracingOptions;
+    perStep?: boolean;
   }) {
     const searchParams = new URLSearchParams();
     searchParams.set('runId', this.runId);
@@ -350,6 +364,7 @@ export class Run extends BaseResource {
           resumeData: params.resumeData,
           requestContext,
           tracingOptions: params.tracingOptions,
+          perStep: params.perStep,
         },
         stream: true,
       },

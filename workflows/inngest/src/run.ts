@@ -551,6 +551,7 @@ export class InngestRun<
       snapshot: (snapshot ?? { context: {} }) as any,
       graph: this.executionGraph,
       initialState: params.initialState,
+      perStep: params.perStep,
     });
 
     const eventOutput = await this.inngest.send({
