@@ -60,25 +60,21 @@ export class MongoDBStore extends MastraStorage {
 
     this.#connector = resolveMongoDBConfig(config);
 
-    const memory = new MemoryStorageMongoDB({
+    const domainConfig = {
       connector: this.#connector,
-    });
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
 
-    const scores = new ScoresStorageMongoDB({
-      connector: this.#connector,
-    });
+    const memory = new MemoryStorageMongoDB(domainConfig);
 
-    const workflows = new WorkflowsStorageMongoDB({
-      connector: this.#connector,
-    });
+    const scores = new ScoresStorageMongoDB(domainConfig);
 
-    const observability = new ObservabilityMongoDB({
-      connector: this.#connector,
-    });
+    const workflows = new WorkflowsStorageMongoDB(domainConfig);
 
-    const agents = new MongoDBAgentsStorage({
-      connector: this.#connector,
-    });
+    const observability = new ObservabilityMongoDB(domainConfig);
+
+    const agents = new MongoDBAgentsStorage(domainConfig);
 
     this.stores = {
       memory,
@@ -204,6 +200,11 @@ export class MongoDBStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the MongoDB client connection.
+   *
+   * This will close the MongoDB client, including pre-configured clients.
+   */
   async close(): Promise<void> {
     try {
       await this.#connector.close();
@@ -212,7 +213,7 @@ export class MongoDBStore extends MastraStorage {
         {
           id: createStorageErrorId('MONGODB', 'CLOSE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );
