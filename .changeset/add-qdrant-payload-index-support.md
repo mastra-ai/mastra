@@ -11,3 +11,18 @@ This release introduces a new `createPayloadIndex()` method on the `QdrantVector
 - `createPayloadIndex(indexName, fieldName, fieldSchema)` - Method to create payload indexes with idempotent behavior on conflicts
 
 This change aligns Mastra's abstraction with Qdrant's native client capabilities and ensures metadata filters work consistently across all Qdrant deployment environments.
+
+**Example usage:**
+
+```typescript
+// Create a payload index for a metadata field before filtering
+const qdrant = new QdrantVector(config);
+
+// Create an index for a 'category' field (keyword type)
+await qdrant.createPayloadIndex('category-idx', 'category', 'keyword');
+
+// Now metadata-based filtering will work in strict-mode environments
+const results = await qdrant.query({
+  vector: [/* ... */],
+  filter: { key: 'category', match: { value: 'electronics' } }
+});
