@@ -1236,3 +1236,48 @@ describe('requireApproval property preservation', () => {
     }
   });
 });
+
+// Reproduction test for GitHub issue #11333
+// https://github.com/mastra-ai/mastra/issues/11333
+describe('tool-error chunk in fullStream (Issue #11333)', () => {
+  it('should emit tool-error chunk when tool throws an error', async () => {
+    // Create a tool that always throws an error (like the user's reproduction)
+    const failingTool = createTool({
+      id: 'failingTool',
+      description: 'A tool that always throws an error. Call this tool immediately.',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ result: z.string() }),
+      execute: async () => {
+        throw new Error('Tool error');
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      model: openai('gpt-4o-mini'),
+      instructions: 'You must call the failingTool tool immediately. Do not say anything else.',
+      tools: { failingTool },
+    });
+
+    const stream = await agent.stream('Call the failingTool now', {
+      toolChoice: 'required',
+    });
+
+    // Collect all chunks from the stream (exactly like the user's reproduction)
+    const chunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    // According to the issue, tool-error chunk should be emitted when a tool throws
+    const toolErrorChunk = chunks.find(chunk => chunk.type === 'tool-error');
+
+    // This assertion should pass - tool-error chunk should be present
+    expect(toolErrorChunk).toBeDefined();
+    expect(toolErrorChunk.type).toBe('tool-error');
+    expect(toolErrorChunk.payload.toolName).toBe('failingTool');
+    expect(toolErrorChunk.payload.error).toBeInstanceOf(Error);
+    expect(toolErrorChunk.payload.error.message).toBe('Tool error');
+  });
+});
