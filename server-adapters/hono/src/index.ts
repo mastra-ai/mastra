@@ -159,11 +159,51 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const queryParams = request.query();
     let body: unknown;
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
-      try {
-        body = await request.json();
-      } catch {}
+      const contentType = request.header('content-type') || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          body = await this.parseFormData(formData);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+        }
+      } else {
+        try {
+          body = await request.json();
+        } catch {}
+      }
     }
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  /**
+   * Parse FormData into a plain object, converting File objects to Buffers.
+   * This handles the voice listen endpoint which expects audioData as a Buffer.
+   */
+  private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        // Convert File to Buffer for audio data
+        const arrayBuffer = await value.arrayBuffer();
+        // Map 'audio' field to 'audioData' to match the expected schema
+        const fieldName = key === 'audio' ? 'audioData' : key;
+        result[fieldName] = Buffer.from(arrayBuffer);
+      } else if (typeof value === 'string') {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[key] = JSON.parse(value);
+        } catch {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {

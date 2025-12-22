@@ -5,6 +5,7 @@ import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import { Busboy } from '@fastify/busboy';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
@@ -126,8 +127,72 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
     const urlParams = request.params;
     const queryParams = request.query;
-    const body = await request.body;
+    let body: unknown;
+
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+      const contentType = request.headers['content-type'] || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          body = await this.parseMultipartFormData(request);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+        }
+      } else {
+        body = request.body;
+      }
+    }
+
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  /**
+   * Parse multipart/form-data using @fastify/busboy.
+   * Converts file uploads to Buffers and parses JSON field values.
+   */
+  private parseMultipartFormData(request: Request): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const result: Record<string, unknown> = {};
+
+      const busboy = new Busboy({
+        headers: {
+          'content-type': request.headers['content-type'] as string,
+        },
+      });
+
+      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
+        const chunks: Buffer[] = [];
+
+        file.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        file.on('end', () => {
+          // Map 'audio' field to 'audioData' to match the expected schema
+          const fieldName = fieldname === 'audio' ? 'audioData' : fieldname;
+          result[fieldName] = Buffer.concat(chunks);
+        });
+      });
+
+      busboy.on('field', (fieldname: string, value: string) => {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[fieldname] = JSON.parse(value);
+        } catch {
+          result[fieldname] = value;
+        }
+      });
+
+      busboy.on('finish', () => {
+        resolve(result);
+      });
+
+      busboy.on('error', (error: Error) => {
+        reject(error);
+      });
+
+      request.pipe(busboy);
+    });
   }
 
   async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {
