@@ -1,6 +1,10 @@
 import type { ChildProcess } from 'node:child_process';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('node:fs', () => ({
+  writeFileSync: vi.fn(),
+}));
+
 vi.mock('execa', () => ({
   execa: vi.fn(),
 }));
