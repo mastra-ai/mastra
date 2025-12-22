@@ -134,9 +134,14 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
       if (contentType.includes('multipart/form-data')) {
         try {
-          body = await this.parseMultipartFormData(request);
+          const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+          body = await this.parseMultipartFormData(request, maxFileSize);
         } catch (error) {
           console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
         }
       } else {
         body = request.body;
@@ -149,8 +154,11 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   /**
    * Parse multipart/form-data using @fastify/busboy.
    * Converts file uploads to Buffers and parses JSON field values.
+   *
+   * @param request - The Express request object
+   * @param maxFileSize - Optional maximum file size in bytes
    */
-  private parseMultipartFormData(request: Request): Promise<Record<string, unknown>> {
+  private parseMultipartFormData(request: Request, maxFileSize?: number): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const result: Record<string, unknown> = {};
 
@@ -158,17 +166,26 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         headers: {
           'content-type': request.headers['content-type'] as string,
         },
+        limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
       });
 
       busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
         const chunks: Buffer[] = [];
+        let limitExceeded = false;
 
         file.on('data', (chunk: Buffer) => {
           chunks.push(chunk);
         });
 
+        file.on('limit', () => {
+          limitExceeded = true;
+          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+        });
+
         file.on('end', () => {
-          result[fieldname] = Buffer.concat(chunks);
+          if (!limitExceeded) {
+            result[fieldname] = Buffer.concat(chunks);
+          }
         });
       });
 

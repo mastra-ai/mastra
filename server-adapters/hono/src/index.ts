@@ -167,6 +167,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           body = await this.parseFormData(formData);
         } catch (error) {
           console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
         }
       } else {
         try {
