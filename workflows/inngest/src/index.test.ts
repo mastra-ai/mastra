@@ -9,7 +9,7 @@ import type { MastraScorer } from '@mastra/core/evals';
 import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { MockStore, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import { MockStore } from '@mastra/core/storage';
 import {
   MastraLanguageModelV2Mock as MockLanguageModelV2,
   simulateReadableStream,
@@ -5598,7 +5598,8 @@ describe('MastraInngestWorkflow', () => {
   describe('Time travel', () => {
     const testStorage = new MockStore();
     afterEach(async () => {
-      await testStorage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+      const workflowsStore = await testStorage.getStore('workflows');
+      await workflowsStore?.dangerouslyClearAll();
     });
 
     it('should throw error if trying to timetravel a workflow execution that is still running', async ctx => {
@@ -8001,15 +8002,6 @@ describe('MastraInngestWorkflow', () => {
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
-          parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
-            startedAt: expect.any(Number),
-            status: 'success',
-            output: {},
-            endedAt: expect.any(Number),
-          },
           parallelStep2: {
             payload: {
               result: 'next step done',
@@ -8019,15 +8011,6 @@ describe('MastraInngestWorkflow', () => {
             output: {
               result: 'parallelStep2 done',
             },
-            endedAt: expect.any(Number),
-          },
-          parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
-            startedAt: expect.any(Number),
-            status: 'success',
-            output: {},
             endedAt: expect.any(Number),
           },
         },
@@ -8320,7 +8303,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { status: 'success' } },
-        step2: { status: 'success', output: {} },
         step5: { status: 'success', output: { result: 'step5' } },
       });
       expect(result.status).toBe('paused');

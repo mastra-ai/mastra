@@ -1617,7 +1617,7 @@ describe('Workflow', () => {
         expect.fail('Execution result is not set');
       }
 
-      expect(watchData.length).toBe(4);
+      expect(watchData.length).toBe(5);
       expect(watchData).toMatchObject([
         {
           payload: {},
@@ -1649,7 +1649,14 @@ describe('Workflow', () => {
           runId,
         },
         {
+          type: 'workflow-paused',
+          payload: {},
+          runId,
+          from: 'WORKFLOW',
+        },
+        {
           payload: {
+            workflowStatus: 'paused',
             metadata: {},
             output: {
               usage: {
@@ -15573,15 +15580,6 @@ describe('Workflow', () => {
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
-          parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
-            startedAt: expect.any(Number),
-            status: 'success',
-            output: {},
-            endedAt: expect.any(Number),
-          },
           parallelStep2: {
             payload: {
               result: 'next step done',
@@ -15591,15 +15589,6 @@ describe('Workflow', () => {
             output: {
               result: 'parallelStep2 done',
             },
-            endedAt: expect.any(Number),
-          },
-          parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
-            startedAt: expect.any(Number),
-            status: 'success',
-            output: {},
             endedAt: expect.any(Number),
           },
         },
@@ -15838,7 +15827,6 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { status: 'success' } },
-        step2: { status: 'success', output: {} },
         step5: { status: 'success', output: { result: 'step5' } },
       });
       expect(result.status).toBe('paused');
