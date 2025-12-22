@@ -10,7 +10,8 @@ import {
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
-import type { StoreOperationsCloudflare } from '../operations';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
 /**
  * Cloudflare KV-specific score row transformation.
@@ -21,16 +22,24 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
-  private operations: StoreOperationsCloudflare;
+  #db: CloudflareKVDB;
 
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV is schemaless, no table creation needed
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const score = await this.operations.getKV(TABLE_SCORERS, id);
+      const score = await this.#db.getKV(TABLE_SCORERS, id);
       if (!score) {
         return null;
       }
@@ -95,7 +104,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
       serializedRecord.createdAt = now.toISOString();
       serializedRecord.updatedAt = now.toISOString();
 
-      await this.operations.putKV({
+      await this.#db.putKV({
         tableName: TABLE_SCORERS,
         key: id,
         value: serializedRecord,
@@ -132,11 +141,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
 
         if (entityId && score.entityId !== entityId) {
           continue;
@@ -201,11 +210,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
         if (score && score.runId === runId) {
           scores.push(transformScoreRow(score));
         }
@@ -261,11 +270,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     entityType: string;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
         if (score && score.entityId === entityId && score.entityType === entityType) {
           scores.push(transformScoreRow(score));
         }
@@ -321,11 +330,11 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     pagination: StoragePagination;
   }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
         if (score && score.traceId === traceId && score.spanId === spanId) {
           scores.push(transformScoreRow(score));
         }

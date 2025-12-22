@@ -1,12 +1,12 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from 'ai-v5';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelRouterModelId } from '../llm/model';
 import type { ModelMethodType } from '../llm/model/model.loop.types';
-import type { MastraLanguageModelV2, OpenAICompatibleConfig } from '../llm/model/shared.types';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
@@ -60,8 +60,8 @@ export type PrepareStepFunction = (
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
-  onFinish?: MastraOnFinishCallback;
-  onStepFinish?: MastraOnStepFinishCallback;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
@@ -84,11 +84,10 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   messageList: MessageList;
   includeRawChunks?: boolean;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
-  headers?: Record<string, string>;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;
-  providerOptions?: SharedV2ProviderOptions;
+  providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
   tools?: TOOLS;
@@ -102,6 +101,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
+  autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;
   agentName?: string;

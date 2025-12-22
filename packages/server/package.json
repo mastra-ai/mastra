@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.0.0-beta.11",
+  "version": "1.0.0-beta.14",
   "description": "",
   "type": "module",
   "files": [
@@ -94,7 +94,6 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

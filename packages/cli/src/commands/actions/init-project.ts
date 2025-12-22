@@ -4,7 +4,7 @@ import { init } from '../init/init';
 import type { Editor } from '../init/mcp-docs-server-install';
 import { checkAndInstallCoreDeps, checkForPkgJson, interactivePrompt } from '../init/utils';
 import type { Component, LLMProvider } from '../init/utils';
-import { getVersionTag } from '../utils';
+import { getVersionTag, isGitInitialized } from '../utils';
 
 const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 
@@ -27,11 +27,12 @@ export const initProject = async (args: InitArgs) => {
 
       // Detect the version tag (e.g., 'beta', 'latest') from the running CLI
       const versionTag = await getVersionTag();
+      const skipGitInit = await isGitInitialized({ cwd: process.cwd() });
 
       await checkAndInstallCoreDeps(Boolean(args?.example || args?.default), versionTag);
 
       if (!Object.keys(args).length) {
-        const result = await interactivePrompt();
+        const result = await interactivePrompt({ skip: { gitInit: skipGitInit } });
         await init({
           ...result,
           llmApiKey: result?.llmApiKey as string,

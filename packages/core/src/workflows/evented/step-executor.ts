@@ -41,10 +41,13 @@ export class StepExecutor extends MastraBase {
     retryCount?: number;
     foreachIdx?: number;
     validateInputs?: boolean;
+    abortController?: AbortController;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
-    const abortController = new AbortController();
+    // Use provided abortController or create a new one for backwards compatibility
+    const abortController = params.abortController ?? new AbortController();
 
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
@@ -88,7 +91,7 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const stepResult = await step.execute(
+      const stepOutput = await step.execute(
         createDeprecationProxy(
           {
             workflowId: params.workflowId,
@@ -140,6 +143,10 @@ export class StepExecutor extends MastraBase {
         ),
       );
 
+      const isNestedWorkflowStep = step.component === 'WORKFLOW';
+
+      const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
+
       const endedAt = Date.now();
 
       let finalResult: StepResult<any, any, any, any>;
@@ -148,7 +155,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
-          ...(stepResult ? { suspendOutput: stepResult } : {}),
+          ...(stepOutput ? { suspendOutput: stepOutput } : {}),
         };
 
         if (suspended.payload) {
@@ -162,12 +169,17 @@ export class StepExecutor extends MastraBase {
           endedAt,
           output: bailed.payload,
         };
+      } else if (nestedWflowStepPaused) {
+        finalResult = {
+          ...stepInfo,
+          status: 'paused',
+        };
       } else {
         finalResult = {
           ...stepInfo,
           status: 'success',
           endedAt,
-          output: stepResult,
+          output: stepOutput,
         };
       }
 
@@ -200,10 +212,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number[]> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     const results = await Promise.all(
@@ -316,10 +329,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     if (step.duration) {
@@ -389,10 +403,11 @@ export class StepExecutor extends MastraBase {
     emitter: { runtime: PubSub; events: PubSub };
     requestContext: RequestContext;
     retryCount?: number;
+    abortController?: AbortController;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
-    const abortController = new AbortController();
+    const abortController = params.abortController ?? new AbortController();
     const ee = new EventEmitter();
 
     if (step.date) {

@@ -126,6 +126,7 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra Folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('-s, --studio', 'Bundle the studio UI with the build')
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
 
@@ -141,6 +142,9 @@ program
   .description('Start the Mastra studio')
   .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the studio')
+  .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
+  .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
+  .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .action(studio);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');

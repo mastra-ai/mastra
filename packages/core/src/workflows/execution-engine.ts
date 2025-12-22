@@ -5,7 +5,14 @@ import { RegisteredLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { Span, SpanType, TracingPolicy } from '../observability';
-import type { OutputWriter, SerializedStepFlowEntry, StepResult, WorkflowRunStatus } from './types';
+import type {
+  OutputWriter,
+  SerializedStepFlowEntry,
+  StepResult,
+  WorkflowRunStatus,
+  WorkflowFinishCallbackResult,
+  WorkflowErrorCallbackInfo,
+} from './types';
 import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
@@ -24,6 +31,18 @@ export interface ExecutionEngineOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Called when workflow execution completes (success, failed, suspended, or tripwire).
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+
+  /**
+   * Called only when workflow execution fails (failed or tripwire status).
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs
@@ -44,6 +63,54 @@ export abstract class ExecutionEngine extends MastraBase {
 
   public getLogger(): IMastraLogger {
     return this.logger;
+  }
+
+  /**
+   * Invokes the onFinish and onError lifecycle callbacks if they are defined.
+   * Errors in callbacks are caught and logged, not propagated.
+   * @param result The workflow result containing status, result, error, steps, and tripwire info
+   */
+  public async invokeLifecycleCallbacks(result: {
+    status: WorkflowRunStatus;
+    result?: any;
+    error?: any;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    tripwire?: any;
+  }): Promise<void> {
+    const { onFinish, onError } = this.options;
+
+    // Always call onFinish if defined (for any terminal status)
+    if (onFinish) {
+      try {
+        await Promise.resolve(
+          onFinish({
+            status: result.status,
+            result: result.result,
+            error: result.error,
+            steps: result.steps,
+            tripwire: result.tripwire,
+          }),
+        );
+      } catch (err) {
+        this.logger.error('Error in onFinish callback', { error: err });
+      }
+    }
+
+    // Call onError only for failure states (failed or tripwire)
+    if (onError && (result.status === 'failed' || result.status === 'tripwire')) {
+      try {
+        await Promise.resolve(
+          onError({
+            status: result.status as 'failed' | 'tripwire',
+            error: result.error,
+            steps: result.steps,
+            tripwire: result.tripwire,
+          }),
+        );
+      } catch (err) {
+        this.logger.error('Error in onError callback', { error: err });
+      }
+    }
   }
 
   /**
@@ -85,5 +152,6 @@ export abstract class ExecutionEngine extends MastraBase {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<TOutput>;
 }

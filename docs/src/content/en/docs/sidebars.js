@@ -125,6 +125,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/snapshots",
+          label: "Snapshots",
+        },
+        {
+          type: "doc",
           id: "workflows/suspend-and-resume",
           label: "Suspend & Resume",
         },
@@ -135,11 +140,6 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/snapshots",
-          label: "Snapshots",
-        },
-        {
-          type: "doc",
           id: "workflows/time-travel",
           label: "Time Travel",
         },
@@ -147,11 +147,6 @@ const sidebars = {
           type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
-        },
-        {
-          type: "doc",
-          id: "workflows/inngest-workflow",
-          label: "Inngest Workflow",
         },
       ],
     },
@@ -210,18 +205,18 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "memory/threads-and-resources",
-          label: "Threads and Resources",
+          id: "memory/storage",
+          label: "Storage",
+        },
+        {
+          type: "doc",
+          id: "memory/message-history",
+          label: "Message History",
         },
         {
           type: "doc",
           id: "memory/working-memory",
           label: "Working Memory",
-        },
-        {
-          type: "doc",
-          id: "memory/conversation-history",
-          label: "Conversation History",
         },
         {
           type: "doc",
@@ -232,37 +227,6 @@ const sidebars = {
           type: "doc",
           id: "memory/memory-processors",
           label: "Memory Processors",
-        },
-        {
-          type: "category",
-          label: "Storage",
-          items: [
-            {
-              type: "doc",
-              id: "memory/storage/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-libsql",
-              label: "Memory with LibSQL",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-mongodb",
-              label: "Memory with MongoDB",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-pg",
-              label: "Memory with PostgreSQL",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-upstash",
-              label: "Memory with Upstash",
-            },
-          ],
         },
       ],
     },
@@ -396,90 +360,62 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/building-mastra",
-          label: "Building Mastra",
+          id: "deployment/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
           id: "deployment/monorepo",
-          label: "With a Monorepo",
+          label: "Monorepo",
+        },
+        {
+          type: "doc",
+          id: "deployment/cloud-providers",
+          label: "Cloud Providers",
         },
         {
           type: "doc",
           id: "deployment/web-framework",
-          label: "With a Web Framework",
+          label: "Web Framework",
         },
         {
-          type: "category",
-          label: "Mastra Cloud",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/setting-up",
-              label: "Setup & Deploy",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/dashboard",
-              label: "Dashboard",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/observability",
-              label: "Observability",
-            },
-          ],
+          type: "doc",
+          id: "deployment/workflow-runners",
+          label: "Workflow Runners",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Mastra Cloud",
+      customProps: {
+        tags: ["beta"],
+      },
+      items: [
+        {
+          type: "doc",
+          id: "mastra-cloud/overview",
+          label: "Overview",
         },
         {
-          type: "category",
-          label: "Cloud Providers",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/index",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/amazon-ec2",
-              label: "Amazon EC2",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/aws-lambda",
-              label: "AWS Lambda",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/cloudflare-deployer",
-              label: "Cloudflare",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/digital-ocean",
-              label: "Digital Ocean",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/netlify-deployer",
-              label: "Netlify",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/vercel-deployer",
-              label: "Vercel",
-            },
-          ],
+          type: "doc",
+          id: "mastra-cloud/setup",
+          label: "Setup",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/studio",
+          label: "Studio",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/deployment",
+          label: "Deployment",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/observability",
+          label: "Observability",
         },
       ],
     },

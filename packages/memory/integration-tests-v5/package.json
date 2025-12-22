@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@mastra/ai-sdk": "latest",
+    "@mastra/client-js": "latest",
     "@mastra/fastembed": "latest",
     "@mastra/libsql": "latest",
     "@mastra/memory": "latest",
@@ -44,11 +45,12 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.8"
   },
   "pnpm": {
     "overrides": {
       "@mastra/ai-sdk": "link:../../../client-sdks/ai-sdk",
+      "@mastra/client-js": "link:../../../client-sdks/client-js",
       "@mastra/core": "link:../../core",
       "mastra": "link:../../cli",
       "@mastra/memory": "link:../../memory",

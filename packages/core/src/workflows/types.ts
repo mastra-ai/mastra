@@ -116,12 +116,23 @@ export type StepWaiting<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepPaused<P, R, S, T> = {
+  status: 'paused';
+  payload: P;
+  suspendPayload?: S;
+  resumePayload?: R;
+  suspendOutput?: T;
+  startedAt: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
-  | StepWaiting<P, R, S, T>;
+  | StepWaiting<P, R, S, T>
+  | StepPaused<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -140,7 +151,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
-  | StepWaiting<P, R, S, T>;
+  | StepWaiting<P, R, S, T>
+  | StepPaused<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,
@@ -235,7 +247,8 @@ export type WorkflowRunStatus =
   | 'waiting'
   | 'pending'
   | 'canceled'
-  | 'bailed';
+  | 'bailed'
+  | 'paused';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
@@ -300,6 +313,27 @@ export interface WorkflowRunState {
   tripwire?: StepTripwireInfo;
 }
 
+/**
+ * Result object passed to the onFinish callback when a workflow completes.
+ */
+export interface WorkflowFinishCallbackResult {
+  status: WorkflowRunStatus;
+  result?: any;
+  error?: SerializedError;
+  steps: Record<string, StepResult<any, any, any, any>>;
+  tripwire?: StepTripwireInfo;
+}
+
+/**
+ * Error info object passed to the onError callback when a workflow fails.
+ */
+export interface WorkflowErrorCallbackInfo {
+  status: 'failed' | 'tripwire';
+  error?: SerializedError;
+  steps: Record<string, StepResult<any, any, any, any>>;
+  tripwire?: StepTripwireInfo;
+}
+
 export interface WorkflowOptions {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
@@ -307,6 +341,20 @@ export interface WorkflowOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Called when workflow execution completes (success, failed, suspended, or tripwire).
+   * This callback is invoked server-side without requiring client-side .watch().
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+
+  /**
+   * Called only when workflow execution fails (failed or tripwire status).
+   * This callback is invoked server-side without requiring client-side .watch().
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
 }
 
 export type WorkflowInfo = {
@@ -529,6 +577,22 @@ export type WorkflowResult<
       };
       suspendPayload: any;
       suspended: [string[], ...string[][]];
+    } & TracingProperties)
+  | ({
+      status: 'paused';
+      state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      input: z.infer<TInput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
     } & TracingProperties);
 
 export type WorkflowStreamResult<
@@ -778,6 +842,7 @@ export type FormattedWorkflowResult = {
   result?: any;
   error?: SerializedError;
   suspended?: string[][];
+  suspendPayload?: any;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
 };

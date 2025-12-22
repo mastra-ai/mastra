@@ -189,7 +189,7 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WorkflowState;
+export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -550,7 +550,6 @@ export interface MemorySearchResult {
 }
 
 export interface TimeTravelParams {
-  runId: string;
   step: string | string[];
   inputData?: Record<string, any>;
   resumeData?: Record<string, any>;
@@ -679,4 +678,17 @@ export interface Provider {
   connected: boolean;
   docUrl?: string;
   models: string[];
+}
+
+// ============================================================================
+// System Types
+// ============================================================================
+
+export interface MastraPackage {
+  name: string;
+  version: string;
+}
+
+export interface GetSystemPackagesResponse {
+  packages: MastraPackage[];
 }

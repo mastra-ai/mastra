@@ -31,28 +31,28 @@ Run the following command to [create a new Next.js app](https://nextjs.org/docs/
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npx create-next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun create next-app@latest my-nextjs-agent --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias
 ```
 
@@ -70,7 +70,7 @@ When prompted, choose a provider (e.g. OpenAI) and enter your key:
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 cd my-nextjs-agent
 npx --force mastra@beta init
 ```
@@ -78,7 +78,7 @@ npx --force mastra@beta init
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 cd my-nextjs-agent
 pnpm dlx mastra@beta init
 ```
@@ -86,7 +86,7 @@ pnpm dlx mastra@beta init
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 cd my-nextjs-agent
 yarn dlx mastra@beta init
 ```
@@ -94,7 +94,7 @@ yarn dlx mastra@beta init
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 cd my-nextjs-agent
 bunx mastra@beta init
 ```
@@ -117,28 +117,28 @@ Install AI SDK UI along with the Mastra adapter:
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm install @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm add @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn add @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun add @mastra/ai-sdk@beta @ai-sdk/react ai
 ```
 
@@ -150,28 +150,28 @@ Next, initialize AI Elements. When prompted, choose the default options:
 <Tabs groupId="pm">
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npx ai-elements@latest
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm dlx ai-elements@latest
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn dlx ai-elements@latest
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bunx ai-elements@latest
 ```
 
@@ -198,7 +198,7 @@ export async function POST(req: Request) {
   const params = await req.json();
   const stream = await handleChatStream({
     mastra,
-    agentId: 'weatherAgent',
+    agentId: 'weather-agent',
     params: {
       ...params,
       memory: {
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  const memory = await mastra.getAgent('weatherAgent').getMemory()
+  const memory = await mastra.getAgentById('weather-agent').getMemory()
   let response = null
   
   try {
@@ -230,7 +230,7 @@ export async function GET() {
 }
 ```
 
-The POST route accepts a prompt and streams the agent's response back in AI SDK format, while the GET route fetches message history from memory so the UI can be hydrated when the client reloads.
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
 
 ## Create a chat page
 
@@ -362,7 +362,6 @@ This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-u
 
 It renders the response text using the [`<MessageResponse>`](https://ai-sdk.dev/elements/components/message#messageresponse-) component, and shows any tool invocations with the [`<Tool>`](https://ai-sdk.dev/elements/components/tool) component.
 
-
 ## Test your agent
 
 1. Run your Next.js app with `npm run dev`
@@ -382,5 +381,5 @@ From here, you can extend the project with your own tools and logic:
 When you're ready, read more about how Mastra integrates with AI SDK UI and Next.js, and how to deploy your agent anywhere, including Vercel:
 
 - Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
-- Deploy your agent to [Vercel](/docs/v1/deployment/cloud-providers/vercel-deployer)
+- Deploy your agent to [Vercel](/guides/v1/deployment/vercel-deployer)
 - Deploy your agent [anywhere](/docs/v1/deployment/overview)

@@ -25,8 +25,8 @@ For general adapter concepts (constructor options, initialization flow, etc.), s
 
 Install the Hono adapter and Hono framework:
 
-```bash copy
-npm install @mastra/hono hono
+```bash
+npm install @mastra/hono@beta hono
 ```
 
 </StepItem>
@@ -35,7 +35,7 @@ npm install @mastra/hono hono
 
 Create your server file:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -54,7 +54,7 @@ export default app;
 
 ## Full example
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 import { mastra } from './mastra';
@@ -147,7 +147,7 @@ export default app;
 
 Add routes directly to the Hono app:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -176,7 +176,7 @@ Routes added before `init()` run without Mastra context. Add routes after `init(
 
 In Hono middleware and route handlers, access Mastra context via `c.get()`:
 
-```typescript copy
+```typescript
 app.get('/custom', async (c) => {
   const mastra = c.get('mastra');
   const requestContext = c.get('requestContext');
@@ -203,7 +203,7 @@ Available context keys:
 
 Add Hono middleware before or after `init()`:
 
-```typescript title="server.ts" copy
+```typescript title="server.ts"
 import { Hono } from 'hono';
 import { HonoBindings, HonoVariables, MastraServer } from '@mastra/hono';
 
@@ -221,7 +221,6 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use('*', async (c, next) => {
   const mastra = c.get('mastra');
-  // ...
   await next();
 });
 ```

@@ -14,18 +14,6 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Workflows",
-      collapsed: true,
-      items: [
-        {
-          type: "doc",
-          id: "workflows/inngest-workflow",
-          label: "Inngest Workflow",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Voice",
       collapsed: true,
       items: [

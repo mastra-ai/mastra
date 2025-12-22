@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import type { Tool } from '@mastra/core/tools';
 import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
@@ -15,6 +15,7 @@ import { OBSERVABILITY_ROUTES } from './observability';
 import { SCORES_ROUTES } from './scorers';
 import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { MastraStreamReturn } from './stream-types';
+import { SYSTEM_ROUTES } from './system';
 import { TOOLS_ROUTES } from './tools';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
@@ -27,7 +28,7 @@ import { WORKFLOWS_ROUTES } from './workflows';
 export type ServerContext = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools?: Record<string, Tool>;
+  tools?: ToolsInput;
   taskStore?: InMemoryTaskStore;
   abortSignal: AbortSignal;
 };
@@ -99,6 +100,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...LEGACY_ROUTES,
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
+  ...SYSTEM_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

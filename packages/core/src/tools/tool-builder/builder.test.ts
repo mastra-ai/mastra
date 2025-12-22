@@ -6,7 +6,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -181,9 +181,8 @@ async function runStructuredOutputSchemaTest(
       throw new Error(
         `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
       );
-    // Check if model is V1 or V2 and use appropriate method
-    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
-    const response = isV2Model
+    // Check if model is V1 or V2/V3 and use appropriate method
+    const response = isSupportedLanguageModel(model)
       ? await agent.generate(prompt, generateOptions)
       : await agent.generateLegacy(prompt, generateOptions);
 
@@ -240,9 +239,8 @@ async function runSingleToolSchemaTest(
       tools: { [toolName]: testTool },
     });
 
-    // Check if model is V1 or V2 and use appropriate method
-    const isV2Model = 'specificationVersion' in model && model.specificationVersion === 'v2';
-    const response = isV2Model
+    // Check if model is V1 or V2/V3 and use appropriate method
+    const response = isSupportedLanguageModel(model)
       ? await agent.generate(`Please call the tool named '${toolName}'.`, {
           toolChoice: 'required',
           maxSteps: 1,

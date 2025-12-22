@@ -5,6 +5,7 @@ import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
 import {
+  createWorkflowRunBodySchema,
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
@@ -14,6 +15,7 @@ import {
   startAsyncWorkflowBodySchema,
   streamWorkflowBodySchema,
   workflowControlResponseSchema,
+  workflowExecutionResultQuerySchema,
   workflowExecutionResultSchema,
   workflowIdPathParams,
   workflowInfoSchema,
@@ -268,11 +270,12 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
   responseType: 'json',
   pathParamSchema: workflowIdPathParams,
   queryParamSchema: optionalRunIdSchema,
+  bodySchema: createWorkflowRunBodySchema,
   responseSchema: createWorkflowRunResponseSchema,
   summary: 'Create workflow run',
   description: 'Creates a new workflow execution instance with an optional custom run ID',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, disableScorers }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -284,7 +287,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId, disableScorers });
 
       return { runId: run.runId };
     } catch (error) {
@@ -303,7 +306,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   summary: 'Stream workflow execution',
   description: 'Executes a workflow and streams the results in real-time',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, ...params }) => {
+  handler: async ({ mastra, workflowId, runId, resourceId, ...params }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -320,7 +323,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       }
       const serverCache = mastra.getServerCache();
 
-      const run = await workflow.createRun({ runId });
+      const run = await workflow.createRun({ runId, resourceId });
       const result = run.stream(params);
       return result.fullStream.pipeThrough(
         new TransformStream<ChunkType, ChunkType>({
@@ -413,11 +416,13 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   path: '/api/workflows/:workflowId/runs/:runId/execution-result',
   responseType: 'json',
   pathParamSchema: workflowRunPathParams,
+  queryParamSchema: workflowExecutionResultQuerySchema,
   responseSchema: workflowExecutionResultSchema,
   summary: 'Get workflow execution result',
-  description: 'Returns the final execution result of a completed workflow run',
+  description:
+    'Returns the final execution result of a completed workflow run. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result)',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId }) => {
+  handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -433,7 +438,13 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(runId);
+      // Parse fields parameter (comma-separated string)
+      const fieldList = fields ? fields.split(',').map((f: string) => f.trim()) : undefined;
+
+      const executionResult = await workflow.getWorkflowRunExecutionResult(runId, {
+        withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
+        fields: fieldList,
+      });
 
       if (!executionResult) {
         throw new HTTPException(404, { message: 'Workflow run execution result not found' });

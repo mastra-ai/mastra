@@ -1,7 +1,6 @@
-import type { ModelMessage, ToolChoice } from 'ai-v5';
+import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
-import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
@@ -32,10 +31,7 @@ export type MultiPrimitiveExecutionOptions = {
   modelSettings?: LoopOptions['modelSettings'];
 };
 
-export type AgentExecutionOptions<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-> = {
+export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -71,10 +67,10 @@ export type AgentExecutionOptions<
   /** Provider-specific options passed to the language model */
   providerOptions?: ProviderOptions;
 
-  /** Callback fired after each execution step. Type varies by format */
-  onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
-  /** Callback fired when execution completes. Type varies by format */
-  onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
+  /** Callback fired after each execution step. */
+  onStepFinish?: LoopConfig['onStepFinish'];
+  /** Callback fired when execution completes. */
+  onFinish?: LoopConfig['onFinish'];
 
   /** Callback fired for each streaming chunk received */
   onChunk?: LoopConfig<OUTPUT>['onChunk'];
@@ -125,6 +121,9 @@ export type AgentExecutionOptions<
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
 
+  /** Automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+
   /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
   toolCallConcurrency?: number;
 
@@ -135,10 +134,7 @@ export type AgentExecutionOptions<
   includeRawChunks?: boolean;
 };
 
-export type InnerAgentExecutionOptions<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> = AgentExecutionOptions<OUTPUT, FORMAT> & {
+export type InnerAgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
   outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;

@@ -3,6 +3,7 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
 import { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
@@ -46,6 +47,33 @@ export function createDestructurableOutput<OUTPUT extends OutputSchema = undefin
   }) as MastraModelOutput<OUTPUT>;
 }
 
+type PromiseResults<OUTPUT extends OutputSchema = undefined> = Pick<
+  LLMStepResult<OUTPUT>,
+  | 'text'
+  | 'reasoning'
+  | 'sources'
+  | 'files'
+  | 'toolCalls'
+  | 'toolResults'
+  | 'content'
+  | 'usage'
+  | 'warnings'
+  | 'providerMetadata'
+  | 'response'
+  | 'request'
+> & {
+  suspendPayload: any;
+  object: InferSchemaOutput<OUTPUT>;
+  reasoningText: string | undefined;
+  totalUsage: LLMStepResult<OUTPUT>['usage'];
+  steps: LLMStepResult<OUTPUT>[];
+  finishReason: LLMStepResult<OUTPUT>['finishReason'];
+};
+
+type DelayedPromises<OUTPUT extends OutputSchema = undefined> = {
+  [K in keyof PromiseResults<OUTPUT>]: DelayedPromise<PromiseResults<OUTPUT>[K]>;
+};
+
 export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
   #aisdkv5: AISDKV5OutputStream<OUTPUT>;
@@ -54,9 +82,9 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #bufferedChunks: ChunkType<OUTPUT>[] = [];
   #streamFinished = false;
   #emitter = new EventEmitter();
-  #bufferedSteps: LLMStepResult[] = [];
-  #bufferedReasoningDetails: Record<string, LLMStepResult['reasoning'][number]> = {};
-  #bufferedByStep: LLMStepResult = {
+  #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
+  #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
+  #bufferedByStep: LLMStepResult<OUTPUT> = {
     text: '',
     reasoning: [],
     sources: [],
@@ -82,41 +110,45 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     providerMetadata: undefined,
     finishReason: undefined,
   };
-  #bufferedText: LLMStepResult['text'][] = [];
+  #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
   #bufferedObject: InferSchemaOutput<OUTPUT> | undefined;
-  #bufferedTextChunks: Record<string, LLMStepResult['text'][]> = {};
-  #bufferedSources: LLMStepResult['sources'] = [];
-  #bufferedReasoning: LLMStepResult['reasoning'] = [];
-  #bufferedFiles: LLMStepResult['files'] = [];
-  #toolCallArgsDeltas: Record<string, LLMStepResult['text'][]> = {};
+  #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
+  #bufferedSources: LLMStepResult<OUTPUT>['sources'] = [];
+  #bufferedReasoning: LLMStepResult<OUTPUT>['reasoning'] = [];
+  #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
+  #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
-  #toolCalls: LLMStepResult['toolCalls'] = [];
-  #toolResults: LLMStepResult['toolResults'] = [];
-  #warnings: LLMStepResult['warnings'] = [];
-  #finishReason: LLMStepResult['finishReason'] = undefined;
-  #request: LLMStepResult['request'] = {};
-  #usageCount: LLMStepResult['usage'] = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+  #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
+  #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
+  #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
+  #finishReason: LLMStepResult<OUTPUT>['finishReason'] = undefined;
+  #request: LLMStepResult<OUTPUT>['request'] = {};
+  #usageCount: LLMStepResult<OUTPUT>['usage'] = {
+    inputTokens: undefined,
+    outputTokens: undefined,
+    totalTokens: undefined,
+  };
   #tripwire: StepTripwireData | undefined = undefined;
 
-  #delayedPromises = {
-    suspendPayload: new DelayedPromise<any>(),
-    object: new DelayedPromise<InferSchemaOutput<OUTPUT>>(),
-    finishReason: new DelayedPromise<LLMStepResult['finishReason']>(),
-    usage: new DelayedPromise<LLMStepResult['usage']>(),
-    warnings: new DelayedPromise<LLMStepResult['warnings']>(),
-    providerMetadata: new DelayedPromise<LLMStepResult['providerMetadata']>(),
-    response: new DelayedPromise<LLMStepResult<OUTPUT>['response']>(),
-    request: new DelayedPromise<LLMStepResult['request']>(),
-    text: new DelayedPromise<LLMStepResult['text']>(),
-    reasoning: new DelayedPromise<LLMStepResult['reasoning']>(),
+  #delayedPromises: DelayedPromises<OUTPUT> = {
+    suspendPayload: new DelayedPromise<PromiseResults<OUTPUT>['suspendPayload']>(),
+    object: new DelayedPromise<PromiseResults<OUTPUT>['object']>(),
+    finishReason: new DelayedPromise<PromiseResults<OUTPUT>['finishReason']>(),
+    usage: new DelayedPromise<PromiseResults<OUTPUT>['usage']>(),
+    warnings: new DelayedPromise<PromiseResults<OUTPUT>['warnings']>(),
+    providerMetadata: new DelayedPromise<PromiseResults<OUTPUT>['providerMetadata']>(),
+    response: new DelayedPromise<PromiseResults<OUTPUT>['response']>(),
+    request: new DelayedPromise<PromiseResults<OUTPUT>['request']>(),
+    text: new DelayedPromise<PromiseResults<OUTPUT>['text']>(),
+    reasoning: new DelayedPromise<PromiseResults<OUTPUT>['reasoning']>(),
     reasoningText: new DelayedPromise<string | undefined>(),
-    sources: new DelayedPromise<LLMStepResult['sources']>(),
-    files: new DelayedPromise<LLMStepResult['files']>(),
-    toolCalls: new DelayedPromise<LLMStepResult['toolCalls']>(),
-    toolResults: new DelayedPromise<LLMStepResult['toolResults']>(),
-    steps: new DelayedPromise<LLMStepResult[]>(),
-    totalUsage: new DelayedPromise<LLMStepResult['usage']>(),
-    content: new DelayedPromise<LLMStepResult['content']>(),
+    sources: new DelayedPromise<PromiseResults<OUTPUT>['sources']>(),
+    files: new DelayedPromise<PromiseResults<OUTPUT>['files']>(),
+    toolCalls: new DelayedPromise<PromiseResults<OUTPUT>['toolCalls']>(),
+    toolResults: new DelayedPromise<PromiseResults<OUTPUT>['toolResults']>(),
+    steps: new DelayedPromise<PromiseResults<OUTPUT>['steps']>(),
+    totalUsage: new DelayedPromise<PromiseResults<OUTPUT>['usage']>(),
+    content: new DelayedPromise<PromiseResults<OUTPUT>['content']>(),
   };
 
   #consumptionStarted = false;
@@ -126,7 +158,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   #model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v1' | 'v2';
+    version: 'v2' | 'v3';
   };
 
   /**
@@ -159,7 +191,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     model: {
       modelId: string | undefined;
       provider: string | undefined;
-      version: 'v1' | 'v2';
+      version: 'v2' | 'v3';
     };
     stream: ReadableStream<ChunkType<OUTPUT>>;
     messageList: MessageList;
@@ -421,7 +453,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               // If step has tripwire, text should be empty (rejected response)
               const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
 
-              const stepResult: LLMStepResult = {
+              const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
                 sources: self.#bufferedByStep.sources,
                 files: self.#bufferedByStep.files,
@@ -521,23 +553,25 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               self.#streamFinished = true;
 
               // Resolve all delayed promises before terminating
-              self.#delayedPromises.text.resolve(self.#bufferedText.join(''));
-              self.#delayedPromises.finishReason.resolve('other');
-              self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
-              self.#delayedPromises.usage.resolve(self.#usageCount);
-              self.#delayedPromises.warnings.resolve(self.#warnings);
-              self.#delayedPromises.providerMetadata.resolve(undefined);
-              self.#delayedPromises.response.resolve({} as LLMStepResult<OUTPUT>['response']);
-              self.#delayedPromises.request.resolve({});
-              self.#delayedPromises.reasoning.resolve([]);
-              self.#delayedPromises.reasoningText.resolve(undefined);
-              self.#delayedPromises.sources.resolve([]);
-              self.#delayedPromises.files.resolve([]);
-              self.#delayedPromises.toolCalls.resolve([]);
-              self.#delayedPromises.toolResults.resolve([]);
-              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
-              self.#delayedPromises.totalUsage.resolve(self.#usageCount);
-              self.#delayedPromises.content.resolve([]);
+              self.resolvePromises({
+                text: self.#bufferedText.join(''),
+                finishReason: 'other',
+                object: undefined,
+                usage: self.#usageCount,
+                warnings: self.#warnings,
+                providerMetadata: undefined,
+                response: {},
+                request: {},
+                reasoning: [],
+                reasoningText: undefined,
+                sources: [],
+                files: [],
+                toolCalls: [],
+                toolResults: [],
+                steps: self.#bufferedSteps,
+                totalUsage: self.#usageCount,
+                content: [],
+              });
 
               // Emit the tripwire chunk for listeners
               self.#emitChunk(chunk);
@@ -635,8 +669,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   }
 
                   // Use the processed text if available, otherwise keep original
-                  self.#delayedPromises.text.resolve(outputText || originalText);
-                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
+                  this.resolvePromises({
+                    text: outputText || originalText,
+                    finishReason: self.#finishReason,
+                  });
 
                   // Update response with processed messages after output processors have run
                   if (chunk.payload.metadata) {
@@ -649,9 +685,10 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                   }
                 } else if (!self.#options.isLLMExecutionStep) {
                   // No processor runner, not in LLM execution step - resolve with buffered text
-                  const textContent = self.#bufferedText.join('');
-                  self.#delayedPromises.text.resolve(textContent);
-                  self.#delayedPromises.finishReason.resolve(self.#finishReason);
+                  this.resolvePromises({
+                    text: self.#bufferedText.join(''),
+                    finishReason: self.#finishReason,
+                  });
                 }
                 // If isLLMExecutionStep is true, don't resolve text here - let the outer MastraModelOutput handle it
               } catch (error) {
@@ -662,42 +699,46 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
                   };
-                  self.#delayedPromises.finishReason.resolve('other');
-                  self.#delayedPromises.text.resolve('');
+                  self.resolvePromises({
+                    finishReason: 'other',
+                    text: '',
+                  });
                 } else {
                   self.#error = getErrorFromUnknown(error, {
                     fallbackMessage: 'Unknown error in stream',
                   });
-                  self.#delayedPromises.finishReason.resolve('error');
-                  self.#delayedPromises.text.resolve('');
+                  self.resolvePromises({
+                    finishReason: 'error',
+                    text: '',
+                  });
                 }
                 if (self.#delayedPromises.object.status.type !== 'resolved') {
                   self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
                 }
               }
 
-              // Resolve all delayed promises with final values
-              self.#delayedPromises.usage.resolve(self.#usageCount);
-              self.#delayedPromises.warnings.resolve(self.#warnings);
-              self.#delayedPromises.providerMetadata.resolve(chunk.payload.metadata?.providerMetadata);
-              self.#delayedPromises.response.resolve(response as LLMStepResult<OUTPUT>['response']);
-              self.#delayedPromises.request.resolve(self.#request || {});
-              // Note: text is already resolved in the try-catch block above (lines 586, 600, 608, 614)
-              // for all cases: processor, non-processor, and error handling
               const reasoningText =
                 self.#bufferedReasoning.length > 0
                   ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
                   : undefined;
-              self.#delayedPromises.reasoningText.resolve(reasoningText);
-              self.#delayedPromises.reasoning.resolve(Object.values(self.#bufferedReasoningDetails || {}));
-              self.#delayedPromises.sources.resolve(self.#bufferedSources);
-              self.#delayedPromises.files.resolve(self.#bufferedFiles);
-              self.#delayedPromises.toolCalls.resolve(self.#toolCalls);
-              self.#delayedPromises.toolResults.resolve(self.#toolResults);
-              self.#delayedPromises.steps.resolve(self.#bufferedSteps);
-              self.#delayedPromises.totalUsage.resolve(self.#getTotalUsage());
-              self.#delayedPromises.content.resolve(messageList.get.response.aiV5.stepContent());
-              self.#delayedPromises.suspendPayload.resolve(undefined);
+              // Resolve all delayed promises with final values
+              this.resolvePromises({
+                usage: self.#usageCount,
+                warnings: self.#warnings,
+                providerMetadata: chunk.payload.metadata?.providerMetadata,
+                response,
+                request: self.#request || {},
+                reasoningText,
+                reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                sources: self.#bufferedSources,
+                files: self.#bufferedFiles,
+                toolCalls: self.#toolCalls,
+                toolResults: self.#toolResults,
+                steps: self.#bufferedSteps,
+                totalUsage: self.#getTotalUsage(),
+                content: messageList.get.response.aiV5.stepContent(),
+                suspendPayload: undefined,
+              });
 
               const baseFinishStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
 
@@ -779,6 +820,36 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
             // always resolve pending object promise as undefined if still hanging in flush and hasn't been rejected by validation error
             self.#delayedPromises.object.resolve(undefined as InferSchemaOutput<OUTPUT>);
           }
+
+          // If stream ends in suspended state (e.g., tool-call-approval), resolve promises with partial results
+          // This allows consumers to access data that was produced before the suspension
+          if (self.#status === 'suspended') {
+            const reasoningText =
+              self.#bufferedReasoning.length > 0
+                ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+                : undefined;
+
+            self.resolvePromises({
+              toolResults: self.#toolResults,
+              toolCalls: self.#toolCalls,
+              text: self.#bufferedText.join(''),
+              reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+              reasoningText,
+              sources: self.#bufferedSources,
+              files: self.#bufferedFiles,
+              steps: self.#bufferedSteps,
+              usage: self.#usageCount,
+              totalUsage: self.#getTotalUsage(),
+              warnings: self.#warnings,
+              finishReason: 'other',
+              content: self.messageList.get.response.aiV5.stepContent(),
+              object: undefined,
+              request: self.#request,
+              response: {},
+              providerMetadata: undefined,
+            });
+          }
+
           // If stream ends without proper finish/error chunks, reject unresolved promises
           // This must be in the final transformer flush to ensure
           // all of the delayed promises had a chance to resolve or reject already
@@ -808,6 +879,25 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
 
     if (initialState) {
       this.deserializeState(initialState);
+    }
+  }
+
+  private resolvePromise<KEY extends keyof PromiseResults<OUTPUT>>(key: KEY, value: PromiseResults<OUTPUT>[KEY]) {
+    if (!(key in this.#delayedPromises)) {
+      throw new MastraError({
+        id: 'MASTRA_MODEL_OUTPUT_INVALID_PROMISE_KEY',
+        domain: ErrorDomain.LLM,
+        category: ErrorCategory.SYSTEM,
+        text: `Attempted to resolve invalid promise key '${key}' with value '${typeof value === 'object' ? JSON.stringify(value, null, 2) : value}'`,
+      });
+    }
+    this.#delayedPromises[key].resolve(value);
+  }
+
+  private resolvePromises(data: Partial<PromiseResults<OUTPUT>>) {
+    for (const keyString in data) {
+      const key = keyString as keyof PromiseResults<OUTPUT>;
+      this.resolvePromise(key, data[key]);
     }
   }
 
@@ -1066,7 +1156,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
     return this.#getDelayedPromise(this.#delayedPromises.totalUsage);
   }
 
-  get content() {
+  get content(): Promise<LLMStepResult['content']> {
     return this.#getDelayedPromise(this.#delayedPromises.content);
   }
 

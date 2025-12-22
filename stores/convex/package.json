@@ -1,6 +1,6 @@
 {
   "name": "@mastra/convex",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.5",
   "description": "Convex provider for Mastra - includes both storage and vector adapters plus Convex server helpers",
   "type": "module",
   "main": "dist/index.js",
@@ -26,6 +26,16 @@
         "default": "./dist/server/index.cjs"
       }
     },
+    "./schema": {
+      "import": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.js"
+      },
+      "require": {
+        "types": "./dist/schema.d.ts",
+        "default": "./dist/schema.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -43,7 +53,6 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

@@ -22,9 +22,8 @@ Use `.then()` to run steps in order, allowing each step to access the result of 
 
 ![Chaining steps with .then()](/img/workflows/workflows-control-flow-then.jpg)
 
-```typescript {30-31} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {27-28} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  //...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -34,7 +33,6 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  // ...
   inputSchema: z.object({
     formatted: z.string()
   }),
@@ -44,7 +42,6 @@ const step2 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -63,15 +60,13 @@ Use `.parallel()` to run steps at the same time. All parallel steps must complet
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
-```typescript {42} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {39} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
-  // ...
 });
 
 const step2 = createStep({
   id: "step-2",
-  // ...
 });
 
 const step3 = createStep({
@@ -97,7 +92,6 @@ const step3 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     message: z.string()
   }),
@@ -116,7 +110,7 @@ export const testWorkflow = createWorkflow({
 
 When steps run in parallel, the output is an object where each key is the step's `id` and the value is that step's output. This allows you to access each parallel step's result independently.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "format-step",
   inputSchema: z.object({ message: z.string() }),
@@ -176,7 +170,11 @@ export const testWorkflow = createWorkflow({
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
 
-> See [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+:::info
+
+Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
+
+:::
 
 ## Conditional logic with `.branch()`
 
@@ -184,11 +182,10 @@ Use `.branch()` to choose which step to run based on a condition. All steps in a
 
 ![Conditional branching with .branch()](/img/workflows/workflows-control-flow-branch.jpg)
 
-```typescript {33-36} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {30-33} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
 
 const stepA = createStep({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -198,7 +195,6 @@ const stepA = createStep({
 });
 
 const stepB = createStep({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -208,7 +204,6 @@ const stepB = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.object({
     value: z.number()
   }),
@@ -228,7 +223,7 @@ export const testWorkflow = createWorkflow({
 
 When using conditional branching, only one branch executes based on which condition evaluates to `true` first. The output structure is similar to `.parallel()`, where the result is keyed by the executed step's `id`.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "initial-step",
   inputSchema: z.object({ value: z.number() }),
@@ -309,7 +304,7 @@ When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary t
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
-```typescript {9} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -337,7 +332,7 @@ The `.map()` method provides additional helper functions for more complex mappin
 
 When working with `.parallel()` or `.branch()` outputs, you can use `.map()` to transform the data structure before passing it to the next step. This is especially useful when you need to flatten or restructure the output.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...})
   .parallel([step1, step2])
   .map(async ({ inputData }) => {
@@ -352,7 +347,7 @@ export const testWorkflow = createWorkflow({...})
 
 You can also use the helper functions provided by `.map()`:
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...})
   .branch([
     [condition1, stepA],
@@ -380,11 +375,10 @@ Use `.dountil()` to run a step repeatedly until a condition becomes true.
 
 ![Repeating with .dountil()](/img/workflows/workflows-control-flow-dountil.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData }) => {
     const { number } = inputData;
     return {
@@ -393,9 +387,7 @@ const step2 = createStep({
   }
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .dountil(step2, async ({ inputData: { number } }) => number > 10)
   .commit();
@@ -407,11 +399,10 @@ Use `.dowhile()` to run a step repeatedly while a condition remains true.
 
 ![Repeating with .dowhile()](/img/workflows/workflows-control-flow-dowhile.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 const step2 = createStep({
-  // ...
   execute: async ({ inputData }) => {
     const { number } = inputData;
     return {
@@ -420,9 +411,7 @@ const step2 = createStep({
   }
 });
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
@@ -434,9 +423,8 @@ Use `.foreach()` to run the same step for each item in an array. The input must 
 
 ![Repeating with .foreach()](/img/workflows/workflows-control-flow-foreach.jpg)
 
-```typescript {17} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {15} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   inputSchema: z.string(),
   outputSchema: z.string(),
   execute: async ({ inputData }) => {
@@ -447,7 +435,6 @@ const step1 = createStep({
 const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({
-  // ...
   inputSchema: z.array(z.string()),
   outputSchema: z.array(z.string())
 })
@@ -460,7 +447,7 @@ export const testWorkflow = createWorkflow({
 
 The `.foreach()` method always returns an array containing the output of each iteration. The order of outputs matches the order of inputs.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const addTenStep = createStep({
   id: "add-ten",
   inputSchema: z.object({ value: z.number() }),
@@ -486,7 +473,7 @@ export const testWorkflow = createWorkflow({
 
 Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
 
 export const testWorkflow = createWorkflow({...})
@@ -498,7 +485,7 @@ export const testWorkflow = createWorkflow({...})
 
 Since `.foreach()` outputs an array, you can use `.then()` or `.map()` to aggregate or transform the results. The step following `.foreach()` receives the entire array as its input.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const processItemStep = createStep({
   id: "process-item",
   inputSchema: z.object({ value: z.number() }),
@@ -535,7 +522,7 @@ export const testWorkflow = createWorkflow({
 
 You can also use `.map()` to transform the array output:
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...})
   .foreach(processItemStep)
   .map(async ({ inputData }) => ({
@@ -551,7 +538,7 @@ export const testWorkflow = createWorkflow({...})
 
 When you chain `.foreach()` calls, each operates on the array output of the previous step. This is useful when each item in your array needs to be transformed by multiple steps in sequence.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const chunkStep = createStep({
   id: "chunk",
   // Takes a document, returns an array of chunks
@@ -589,7 +576,7 @@ For processing multiple documents where each produces multiple chunks, you have 
 
 **Option 1: Process all documents in a single step with batching control**
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const downloadAndChunkStep = createStep({
   id: "download-and-chunk",
   inputSchema: z.array(z.string()),  // Array of URLs
@@ -614,7 +601,7 @@ export const multiDocWorkflow = createWorkflow({...})
 
 **Option 2: Use foreach for documents, aggregate chunks, then foreach for embeddings**
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const downloadStep = createStep({
   id: "download",
   inputSchema: z.string(),  // Single URL
@@ -660,7 +647,7 @@ export const multiDocWorkflow = createWorkflow({
 
 The step after `.foreach()` only executes after all iterations complete. If you need to run multiple sequential operations per item, use a nested workflow instead of chaining multiple `.foreach()` calls. This keeps all operations for each item together and makes the data flow clearer.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 // Define a workflow that processes a single document
 const processDocumentWorkflow = createWorkflow({
   id: "process-document",
@@ -820,7 +807,7 @@ Loop conditions can be implemented in different ways depending on how you want t
 
 Use `iterationCount` to limit how many times a loop runs. If the count exceeds your threshold, throw an error to fail the step and stop the workflow.
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({...})
