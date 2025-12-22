@@ -11,6 +11,7 @@ export const workflowRunStatusSchema = z.enum([
   'pending',
   'bailed',
   'tripwire',
+  'paused',
 ]);
 
 // Path parameter schemas
@@ -108,6 +109,7 @@ const workflowExecutionBodySchema = z.object({
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
+  perStep: z.boolean().optional(),
 });
 
 /**
@@ -133,6 +135,7 @@ export const resumeBodySchema = z.object({
   resumeData: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
+  perStep: z.boolean().optional(),
 });
 
 /**
@@ -157,6 +160,7 @@ export const timeTravelBodySchema = z.object({
   nestedStepsContext: z.record(z.string(), z.record(z.string(), z.any())).optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   tracingOptions: tracingOptionsSchema.optional(),
+  perStep: z.boolean().optional(),
 });
 
 /**
