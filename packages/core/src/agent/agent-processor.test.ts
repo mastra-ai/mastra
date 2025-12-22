@@ -3395,4 +3395,89 @@ describe('Workflow as Processor', () => {
       expect(result.tripwire?.processorId).toBe('output-step-metadata-processor');
     });
   });
+
+  describe('TripWire in prepareStep option', () => {
+    it('should emit tripwire chunk when prepareStep calls abort', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'prepare-step-tripwire-test-agent',
+        name: 'PrepareStep Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+
+      const stream = await agent.stream('Hello', {
+        prepareStep: ({ abort }) => {
+          abort('Blocked by prepareStep', {
+            metadata: { reason: 'content_moderation', score: 0.85 },
+          });
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Blocked by prepareStep');
+      expect(tripwireChunk.payload.metadata).toEqual({ reason: 'content_moderation', score: 0.85 });
+      expect(tripwireChunk.payload.processorId).toBe('prepare-step');
+    });
+
+    it('should emit tripwire chunk with retry option when prepareStep calls abort with retry', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'prepare-step-retry-tripwire-test-agent',
+        name: 'PrepareStep Retry Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+
+      const stream = await agent.stream('Hello', {
+        prepareStep: ({ abort }) => {
+          abort('Please rephrase your question', { retry: true });
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Please rephrase your question');
+      expect(tripwireChunk.payload.retry).toBe(true);
+    });
+  });
 });
