@@ -74,7 +74,7 @@ export function getSingleDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
     // v3
     return new MockLanguageModelV3({
       doGenerate: async () => ({
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
           inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -104,7 +104,7 @@ export function getSingleDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -192,7 +192,7 @@ export function getDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
     // v3
     return new MockLanguageModelV3({
       doGenerate: async _options => ({
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
           inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 10, text: 10, reasoning: undefined },
@@ -226,7 +226,7 @@ export function getDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 10, text: 10, reasoning: undefined },
@@ -290,7 +290,7 @@ export function getEmptyResponseModel(version: 'v1' | 'v2' | 'v3') {
     // v3
     return new MockLanguageModelV3({
       doGenerate: async _options => ({
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
           inputTokens: { total: 0, noCache: 0, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 0, text: 0, reasoning: undefined },
@@ -312,7 +312,7 @@ export function getEmptyResponseModel(version: 'v1' | 'v2' | 'v3') {
           },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 0, noCache: 0, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 0, text: 0, reasoning: undefined },
