@@ -199,8 +199,12 @@ export function AppSidebar() {
             </MainSidebar.NavList>
           </MainSidebar.NavSection>
         </MainSidebar.Nav>
-        <MainSidebar.NavSeparator />
-        <MastraVersionFooter collapsed={state === 'collapsed'} />
+        {state !== 'collapsed' && (
+          <>
+            <MainSidebar.NavSeparator />
+            <MastraVersionFooter collapsed={false} />
+          </>
+        )}
       </MainSidebar.Bottom>
     </MainSidebar>
   );

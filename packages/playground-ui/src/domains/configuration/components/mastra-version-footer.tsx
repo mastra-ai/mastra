@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Check, Package, MoveRight, Info, ExternalLink } from 'lucide-react';
+import { Copy, Check, MoveRight, Info, ExternalLink } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import Spinner from '@/components/ui/spinner';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -40,10 +40,15 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
 
+  // Don't render anything when the sidebar is collapsed
+  if (collapsed) {
+    return null;
+  }
+
   if (isLoadingPackages) {
     return (
-      <div className={cn('px-3 py-2', collapsed && 'flex justify-center')}>
-        <div className={cn('animate-pulse h-4 bg-surface2 rounded', collapsed ? 'w-4' : 'w-16')}></div>
+      <div className="px-3 py-2">
+        <div className="animate-pulse h-4 bg-surface2 rounded w-16"></div>
       </div>
     );
   }
@@ -57,41 +62,6 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
   const mainVersion = mastraCorePackage?.version ?? installedPackages[0]?.version ?? '';
 
   const updateCommand = generateUpdateCommand(packageUpdates, packageManager);
-
-  if (collapsed) {
-    return (
-      <Dialog>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <button className="flex items-center justify-center min-h-[2rem] py-[6px] px-[0.75rem] w-full rounded-lg text-icon3/60 hover:bg-surface4 hover:text-icon3 transition-colors relative">
-                <Package className="w-4 h-4" />
-                {isLoadingUpdates && <LoadingSpinner />}
-                {hasUpdates && <StatusDot variant={deprecatedCount > 0 ? 'error' : 'warning'} />}
-              </button>
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="right" align="center" className="bg-border1 text-icon6 ml-[1rem]">
-            <span>Mastra Packages</span>
-            <span className="block text-xs mt-0.5">
-              {outdatedCount > 0 && <span className="text-accent6">{outdatedCount} outdated</span>}
-              {outdatedCount > 0 && deprecatedCount > 0 && ', '}
-              {deprecatedCount > 0 && <span className="text-accent2">{deprecatedCount} deprecated</span>}
-            </span>
-          </TooltipContent>
-        </Tooltip>
-        <PackagesModalContent
-          packages={packageUpdates}
-          isLoadingUpdates={isLoadingUpdates}
-          outdatedCount={outdatedCount}
-          deprecatedCount={deprecatedCount}
-          updateCommand={updateCommand}
-          packageManager={packageManager}
-          onPackageManagerChange={setPackageManager}
-        />
-      </Dialog>
-    );
-  }
 
   return (
     <Dialog>
@@ -138,28 +108,12 @@ function generateUpdateCommand(packages: PackageUpdateInfo[], packageManager: Pa
   return `${command} ${packageArgs}`;
 }
 
-function LoadingSpinner() {
-  return (
-    <span className="absolute top-0 right-0">
-      <Spinner className="w-3 h-3" color="currentColor" />
-    </span>
-  );
-}
-
-function StatusDot({ variant }: { variant: 'warning' | 'error' }) {
-  return (
-    <span
-      className={cn('absolute top-0 right-0 w-2 h-2 rounded-full', variant === 'error' ? 'bg-accent2' : 'bg-accent6')}
-    />
-  );
-}
-
 function CountBadge({ count, variant }: { count: number; variant: 'warning' | 'error' }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold text-surface1',
-        variant === 'error' ? 'bg-accent2' : 'bg-accent6',
+        'inline-flex items-center justify-center min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold text-black',
+        variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
       )}
     >
       {count}
@@ -171,8 +125,8 @@ function StatusBadge({ value, variant }: { value: string | number; variant: 'war
   return (
     <span
       className={cn(
-        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-surface1 text-xs min-w-[1.25rem]',
-        variant === 'error' ? 'bg-accent2' : 'bg-accent6',
+        'inline-flex font-bold rounded-md px-1.5 py-0.5 items-center justify-center text-black text-xs min-w-[1.25rem]',
+        variant === 'error' ? 'bg-red-700' : 'bg-yellow-700',
       )}
     >
       {value}
@@ -264,7 +218,7 @@ const PackagesModalContent = ({
                       <span
                         className={cn(
                           'cursor-help',
-                          pkg.isDeprecated ? 'text-accent2' : pkg.isOutdated ? 'text-accent6' : '',
+                          pkg.isDeprecated ? 'text-red-500' : pkg.isOutdated ? 'text-yellow-500' : '',
                         )}
                       >
                         {pkg.version}
