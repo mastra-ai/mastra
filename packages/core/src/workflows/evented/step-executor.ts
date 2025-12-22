@@ -42,8 +42,9 @@ export class StepExecutor extends MastraBase {
     foreachIdx?: number;
     validateInputs?: boolean;
     abortController?: AbortController;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any>> {
-    const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
+    const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
     // Use provided abortController or create a new one for backwards compatibility
     const abortController = params.abortController ?? new AbortController();
@@ -90,7 +91,7 @@ export class StepExecutor extends MastraBase {
         throw validationError;
       }
 
-      const stepResult = await step.execute(
+      const stepOutput = await step.execute(
         createDeprecationProxy(
           {
             workflowId: params.workflowId,
@@ -142,6 +143,10 @@ export class StepExecutor extends MastraBase {
         ),
       );
 
+      const isNestedWorkflowStep = step.component === 'WORKFLOW';
+
+      const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
+
       const endedAt = Date.now();
 
       let finalResult: StepResult<any, any, any, any>;
@@ -150,7 +155,7 @@ export class StepExecutor extends MastraBase {
           ...stepInfo,
           status: 'suspended',
           suspendedAt: endedAt,
-          ...(stepResult ? { suspendOutput: stepResult } : {}),
+          ...(stepOutput ? { suspendOutput: stepOutput } : {}),
         };
 
         if (suspended.payload) {
@@ -164,12 +169,17 @@ export class StepExecutor extends MastraBase {
           endedAt,
           output: bailed.payload,
         };
+      } else if (nestedWflowStepPaused) {
+        finalResult = {
+          ...stepInfo,
+          status: 'paused',
+        };
       } else {
         finalResult = {
           ...stepInfo,
           status: 'success',
           endedAt,
-          output: stepResult,
+          output: stepOutput,
         };
       }
 

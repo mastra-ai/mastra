@@ -359,7 +359,6 @@ export type ProviderModelsMap = {
   readonly venice: readonly [
     'claude-opus-45',
     'deepseek-v3.2',
-    'devstral-2-2512',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
     'google-gemma-3-27b-it',
