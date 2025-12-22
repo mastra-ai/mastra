@@ -35,6 +35,10 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     return this.#connector.getCollection(name);
   }
 
+  /**
+   * Returns default index definitions for the observability domain collections.
+   * These indexes optimize common query patterns for span and trace lookups.
+   */
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
       { collection: TABLE_SPANS, keys: { spanId: 1, traceId: 1 }, options: { unique: true } },

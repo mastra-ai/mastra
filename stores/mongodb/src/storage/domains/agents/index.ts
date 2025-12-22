@@ -39,6 +39,10 @@ export class MongoDBAgentsStorage extends AgentsStorage {
     return this.#connector.getCollection(name);
   }
 
+  /**
+   * Returns default index definitions for the agents domain collections.
+   * These indexes optimize common query patterns for agent lookups.
+   */
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
       { collection: TABLE_AGENTS, keys: { id: 1 }, options: { unique: true } },

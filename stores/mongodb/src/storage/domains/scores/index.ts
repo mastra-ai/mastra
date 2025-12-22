@@ -47,6 +47,10 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     return this.#connector.getCollection(name);
   }
 
+  /**
+   * Returns default index definitions for the scores domain collections.
+   * These indexes optimize common query patterns for score lookups.
+   */
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
       { collection: TABLE_SCORERS, keys: { id: 1 }, options: { unique: true } },

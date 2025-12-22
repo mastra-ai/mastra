@@ -24,6 +24,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   private db: MssqlDB;
   private schema?: string;
   private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
   private indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
@@ -36,8 +37,28 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.schema = schemaName;
     this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
     this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   * Currently no default indexes are defined for workflows.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workflows.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for workflows domain
   }
 
   async init(): Promise<void> {
@@ -46,6 +67,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
 
