@@ -534,6 +534,36 @@
       "source": "/guides/deployment",
       "destination": "/docs/deployment/cloud-providers",
       "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/text-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/speech-to-text",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/speech-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/turn-taking",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1",
+      "destination": "/docs/v1",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/workflows/inngest-workflow",
+      "destination": "/guides/v1/deployment/inngest",
+      "permanent": true
     }
   ]
 }

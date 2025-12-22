@@ -95,7 +95,7 @@ const sidebars = {
         {
           type: "doc",
           id: "agents/adding-voice",
-          label: "Adding Voice",
+          label: "Voice",
         },
       ],
     },
