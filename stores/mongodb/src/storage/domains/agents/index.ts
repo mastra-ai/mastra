@@ -57,7 +57,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
-        console.warn(`Failed to create index on ${indexDef.collection}:`, error);
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
       }
     }
   }
@@ -75,7 +75,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
-        console.warn(`Failed to create custom index on ${indexDef.collection}:`, error);
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
       }
     }
   }

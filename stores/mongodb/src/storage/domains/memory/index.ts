@@ -88,7 +88,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
         // Log but continue - indexes are performance optimizations
-        console.warn(`Failed to create index on ${indexDef.collection}:`, error);
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
       }
     }
   }
@@ -107,7 +107,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
         // Log but continue - indexes are performance optimizations
-        console.warn(`Failed to create custom index on ${indexDef.collection}:`, error);
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
       }
     }
   }

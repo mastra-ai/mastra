@@ -88,7 +88,7 @@ export class ScoresPG extends ScoresStorage {
         await this.#db.createIndex(indexDef);
       } catch (error) {
         // Log but continue - indexes are performance optimizations
-        console.warn(`Failed to create index ${indexDef.name}:`, error);
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
       }
     }
   }
@@ -106,7 +106,7 @@ export class ScoresPG extends ScoresStorage {
         await this.#db.createIndex(indexDef);
       } catch (error) {
         // Log but continue - indexes are performance optimizations
-        console.warn(`Failed to create custom index ${indexDef.name}:`, error);
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
   }
