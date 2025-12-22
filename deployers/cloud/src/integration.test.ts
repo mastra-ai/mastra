@@ -257,11 +257,9 @@ describe('CloudDeployer Integration Tests', () => {
 
       await studioDeployer.prepare(outputDir);
 
-      expect(copy).toHaveBeenCalledWith(
-        expect.any(String),
-        join(outputDir, 'output', 'playground'),
-        { overwrite: true },
-      );
+      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'playground'), {
+        overwrite: true,
+      });
     });
   });
 });
