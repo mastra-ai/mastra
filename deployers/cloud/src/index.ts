@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
 import { IS_DEFAULT } from '@mastra/deployer/bundler';
-import { readJSON } from 'fs-extra/esm';
+import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
 import { MASTRA_DIRECTORY, BUILD_ID, PROJECT_ID, TEAM_ID } from './utils/constants.js';
@@ -12,8 +12,11 @@ import { getMastraEntryFile } from './utils/file.js';
 import { successEntrypoint } from './utils/report.js';
 
 export class CloudDeployer extends Deployer {
-  constructor() {
+  private studio: boolean;
+
+  constructor({ studio }: { studio?: boolean } = {}) {
     super({ name: 'cloud' });
+    this.studio = studio ?? false;
   }
 
   protected async getUserBundlerOptions(
@@ -33,6 +36,20 @@ export class CloudDeployer extends Deployer {
   }
 
   async deploy(_outputDirectory: string): Promise<void> {}
+
+  async prepare(outputDirectory: string): Promise<void> {
+    await super.prepare(outputDirectory);
+
+    if (this.studio) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
+      await copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+        overwrite: true,
+      });
+    }
+  }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
       | Record<string, string>
@@ -61,6 +78,7 @@ export class CloudDeployer extends Deployer {
     // Use the getAllToolPaths method to prepare tools paths
     const discoveredTools = this.getAllToolPaths(mastraAppDir);
 
+    await this.prepare(outputDirectory);
     await this._bundle(
       this.getEntry(),
       mastraEntryFile,
@@ -151,7 +169,7 @@ if (mastra?.getStorage()) {
 
 ${getAuthEntrypoint()}
 
-await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });
+await createNodeServer(mastra, { playground: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
 
 ${successEntrypoint()}
 

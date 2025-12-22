@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'node:path/posix';
+import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
@@ -22,6 +22,9 @@ import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome';
+
+// Get studio path from env or default to ./playground relative to cwd
+const getStudioPath = () => process.env.MASTRA_STUDIO_PATH || './playground';
 
 // Use adapter type definitions
 type Bindings = HonoBindings;
@@ -256,10 +259,11 @@ export async function createHonoServer(
     // Serve static assets from playground directory
     // Note: Vite builds with base: './' so all asset URLs are relative
     // The <base href> tag in index.html handles path resolution for the SPA
+    const studioPath = getStudioPath();
     app.use(
       `${studioBasePath}/assets/*`,
       serveStatic({
-        root: './playground/assets',
+        root: join(studioPath, 'assets'),
         rewriteRequestPath: path => {
           // Remove the basePath AND /assets prefix to get the actual file path
           // Example: /custom-path/assets/style.css -> /style.css -> ./playground/assets/style.css
@@ -300,7 +304,8 @@ export async function createHonoServer(
       studioBasePath === '' || requestPath === studioBasePath || requestPath.startsWith(`${studioBasePath}/`);
     if (options?.playground && isPlaygroundRoute) {
       // For HTML routes, serve index.html with dynamic replacements
-      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      const studioPath = getStudioPath();
+      let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
 
       // Inject the server configuration information
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
@@ -330,11 +335,12 @@ export async function createHonoServer(
 
   if (options?.playground) {
     // Serve extra static files from playground directory (this comes after HTML handler)
+    const studioPath = getStudioPath();
     const playgroundPath = studioBasePath ? `${studioBasePath}/*` : '*';
     app.use(
       playgroundPath,
       serveStatic({
-        root: './playground',
+        root: studioPath,
         rewriteRequestPath: path => {
           // Remove the basePath prefix if present
           if (studioBasePath && path.startsWith(studioBasePath)) {
