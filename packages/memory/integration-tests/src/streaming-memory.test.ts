@@ -147,18 +147,14 @@ describe('Memory Streaming Tests', () => {
     beforeAll(async () => {
       port = await getAvailablePort();
 
-      mastraServer = spawn(
-        'pnpm',
-        [path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`), 'dev'],
-        {
-          stdio: 'pipe',
-          detached: true, // Run in a new process group so we can kill it and children
-          env: {
-            ...process.env,
-            PORT: port.toString(),
-          },
+      mastraServer = spawn('pnpm', ['mastra', 'dev'], {
+        stdio: 'pipe',
+        detached: true, // Run in a new process group so we can kill it and children
+        env: {
+          ...process.env,
+          PORT: port.toString(),
         },
-      );
+      });
 
       // Wait for server to be ready
       await new Promise<void>((resolve, reject) => {
