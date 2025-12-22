@@ -8,12 +8,13 @@ import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'roll
 import { esbuild } from './plugins/esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { analyzeBundle } from './analyze';
-import { removeDeployer } from './plugins/remove-deployer';
+import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
+import { removeDeployer } from './plugins/remove-deployer';
 
 export async function getInputOptions(
   entryFile: string,
@@ -122,13 +123,15 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      commonjs({
-        extensions: ['.js', '.ts'],
-        transformMixedEsModules: true,
-        esmExternals(id) {
-          return externals.includes(id);
-        },
-      }),
+      externalsPreset
+        ? null
+        : commonjs({
+            extensions: ['.js', '.ts'],
+            transformMixedEsModules: true,
+            esmExternals(id) {
+              return externals.includes(id);
+            },
+          }),
       enableEsmShim ? esmShim() : undefined,
       externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging

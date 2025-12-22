@@ -108,16 +108,37 @@ export class Workflow extends BaseResource {
   /**
    * Retrieves the execution result for a specific workflow run by its ID
    * @param runId - The ID of the workflow run to retrieve the execution result for
-   * @param requestContext - Optional request context to pass as query parameter
+   * @param options - Optional configuration
+   * @param options.requestContext - Optional request context to pass as query parameter
+   * @param options.fields - Optional array of fields to return (e.g., ['status', 'result']). Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. Omitting this returns all fields.
+   * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
    * @returns Promise containing the workflow run execution result
    */
   runExecutionResult(
     runId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    options?: {
+      requestContext?: RequestContext | Record<string, any>;
+      fields?: string[];
+      withNestedWorkflows?: boolean;
+    },
   ): Promise<GetWorkflowRunExecutionResultResponse> {
-    return this.request(
-      `/api/workflows/${this.workflowId}/runs/${runId}/execution-result${requestContextQueryString(requestContext)}`,
-    );
+    const searchParams = new URLSearchParams();
+
+    if (options?.fields && options.fields.length > 0) {
+      searchParams.set('fields', options.fields.join(','));
+    }
+
+    if (options?.withNestedWorkflows !== undefined) {
+      searchParams.set('withNestedWorkflows', String(options.withNestedWorkflows));
+    }
+
+    const requestContextParam = base64RequestContext(parseClientRequestContext(options?.requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/execution-result${queryString}`);
   }
 
   /**

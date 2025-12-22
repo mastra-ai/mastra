@@ -20,13 +20,15 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { resolveMssqlConfig } from '../../db';
+import type { MssqlDB, MssqlDomainConfig } from '../../db';
 import { getTableName, getSchemaName, buildDateRangeFilter, prepareWhereClause } from '../utils';
 
 export class MemoryMSSQL extends MemoryStorage {
   private pool: sql.ConnectionPool;
-  private schema: string;
-  private operations: StoreOperationsMSSQL;
+  private schema?: string;
+  private db: MssqlDB;
+  private needsConnect: boolean;
 
   private _parseAndFormatMessages(messages: any[], format?: 'v1' | 'v2') {
     // Parse content back to objects if they were stringified during storage
@@ -50,19 +52,29 @@ export class MemoryMSSQL extends MemoryStorage {
     return format === 'v2' ? list.get.all.db() : list.get.all.v1();
   }
 
-  constructor({
-    pool,
-    schema,
-    operations,
-  }: {
-    pool: sql.ConnectionPool;
-    schema: string;
-    operations: StoreOperationsMSSQL;
-  }) {
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
     this.schema = schema;
-    this.operations = operations;
+    this.db = db;
+    this.needsConnect = needsConnect;
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.db.clearTable({ tableName: TABLE_THREADS });
+    await this.db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -982,7 +994,7 @@ export class MemoryMSSQL extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    await this.operations.insert({
+    await this.db.insert({
       tableName: TABLE_RESOURCES,
       record: {
         ...resource,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StoreOperationsPG } from '../domains/operations';
+import { PgDB } from '../db';
 import { PostgresStore } from '../index';
 
 // Mock pg-promise
@@ -7,66 +7,68 @@ const mockClient = {
   none: vi.fn(),
   one: vi.fn(),
   manyOrNone: vi.fn(),
+  oneOrNone: vi.fn(),
+  query: vi.fn(),
 };
 
 const mockPgp = vi.fn(() => mockClient);
 vi.mock('pg-promise', () => ({ default: vi.fn(() => mockPgp) }));
 
 describe('PostgresStore Performance Indexes', () => {
-  let operations: StoreOperationsPG;
+  let dbOps: PgDB;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    operations = new StoreOperationsPG({
+    dbOps = new PgDB({
       client: mockClient as any,
       schemaName: 'test_schema',
     });
 
     // Mock createIndex method to simulate the actual implementation
-    vi.spyOn(operations, 'createIndex').mockResolvedValue(undefined);
+    vi.spyOn(dbOps, 'createIndex').mockResolvedValue(undefined);
   });
 
   describe('createAutomaticIndexes', () => {
     it('should create all necessary composite indexes', async () => {
-      await operations.createAutomaticIndexes();
+      await dbOps.createAutomaticIndexes();
 
-      // Verify that createIndex was called 4 times for composite indexes
-      expect(operations.createIndex).toHaveBeenCalledTimes(4);
+      // Verify that createIndex was called for composite indexes
+      expect(dbOps.createIndex).toHaveBeenCalledTimes(8);
 
       // Check that composite index for threads is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(dbOps.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_threads_resourceid_createdat_idx',
         table: 'mastra_threads',
         columns: ['resourceId', 'createdAt DESC'],
       });
 
       // Check that composite index for messages is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(dbOps.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_messages_thread_id_createdat_idx',
         table: 'mastra_messages',
         columns: ['thread_id', 'createdAt DESC'],
       });
 
       // Check that composite index for traces is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(dbOps.createIndex).toHaveBeenCalledWith({
         name: 'test_schema_mastra_traces_name_starttime_idx',
         table: 'mastra_traces',
         columns: ['name', 'startTime DESC'],
       });
 
-      // Check that composite index for evals is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
-        name: 'test_schema_mastra_evals_agent_name_created_at_idx',
-        table: 'mastra_evals',
-        columns: ['agent_name', 'created_at DESC'],
+      // Check that composite index for scores is created
+      expect(dbOps.createIndex).toHaveBeenCalledWith({
+        name: 'test_schema_mastra_scores_trace_id_span_id_created_at_idx',
+        table: 'mastra_scores',
+        columns: ['traceId', 'spanId', 'createdAt DESC'],
       });
     });
 
     it('should handle index creation errors gracefully', async () => {
       // Mock the logger using Object.defineProperty to bypass protected access
       const loggerWarnSpy = vi.fn();
-      Object.defineProperty(operations, 'logger', {
+      Object.defineProperty(dbOps, 'logger', {
         value: {
           warn: loggerWarnSpy,
         },
@@ -75,31 +77,31 @@ describe('PostgresStore Performance Indexes', () => {
       });
 
       // Make createIndex fail for the first index
-      vi.spyOn(operations, 'createIndex')
+      vi.spyOn(dbOps, 'createIndex')
         .mockRejectedValueOnce(new Error('Index already exists'))
         .mockResolvedValue(undefined);
 
-      await operations.createAutomaticIndexes();
+      await dbOps.createAutomaticIndexes();
 
       // Should log warning but continue with other indexes
       expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to create index'), expect.any(Error));
 
-      // Should still try to create all 4 indexes
-      expect(operations.createIndex).toHaveBeenCalledTimes(4);
+      // Should still try to create all indexes
+      expect(dbOps.createIndex).toHaveBeenCalledTimes(8);
     });
 
     it('should work with default schema (public)', async () => {
-      const publicOperations = new StoreOperationsPG({
+      const publicDbOps = new PgDB({
         client: mockClient as any,
         // No schemaName provided, should default to public
       });
 
-      vi.spyOn(publicOperations, 'createIndex').mockResolvedValue(undefined);
+      vi.spyOn(publicDbOps, 'createIndex').mockResolvedValue(undefined);
 
-      await publicOperations.createAutomaticIndexes();
+      await publicDbOps.createAutomaticIndexes();
 
       // Verify indexes are created without schema prefix
-      expect(publicOperations.createIndex).toHaveBeenCalledWith({
+      expect(publicDbOps.createIndex).toHaveBeenCalledWith({
         name: 'mastra_threads_resourceid_createdat_idx', // No schema prefix
         table: 'mastra_threads',
         columns: ['resourceId', 'createdAt DESC'],
@@ -126,11 +128,11 @@ describe('PostgresStore Performance Indexes', () => {
       // Use the already mocked pg-promise at module level
       mockPgp.mockReturnValue(mockDb);
 
-      // Create a mock operations instance with logger
-      const mockOperations = {
+      // Create a mock dbOps instance with logger
+      const mockDbOps = {
         createAutomaticIndexes: vi.fn().mockImplementation(async function () {
           // Simulate index creation failures with proper logging
-          for (let i = 0; i < 4; i++) {
+          for (let i = 0; i < 8; i++) {
             try {
               throw new Error('Index creation failed');
             } catch (error) {
@@ -144,28 +146,20 @@ describe('PostgresStore Performance Indexes', () => {
         },
       };
 
-      // Mock the store's operations property
-      Object.defineProperty(testStore, 'stores', {
-        value: {
-          operations: mockOperations,
-        },
-        writable: true,
-      });
-
-      // Mock the init method to simulate what PostgresStore.init does
+      // Mock the store's #dbOps property via init override
       testStore.init = vi.fn().mockImplementation(async function () {
         // Call createAutomaticIndexes like the real implementation does
-        await mockOperations.createAutomaticIndexes.call(mockOperations);
+        await mockDbOps.createAutomaticIndexes.call(mockDbOps);
       });
 
       // Init should still succeed even if index creation fails
       await expect(testStore.init()).resolves.not.toThrow();
 
       // Verify that createAutomaticIndexes was called
-      expect(mockOperations.createAutomaticIndexes).toHaveBeenCalled();
+      expect(mockDbOps.createAutomaticIndexes).toHaveBeenCalled();
 
       // Verify warnings were logged using the logger
-      expect(mockOperations.logger.warn).toHaveBeenCalled();
+      expect(mockDbOps.logger.warn).toHaveBeenCalled();
     });
   });
 });

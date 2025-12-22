@@ -5,9 +5,7 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
@@ -20,20 +18,28 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
-import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
+import {
+  validateConfig,
+  isCloudSqlConfig,
+  isConnectionStringConfig,
+  isHostConfig,
+  isClientConfig,
+} from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
+import { PgDB } from './db';
+import type { PgDomainConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
-import { StoreOperationsPG } from './domains/operations';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { CreateIndexOptions, IndexInfo } from '@mastra/core/storage';
+export type { PgDomainConfig, PgDBConfig } from './db';
 
 export class PostgresStore extends MastraStorage {
   #db: pgPromise.IDatabase<{}>;
   #pgp: pgPromise.IMain;
+  #dbOps: PgDB;
   private schema: string;
   private isInitialized: boolean = false;
 
@@ -46,60 +52,72 @@ export class PostgresStore extends MastraStorage {
       super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
       this.schema = config.schemaName || 'public';
 
-      let pgConfig: PostgresStoreConfig;
-      if (isConnectionStringConfig(config)) {
-        pgConfig = {
-          id: config.id,
-          connectionString: config.connectionString,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-          ssl: config.ssl,
-        };
-      } else if (isCloudSqlConfig(config)) {
-        // Cloud SQL connector config
-        pgConfig = {
-          ...config,
-          id: config.id,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
-      } else if (isHostConfig(config)) {
-        pgConfig = {
-          id: config.id,
-          host: config.host,
-          port: config.port,
-          database: config.database,
-          user: config.user,
-          password: config.password,
-          ssl: config.ssl,
-          max: config.max,
-          idleTimeoutMillis: config.idleTimeoutMillis,
-        };
-      } else {
-        // This should never happen due to validation above, but included for completeness
-        throw new Error(
-          'PostgresStore: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
-        );
-      }
-
-      // Initialize pg-promise and create database connection synchronously
-      // Note: pg-promise creates connections lazily when queries are executed,
-      // so this is safe to do in the constructor
+      // Initialize pg-promise
       this.#pgp = pgPromise();
-      this.#db = this.#pgp(pgConfig as any);
+
+      // Handle pre-configured client vs creating new connection
+      if (isClientConfig(config)) {
+        // User provided a pre-configured pg-promise client
+        this.#db = config.client;
+      } else {
+        // Create connection from config
+        let pgConfig: PostgresStoreConfig;
+        if (isConnectionStringConfig(config)) {
+          pgConfig = {
+            id: config.id,
+            connectionString: config.connectionString,
+            max: config.max,
+            idleTimeoutMillis: config.idleTimeoutMillis,
+            ssl: config.ssl,
+          };
+        } else if (isCloudSqlConfig(config)) {
+          // Cloud SQL connector config
+          pgConfig = {
+            ...config,
+            id: config.id,
+            max: config.max,
+            idleTimeoutMillis: config.idleTimeoutMillis,
+          };
+        } else if (isHostConfig(config)) {
+          pgConfig = {
+            id: config.id,
+            host: config.host,
+            port: config.port,
+            database: config.database,
+            user: config.user,
+            password: config.password,
+            ssl: config.ssl,
+            max: config.max,
+            idleTimeoutMillis: config.idleTimeoutMillis,
+          };
+        } else {
+          // This should never happen due to validation above, but included for completeness
+          throw new Error(
+            'PostgresStore: invalid config. Provide either {client}, {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with `stream`).',
+          );
+        }
+
+        // Note: pg-promise creates connections lazily when queries are executed,
+        // so this is safe to do in the constructor
+        this.#db = this.#pgp(pgConfig as any);
+      }
 
       // Create all domain instances synchronously in the constructor
       // This is required for Memory to work correctly, as it checks for
       // stores.memory during getInputProcessors() before init() is called
-      const operations = new StoreOperationsPG({ client: this.#db, schemaName: this.schema });
-      const scores = new ScoresPG({ client: this.#db, operations, schema: this.schema });
-      const workflows = new WorkflowsPG({ client: this.#db, operations, schema: this.schema });
-      const memory = new MemoryPG({ client: this.#db, schema: this.schema, operations });
-      const observability = new ObservabilityPG({ client: this.#db, operations, schema: this.schema });
-      const agents = new AgentsPG({ client: this.#db, schema: this.schema });
+      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema };
+
+      // Create a PgDB instance for direct operations (createTable, clearTable, etc.)
+      // PgDB expects the internal config format (already resolved client)
+      this.#dbOps = new PgDB({ client: this.#db, schemaName: this.schema });
+
+      const scores = new ScoresPG(domainConfig);
+      const workflows = new WorkflowsPG(domainConfig);
+      const memory = new MemoryPG(domainConfig);
+      const observability = new ObservabilityPG(domainConfig);
+      const agents = new AgentsPG(domainConfig);
 
       this.stores = {
-        operations,
         scores,
         workflows,
         memory,
@@ -131,7 +149,7 @@ export class PostgresStore extends MastraStorage {
       // Create automatic performance indexes by default
       // This is done after table creation and is safe to run multiple times
       try {
-        await (this.stores.operations as StoreOperationsPG).createAutomaticIndexes();
+        await this.#dbOps.createAutomaticIndexes();
       } catch (indexError) {
         // Log the error but don't fail initialization
         // Indexes are performance optimizations, not critical for functionality
@@ -170,48 +188,6 @@ export class PostgresStore extends MastraStorage {
       listScoresBySpan: true,
       agents: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   /**

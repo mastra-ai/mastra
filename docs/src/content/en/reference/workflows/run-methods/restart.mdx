@@ -14,8 +14,6 @@ const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
 
-//.. server connection lost,
-
 const restartedResult = await run.restart();
 ```
 

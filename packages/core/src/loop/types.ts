@@ -60,8 +60,8 @@ export type PrepareStepFunction = (
 export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
-  onFinish?: MastraOnFinishCallback;
-  onStepFinish?: MastraOnStepFinishCallback;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   onAbort?: (event: any) => Promise<void> | void;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
@@ -84,7 +84,6 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   messageList: MessageList;
   includeRawChunks?: boolean;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
-  headers?: Record<string, string>;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;

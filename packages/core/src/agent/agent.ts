@@ -20,6 +20,7 @@ import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type {
   MastraLanguageModel,
   MastraLanguageModelV2,
@@ -320,8 +321,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
-    this.logger.debug('outputProcessors', outputProcessors);
-
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
@@ -416,7 +415,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
@@ -441,7 +440,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
@@ -2486,7 +2485,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    if (Object.keys(result).length === 0) {
+    // Only throw if scorers were provided but none could be resolved
+    if (Object.keys(result).length === 0 && Object.keys(overrideScorers).length > 0) {
       throw new MastraError({
         id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
         domain: ErrorDomain.AGENT,
@@ -2528,12 +2528,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         throw mastraError;
       }
 
+      // Extract headers from ModelRouterLanguageModel if available
+      let headers: Record<string, string> | undefined;
+      if (resolvedModel instanceof ModelRouterLanguageModel) {
+        headers = (resolvedModel as any).config?.headers;
+      }
+
       return [
         {
           id: 'main',
           model: resolvedModel,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
+          headers,
         },
       ];
     }
@@ -2573,11 +2580,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           throw mastraError;
         }
 
+        // Extract headers from ModelRouterLanguageModel if available
+        let headers: Record<string, string> | undefined;
+        if (model instanceof ModelRouterLanguageModel) {
+          headers = (model as any).config?.headers;
+        }
+
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
+          headers,
         };
       }),
     );

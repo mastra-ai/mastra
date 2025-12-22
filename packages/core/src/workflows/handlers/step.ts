@@ -55,6 +55,7 @@ export interface ExecuteStepParams {
   serializedStepGraph: SerializedStepFlowEntry[];
   tracingContext: TracingContext;
   iterationCount?: number;
+  perStep?: boolean;
 }
 
 export async function executeStep(
@@ -81,6 +82,7 @@ export async function executeStep(
     serializedStepGraph,
     tracingContext,
     iterationCount,
+    perStep,
   } = params;
 
   const stepCallId = randomUUID();
@@ -186,6 +188,7 @@ export async function executeStep(
       tracingContext,
       outputWriter,
       stepSpan,
+      perStep,
     });
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
@@ -353,6 +356,7 @@ export async function executeStep(
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
+        perStep,
       });
 
       // Capture requestContext state after step execution (only for engines that need it)
@@ -360,7 +364,11 @@ export async function executeStep(
         contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
       }
 
-      return { output, suspended, bailed, contextMutations };
+      const isNestedWorkflowStep = step.component === 'WORKFLOW';
+
+      const nestedWflowStepPaused = isNestedWorkflowStep && perStep;
+
+      return { output, suspended, bailed, contextMutations, nestedWflowStepPaused };
     },
     { retries, delay, stepSpan, workflowId, runId },
   );
@@ -409,6 +417,8 @@ export async function executeStep(
       };
     } else if (durableResult.bailed) {
       execResults = { status: 'bailed', output: durableResult.bailed.payload, endedAt: Date.now() };
+    } else if (durableResult.nestedWflowStepPaused) {
+      execResults = { status: 'paused' };
     } else {
       execResults = { status: 'success', output: durableResult.output, endedAt: Date.now() };
     }

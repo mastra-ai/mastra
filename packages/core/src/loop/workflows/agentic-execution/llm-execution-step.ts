@@ -417,7 +417,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
       while (attempt <= maxRetries) {
         try {
           const isLastModel = attempt === maxRetries && index === models.length;
-          const result = await callback(modelConfig.model, isLastModel);
+          const result = await callback(modelConfig, isLastModel);
           finalResult = result;
           done = true;
           break;
@@ -466,7 +466,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   inputProcessors,
   logger,
   agentId,
-  headers,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -493,7 +492,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
-      }>(models)(async (model, isLastModel) => {
+      }>(models)(async (modelConfig, isLastModel) => {
+        const model = modelConfig.model;
+        const modelHeaders = modelConfig.headers;
         // Reset system messages to original before each step execution
         // This ensures that system message modifications in prepareStep/processInputStep/processors
         // don't persist across steps - each step starts fresh with original system messages
@@ -619,7 +620,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 modelSettings: currentStep.modelSettings,
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
-                headers,
+                // Merge headers: modelConfig headers first, then modelSettings overrides them
+                // Only create object if there are actual headers to avoid passing empty {}
+                headers:
+                  modelHeaders || currentStep.modelSettings?.headers
+                    ? { ...modelHeaders, ...currentStep.modelSettings?.headers }
+                    : undefined,
                 methodType,
                 generateId: _internal?.generateId,
                 onResult: ({

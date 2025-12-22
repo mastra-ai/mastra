@@ -3,6 +3,7 @@ import {
   createStorageErrorId,
   WorkflowsStorage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
@@ -13,27 +14,35 @@ import type {
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { resolveMssqlConfig } from '../../db';
+import type { MssqlDB, MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
-  private operations: StoreOperationsMSSQL;
-  private schema: string;
+  private db: MssqlDB;
+  private schema?: string;
+  private needsConnect: boolean;
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: sql.ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema: string;
-  }) {
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
+    this.db = db;
     this.schema = schema;
+    this.needsConnect = needsConnect;
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -293,7 +302,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load({
+      const result = await this.db.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -424,7 +433,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;

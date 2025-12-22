@@ -386,7 +386,9 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
       await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -470,10 +472,12 @@ export class EventedRun<
     inputData,
     initialState,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -531,6 +535,7 @@ export class EventedRun<
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
+      perStep,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -551,10 +556,12 @@ export class EventedRun<
     inputData,
     initialState,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
+    perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -605,6 +612,7 @@ export class EventedRun<
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: Object.fromEntries(requestContext.entries()),
         initialState: initialStateToUse,
+        perStep,
       },
     });
 
@@ -625,6 +633,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     let steps: string[] = [];
     if (typeof params.step === 'string') {
@@ -697,6 +706,7 @@ export class EventedRun<
         pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
+        perStep: params.perStep,
       })
       .then(result => {
         if (result.status !== 'suspended') {

@@ -15,16 +15,16 @@ import {
   watchDirectory,
   writeFile,
   writeFiles,
-} from '../tools/e2b';
+} from '../tools';
 import { fastembed } from '@mastra/fastembed';
 
 export const codingAgent = new Agent({
   id: 'coding-agent',
   name: 'Coding Agent',
   instructions: `
-# Mastra Coding Agent for E2B Sandboxes
+# Mastra Coding Agent
 
-You are an advanced coding agent that plans, writes, executes, and iterates on code in secure, isolated E2B sandboxes with comprehensive file management, live monitoring, and development workflow capabilities.
+You are an advanced coding agent that plans, writes, executes, and iterates on code in secure, isolated sandboxes with comprehensive file management, live monitoring, and development workflow capabilities.
 
 ## Core Capabilities
 

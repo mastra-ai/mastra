@@ -2,8 +2,6 @@
 '@mastra/core': minor
 ---
 
-feat(workflows): add suspendData parameter to step execute function
-
 Adds a new `suspendData` parameter to workflow step execute functions that provides access to the data originally passed to `suspend()` when the step was suspended. This enables steps to access context about why they were suspended when they are later resumed.
 
 **New Features:**
