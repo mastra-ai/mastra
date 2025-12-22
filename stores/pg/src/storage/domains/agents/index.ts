@@ -22,6 +22,7 @@ import { getTableName, getSchemaName } from '../utils';
 export class AgentsPG extends AgentsStorage {
   #db: PgDB;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
@@ -32,12 +33,33 @@ export class AgentsPG extends AgentsStorage {
     const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
     this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  /**
+   * Returns default index definitions for the agents domain tables.
+   * Currently no default indexes are defined for agents.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for agents.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for agents domain
+  }
+
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
 
@@ -54,7 +76,7 @@ export class AgentsPG extends AgentsStorage {
         await this.#db.createIndex(indexDef);
       } catch (error) {
         // Log but continue - indexes are performance optimizations
-        console.warn(`Failed to create custom index ${indexDef.name}:`, error);
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
   }

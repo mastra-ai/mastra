@@ -107,7 +107,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         await this.#db.createIndex(indexDef);
       } catch (error) {
         // Log but continue - indexes are performance optimizations
-        console.warn(`Failed to create custom index ${indexDef.name}:`, error);
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
       }
     }
   }
@@ -323,7 +323,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           values.push(resourceId);
           paramIndex++;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
