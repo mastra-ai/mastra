@@ -102,7 +102,7 @@ export const WorkflowStepActionBar = ({
     }
 
     return undefined;
-  }, [stepKey, stepsFlow, inDebugMode]);
+  }, [stepKey, stepsFlow, inDebugMode, result]);
 
   const showDebugMode = inDebugMode && stepPayload && !result?.steps[stepKey];
 

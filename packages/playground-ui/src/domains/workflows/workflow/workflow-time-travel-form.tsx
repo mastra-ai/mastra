@@ -26,7 +26,7 @@ export type WorkflowTimeTravelFormProps = {
   isPerStepRun?: boolean;
   isContinueRun?: boolean;
   buttonText?: string;
-  inputData?: any;
+  inputData?: unknown;
 };
 
 const prettyJson = (value: unknown) => {

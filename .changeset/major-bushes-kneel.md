@@ -7,4 +7,4 @@
 'create-mastra': patch
 ---
 
-Add debugger-like click through UI to workflow graph
+Add debugger-like click-through UI to workflow graph

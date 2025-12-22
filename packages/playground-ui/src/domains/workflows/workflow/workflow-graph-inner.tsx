@@ -25,8 +25,6 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const [edges] = useEdgesState(initialEdges);
   const { steps } = useCurrentRun();
 
-  console.log({ edges });
-
   const stepsFlow = useMemo(() => {
     return initialEdges.reduce(
       (acc, edge) => {
