@@ -171,6 +171,16 @@
         "default": "./dist/agent/message-list/index.cjs"
       }
     },
+    "./storage/constants": {
+      "import": {
+        "types": "./dist/storage/constants.d.ts",
+        "default": "./dist/storage/constants.js"
+      },
+      "require": {
+        "types": "./dist/storage/constants.d.ts",
+        "default": "./dist/storage/constants.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
