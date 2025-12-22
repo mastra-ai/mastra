@@ -1834,7 +1834,13 @@ export class Workflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow runs. Workflows storage domain is not available');
+      return { runs: [], total: 0 };
+    }
+
+    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
   public async listActiveWorkflowRuns() {
@@ -1878,7 +1884,16 @@ export class Workflow<
         ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow runs. Workflows storage domain is not available');
+      return this.#runs.get(runId)
+        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
 
     return (
       run ??
@@ -1892,7 +1907,14 @@ export class Workflow<
       this.logger.debug('Cannot delete workflow run by ID. Mastra storage is not initialized');
       return;
     }
-    await storage.deleteWorkflowRunById({ runId, workflowName: this.id });
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot delete workflow run. Workflows storage domain is not available');
+      return;
+    }
+
+    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id });
     // deleting the run from the in memory runs
     this.#runs.delete(runId);
   }
@@ -1904,7 +1926,13 @@ export class Workflow<
       return {};
     }
 
-    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow run steps. Workflows storage domain is not available');
+      return {};
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -1963,7 +1991,13 @@ export class Workflow<
       return null;
     }
 
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow run execution result. Workflows storage domain is not available');
+      return null;
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 

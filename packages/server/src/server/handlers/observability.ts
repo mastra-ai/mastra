@@ -46,7 +46,12 @@ export async function getTraceHandler({ mastra, traceId }: ObservabilityContext 
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
-    const trace = await storage.getTrace(traceId);
+    const observabilityStore = await storage.getStore('observability');
+    if (!observabilityStore) {
+      throw new HTTPException(500, { message: 'Observability storage domain is not available' });
+    }
+
+    const trace = await observabilityStore.getTrace(traceId);
 
     if (!trace) {
       throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
@@ -69,6 +74,11 @@ export async function getTracesPaginatedHandler({ mastra, pagination, filters }:
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
+    const observabilityStore = await storage.getStore('observability');
+    if (!observabilityStore) {
+      throw new HTTPException(500, { message: 'Observability storage domain is not available' });
+    }
+
     if (pagination?.page && pagination.page < 0) {
       throw new HTTPException(400, { message: 'Page must be a non-negative integer' });
     }
@@ -89,7 +99,7 @@ export async function getTracesPaginatedHandler({ mastra, pagination, filters }:
       }
     }
 
-    return storage.getTracesPaginated({
+    return observabilityStore.getTracesPaginated({
       pagination,
       filters,
     });
@@ -161,11 +171,16 @@ export async function listScoresBySpan({
       throw new HTTPException(500, { message: 'Storage is not available' });
     }
 
+    const scoresStore = await storage.getStore('scores');
+    if (!scoresStore) {
+      throw new HTTPException(500, { message: 'Scores storage domain is not available' });
+    }
+
     if (!traceId || !spanId) {
       throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
     }
 
-    return await storage.listScoresBySpan({ traceId, spanId, pagination: { page, perPage } });
+    return await scoresStore.listScoresBySpan({ traceId, spanId, pagination: { page, perPage } });
   } catch (error) {
     return handleError(error, 'Error getting scores by span');
   }
@@ -198,6 +213,11 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
       const storage = mastra.getStorage();
       if (!storage) {
         throw new HTTPException(500, { message: 'Storage is not available' });
+      }
+
+      const observabilityStore = await storage.getStore('observability');
+      if (!observabilityStore) {
+        throw new HTTPException(500, { message: 'Observability storage domain is not available' });
       }
 
       const { page, perPage, name, spanType, dateRange, entityId, entityType } = params;
@@ -239,7 +259,7 @@ export const GET_TRACES_PAGINATED_ROUTE = createRoute({
         }
       }
 
-      return storage.getTracesPaginated({ pagination, filters });
+      return observabilityStore.getTracesPaginated({ pagination, filters });
     } catch (error) {
       handleError(error, 'Error getting traces paginated');
     }
@@ -266,7 +286,12 @@ export const GET_TRACE_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Storage is not available' });
       }
 
-      const trace = await storage.getTrace(traceId);
+      const observabilityStore = await storage.getStore('observability');
+      if (!observabilityStore) {
+        throw new HTTPException(500, { message: 'Observability storage domain is not available' });
+      }
+
+      const trace = await observabilityStore.getTrace(traceId);
 
       if (!trace) {
         throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
@@ -348,12 +373,17 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Storage is not available' });
       }
 
+      const scoresStore = await storage.getStore('scores');
+      if (!scoresStore) {
+        throw new HTTPException(500, { message: 'Scores storage domain is not available' });
+      }
+
       if (!traceId || !spanId) {
         throw new HTTPException(400, { message: 'Trace ID and span ID are required' });
       }
 
       const { page, perPage } = params;
-      return await storage.listScoresBySpan({
+      return await scoresStore.listScoresBySpan({
         traceId,
         spanId,
         pagination: { page: page ?? 0, perPage: perPage ?? 10 },

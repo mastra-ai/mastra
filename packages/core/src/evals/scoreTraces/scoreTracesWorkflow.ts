@@ -6,7 +6,7 @@ import type { TracingContext } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
-import type { ScoreRowData } from '../types';
+import type { SaveScorePayload, ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import { transformTraceToScorerInputAndOutput } from './utils';
 
@@ -107,7 +107,11 @@ export async function runScorerOnTarget({
   tracingContext: TracingContext;
 }) {
   // TODO: add storage api to get a single span
-  const trace = await storage.getTrace(target.traceId);
+  const observabilityStore = await storage.getStore('observability');
+  if (!observabilityStore) {
+    throw new Error('Observability storage domain is not available');
+  }
+  const trace = await observabilityStore.getTrace(target.traceId);
 
   if (!trace) {
     throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
@@ -155,8 +159,12 @@ export async function runScorerOnTarget({
 }
 
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
+  const scoresStore = await storage.getStore('scores');
+  if (!scoresStore) {
+    throw new Error('Scores storage domain is not available');
+  }
   const payloadToSave = saveScorePayloadSchema.parse(scorerResult);
-  const result = await storage.saveScore(payloadToSave);
+  const result = await scoresStore.saveScore(payloadToSave as SaveScorePayload);
   return result.score;
 }
 
@@ -195,6 +203,10 @@ async function attachScoreToSpan({
   span: SpanRecord;
   scoreRecord: ScoreRowData;
 }) {
+  const observabilityStore = await storage.getStore('observability');
+  if (!observabilityStore) {
+    throw new Error('Observability storage domain is not available');
+  }
   const existingLinks = span.links || [];
   const link = {
     type: 'score',
@@ -203,7 +215,7 @@ async function attachScoreToSpan({
     score: scoreRecord.score,
     createdAt: scoreRecord.createdAt,
   };
-  await storage.updateSpan({
+  await observabilityStore.updateSpan({
     spanId: span.spanId,
     traceId: span.traceId,
     updates: { links: [...existingLinks, link] },
