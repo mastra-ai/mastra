@@ -129,9 +129,11 @@ export class PostgresPerformanceTest {
     }
   }
 
-  async createAutomaticIndexes(): Promise<void> {
+  async createDefaultIndexes(): Promise<void> {
     console.info('Creating indexes...');
-    await this.dbOps.createAutomaticIndexes();
+    // Note: Indexes are now created by domain classes during init()
+    // This method re-initializes the store to ensure indexes are created
+    await this.store.init();
   }
 
   async seedTestData(): Promise<void> {
@@ -403,7 +405,7 @@ export class PostgresPerformanceTest {
     const withoutIndexes = await this.runPerformanceTests('without_indexes');
 
     // Then, test with indexes
-    await this.createAutomaticIndexes();
+    await this.createDefaultIndexes();
     await this.analyzeCurrentQueries(); // Show query plans with indexes
     const withIndexes = await this.runPerformanceTests('with_indexes');
 

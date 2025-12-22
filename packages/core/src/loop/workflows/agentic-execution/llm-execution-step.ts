@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
@@ -422,6 +422,12 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
           done = true;
           break;
         } catch (err) {
+          // TripWire errors should be re-thrown immediately - they are intentional aborts
+          // from processors (e.g., processInputStep) and should not trigger model retries
+          if (err instanceof TripWire) {
+            throw err;
+          }
+
           attempt++;
 
           console.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
@@ -556,6 +562,51 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
+            // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
+            if (error instanceof TripWire) {
+              // Emit tripwire chunk to the stream
+              if (isControllerOpen(controller)) {
+                controller.enqueue({
+                  type: 'tripwire',
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    reason: error.message,
+                    retry: error.options?.retry,
+                    metadata: error.options?.metadata,
+                    processorId: error.processorId,
+                  },
+                });
+              }
+
+              // Create a minimal runState for the bail response
+              const runState = new AgenticRunState({
+                _internal: _internal!,
+                model,
+              });
+
+              // Return via bail to properly signal the tripwire
+              return {
+                callBail: true,
+                outputStream: new MastraModelOutput({
+                  model: {
+                    modelId: model.modelId,
+                    provider: model.provider,
+                    version: model.specificationVersion,
+                  },
+                  stream: new ReadableStream({
+                    start(c) {
+                      c.close();
+                    },
+                  }),
+                  messageList,
+                  messageId,
+                  options: { runId },
+                }),
+                runState,
+                stepTools: tools,
+              };
+            }
             console.error('Error in processInputStep processors:', error);
             throw error;
           }

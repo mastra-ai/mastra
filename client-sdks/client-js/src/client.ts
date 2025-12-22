@@ -49,6 +49,7 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  GetSystemPackagesResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -732,5 +733,17 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // System
+  // ============================================================================
+
+  /**
+   * Retrieves installed Mastra packages and their versions
+   * @returns Promise containing the list of installed Mastra packages
+   */
+  public getSystemPackages(): Promise<GetSystemPackagesResponse> {
+    return this.request('/api/system/packages');
   }
 }
