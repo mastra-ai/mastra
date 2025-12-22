@@ -8995,6 +8995,94 @@ describe('Workflow', () => {
       expect(((step2Result as any)?.error as Error).message).toContain('start: Expected string, received number');
     });
 
+    it('should properly validate input schema when .map is used after .foreach. bug #11313', async () => {
+      const startTime = Date.now();
+      const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
+        return { value: inputData.value + 11 };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.object({
+          inputValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.inputValue };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .foreach(mapStep)
+        .map(
+          async ({ inputData }) => {
+            return {
+              inputValue: inputData.reduce((acc, curr) => acc + curr.value, 0),
+            };
+          },
+          { id: 'map-step' },
+        )
+        .then(finalStep)
+        .commit();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      expect(duration).toBeGreaterThan(3e3 - 200);
+
+      expect(map).toHaveBeenCalledTimes(3);
+      expect(result.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'map-step': {
+          status: 'success',
+          output: { inputValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: { inputValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
       const resumeStep = createStep({
         id: 'resume',
