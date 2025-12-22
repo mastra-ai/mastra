@@ -225,6 +225,13 @@ createStoreIndexTests({
       schemaName: `idx_s_${storeTestId}_c`,
       indexes: indexes as any,
     }),
+  createStoreWithInvalidTable: indexes =>
+    new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-idx-invalid',
+      schemaName: `idx_s_${storeTestId}_i`,
+      indexes: indexes as any,
+    }),
   indexExists: (store, pattern) => pgIndexExists(store as PostgresStore, pattern),
   defaultIndexPattern: 'threads_resourceid_createdat',
   customIndexName: 'custom_pg_test_idx',
@@ -232,6 +239,11 @@ createStoreIndexTests({
     name: 'custom_pg_test_idx',
     table: TABLE_THREADS,
     columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_table_idx',
+    table: 'nonexistent_table_xyz',
+    columns: ['id'],
   },
 });
 
@@ -257,6 +269,11 @@ createDomainIndexTests({
     const { client } = createTestClient();
     return new MemoryPG({ client, schemaName: currentDomainTestSchema, indexes: indexes as any });
   },
+  createDomainWithInvalidTable: indexes => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_i`;
+    const { client } = createTestClient();
+    return new MemoryPG({ client, schemaName: currentDomainTestSchema, indexes: indexes as any });
+  },
   indexExists: async (_domain, pattern) => {
     // Create a fresh client to check indexes
     const { client, pgp } = createTestClient();
@@ -276,5 +293,10 @@ createDomainIndexTests({
     name: 'custom_memory_test_idx',
     table: TABLE_THREADS,
     columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_domain_table_idx',
+    table: 'nonexistent_table_xyz',
+    columns: ['id'],
   },
 });

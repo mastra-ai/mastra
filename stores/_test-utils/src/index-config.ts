@@ -36,6 +36,15 @@ export interface StoreIndexTestConfig {
 
   /** Custom index definition (store-specific format) */
   customIndexDef: { name: string; [key: string]: unknown };
+
+  /** Factory to create a store with an invalid table name (for error testing) */
+  createStoreWithInvalidTable?: (indexes: Array<{ name: string; [key: string]: unknown }>) => {
+    init(): Promise<void>;
+    close?(): Promise<void>;
+  };
+
+  /** Invalid index definition for error testing */
+  invalidTableIndexDef?: { name: string; [key: string]: unknown };
 }
 
 /**
@@ -56,6 +65,8 @@ export function createStoreIndexTests(config: StoreIndexTestConfig) {
     defaultIndexPattern,
     customIndexName,
     customIndexDef,
+    createStoreWithInvalidTable,
+    invalidTableIndexDef,
   } = config;
 
   describe(`${storeName} Index Configuration`, () => {
@@ -91,6 +102,32 @@ export function createStoreIndexTests(config: StoreIndexTestConfig) {
         await store.close?.();
       }
     });
+
+    it('should be idempotent - calling init() twice should not fail', async () => {
+      const store = createStoreWithCustomIndexes([customIndexDef]);
+      try {
+        await store.init();
+        // Second init should not throw
+        await expect(store.init()).resolves.not.toThrow();
+        // Index should still exist
+        const exists = await indexExists(store, customIndexName);
+        expect(exists, `Custom index "${customIndexName}" should still exist after second init`).toBe(true);
+      } finally {
+        await store.close?.();
+      }
+    });
+
+    if (createStoreWithInvalidTable && invalidTableIndexDef) {
+      it('should handle invalid table name gracefully (not crash)', async () => {
+        const store = createStoreWithInvalidTable([invalidTableIndexDef]);
+        try {
+          // Should not throw - invalid indexes are logged but don't crash init
+          await expect(store.init()).resolves.not.toThrow();
+        } finally {
+          await store.close?.();
+        }
+      });
+    }
   });
 }
 
@@ -127,6 +164,14 @@ export interface DomainIndexTestConfig {
 
   /** Custom index definition (domain-specific format) */
   customIndexDef: { name: string; [key: string]: unknown };
+
+  /** Factory to create a domain with an invalid table/collection name (for error testing) */
+  createDomainWithInvalidTable?: (indexes: Array<{ name: string; [key: string]: unknown }>) => {
+    init(): Promise<void>;
+  };
+
+  /** Invalid index definition for error testing */
+  invalidTableIndexDef?: { name: string; [key: string]: unknown };
 }
 
 /**
@@ -136,6 +181,8 @@ export interface DomainIndexTestConfig {
  * - Default indexes are created by default
  * - skipDefaultIndexes: true prevents default index creation
  * - Custom indexes are created when specified
+ * - Calling init() twice is idempotent
+ * - Invalid table names are handled gracefully
  */
 export function createDomainIndexTests(config: DomainIndexTestConfig) {
   const {
@@ -147,6 +194,8 @@ export function createDomainIndexTests(config: DomainIndexTestConfig) {
     defaultIndexPattern,
     customIndexName,
     customIndexDef,
+    createDomainWithInvalidTable,
+    invalidTableIndexDef,
   } = config;
 
   describe(`${domainName} Index Configuration`, () => {
@@ -170,5 +219,23 @@ export function createDomainIndexTests(config: DomainIndexTestConfig) {
       const exists = await indexExists(domain, customIndexName);
       expect(exists, `Custom index "${customIndexName}" should exist`).toBe(true);
     });
+
+    it('should be idempotent - calling init() twice should not fail', async () => {
+      const domain = createDomainWithCustomIndexes([customIndexDef]);
+      await domain.init();
+      // Second init should not throw
+      await expect(domain.init()).resolves.not.toThrow();
+      // Index should still exist
+      const exists = await indexExists(domain, customIndexName);
+      expect(exists, `Custom index "${customIndexName}" should still exist after second init`).toBe(true);
+    });
+
+    if (createDomainWithInvalidTable && invalidTableIndexDef) {
+      it('should handle invalid table/collection name gracefully (not crash)', async () => {
+        const domain = createDomainWithInvalidTable([invalidTableIndexDef]);
+        // Should not throw - invalid indexes are logged but don't crash init
+        await expect(domain.init()).resolves.not.toThrow();
+      });
+    }
   });
 }

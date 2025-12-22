@@ -618,6 +618,19 @@ createStoreIndexTests({
       })),
     });
   },
+  createStoreWithInvalidTable: indexes => {
+    currentStoreTestDbName = `idx_s_${storeTestId}_i`;
+    return new MongoDBStore({
+      id: 'mongodb-idx-invalid',
+      url: TEST_CONFIG.url!,
+      dbName: currentStoreTestDbName,
+      indexes: indexes.map(idx => ({
+        collection: (idx as any).collection || 'nonexistent_collection_xyz',
+        keys: { [(idx as any).columns?.[0] || 'id']: 1 },
+        options: { name: idx.name },
+      })),
+    });
+  },
   indexExists: (_store, pattern) => mongoIndexExists(currentStoreTestDbName, pattern),
   defaultIndexPattern: 'resourceid',
   customIndexName: 'custom_mongo_test_idx',
@@ -625,6 +638,11 @@ createStoreIndexTests({
     name: 'custom_mongo_test_idx',
     collection: TABLE_THREADS,
     columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_collection_idx',
+    collection: 'nonexistent_collection_xyz',
+    columns: ['id'],
   },
 });
 
@@ -662,6 +680,18 @@ createDomainIndexTests({
       })),
     });
   },
+  createDomainWithInvalidTable: indexes => {
+    currentDomainTestDbName = `idx_d_${domainTestId}_i`;
+    return new MemoryStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: currentDomainTestDbName,
+      indexes: indexes.map(idx => ({
+        collection: (idx as any).collection || 'nonexistent_collection_xyz',
+        keys: { [(idx as any).columns?.[0] || 'id']: 1 },
+        options: { name: idx.name },
+      })),
+    });
+  },
   indexExists: (_domain, pattern) => mongoIndexExists(currentDomainTestDbName, pattern),
   defaultIndexPattern: 'resourceid',
   customIndexName: 'custom_memory_mongo_idx',
@@ -669,5 +699,10 @@ createDomainIndexTests({
     name: 'custom_memory_mongo_idx',
     collection: TABLE_THREADS,
     columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_domain_collection_idx',
+    collection: 'nonexistent_collection_xyz',
+    columns: ['id'],
   },
 });

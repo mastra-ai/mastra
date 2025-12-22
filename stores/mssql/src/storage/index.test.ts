@@ -318,6 +318,17 @@ if (process.env.ENABLE_TESTS === 'true') {
           columns: (idx as any).columns || ['title'],
         })),
       }),
+    createStoreWithInvalidTable: indexes =>
+      new MSSQLStore({
+        ...TEST_CONFIG,
+        id: 'mssql-idx-invalid',
+        schemaName: `idx_s_${storeTestId}_i`,
+        indexes: indexes.map(idx => ({
+          name: idx.name,
+          table: (idx as any).table || 'nonexistent_table_xyz',
+          columns: (idx as any).columns || ['id'],
+        })),
+      }),
     indexExists: (store, pattern) => mssqlIndexExists(store as MSSQLStore, pattern),
     defaultIndexPattern: 'threads_resourceid',
     customIndexName: 'custom_mssql_test_idx',
@@ -325,6 +336,11 @@ if (process.env.ENABLE_TESTS === 'true') {
       name: 'custom_mssql_test_idx',
       table: TABLE_THREADS,
       columns: ['title'],
+    },
+    invalidTableIndexDef: {
+      name: 'invalid_table_idx',
+      table: 'nonexistent_table_xyz',
+      columns: ['id'],
     },
   });
 
@@ -362,6 +378,18 @@ if (process.env.ENABLE_TESTS === 'true') {
         })),
       });
     },
+    createDomainWithInvalidTable: indexes => {
+      currentDomainTestSchema = `idx_d_${domainTestId}_i`;
+      return new MemoryMSSQL({
+        ...DOMAIN_CONFIG,
+        schemaName: currentDomainTestSchema,
+        indexes: indexes.map(idx => ({
+          name: idx.name,
+          table: (idx as any).table || 'nonexistent_table_xyz',
+          columns: (idx as any).columns || ['id'],
+        })),
+      });
+    },
     indexExists: async (_domain, pattern) => {
       // Create a fresh pool to check indexes
       const pool = createTestPool();
@@ -385,6 +413,11 @@ if (process.env.ENABLE_TESTS === 'true') {
       name: 'custom_memory_mssql_idx',
       table: TABLE_THREADS,
       columns: ['title'],
+    },
+    invalidTableIndexDef: {
+      name: 'invalid_domain_table_idx',
+      table: 'nonexistent_table_xyz',
+      columns: ['id'],
     },
   });
 }
