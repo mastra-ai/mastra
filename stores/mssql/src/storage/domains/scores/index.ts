@@ -7,12 +7,14 @@ import {
   createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
+  TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { resolveMssqlConfig } from '../../db';
+import type { MssqlDB, MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
 /**
@@ -27,22 +29,29 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class ScoresMSSQL extends ScoresStorage {
   public pool: ConnectionPool;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
   private schema?: string;
+  private needsConnect: boolean;
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema?: string;
-  }) {
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, db, schema, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
+    this.db = db;
     this.schema = schema;
+    this.needsConnect = needsConnect;
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -111,7 +120,7 @@ export class ScoresMSSQL extends ScoresStorage {
         ...rest
       } = validatedScore;
 
-      await this.operations.insert({
+      await this.db.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,

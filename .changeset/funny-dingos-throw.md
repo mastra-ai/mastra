@@ -9,4 +9,4 @@
 '@mastra/pg': patch
 ---
 
-fix: ensure score responses match saved payloads for Mastra Stores.
+Ensure score responses match saved payloads for Mastra Stores.

@@ -44,6 +44,15 @@ export { bundler };
 "
 `;
 
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic-with-spread.js 1`] = `
+"const bundler = {
+  externals: ["sharp"]
+};
+
+export { bundler };
+"
+`;
+
 exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/empty-mastra.js 1`] = `
 "const bundler = {};
 

@@ -6,9 +6,7 @@ import type { StorageThreadType, MastraDBMessage } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   StoragePagination,
   WorkflowRuns,
@@ -19,7 +17,6 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageD1 } from './domains/memory';
-import { StoreOperationsD1 } from './domains/operations';
 import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
 
@@ -90,7 +87,7 @@ export interface D1Client {
 
 export class D1Store extends MastraStorage {
   private client?: D1Client;
-  private binding?: D1Database; // D1Database binding
+  private binding?: D1Database;
   private tablePrefix: string;
 
   stores: StorageDomains;
@@ -153,26 +150,23 @@ export class D1Store extends MastraStorage {
       );
     }
 
-    const operations = new StoreOperationsD1({
-      client: this.client,
-      binding: this.binding,
-      tablePrefix: this.tablePrefix,
-    });
+    let scores: ScoresStorageD1;
+    let workflows: WorkflowsStorageD1;
+    let memory: MemoryStorageD1;
 
-    const scores = new ScoresStorageD1({
-      operations,
-    });
-
-    const workflows = new WorkflowsStorageD1({
-      operations,
-    });
-
-    const memory = new MemoryStorageD1({
-      operations,
-    });
+    if (this.binding) {
+      const domainConfig = { binding: this.binding, tablePrefix: this.tablePrefix };
+      scores = new ScoresStorageD1(domainConfig);
+      workflows = new WorkflowsStorageD1(domainConfig);
+      memory = new MemoryStorageD1(domainConfig);
+    } else {
+      const domainConfig = { client: this.client!, tablePrefix: this.tablePrefix };
+      scores = new ScoresStorageD1(domainConfig);
+      workflows = new WorkflowsStorageD1(domainConfig);
+      memory = new MemoryStorageD1(domainConfig);
+    }
 
     this.stores = {
-      operations,
       scores,
       workflows,
       memory,
@@ -185,57 +179,9 @@ export class D1Store extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async hasColumn(table: string, column: string): Promise<boolean> {
-    return this.stores.operations.hasColumn(table, column);
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -330,15 +276,6 @@ export class D1Store extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
-  /**
-   * Insert multiple records in a batch operation
-   * @param tableName The table to insert into
-   * @param records The records to insert
-   */
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
   async updateMessages(_args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
@@ -349,6 +286,14 @@ export class D1Store extends MastraStorage {
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(_args);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
+  }
+
+  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    return this.stores.memory.listMessagesById({ messageIds });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {

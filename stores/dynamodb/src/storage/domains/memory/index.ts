@@ -2,7 +2,15 @@ import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
-import { createStorageErrorId, MemoryStorage, normalizePerPage, calculatePagination } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  MemoryStorage,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_THREADS,
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+} from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
@@ -11,12 +19,74 @@ import type {
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
+import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    this.service = resolveDynamoDBConfig(config);
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_THREADS);
+    await deleteTableData(this.service, TABLE_MESSAGES);
+    await deleteTableData(this.service, TABLE_RESOURCES);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Delete messages in batches of 25 (DynamoDB limit)
+      const batchSize = 25;
+      for (let i = 0; i < messageIds.length; i += batchSize) {
+        const batch = messageIds.slice(i, i + batchSize);
+
+        // Get messages to find their threadIds before deleting
+        const messagesToDelete = await Promise.all(
+          batch.map(async id => {
+            const result = await this.service.entities.message.get({ entity: 'message', id }).go();
+            return result.data;
+          }),
+        );
+
+        // Collect threadIds and delete messages
+        for (const message of messagesToDelete) {
+          if (message) {
+            if (message.threadId) {
+              threadIds.add(message.threadId);
+            }
+            await this.service.entities.message.delete({ entity: 'message', id: message.id }).go();
+          }
+        }
+      }
+
+      // Update thread timestamps
+      const now = new Date().toISOString();
+      for (const threadId of threadIds) {
+        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Helper function to parse message data (handle JSON fields)

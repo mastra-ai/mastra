@@ -9,14 +9,35 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  async init(): Promise<void> {
+    const collection = await this.getCollection(TABLE_SPANS);
+    await collection.createIndex({ spanId: 1, traceId: 1 }, { unique: true });
+    await collection.createIndex({ traceId: 1 });
+    await collection.createIndex({ parentSpanId: 1 });
+    await collection.createIndex({ startedAt: -1 });
+    await collection.createIndex({ spanType: 1 });
+    await collection.createIndex({ name: 1 });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.getCollection(TABLE_SPANS);
+    await collection.deleteMany({});
   }
 
   public get tracingStrategy(): {
@@ -42,7 +63,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         updatedAt: new Date().toISOString(),
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      const collection = await this.getCollection(TABLE_SPANS);
+      await collection.insertOne(record);
     } catch (error) {
       throw new MastraError(
         {
@@ -63,7 +85,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   async getTrace(traceId: string): Promise<TraceRecord | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SPANS);
+      const collection = await this.getCollection(TABLE_SPANS);
 
       const spans = await collection.find({ traceId }).sort({ startedAt: -1 }).toArray();
 
@@ -114,11 +136,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         updatedAt: new Date().toISOString(),
       };
 
-      await this.operations.update({
-        tableName: TABLE_SPANS,
-        keys: { spanId, traceId },
-        data: updateData,
-      });
+      const collection = await this.getCollection(TABLE_SPANS);
+      await collection.updateOne({ spanId, traceId }, { $set: updateData });
     } catch (error) {
       throw new MastraError(
         {
@@ -144,7 +163,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     const { entityId, entityType, ...actualFilters } = filters || {};
 
     try {
-      const collection = await this.operations.getCollection(TABLE_SPANS);
+      const collection = await this.getCollection(TABLE_SPANS);
 
       // Build MongoDB query filter
       const mongoFilter: Record<string, any> = {
@@ -253,10 +272,10 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
         };
       });
 
-      return this.operations.batchInsert({
-        tableName: TABLE_SPANS,
-        records,
-      });
+      if (records.length > 0) {
+        const collection = await this.getCollection(TABLE_SPANS);
+        await collection.insertMany(records);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -277,30 +296,36 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     }[];
   }): Promise<void> {
     try {
-      return this.operations.batchUpdate({
-        tableName: TABLE_SPANS,
-        updates: args.records.map(record => {
-          const data: Partial<UpdateSpanRecord> = { ...record.updates };
+      if (args.records.length === 0) {
+        return;
+      }
 
-          if (data.endedAt instanceof Date) {
-            data.endedAt = data.endedAt.toISOString() as any;
-          }
-          if (data.startedAt instanceof Date) {
-            data.startedAt = data.startedAt.toISOString() as any;
-          }
+      const bulkOps = args.records.map(record => {
+        const data: Partial<UpdateSpanRecord> = { ...record.updates };
 
-          // Add updatedAt timestamp
-          const updateData = {
-            ...data,
-            updatedAt: new Date().toISOString(),
-          };
+        if (data.endedAt instanceof Date) {
+          data.endedAt = data.endedAt.toISOString() as any;
+        }
+        if (data.startedAt instanceof Date) {
+          data.startedAt = data.startedAt.toISOString() as any;
+        }
 
-          return {
-            keys: { spanId: record.spanId, traceId: record.traceId },
-            data: updateData,
-          };
-        }),
+        // Add updatedAt timestamp
+        const updateData = {
+          ...data,
+          updatedAt: new Date().toISOString(),
+        };
+
+        return {
+          updateOne: {
+            filter: { spanId: record.spanId, traceId: record.traceId },
+            update: { $set: updateData },
+          },
+        };
       });
+
+      const collection = await this.getCollection(TABLE_SPANS);
+      await collection.bulkWrite(bulkOps);
     } catch (error) {
       throw new MastraError(
         {
@@ -315,7 +340,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SPANS);
+      const collection = await this.getCollection(TABLE_SPANS);
 
       await collection.deleteMany({
         traceId: { $in: args.traceIds },

@@ -15,7 +15,7 @@ Use [`handleNetworkStream()`](/reference/v1/ai-sdk/handle-network-stream) if you
 
 This example shows how to set up a network route at the `/network` endpoint that uses an agent with the ID `weatherAgent`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { networkRoute } from "@mastra/ai-sdk";
 
@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 
 You can also use dynamic agent routing based on an `agentId`. The URL `/network/weatherAgent` will resolve to the agent with the ID `weatherAgent`.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { networkRoute } from "@mastra/ai-sdk";
 

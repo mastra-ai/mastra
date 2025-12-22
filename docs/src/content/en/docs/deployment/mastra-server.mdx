@@ -26,7 +26,7 @@ tsconfig.json
 
 The `mastra build` command starts the build process:
 
-```bash copy
+```bash
 mastra build
 ```
 
@@ -34,7 +34,7 @@ mastra build
 
 If your Mastra files are located elsewhere, use the `--dir` flag to specify the custom location. The `--dir` flag tells Mastra where to find your entry point file (`index.ts` or `index.js`) and related directories.
 
-```bash copy
+```bash
 mastra build --dir ./my-project/mastra
 ```
 
@@ -68,6 +68,6 @@ If a `public` folder exists in `src/mastra`, its contents are copied into the `.
 
 Start the HTTP server:
 
-```bash copy
+```bash
 node .mastra/output/index.mjs
 ```

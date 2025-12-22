@@ -1,5 +1,5 @@
 import z from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -285,7 +285,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
             })
           : baseSchema;
 
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,

@@ -77,20 +77,22 @@ await storage.init();
 ### Working with Threads
 
 ```typescript
+const memoryStorage = await storage.getStore('memory');
+
 // Create a new thread
-const thread = await storage.createThread({
+const thread = await memoryStorage.createThread({
   resourceId: 'resource-123',
   title: 'My Thread',
   metadata: { key: 'value' },
 });
 
 // Get thread by ID
-const retrievedThread = await storage.getThreadById({
+const retrievedThread = await memoryStorage.getThreadById({
   threadId: thread.id,
 });
 
 // Update thread
-await storage.updateThread({
+await memoryStorage.updateThread({
   id: thread.id,
   title: 'Updated Title',
   metadata: { newKey: 'newValue' },
@@ -100,8 +102,10 @@ await storage.updateThread({
 ### Working with Messages
 
 ```typescript
+const memoryStorage = await storage.getStore('memory');
+
 // Save messages
-await storage.saveMessages({
+await memoryStorage.saveMessages({
   messages: [
     {
       id: 'msg-1',
@@ -114,7 +118,7 @@ await storage.saveMessages({
 });
 
 // Get thread messages with pagination
-const result = await storage.listMessages({
+const result = await memoryStorage.listMessages({
   threadId: thread.id,
   page: 0,
   perPage: 50,
@@ -128,8 +132,10 @@ console.log(result.hasMore); // Whether more pages exist
 ### Working with Workflow Snapshots
 
 ```typescript
+const workflowsStorage = await storage.getStore('workflows');
+
 // Save workflow state
-await storage.persistWorkflowSnapshot({
+await workflowsStorage.persistWorkflowSnapshot({
   workflowName: 'my-workflow',
   runId: 'run-123',
   snapshot: {
@@ -146,7 +152,7 @@ await storage.persistWorkflowSnapshot({
 });
 
 // Load workflow state
-const snapshot = await storage.loadWorkflowSnapshot({
+const snapshot = await workflowsStorage.loadWorkflowSnapshot({
   workflowName: 'my-workflow',
   runId: 'run-123',
 });

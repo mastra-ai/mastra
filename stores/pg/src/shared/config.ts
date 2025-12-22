@@ -1,6 +1,7 @@
 import type { ConnectionOptions } from 'node:tls';
 import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
+import type pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 /**
@@ -51,8 +52,41 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
 
 /**
  * PostgreSQL configuration for PostgresStore (uses pg-promise with ISSLConfig)
+ *
+ * Accepts either:
+ * - A pre-configured pg-promise client: `{ id, client, schemaName? }`
+ * - Connection string: `{ id, connectionString, ... }`
+ * - Host/port config: `{ id, host, port, database, user, password, ... }`
+ * - Cloud SQL connector config: `{ id, stream, ... }`
  */
-export type PostgresStoreConfig = PostgresConfig<ISSLConfig>;
+export type PostgresStoreConfig =
+  | PostgresConfig<ISSLConfig>
+  | {
+      id: string;
+      /**
+       * Pre-configured pg-promise database client.
+       * Use this when you need to configure the client before initialization,
+       * e.g., to add pool listeners or set connection-level settings.
+       *
+       * @example
+       * ```typescript
+       * import pgPromise from 'pg-promise';
+       *
+       * const pgp = pgPromise();
+       * const client = pgp({ connectionString: '...' });
+       *
+       * // Custom setup before using
+       * client.$pool.on('connect', async (poolClient) => {
+       *   await poolClient.query('SET ROLE my_role;');
+       * });
+       *
+       * const store = new PostgresStore({ id: 'my-store', client });
+       * ```
+       */
+      client: pgPromise.IDatabase<{}>;
+      schemaName?: string;
+      disableInit?: boolean;
+    };
 
 /**
  * PostgreSQL configuration for PgVector (uses pg with ConnectionOptions)
@@ -86,9 +120,26 @@ export const isCloudSqlConfig = <SSLType>(
   return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
 };
 
-export const validateConfig = (name: string, config: PostgresConfig<ISSLConfig | ConnectionOptions>) => {
+/**
+ * Type guard for pre-configured client config (PostgresStore only)
+ */
+export const isClientConfig = (
+  cfg: PostgresStoreConfig,
+): cfg is { id: string; client: pgPromise.IDatabase<{}>; schemaName?: string; disableInit?: boolean } => {
+  return 'client' in cfg;
+};
+
+export const validateConfig = (name: string, config: PostgresStoreConfig) => {
   if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
     throw new Error(`${name}: id must be provided and cannot be empty.`);
+  }
+
+  // Client config: user provides pre-configured pg-promise client
+  if (isClientConfig(config)) {
+    if (!config.client) {
+      throw new Error(`${name}: client must be provided when using client config.`);
+    }
+    return; // Valid client config
   }
 
   if (isConnectionStringConfig(config)) {
@@ -114,7 +165,7 @@ export const validateConfig = (name: string, config: PostgresConfig<ISSLConfig |
     }
   } else {
     throw new Error(
-      `${name}: invalid config. Provide either {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with \`stream\`).`,
+      `${name}: invalid config. Provide either {client}, {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with \`stream\`).`,
     );
   }
 };

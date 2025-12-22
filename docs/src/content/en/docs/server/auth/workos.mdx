@@ -19,7 +19,7 @@ This example uses WorkOS authentication. Make sure to:
 3. Configure your redirect URIs and allowed origins
 4. Set up Organizations and configure user roles as needed
 
-```env title=".env" copy
+```env title=".env"
 WORKOS_API_KEY=sk_live_...
 WORKOS_CLIENT_ID=client_...
 ```
@@ -32,7 +32,7 @@ WORKOS_CLIENT_ID=client_...
 
 Before you can use the `MastraAuthWorkos` class you have to install the `@mastra/auth-workos` package.
 
-```bash copy
+```bash
 npm install @mastra/auth-workos@beta
 ```
 
@@ -40,12 +40,11 @@ npm install @mastra/auth-workos@beta
 
 ### Basic usage with environment variables
 
-```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,6} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos(),
   },
@@ -54,12 +53,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,
@@ -82,7 +80,7 @@ By default, `MastraAuthWorkos` checks whether the authenticated user has an 'adm
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
-```typescript title="src/mastra/auth.ts" showLineNumbers copy
+```typescript title="src/mastra/auth.ts"
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 const workosAuth = new MastraAuthWorkos({
@@ -94,7 +92,11 @@ const workosAuth = new MastraAuthWorkos({
 });
 ```
 
-> See the [MastraAuthWorkos](/reference/v1/auth/workos) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthWorkos](/reference/v1/auth/workos) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -104,7 +106,7 @@ When using WorkOS auth, you'll need to implement the WorkOS authentication flow 
 
 First, install the WorkOS SDK in your application:
 
-```bash copy
+```bash
 npm install @workos-inc/node
 ```
 
@@ -112,7 +114,7 @@ npm install @workos-inc/node
 
 After users complete the WorkOS authentication flow and return with an authorization code, exchange it for an access token:
 
-```typescript title="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts"
 import { WorkOS } from "@workos-inc/node";
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY);
@@ -137,7 +139,7 @@ export const authenticateWithWorkos = async (
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
-```typescript title="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript title="lib/mastra/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (accessToken: string) => {
@@ -152,7 +154,11 @@ export const createMastraClient = (accessToken: string) => {
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -160,7 +166,7 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 
 <Tabs>
   <TabItem value="react" label="React">
-    ```typescript title="src/api/agents.ts" showLineNumbers copy
+    ```typescript title="src/api/agents.ts" copy
     import { WorkOS } from '@workos-inc/node';
     import { MastraClient } from '@mastra/client-js';
 

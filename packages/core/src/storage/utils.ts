@@ -1,6 +1,7 @@
 import type { ScoreRowData } from '../evals/types';
 import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';
+import type { StorageColumn } from './types';
 
 /**
  * Canonical store names for type safety.
@@ -210,4 +211,56 @@ export function createStorageErrorId(store: StoreName, operation: string, status
 
 export function createVectorErrorId(store: StoreName, operation: string, status: string): Uppercase<string> {
   return createStoreErrorId('vector', store, operation, status);
+}
+
+export function getSqlType(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'text':
+      return 'TEXT';
+    case 'timestamp':
+      return 'TIMESTAMP';
+    case 'float':
+      return 'FLOAT';
+    case 'integer':
+      return 'INTEGER';
+    case 'bigint':
+      return 'BIGINT';
+    case 'jsonb':
+      return 'JSONB';
+    case 'boolean':
+      return 'BOOLEAN';
+    default:
+      return 'TEXT';
+  }
+}
+
+export function getDefaultValue(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'text':
+    case 'uuid':
+      return "DEFAULT ''";
+    case 'timestamp':
+      return "DEFAULT '1970-01-01 00:00:00'";
+    case 'integer':
+    case 'bigint':
+    case 'float':
+      return 'DEFAULT 0';
+    case 'jsonb':
+      return "DEFAULT '{}'";
+    case 'boolean':
+      return 'DEFAULT FALSE';
+    default:
+      return "DEFAULT ''";
+  }
+}
+
+export function ensureDate(date: Date | string | undefined): Date | undefined {
+  if (!date) return undefined;
+  return date instanceof Date ? date : new Date(date);
+}
+
+export function serializeDate(date: Date | string | undefined): string | undefined {
+  if (!date) return undefined;
+  const dateObj = ensureDate(date);
+  return dateObj?.toISOString();
 }

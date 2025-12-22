@@ -1,0 +1,444 @@
+---
+title: "Inngest | Deployment"
+description: "Deploy Mastra workflows with Inngest"
+---
+
+# Inngest workflow
+
+[Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
+
+For a complete example with advanced flow control features, see the [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest).
+
+## How Inngest works with Mastra
+
+Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow()` and `createStep()` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
+
+The `serve()` function bridges the two systems by registering Mastra workflows as Inngest functions and setting up the necessary event handlers for execution and monitoring.
+
+When an event triggers a workflow, Inngest executes it step by step, memoizing each step's result. This means if a workflow is retried or resumed, completed steps are skipped, ensuring efficient and reliable execution. Control flow primitives in Mastra, such as loops, conditionals, and nested workflows are seamlessly translated into the same Inngest's function/step model, preserving advanced workflow features like composition, branching, and suspension.
+
+Real-time monitoring, suspend/resume, and step-level observability are enabled via Inngest's publish-subscribe system and dashboard. As each step executes, its state and output are tracked using Mastra storage and can be resumed as needed.
+
+## Setup
+
+Install the required packages:
+
+```sh
+npm install @mastra/inngest@beta inngest @inngest/realtime
+```
+
+## Building an Inngest workflow
+
+This guide walks through creating a workflow with Inngest and Mastra, demonstrating a counter application that increments a value until it reaches 10.
+
+### Inngest initialization
+
+Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The `createWorkflow()` and `createStep()` functions are used to create workflow and step objects that are compatible with Mastra and inngest.
+
+In development:
+
+```ts title="src/mastra/inngest/index.ts"
+import { Inngest } from "inngest";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
+
+export const inngest = new Inngest({
+  id: "mastra",
+  baseUrl: "http://localhost:8288",
+  isDev: true,
+  middleware: [realtimeMiddleware()],
+});
+```
+
+In production:
+
+```ts title="src/mastra/inngest/index.ts"
+import { Inngest } from "inngest";
+import { realtimeMiddleware } from "@inngest/realtime/middleware";
+
+export const inngest = new Inngest({
+  id: "mastra",
+  middleware: [realtimeMiddleware()],
+});
+```
+
+### Creating steps
+
+Define the individual steps that will compose your workflow:
+
+```ts title="src/mastra/workflows/index.ts"
+import { z } from "zod";
+import { inngest } from "../inngest";
+import { init } from "@mastra/inngest";
+
+// Initialize Inngest with Mastra, pointing to your local Inngest server
+const { createWorkflow, createStep } = init(inngest);
+
+// Step: Increment the counter value
+const incrementStep = createStep({
+  id: "increment",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 };
+  },
+});
+```
+
+### Creating the workflow
+
+Compose the steps into a workflow using the `dountil` loop pattern. The `createWorkflow()` function creates a function on Inngest server that is invocable.
+
+```ts title="src/mastra/workflows/index.ts"
+// workflow that is registered as a function on inngest server
+const workflow = createWorkflow({
+  id: "increment-workflow",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+}).then(incrementStep);
+
+workflow.commit();
+
+export { workflow as incrementWorkflow };
+```
+
+### Configuring the Mastra instance
+
+Register the workflow with Mastra and configure the Inngest API endpoint:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { serve } from "@mastra/inngest";
+import { incrementWorkflow } from "./workflows";
+import { inngest } from "./inngest";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  server: {
+    host: "0.0.0.0",
+    apiRoutes: [
+      {
+        path: "/api/inngest",
+        method: "ALL",
+        createHandler: async ({ mastra }) => {
+          return serve({ mastra, inngest });
+        },
+      },
+    ],
+  },
+  logger: new PinoLogger({ name: "Mastra", level: "info" }),
+});
+```
+
+## Running workflows
+
+### Running locally
+
+1. Run `npx mastra dev` to start the Mastra server locally on port 4111
+2. Start the Inngest Dev Server. In a new terminal, run:
+
+    ```sh
+    npx inngest-cli@latest dev -u http://localhost:4111/api/inngest
+    ```
+
+    :::note
+    The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint
+    :::
+
+3. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
+
+4. Invoke the workflow by going to **Functions**, selecting your workflow, and clicking **Invoke** with the following input:
+
+    ```json
+    {
+      "data": {
+        "inputData": {
+          "value": 5
+        }
+      }
+    }
+    ```
+
+5. Monitor the workflow execution in the **Runs** tab to see step-by-step execution progress
+
+### Running in production
+
+Before you begin, make sure you have:
+
+- Vercel account and Vercel CLI installed (`npm i -g vercel`)
+- Inngest account
+- Vercel token
+
+
+1. Set your Vercel token in your environment:
+
+    ```sh title=".env"
+    export VERCEL_TOKEN=your_vercel_token
+    ```
+
+2. Add `VercelDeployer` to Mastra instance
+
+    ```ts title="src/mastra/index.ts"
+    import { VercelDeployer } from "@mastra/deployer-vercel";
+
+    export const mastra = new Mastra({
+      deployer: new VercelDeployer({
+        teamSlug: "your_team_slug",
+        projectName: "your_project_name",
+        // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
+        // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
+        token: process.env.VERCEL_TOKEN,
+      }),
+    });
+    ```
+
+
+3. Build the mastra instance
+
+    ```sh
+    npx mastra build
+    ```
+
+4. Deploy to Vercel
+
+    ```sh
+    cd .mastra/output
+    vercel login
+    vercel --prod
+    ```
+
+5. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by clicking **Sync new app with Vercel** and following the instructions
+
+6. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, clicking **All actions** > **Invoke**, and providing the following input:
+
+    ```json
+    {
+      "data": {
+        "inputData": {
+          "value": 5
+        }
+      }
+    }
+    ```
+
+7. Monitor execution in the **Runs** tab to see step-by-step progress
+
+## Adding custom Inngest functions
+
+You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `serve()`.
+
+### Creating custom functions
+
+First, create your custom Inngest functions:
+
+```ts title="src/inngest/custom-functions.ts"
+import { inngest } from "../inngest";
+
+// Define custom Inngest functions
+export const customEmailFunction = inngest.createFunction(
+  { id: "send-welcome-email" },
+  { event: "user/registered" },
+  async ({ event }) => {
+    // Custom email logic here
+    console.log(`Sending welcome email to ${event.data.email}`);
+    return { status: "email_sent" };
+  },
+);
+
+export const customWebhookFunction = inngest.createFunction(
+  { id: "process-webhook" },
+  { event: "webhook/received" },
+  async ({ event }) => {
+    // Custom webhook processing
+    console.log(`Processing webhook: ${event.data.type}`);
+    return { processed: true };
+  },
+);
+```
+
+### Serving custom functions with workflows
+
+Update your Mastra configuration to import and include the custom functions. The highlighted lines show the additions:
+
+```ts title="src/mastra/index.ts" {5-8,23}
+import { Mastra } from "@mastra/core";
+import { serve } from "@mastra/inngest";
+import { incrementWorkflow } from "./workflows";
+import { inngest } from "./inngest";
+import {
+  customEmailFunction,
+  customWebhookFunction,
+} from "./inngest/custom-functions";
+import { PinoLogger } from "@mastra/loggers";
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  server: {
+    host: "0.0.0.0",
+    apiRoutes: [
+      {
+        path: "/api/inngest",
+        method: "ALL",
+        createHandler: async ({ mastra }) => {
+          return serve({
+            mastra,
+            inngest,
+            functions: [customEmailFunction, customWebhookFunction],
+          });
+        },
+      },
+    ],
+  },
+  logger: new PinoLogger({ name: "Mastra", level: "info" }),
+});
+```
+
+### Function registration
+
+When you include custom functions:
+
+1. Mastra workflows are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
+2. Custom functions retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
+3. All functions are served together on the same `/api/inngest` endpoint
+
+This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
+
+## Flow control
+
+Inngest workflows support flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These options are configured in the `createWorkflow()` call and help manage workflow execution at scale.
+
+### Concurrency
+
+Control how many workflow instances can run simultaneously:
+
+```ts
+const workflow = createWorkflow({
+  id: "user-processing-workflow",
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  steps: [processUserStep],
+  // Limit to 10 concurrent executions, scoped by user ID
+  concurrency: {
+    limit: 10,
+    key: "event.data.userId",
+  },
+});
+```
+
+### Rate limiting
+
+Limit the number of workflow executions within a time period:
+
+```ts
+const workflow = createWorkflow({
+  id: "api-sync-workflow",
+  inputSchema: z.object({ endpoint: z.string() }),
+  outputSchema: z.object({ status: z.string() }),
+  steps: [apiSyncStep],
+  // Maximum 1000 executions per hour
+  rateLimit: {
+    period: "1h",
+    limit: 1000,
+  },
+});
+```
+
+### Throttling
+
+Ensure minimum time between workflow executions:
+
+```ts
+const workflow = createWorkflow({
+  id: "email-notification-workflow",
+  inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
+  outputSchema: z.object({ sent: z.boolean() }),
+  steps: [sendEmailStep],
+  // Only one execution per 10 seconds per organization
+  throttle: {
+    period: "10s",
+    limit: 1,
+    key: "event.data.organizationId",
+  },
+});
+```
+
+### Debouncing
+
+Delay execution until no new events arrive within a time window:
+
+```ts
+const workflow = createWorkflow({
+  id: "search-index-workflow",
+  inputSchema: z.object({ documentId: z.string() }),
+  outputSchema: z.object({ indexed: z.boolean() }),
+  steps: [indexDocumentStep],
+  // Wait 5 seconds of no updates before indexing
+  debounce: {
+    period: "5s",
+    key: "event.data.documentId",
+  },
+});
+```
+
+### Priority
+
+Set execution priority for workflows:
+
+```ts
+const workflow = createWorkflow({
+  id: "order-processing-workflow",
+  inputSchema: z.object({
+    orderId: z.string(),
+    priority: z.number().optional(),
+  }),
+  outputSchema: z.object({ processed: z.boolean() }),
+  steps: [processOrderStep],
+  // Higher priority orders execute first
+  priority: {
+    run: "event.data.priority ?? 50",
+  },
+});
+```
+
+### Combining flow control options
+
+Multiple flow control options can be combined in a single workflow:
+
+```ts
+const workflow = createWorkflow({
+  id: "comprehensive-workflow",
+  inputSchema: z.object({
+    userId: z.string(),
+    organizationId: z.string(),
+    priority: z.number().optional(),
+  }),
+  outputSchema: z.object({ result: z.string() }),
+  steps: [comprehensiveStep],
+  concurrency: {
+    limit: 5,
+    key: "event.data.userId",
+  },
+  rateLimit: {
+    period: "1m",
+    limit: 100,
+  },
+  throttle: {
+    period: "10s",
+    limit: 1,
+    key: "event.data.organizationId",
+  },
+  priority: {
+    run: "event.data.priority ?? 0",
+  },
+});
+```
+
+All flow control options are optional. If not specified, workflows run with Inngest's default behavior. For more information, see the [Inngest flow control documentation](https://www.inngest.com/docs/guides/flow-control).

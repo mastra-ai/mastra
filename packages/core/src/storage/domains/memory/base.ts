@@ -1,5 +1,4 @@
 import type { MastraMessageContentV2 } from '../../../agent';
-import { MastraBase } from '../../../base';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import type {
   StorageResourceType,
@@ -11,8 +10,9 @@ import type {
   StorageListThreadsByResourceIdOutput,
   StorageOrderBy,
 } from '../../types';
+import { StorageDomain } from '../base';
 
-export abstract class MemoryStorage extends MastraBase {
+export abstract class MemoryStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',

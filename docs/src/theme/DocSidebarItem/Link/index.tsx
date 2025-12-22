@@ -9,21 +9,13 @@ import type { Props } from "@theme/DocSidebarItem/Link";
 import SidebarBadge from "@site/src/components/SidebarBadge";
 
 import styles from "./styles.module.css";
+import { getBadgeType } from "../utils";
 
 function LinkLabel({ label, item }: { label: string; item: any }) {
   // Get tags from customProps in sidebar config
   const tags = item?.customProps?.tags;
 
-  // Determine which badge to show based on tags
-  const getBadgeType = () => {
-    if (!tags || tags.length === 0) return null;
-    if (tags.includes("new")) return "new";
-    if (tags.includes("beta")) return "beta";
-    if (tags.includes("advanced")) return "advanced";
-    return null;
-  };
-
-  const badgeType = getBadgeType();
+  const badgeType = getBadgeType(tags);
 
   return (
     <>

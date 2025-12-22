@@ -150,3 +150,26 @@ const mastra = new Mastra({
 export { mastra };
 "
 `;
+
+exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-spread.js 1`] = `
+"import { Mastra } from '@mastra/core/mastra';
+import { createLogger } from '@mastra/core/logger';
+
+const configLogger = {
+  logger: createLogger({
+    name: "yo",
+    level: "info"
+  })
+};
+const configDeployer = {};
+const mastra = new Mastra({
+  ...configLogger,
+  bundler: {
+    externals: ["sharp"]
+  },
+  ...configDeployer
+});
+
+export { mastra };
+"
+`;

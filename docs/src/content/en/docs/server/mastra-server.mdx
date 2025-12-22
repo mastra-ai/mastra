@@ -35,7 +35,7 @@ adding additional server behaviour.
 
 You can configure server `port`, `host`, `studioBase`, and `timeout` in the Mastra instance.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
@@ -54,7 +54,7 @@ The `studioBase` option allows you to host Mastra Studio on a sub-path of your e
 
 Mastra requires `module` and `moduleResolution` values that support modern Node.js versions. Older settings like `CommonJS` or `node` are incompatible with Mastra’s packages and will cause resolution errors.
 
-```json {4-5} title="tsconfig.json" copy
+```json {4-5} title="tsconfig.json"
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -77,7 +77,7 @@ Mastra requires `module` and `moduleResolution` values that support modern Node.
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
-```typescript title="src/mastra/index.ts" copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({

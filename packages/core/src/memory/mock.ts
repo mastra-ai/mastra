@@ -3,6 +3,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodTypeAny } from 'zod';
 import z, { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
@@ -48,7 +49,18 @@ export class MockMemory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    const memoryStorage = await this.storage.getStore('memory');
+
+    if (!memoryStorage) {
+      throw new MastraError({
+        id: 'MASTRA_MEMORY_GET_THREAD_BY_ID_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.SYSTEM,
+        text: 'Memory storage is not supported by this storage adapter',
+      });
+    }
+
+    return memoryStorage.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {

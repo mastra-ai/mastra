@@ -14,18 +14,17 @@ The `MastraJwtAuth` class provides a lightweight authentication mechanism for Ma
 
 Before you can use the `MastraJwtAuth` class you have to install the `@mastra/auth` package.
 
-```bash copy
+```bash
 npm install @mastra/auth@beta
 ```
 
 ## Usage example
 
-```typescript {2,7-9} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,6-8} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
@@ -34,13 +33,17 @@ export const mastra = new Mastra({
 });
 ```
 
-> See the [MastraJwtAuth](/reference/v1/auth/jwt) API reference for all available configuration options.
+:::info
+
+Visit [MastraJwtAuth](/reference/v1/auth/jwt) for all available configuration options.
+
+:::
 
 ## Configuring `MastraClient`
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid JWT in the `Authorization` header:
 
-```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} title="lib/mastra/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
@@ -51,7 +54,11 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -59,7 +66,7 @@ Once `MastraClient` is configured, you can send authenticated requests from your
 
 <Tabs>
   <TabItem value="react" label="React">
-    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
+    ```tsx title="src/components/test-agent.tsx" copy
     import { mastraClient } from "../../lib/mastra-client";
 
     export const TestAgent = () => {

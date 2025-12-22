@@ -3,4 +3,4 @@
 "create-mastra": patch
 ---
 
-fix: detect bun runtime and cleanup on failure
+Detect bun runtime and cleanup on failure

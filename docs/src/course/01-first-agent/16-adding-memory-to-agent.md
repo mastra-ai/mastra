@@ -6,7 +6,6 @@ Now, let's update our agent to include memory. Open your `agents/index.ts` file 
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
 import { getTransactionsTool } from "../tools";
@@ -20,7 +19,7 @@ export const financialAgent = new Agent({
   instructions: `ROLE DEFINITION
   // ... existing instructions ...
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   tools: { getTransactionsTool },
   memory: new Memory({
     storage: new LibSQLStore({

@@ -1892,7 +1892,7 @@ describe('processInputStep', () => {
           model: createMockModel(),
           steps: [],
         }),
-      ).rejects.toThrow(/v1 models are not supported/);
+      ).rejects.toThrow(/unsupported model version v1/);
     });
   });
 

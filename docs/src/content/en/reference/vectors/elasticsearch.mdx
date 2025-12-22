@@ -10,13 +10,13 @@ It's part of the `@mastra/elasticsearch` package.
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/elasticsearch@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { ElasticSearchVector } from "@mastra/elasticsearch";
 
 const store = new ElasticSearchVector({
@@ -176,7 +176,7 @@ Gets information about an index.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -296,7 +296,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;

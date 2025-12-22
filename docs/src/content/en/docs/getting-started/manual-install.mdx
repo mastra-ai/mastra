@@ -22,7 +22,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
 Create a new project and change directory:
 
-```bash copy
+```bash
 mkdir my-first-agent && cd my-first-agent
 ```
 
@@ -31,7 +31,7 @@ Initialize a TypeScript project and install the following dependencies:
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm init -y
 npm install -D typescript @types/node mastra@beta
 npm install @mastra/core@beta zod@^4
@@ -40,7 +40,7 @@ npm install @mastra/core@beta zod@^4
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm init
 pnpm add -D typescript @types/node mastra@beta
 pnpm add @mastra/core@beta zod@^4
@@ -49,7 +49,7 @@ pnpm add @mastra/core@beta zod@^4
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn init -y
 yarn add -D typescript @types/node mastra@beta
 yarn add @mastra/core@beta zod@^4
@@ -58,7 +58,7 @@ yarn add @mastra/core@beta zod@^4
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun init -y
 bun add -d typescript @types/node mastra@beta
 bun add @mastra/core@beta zod@^4
@@ -69,7 +69,7 @@ bun add @mastra/core@beta zod@^4
 
 Add `dev` and `build` scripts to your `package.json` file:
 
-```json title="package.json" copy /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
+```json title="package.json" /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
 {
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -85,13 +85,13 @@ Add `dev` and `build` scripts to your `package.json` file:
 
 Create a `tsconfig.json` file:
 
-```bash copy
+```bash
 touch tsconfig.json
 ```
 
 Add the following configuration:
 
-```json title="tsconfig.json" copy
+```json title="tsconfig.json"
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -120,13 +120,13 @@ Mastra requires modern `module` and `moduleResolution` settings. Using `CommonJS
 
 Create an `.env` file:
 
-```bash copy
+```bash
 touch .env
 ```
 
 Add your API key:
 
-```bash title=".env" copy
+```bash title=".env"
 GOOGLE_GENERATIVE_AI_API_KEY=<your-api-key>
 ```
 
@@ -142,13 +142,13 @@ This guide uses Google Gemini, but you can use any supported [model provider](/m
 
 Create a `weather-tool.ts` file:
 
-```bash copy
+```bash
 mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
 ```
 
 Add the following code:
 
-```ts title="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+```ts title="src/mastra/tools/weather-tool.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 
@@ -181,13 +181,13 @@ We've shortened and simplified the `weatherTool` example here. You can see the c
 
 Create a `weather-agent.ts` file:
 
-```bash copy
+```bash
 mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
 ```
 
 Add the following code:
 
-```ts title="src/mastra/agents/weather-agent.ts" showLineNumbers copy
+```ts title="src/mastra/agents/weather-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
 
@@ -217,13 +217,13 @@ export const weatherAgent = new Agent({
 
 Create the Mastra entry point and register your agent:
 
-```bash copy
+```bash
 touch src/mastra/index.ts
 ```
 
 Add the following code:
 
-```ts title="src/mastra/index.ts" showLineNumbers copy
+```ts title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { weatherAgent } from "./agents/weather-agent";
 
@@ -241,28 +241,28 @@ You can now launch [Studio](/docs/v1/getting-started/studio) and test your agent
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npm run dev
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm run dev
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn run dev
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun run dev
 ```
 

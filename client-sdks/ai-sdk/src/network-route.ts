@@ -8,10 +8,7 @@ import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<
-  OUTPUT,
-  'mastra'
-> & {
+export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
   messages: MessageListInput;
 };
 
@@ -19,7 +16,7 @@ export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined>
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
 /**
@@ -73,8 +70,8 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
 }
 
 export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> };
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
+  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
@@ -181,14 +178,17 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      const routeRequestContext = contextRequestContext || defaultOptions?.requestContext;
+      // Prioritize requestContext from middleware/route options over body
+      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
 
-      if (routeRequestContext && params.requestContext) {
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
         mastra
           .getLogger()
-          ?.warn(
-            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
-          );
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
       }
 
       if (!agentToUse) {
@@ -200,7 +200,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
         agentId: agentToUse,
         params: {
           ...params,
-          requestContext: routeRequestContext || params.requestContext,
+          requestContext: effectiveRequestContext,
         },
         defaultOptions,
       });

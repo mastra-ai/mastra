@@ -5,7 +5,6 @@ By default, the `Memory` instance includes the last 10 messages from the current
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
 import { LibSQLStore } from "@mastra/libsql";
 
 // Create a memory instance with custom conversation history settings
@@ -27,7 +26,7 @@ export const memoryAgent = new Agent({
     When a user shares information about themselves, acknowledge it and remember it for future reference.
     If asked about something mentioned earlier in the conversation, recall it accurately.
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   memory: memory,
 });
 ```

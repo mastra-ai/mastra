@@ -10,6 +10,7 @@ import {
   normalizePerPage,
   calculatePagination,
   createStorageErrorId,
+  ensureDate,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -21,8 +22,9 @@ import type {
   ThreadSortDirection,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
-import { ensureDate, getKey, processRecord } from '../utils';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
+import { getKey, processRecord } from '../utils';
 
 function getThreadMessagesKey(threadId: string): string {
   return `thread:${threadId}:messages`;
@@ -40,16 +42,23 @@ function getMessageIndexKey(messageId: string): string {
 
 export class StoreMemoryUpstash extends MemoryStorage {
   private client: Redis;
-  private operations: StoreOperationsUpstash;
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  #db: UpstashDB;
+  constructor(config: UpstashDomainConfig) {
     super();
+    const client = resolveUpstashConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new UpstashDB({ client });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_THREADS });
+    await this.#db.deleteData({ tableName: TABLE_MESSAGES });
+    await this.#db.deleteData({ tableName: TABLE_RESOURCES });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const thread = await this.operations.load<StorageThreadType>({
+      const thread = await this.#db.get<StorageThreadType>({
         tableName: TABLE_THREADS,
         keys: { id: threadId },
       });
@@ -101,7 +110,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     try {
       let allThreads: StorageThreadType[] = [];
       const pattern = `${TABLE_THREADS}:*`;
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.#db.scanKeys(pattern);
 
       const pipeline = this.client.pipeline();
       keys.forEach(key => pipeline.get(key));
@@ -163,7 +172,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_THREADS,
         record: thread,
       });
@@ -255,7 +264,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       await pipeline.exec();
 
       // Bulk delete all message keys for this thread if any remain
-      await this.operations.scanAndDelete(getMessageKey(threadId, '*'));
+      await this.#db.scanAndDelete(getMessageKey(threadId, '*'));
     } catch (error) {
       throw new MastraError(
         {
@@ -332,7 +341,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
           // Check if this message id exists in another thread
           const existingKeyPattern = getMessageKey('*', message.id);
-          const keys = await this.operations.scanKeys(existingKeyPattern);
+          const keys = await this.#db.scanKeys(existingKeyPattern);
 
           if (keys.length > 0) {
             const pipeline2 = this.client.pipeline();
@@ -403,7 +412,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
     // Fall back to scan for backwards compatibility (old messages without index)
     const existingKeyPattern = getMessageKey('*', messageId);
-    const keys = await this.operations.scanKeys(existingKeyPattern);
+    const keys = await this.#db.scanKeys(existingKeyPattern);
     if (keys.length === 0) return null;
 
     // Get the message to find its threadId
@@ -859,7 +868,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Scan for all message keys that match any of the IDs
       for (const messageId of messageIds) {
         const pattern = getMessageKey('*', messageId);
-        const keys = await this.operations.scanKeys(pattern);
+        const keys = await this.#db.scanKeys(pattern);
 
         for (const key of keys) {
           const message = await this.client.get<MastraDBMessage>(key);
@@ -1035,7 +1044,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // Fall back to scan for unindexed messages (backwards compatibility)
       for (const messageId of unindexedMessageIds) {
         const pattern = getMessageKey('*', messageId);
-        const keys = await this.operations.scanKeys(pattern);
+        const keys = await this.#db.scanKeys(pattern);
 
         for (const key of keys) {
           const message = await this.client.get<MastraDBMessage>(key);

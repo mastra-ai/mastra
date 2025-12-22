@@ -23,14 +23,28 @@ describe('Loop Tests', () => {
     });
 
     textStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    fullStreamTests({ loopFn: loop, runId: 'test-run-id' });
+    fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
     toUIMessageStreamTests({ loopFn: loop, runId: 'test-run-id' });
-    resultObjectTests({ loopFn: loop, runId: 'test-run-id' });
+    resultObjectTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v2' });
     optionsTests({ loopFn: loop, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn: loop, runId: 'test-run-id' });
     toolsTests({ loopFn: loop, runId: 'test-run-id' });
 
     streamObjectTests({ loopFn: loop, runId: 'test-run-id' });
+  });
+
+  describe('AISDK v6 (V3 models)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(mockDate);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    fullStreamTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
+    resultObjectTests({ loopFn: loop, runId: 'test-run-id', modelVersion: 'v3' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });

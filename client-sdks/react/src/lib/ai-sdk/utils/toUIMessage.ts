@@ -174,8 +174,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'start': {
       // Create a new assistant message
+      // Use the server-provided messageId if available, otherwise fall back to generated ID
       const newMessage: MastraUIMessage = {
-        id: `start-${chunk.runId + Date.now()}`,
+        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,

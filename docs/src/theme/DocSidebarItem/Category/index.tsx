@@ -25,12 +25,14 @@ import useIsBrowser from "@docusaurus/useIsBrowser";
 import DocSidebarItems from "@theme/DocSidebarItems";
 import DocSidebarItemLink from "@theme/DocSidebarItem/Link";
 import type { Props } from "@theme/DocSidebarItem/Category";
+import SidebarBadge from "@site/src/components/SidebarBadge";
 
 import type {
   PropSidebarItemCategory,
   PropSidebarItemLink,
 } from "@docusaurus/plugin-content-docs";
 import styles from "./styles.module.css";
+import { getBadgeType } from "../utils";
 
 // If we navigate to a category and it becomes active, it should automatically
 // expand itself
@@ -127,14 +129,6 @@ function CollapseButton({
   );
 }
 
-function CategoryLinkLabel({ label }: { label: string }) {
-  return (
-    <span title={label} className={styles.categoryLinkLabel}>
-      {label}
-    </span>
-  );
-}
-
 export default function DocSidebarItemCategory(props: Props): ReactNode {
   const visibleChildren = useVisibleSidebarItems(
     props.item.items,
@@ -185,6 +179,9 @@ function DocSidebarItemCategoryCollapsible({
   ...props
 }: Props): ReactNode {
   const { items, label, collapsible, className, href } = item;
+  // Get tags from customProps in sidebar config
+  const tags = item?.customProps?.tags;
+  const badgeType = getBadgeType(tags);
   const {
     docs: {
       sidebar: { autoCollapseCategories },
@@ -284,7 +281,12 @@ function DocSidebarItemCategoryCollapsible({
           }
           {...props}
         >
-          <CategoryLinkLabel label={label} />
+          <span title={label} className={styles.categoryLinkLabel}>
+            {label}{" "}
+            {badgeType && (
+              <SidebarBadge type={badgeType as "new" | "beta" | "advanced"} />
+            )}
+          </span>
         </Link>
         {href && collapsible && (
           <CollapseButton

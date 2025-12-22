@@ -19,6 +19,7 @@ export async function processWorkflowLoop(
     parentWorkflow,
     requestContext,
     retryCount = 0,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -64,6 +65,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           requestContext,
+          perStep,
         },
       });
     } else {
@@ -82,6 +84,7 @@ export async function processWorkflowLoop(
           activeSteps,
           requestContext,
           retryCount,
+          perStep,
         },
       });
     }
@@ -102,6 +105,7 @@ export async function processWorkflowLoop(
           activeSteps,
           requestContext,
           retryCount,
+          perStep,
         },
       });
     } else {
@@ -119,6 +123,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           requestContext,
+          perStep,
         },
       });
     }
@@ -138,6 +143,7 @@ export async function processWorkflowForEach(
     resumeData,
     parentWorkflow,
     requestContext,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -172,6 +178,7 @@ export async function processWorkflowForEach(
         resumeData,
         activeSteps,
         requestContext,
+        perStep,
       },
     });
 
@@ -215,6 +222,7 @@ export async function processWorkflowForEach(
           resumeData,
           activeSteps,
           requestContext,
+          perStep,
         },
       });
     }
@@ -251,6 +259,7 @@ export async function processWorkflowForEach(
       resumeData,
       activeSteps,
       requestContext,
+      perStep,
     },
   });
 }

@@ -766,7 +766,7 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      vi.spyOn(storage, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
       vi.spyOn(storage, 'listMessages').mockResolvedValue(mockResult);
 
       const result = await LIST_MESSAGES_ROUTE.handler({
@@ -782,7 +782,7 @@ describe('Memory Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(storage.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
+      expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
       expect(storage.listMessages).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',

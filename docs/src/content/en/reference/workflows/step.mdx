@@ -10,7 +10,7 @@ It can take either a tool or an agent as a parameter to automatically create a s
 
 ## Usage example
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -38,7 +38,7 @@ You can create a step directly from an agent. The step will use the agent's name
 
 ### Basic agent step
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from "../agents/test-agent";
 
 const agentStep = createStep(testAgent);
@@ -50,7 +50,7 @@ const agentStep = createStep(testAgent);
 
 Pass `structuredOutput` to have the agent return typed structured data:
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 const articleSchema = z.object({
   title: z.string(),
   summary: z.string(),

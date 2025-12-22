@@ -16,6 +16,7 @@ import type {
   StorageAgentType,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import type Cloudflare from 'cloudflare';
 
 /**
  * Base configuration options shared across Cloudflare configurations
@@ -114,3 +115,42 @@ export type ListOptions = {
   limit?: number;
   prefix?: string;
 };
+
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing Cloudflare client (REST API) or bindings (Workers API)
+ * 2. Config to create a new client internally
+ */
+export type CloudflareDomainConfig =
+  | CloudflareDomainClientConfig
+  | CloudflareDomainBindingsConfig
+  | CloudflareDomainRestConfig;
+
+/**
+ * Pass an existing Cloudflare SDK client (REST API)
+ */
+export interface CloudflareDomainClientConfig {
+  client: Cloudflare;
+  accountId: string;
+  namespacePrefix?: string;
+}
+
+/**
+ * Pass existing KV bindings (Workers Binding API)
+ */
+export interface CloudflareDomainBindingsConfig {
+  bindings: {
+    [key in TABLE_NAMES]: KVNamespace;
+  };
+  keyPrefix?: string;
+}
+
+/**
+ * Pass config to create a new Cloudflare client internally (REST API)
+ */
+export interface CloudflareDomainRestConfig {
+  accountId: string;
+  apiToken: string;
+  namespacePrefix?: string;
+}

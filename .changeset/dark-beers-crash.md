@@ -4,7 +4,7 @@
 
 Added `messageMetadata` and `onError` options to `toAISdkV5Stream`, enabling you to attach custom metadata to stream chunks and handle errors during stream conversion.
 
-#### messageMetadata
+**messageMetadata**
 
 Attach custom metadata to start and finish chunks by providing a function that receives the current stream part:
 
@@ -19,7 +19,7 @@ const stream = toAISdkV5Stream(agentStream, {
 });
 ```
 
-#### onError
+**onError**
 
 Customize error handling during stream conversion:
 

@@ -19,7 +19,7 @@ This example uses Firebase Authentication. Make sure to:
 3. Generate a service account key from Project Settings > Service Accounts
 4. Download the service account JSON file
 
-```env title=".env" copy
+```env title=".env"
 FIREBASE_SERVICE_ACCOUNT=/path/to/your/service-account-key.json
 FIRESTORE_DATABASE_ID=(default)
 # Alternative environment variable names:
@@ -32,7 +32,7 @@ FIRESTORE_DATABASE_ID=(default)
 
 Before you can use the `MastraAuthFirebase` class you have to install the `@mastra/auth-firebase` package.
 
-```bash copy
+```bash
 npm install @mastra/auth-firebase@beta
 ```
 
@@ -42,13 +42,12 @@ npm install @mastra/auth-firebase@beta
 
 If you set the required environment variables (`FIREBASE_SERVICE_ACCOUNT` and `FIRESTORE_DATABASE_ID`), you can initialize `MastraAuthFirebase` without any constructor arguments. The class will automatically read these environment variables as configuration:
 
-```typescript {2,7} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,7} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -57,12 +56,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts" showLineNumbers copy
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account.json",
@@ -87,7 +85,7 @@ The `MastraAuthFirebase` class can be configured through constructor options or 
 
 By default, `MastraAuthFirebase` uses Firestore to manage user access. It expects a collection named `user_access` with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
 
-```typescript title="firestore-structure.txt" copy
+```typescript title="firestore-structure.txt"
 user_access/
   {user_uid_1}/     // Document exists = user authorized
   {user_uid_2}/     // Document exists = user authorized
@@ -95,7 +93,7 @@ user_access/
 
 To customize user authorization, provide a custom `authorizeUser` function:
 
-```typescript title="src/mastra/auth.ts" showLineNumbers copy
+```typescript title="src/mastra/auth.ts"
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 const firebaseAuth = new MastraAuthFirebase({
@@ -106,7 +104,11 @@ const firebaseAuth = new MastraAuthFirebase({
 });
 ```
 
-> See the [MastraAuthFirebase](/reference/v1/auth/firebase) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthFirebase](/reference/v1/auth/firebase) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -116,7 +118,7 @@ When using Firebase auth, you'll need to initialize Firebase on the client side,
 
 First, initialize Firebase in your client application:
 
-```typescript title="lib/firebase.ts" showLineNumbers copy
+```typescript title="lib/firebase.ts"
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
@@ -135,7 +137,7 @@ export const googleProvider = new GoogleAuthProvider();
 
 Use Firebase authentication to sign in users and retrieve their ID tokens:
 
-```typescript title="lib/auth.ts" showLineNumbers copy
+```typescript title="lib/auth.ts"
 import { signInWithPopup, signOut, User } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
@@ -175,7 +177,7 @@ export const signOutUser = async () => {
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid Firebase ID token in the `Authorization` header:
 
-```typescript {6} title="lib/mastra/mastra-client.ts" showLineNumbers copy
+```typescript {6} title="lib/mastra/mastra-client.ts"
 import { MastraClient } from "@mastra/client-js";
 
 export const createMastraClient = (idToken: string) => {
@@ -190,7 +192,11 @@ export const createMastraClient = (idToken: string) => {
 
 > **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 
@@ -198,7 +204,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
 <Tabs>
   <TabItem value="react" label="React">
-    ```tsx title="src/components/test-agent.tsx" showLineNumbers copy
+    ```tsx title="src/components/test-agent.tsx" copy
     "use client";
 
     import { useAuthState } from 'react-firebase-hooks/auth';
@@ -233,7 +239,7 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
   </TabItem>
   <TabItem value="nodejs" label="Node.js">
-    ```typescript title="server.js" showLineNumbers copy
+    ```typescript title="server.js" copy
     const express = require('express');
     const admin = require('firebase-admin');
     const { MastraClient } = require('@mastra/client-js');

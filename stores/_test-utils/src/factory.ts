@@ -1,19 +1,8 @@
 import { describe, beforeAll, afterAll } from 'vitest';
 import type { MastraStorage } from '@mastra/core/storage';
-import {
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_RESOURCES,
-  TABLE_SCORERS,
-  TABLE_TRACES,
-  TABLE_SPANS,
-  TABLE_AGENTS,
-} from '@mastra/core/storage';
 import { createScoresTest } from './domains/scores';
 import { createMemoryTest } from './domains/memory';
 import { createWorkflowsTests } from './domains/workflows';
-import { createOperationsTests } from './domains/operations';
 import { createObservabilityTests } from './domains/observability';
 import { createAgentsTests } from './domains/agents';
 export * from './domains/memory/data';
@@ -33,32 +22,41 @@ export function createTestSuite(storage: MastraStorage) {
     });
 
     afterAll(async () => {
-      // Clear tables after tests
-      await Promise.all([
-        storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
-        storage.clearTable({ tableName: TABLE_MESSAGES }),
-        storage.clearTable({ tableName: TABLE_THREADS }),
-        storage.clearTable({ tableName: TABLE_RESOURCES }),
-        storage.clearTable({ tableName: TABLE_SCORERS }),
-        storage.clearTable({ tableName: TABLE_TRACES }),
-        storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
-        storage.supports.agents && storage.clearTable({ tableName: TABLE_AGENTS }),
-      ]);
+      const clearList: Promise<void>[] = [];
+
+      const workflowStorage = await storage.getStore('workflows');
+      const memoryStorage = await storage.getStore('memory');
+      const scoresStorage = await storage.getStore('scores');
+      const observabilityStorage = await storage.getStore('observability');
+      const agentsStorage = await storage.getStore('agents');
+
+      if (workflowStorage) {
+        clearList.push(workflowStorage.dangerouslyClearAll());
+      }
+      if (memoryStorage) {
+        clearList.push(memoryStorage.dangerouslyClearAll());
+      }
+      if (scoresStorage) {
+        clearList.push(scoresStorage.dangerouslyClearAll());
+      }
+      if (observabilityStorage) {
+        clearList.push(observabilityStorage.dangerouslyClearAll());
+      }
+      if (agentsStorage && storage.supports.agents) {
+        clearList.push(agentsStorage.dangerouslyClearAll());
+      }
+      // Clear all domain data after tests
+      await Promise.all(clearList);
     });
 
-    createOperationsTests({ storage });
-
+    // Tests are registered unconditionally - each test internally handles
+    // checking if the storage domain is available
     createWorkflowsTests({ storage });
-
     createMemoryTest({ storage });
-
     createScoresTest({ storage });
-
     if (storage.supports.observabilityInstance) {
       createObservabilityTests({ storage });
     }
-
-    // Agents tests are conditionally run based on storage.supports.agents inside the test suite
     createAgentsTests({ storage });
   });
 }

@@ -1,4 +1,3 @@
-import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { TracingStorageStrategy } from '../../../observability';
 import type {
@@ -9,13 +8,22 @@ import type {
   PaginationInfo,
   UpdateSpanRecord,
 } from '../../types';
+import { StorageDomain } from '../base';
 
-export class ObservabilityStorage extends MastraBase {
+/**
+ * ObservabilityStorage is not abstract because it provides default implementations
+ * that throw errors - adapters override only the methods they support.
+ */
+export class ObservabilityStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',
       name: 'OBSERVABILITY',
     });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    // Default no-op - subclasses override
   }
 
   /**

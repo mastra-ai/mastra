@@ -4,11 +4,9 @@ import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageDomains,
   StoragePagination,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   SpanRecord,
@@ -21,50 +19,14 @@ import type {
 } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { MongoDBConnector } from './connectors/MongoDBConnector';
+import type { MongoDBConnector } from './connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from './db';
+import { MongoDBAgentsStorage } from './domains/agents';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { ObservabilityMongoDB } from './domains/observability';
-import { StoreOperationsMongoDB } from './domains/operations';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
-
-const loadConnector = (config: MongoDBConfig): MongoDBConnector => {
-  try {
-    if ('connectorHandler' in config) {
-      return MongoDBConnector.fromConnectionHandler(config.connectorHandler);
-    }
-  } catch (error) {
-    throw new MastraError(
-      {
-        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { connectionHandler: true },
-      },
-      error,
-    );
-  }
-
-  try {
-    return MongoDBConnector.fromDatabaseConfig({
-      id: config.id,
-      options: config.options,
-      url: config.url,
-      dbName: config.dbName,
-    });
-  } catch (error) {
-    throw new MastraError(
-      {
-        id: createStorageErrorId('MONGODB', 'CONSTRUCTOR', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { url: config?.url, dbName: config?.dbName },
-      },
-      error,
-    );
-  }
-};
 
 export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
@@ -78,14 +40,16 @@ export class MongoDBStore extends MastraStorage {
     createTable: boolean;
     deleteMessages: boolean;
     listScoresBySpan: boolean;
+    agents: boolean;
   } {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
-      deleteMessages: false,
+      deleteMessages: true,
       listScoresBySpan: true,
+      agents: true,
     };
   }
 
@@ -94,73 +58,35 @@ export class MongoDBStore extends MastraStorage {
 
     this.stores = {} as StorageDomains;
 
-    this.#connector = loadConnector(config);
+    this.#connector = resolveMongoDBConfig(config);
 
-    const operations = new StoreOperationsMongoDB({
+    const memory = new MemoryStorageMongoDB({
       connector: this.#connector,
     });
 
-    const memory = new MemoryStorageMongoDB({
-      operations,
-    });
-
     const scores = new ScoresStorageMongoDB({
-      operations,
+      connector: this.#connector,
     });
 
     const workflows = new WorkflowsStorageMongoDB({
-      operations,
+      connector: this.#connector,
     });
 
     const observability = new ObservabilityMongoDB({
-      operations,
+      connector: this.#connector,
+    });
+
+    const agents = new MongoDBAgentsStorage({
+      connector: this.#connector,
     });
 
     this.stores = {
-      operations,
       memory,
       scores,
       workflows,
       observability,
+      agents,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable(_args);
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -202,6 +128,10 @@ export class MongoDBStore extends MastraStorage {
     })[];
   }): Promise<MastraDBMessage[]> {
     return this.stores.memory.updateMessages(_args);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    return this.stores.memory.deleteMessages(messageIds);
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {

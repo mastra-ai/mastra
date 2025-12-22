@@ -5,12 +5,12 @@
 '@mastra/server': patch
 ---
 
-### Breaking Changes
+**Breaking Changes**
 
 - Renamed `RuntimeContext` type to `ServerContext` to avoid confusion with the user-facing `RequestContext` (previously called `RuntimeContext`)
 - Removed `playground` and `isDev` options from server adapter constructors - these only set context variables without any actual functionality
 
-### Changes
+**Changes**
 
 **@mastra/server**
 - Renamed `RuntimeContext` type to `ServerContext` in route handler types

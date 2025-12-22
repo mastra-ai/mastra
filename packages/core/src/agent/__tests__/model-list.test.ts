@@ -798,35 +798,35 @@ function modelListTests(version: 'v1' | 'v2') {
           await agent.getLLM();
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.generate('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.stream('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.generate('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.stream('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
       });
     },

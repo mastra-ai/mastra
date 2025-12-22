@@ -1,9 +1,9 @@
-import { MastraBase } from '../../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import type { PaginationInfo, StoragePagination } from '../../types';
+import { StorageDomain } from '../base';
 
-export abstract class ScoresStorage extends MastraBase {
+export abstract class ScoresStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',

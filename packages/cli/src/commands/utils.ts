@@ -91,6 +91,18 @@ export async function getVersionTag(): Promise<string | undefined> {
 }
 
 /**
+ * Check if the current directory already has git initialized.
+ */
+export async function isGitInitialized({ cwd }: { cwd: string }): Promise<boolean> {
+  try {
+    await execa('git', ['rev-parse', '--is-inside-work-tree'], { cwd, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Initialize a git repository in the specified directory.
  */
 export async function gitInit({ cwd }: { cwd: string }) {

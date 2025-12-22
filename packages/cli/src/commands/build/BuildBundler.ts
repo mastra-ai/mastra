@@ -1,11 +1,28 @@
 import { FileService } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
+import type { Config } from '@mastra/core/mastra';
 
 import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class BuildBundler extends Bundler {
   constructor() {
     super('Build');
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    if (!bundlerOptions?.[IS_DEFAULT]) {
+      return bundlerOptions;
+    }
+
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   getEnvFiles(): Promise<string[]> {

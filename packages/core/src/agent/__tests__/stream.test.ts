@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
@@ -22,13 +24,15 @@ import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } f
 
 config();
 
-function runStreamTest(version: 'v1' | 'v2') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2;
+function runStreamTest(version: 'v1' | 'v2' | 'v3') {
+  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;
 
   if (version === 'v1') {
     openaiModel = openai('gpt-4o-mini');
-  } else {
+  } else if (version === 'v2') {
     openaiModel = openai_v5('gpt-4o-mini');
+  } else {
+    openaiModel = openai_v6('gpt-4o-mini');
   }
 
   const dummyResponseModel = getDummyResponseModel(version);
@@ -347,7 +351,7 @@ function runStreamTest(version: 'v1' | 'v2') {
       ).toBe(true);
     });
 
-    it.skipIf(version === 'v2')(
+    it.skipIf(version === 'v2' || version === 'v3')(
       'should format messages correctly in onStepFinish when provider sends multiple response-metadata chunks (Issue #7050)',
       async () => {
         // This test reproduces the bug where real LLM providers (like OpenRouter)
@@ -1057,3 +1061,4 @@ function runStreamTest(version: 'v1' | 'v2') {
 
 runStreamTest('v1');
 runStreamTest('v2');
+runStreamTest('v3');

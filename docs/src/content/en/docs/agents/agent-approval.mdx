@@ -20,7 +20,6 @@ import { Mastra } from "@mastra/core/mastra";
 import { LibSQLStore } from "@mastra/libsql";
 
 export const mastra = new Mastra({
-  // ...
   storage: new LibSQLStore({
     id: "mastra-storage",
     url: ":memory:"
@@ -33,7 +32,7 @@ export const mastra = new Mastra({
 
 When calling an agent using `.stream()` set `requireToolApproval` to `true` which will prevent the agent from calling any of the tools defined in its configuration.
 
-```typescript showLineNumbers
+```typescript
 const stream = await agent.stream("What's the weather in London?", {
   requireToolApproval: true
 });
@@ -43,7 +42,7 @@ const stream = await agent.stream("What's the weather in London?", {
 
 To approve a tool call, access `approveToolCall` from the `agent`, passing in the `runId` of the stream. This will let the agent know its now OK to call its tools.
 
-```typescript showLineNumbers
+```typescript
 const handleApproval = async () => {
   const approvedStream = await agent.approveToolCall({ runId: stream.runId });
 
@@ -58,7 +57,7 @@ const handleApproval = async () => {
 
 To decline a tool call, access the `declineToolCall` from the `agent`. You will see the streamed response from the agent, but it won't call its tools.
 
-```typescript showLineNumbers
+```typescript
 const handleDecline = async () => {
   const declinedStream = await agent.declineToolCall({ runId: stream.runId });
 
@@ -218,7 +217,7 @@ When `autoResumeSuspendedTools` is enabled:
 1. A tool suspends execution by calling `suspend()` with a payload (e.g., requesting more information)
 2. The suspension is persisted to memory along with the conversation
 3. When the user sends their next message on the same thread, the agent:
-   - Detects the suspended tool from conversation history
+   - Detects the suspended tool from message history
    - Extracts `resumeData` from the user's message based on the tool's `resumeSchema`
    - Automatically resumes the tool with the extracted data
 
@@ -312,7 +311,7 @@ For automatic tool resumption to work:
 | Manual (`resumeStream()`) | Programmatic control, webhooks, button clicks, external triggers |
 | Automatic (`autoResumeSuspendedTools`) | Conversational flows where users provide resume data in natural language |
 
-Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the conversation history and the user sends a new message on the same thread.
+Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
 ## Related
 
