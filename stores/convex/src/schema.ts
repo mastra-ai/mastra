@@ -29,9 +29,11 @@ function columnToValidator(column: { type: string; nullable?: boolean }) {
       validator = v.string();
       break;
     case 'integer':
-    case 'bigint':
     case 'float':
       validator = v.number();
+      break;
+    case 'bigint':
+      validator = v.int64();
       break;
     case 'boolean':
       validator = v.boolean();
