@@ -213,7 +213,7 @@ export class MongoDBStore extends MastraStorage {
         {
           id: createStorageErrorId('MONGODB', 'CLOSE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
+          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );

@@ -276,13 +276,14 @@ if (process.env.ENABLE_TESTS === 'true') {
   const mssqlIndexExists = async (store: MSSQLStore, namePattern: string): Promise<boolean> => {
     const schemaName = (store as any).schema || 'dbo';
     try {
-      const result = await store.pool.request().query(`
-        SELECT 1 as found
-        FROM sys.indexes i
-        INNER JOIN sys.tables t ON i.object_id = t.object_id
-        INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-        WHERE s.name = '${schemaName}' AND i.name LIKE '%${namePattern}%'
-      `);
+      const result = await store.pool.request().input('schemaName', schemaName).input('namePattern', `%${namePattern}%`)
+        .query(`
+          SELECT 1 as found
+          FROM sys.indexes i
+          INNER JOIN sys.tables t ON i.object_id = t.object_id
+          INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+          WHERE s.name = @schemaName AND i.name LIKE @namePattern
+        `);
       return result.recordset.length > 0;
     } catch {
       return false;
@@ -395,13 +396,16 @@ if (process.env.ENABLE_TESTS === 'true') {
       const pool = createTestPool();
       try {
         await pool.connect();
-        const result = await pool.request().query(`
-          SELECT 1 as found
-          FROM sys.indexes i
-          INNER JOIN sys.tables t ON i.object_id = t.object_id
-          INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-          WHERE s.name = '${currentDomainTestSchema}' AND i.name LIKE '%${pattern}%'
-        `);
+        const result = await pool
+          .request()
+          .input('schemaName', currentDomainTestSchema)
+          .input('namePattern', `%${pattern}%`).query(`
+            SELECT 1 as found
+            FROM sys.indexes i
+            INNER JOIN sys.tables t ON i.object_id = t.object_id
+            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = @schemaName AND i.name LIKE @namePattern
+          `);
         return result.recordset.length > 0;
       } finally {
         await pool.close();
