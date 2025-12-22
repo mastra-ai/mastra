@@ -1,3 +1,4 @@
+import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -5,7 +6,6 @@ import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
-import { Busboy } from '@fastify/busboy';
 import type { Application, NextFunction, Request, Response } from 'express';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
