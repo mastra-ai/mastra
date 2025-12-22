@@ -1,10 +1,13 @@
+import type { Server } from 'node:http';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
   consumeSSEStream,
+  createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
+import { serve } from '@hono/node-server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -395,5 +398,61 @@ describe('Hono Server Adapter', () => {
       expect(receivedAbortSignal).toBeDefined();
       expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
     });
+  });
+
+  // Multipart FormData tests
+  createMultipartTestSuite({
+    suiteName: 'Hono Multipart FormData',
+
+    setupAdapter: async (context, options) => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+        taskStore: context.taskStore,
+        bodyLimitOptions: options?.bodyLimitOptions,
+      });
+
+      await adapter.init();
+
+      return { app, adapter };
+    },
+
+    startServer: async (app: Hono) => {
+      const server = serve({
+        fetch: app.fetch,
+        port: 0, // Random available port
+      }) as Server;
+
+      // Wait for server to be listening
+      await new Promise<void>(resolve => {
+        server.once('listening', () => resolve());
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+
+      return {
+        baseUrl: `http://localhost:${address.port}`,
+        cleanup: async () => {
+          await new Promise<void>(resolve => {
+            server.close(() => resolve());
+          });
+        },
+      };
+    },
+
+    registerRoute: async (adapter, app, route, options) => {
+      await adapter.registerRoute(app, route, options || { prefix: '' });
+    },
+
+    getContextMiddleware: adapter => adapter.createContextMiddleware(),
+
+    applyMiddleware: (app, middleware) => {
+      app.use('*', middleware);
+    },
   });
 });
