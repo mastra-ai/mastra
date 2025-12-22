@@ -1,16 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import {
-  createStorageErrorId,
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_SCHEMAS,
-  TABLE_THREADS,
-  TABLE_MESSAGES,
-  TABLE_TRACES,
-  TABLE_SCORERS,
-  TABLE_SPANS,
-  getDefaultValue,
-} from '@mastra/core/storage';
+import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, getDefaultValue } from '@mastra/core/storage';
 import type {
   StorageColumn,
   TABLE_NAMES,
@@ -28,18 +18,20 @@ export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
 /**
  * Configuration for standalone domain usage.
  * Accepts either:
- * 1. An existing pool, db, and schema
+ * 1. A pre-configured pool (domain creates its own MssqlDB)
  * 2. Config to create a new pool internally
  */
 export type MssqlDomainConfig = MssqlDomainPoolConfig | MssqlDomainRestConfig;
 
 /**
- * Pass an existing pool, db, and schema
+ * Pass an existing pool - domain will create its own MssqlDB
  */
 export interface MssqlDomainPoolConfig {
   pool: sql.ConnectionPool;
-  db: MssqlDB;
-  schema?: string;
+  schemaName?: string;
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
@@ -53,14 +45,17 @@ export interface MssqlDomainRestConfig {
   password: string;
   schemaName?: string;
   options?: sql.IOptions;
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
- * Resolves MssqlDomainConfig to pool, db, and schema.
- * Handles creating a new pool and db if config is provided.
+ * Resolves MssqlDomainConfig to pool and schema.
+ * Domain classes create their own MssqlDB instance from the returned pool.
  *
- * @param config - Either an existing connected pool/db, or connection details to create a new pool
- * @returns Object containing pool, db, schema, and whether the pool needs connection
+ * @param config - Either an existing connected pool, or connection details to create a new pool
+ * @returns Object containing pool, schemaName, skipDefaultIndexes, and whether the pool needs connection
  *
  * @remarks
  * When using connection details (not an existing pool), the returned pool is NOT connected.
@@ -69,32 +64,46 @@ export interface MssqlDomainRestConfig {
  */
 export function resolveMssqlConfig(config: MssqlDomainConfig): {
   pool: sql.ConnectionPool;
-  db: MssqlDB;
-  schema?: string;
+  schemaName?: string;
+  skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
   needsConnect: boolean;
 } {
-  // Existing pool and db - already connected by MSSQLStore
-  if ('pool' in config && 'db' in config) {
-    return { pool: config.pool, db: config.db, schema: config.schema, needsConnect: false };
+  // Existing pool - already connected
+  if ('pool' in config && !('server' in config)) {
+    return {
+      pool: config.pool,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+      needsConnect: false,
+    };
   }
 
   // Config to create new pool - needs to be connected via init()
+  const restConfig = config as MssqlDomainRestConfig;
   const pool = new sql.ConnectionPool({
-    server: config.server,
-    database: config.database,
-    user: config.user,
-    password: config.password,
-    port: config.port,
-    options: config.options || { encrypt: true, trustServerCertificate: true },
+    server: restConfig.server,
+    database: restConfig.database,
+    user: restConfig.user,
+    password: restConfig.password,
+    port: restConfig.port,
+    options: restConfig.options || { encrypt: true, trustServerCertificate: true },
   });
 
-  const db = new MssqlDB({ pool, schemaName: config.schemaName });
-  return { pool, db, schema: config.schemaName, needsConnect: true };
+  return {
+    pool,
+    schemaName: restConfig.schemaName,
+    skipDefaultIndexes: restConfig.skipDefaultIndexes,
+    indexes: restConfig.indexes,
+    needsConnect: true,
+  };
 }
 
 export class MssqlDB extends MastraBase {
   public pool: sql.ConnectionPool;
   public schemaName?: string;
+  public skipDefaultIndexes?: boolean;
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
@@ -133,10 +142,19 @@ export class MssqlDB extends MastraBase {
     }
   }
 
-  constructor({ pool, schemaName }: { pool: sql.ConnectionPool; schemaName?: string }) {
+  constructor({
+    pool,
+    schemaName,
+    skipDefaultIndexes,
+  }: {
+    pool: sql.ConnectionPool;
+    schemaName?: string;
+    skipDefaultIndexes?: boolean;
+  }) {
     super({ component: 'STORAGE', name: 'MssqlDB' });
     this.pool = pool;
     this.schemaName = schemaName;
+    this.skipDefaultIndexes = skipDefaultIndexes;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -1102,88 +1120,6 @@ export class MssqlDB extends MastraBase {
           details: {
             indexName,
           },
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * Returns definitions for automatic performance indexes
-   * IMPORTANT: Uses seq_id DESC instead of createdAt DESC for MSSQL due to millisecond accuracy limitations
-   * NOTE: Using NVARCHAR(400) for text columns (800 bytes) leaves room for composite indexes
-   */
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-    return [
-      // Composite indexes for optimal filtering + sorting performance
-      // NVARCHAR(400) = 800 bytes, plus BIGINT (8 bytes) = 808 bytes total (under 900-byte limit)
-      {
-        name: `${schemaPrefix}mastra_threads_resourceid_seqid_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'seq_id DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_messages_thread_id_seqid_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'seq_id DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_traces_name_seqid_idx`,
-        table: TABLE_TRACES,
-        columns: ['name', 'seq_id DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
-        table: TABLE_SCORERS,
-        columns: ['traceId', 'spanId', 'seq_id DESC'],
-      },
-      // Spans indexes for optimal trace querying
-      {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['traceId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['parentSpanId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_SPANS,
-        columns: ['name'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['spanType', 'startedAt DESC'],
-      },
-    ];
-  }
-
-  /**
-   * Creates automatic indexes for optimal query performance
-   * Uses getAutomaticIndexDefinitions() to determine which indexes to create
-   */
-  async createAutomaticIndexes(): Promise<void> {
-    try {
-      const indexes = this.getAutomaticIndexDefinitions();
-
-      for (const indexOptions of indexes) {
-        try {
-          await this.createIndex(indexOptions);
-        } catch (error) {
-          // Log but continue with other indexes
-          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('MSSQL', 'CREATE_PERFORMANCE_INDEXES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );

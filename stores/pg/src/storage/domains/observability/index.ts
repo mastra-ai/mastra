@@ -14,6 +14,7 @@ import type {
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -22,16 +23,91 @@ import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTable
 export class ObservabilityPG extends ObservabilityStorage {
   #db: PgDB;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SPANS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName });
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (ObservabilityPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the observability domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['traceId', 'startedAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['parentSpanId', 'startedAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+        table: TABLE_SPANS,
+        columns: ['name'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['spanType', 'startedAt DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
