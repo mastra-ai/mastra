@@ -210,6 +210,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._start(params);
   }
@@ -229,6 +230,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Persist initial snapshot
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
@@ -265,6 +267,7 @@ export class InngestRun<
         outputOptions: params.outputOptions,
         tracingOptions: params.tracingOptions,
         requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+        perStep: params.perStep,
       },
     });
 
@@ -284,6 +287,7 @@ export class InngestRun<
     tracingOptions,
     format,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
@@ -294,6 +298,7 @@ export class InngestRun<
       includeResumeLabels?: boolean;
     };
     format?: 'legacy' | 'vnext' | undefined;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     await this.#mastra.getStorage()?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -328,6 +333,7 @@ export class InngestRun<
         tracingOptions,
         format,
         requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+        perStep,
       },
     });
 
@@ -354,6 +360,7 @@ export class InngestRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
       if (result.status !== 'suspended') {
@@ -375,6 +382,7 @@ export class InngestRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const storage = this.#mastra?.getStorage();
 
@@ -415,6 +423,7 @@ export class InngestRun<
           resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
         },
         requestContext: mergedRequestContext,
+        perStep: params.perStep,
       },
     });
 
@@ -445,6 +454,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._timeTravel(params).then(result => {
       if (result.status !== 'suspended') {
@@ -475,6 +485,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     if (!params.step || (Array.isArray(params.step) && params.step?.length === 0)) {
       throw new Error('Step is required and must be a valid step or array of steps');
@@ -553,6 +564,7 @@ export class InngestRun<
         tracingOptions: params.tracingOptions,
         outputOptions: params.outputOptions,
         requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+        perStep: params.perStep,
       },
     });
 
@@ -661,6 +673,7 @@ export class InngestRun<
     closeOnSuspend = true,
     initialState,
     outputOptions,
+    perStep,
   }: {
     inputData?: z.input<TInput>;
     requestContext?: RequestContext;
@@ -672,6 +685,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   } = {}): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
@@ -714,6 +728,7 @@ export class InngestRun<
           tracingOptions,
           outputOptions,
           format: 'vnext',
+          perStep,
         });
         let executionResults;
         try {
@@ -759,6 +774,7 @@ export class InngestRun<
         includeState?: boolean;
         includeResumeLabels?: boolean;
       };
+      perStep?: boolean;
     } = {},
   ): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
     return this.stream(args);
@@ -774,6 +790,7 @@ export class InngestRun<
     requestContext,
     tracingOptions,
     outputOptions,
+    perStep,
   }: {
     inputData?: z.input<TInputSchema>;
     initialState?: z.input<TState>;
@@ -794,6 +811,7 @@ export class InngestRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }) {
     this.closeStreamAction = async () => {};
 
@@ -833,6 +851,7 @@ export class InngestRun<
           requestContext,
           tracingOptions,
           outputOptions,
+          perStep,
         });
 
         self.executionResults = executionResultsPromise;
