@@ -159,11 +159,53 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const queryParams = request.query();
     let body: unknown;
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
-      try {
-        body = await request.json();
-      } catch {}
+      const contentType = request.header('content-type') || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          body = await this.parseFormData(formData);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
+        }
+      } else {
+        try {
+          body = await request.json();
+        } catch (error) {
+          console.error('Failed to parse JSON body:', error);
+        }
+      }
     }
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  /**
+   * Parse FormData into a plain object, converting File objects to Buffers.
+   */
+  private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        const arrayBuffer = await value.arrayBuffer();
+        result[key] = Buffer.from(arrayBuffer);
+      } else if (typeof value === 'string') {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[key] = JSON.parse(value);
+        } catch {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {

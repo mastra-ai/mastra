@@ -1,3 +1,4 @@
+import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -126,8 +127,87 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
     const urlParams = request.params;
     const queryParams = request.query;
-    const body = await request.body;
+    let body: unknown;
+
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+      const contentType = request.headers['content-type'] || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+          body = await this.parseMultipartFormData(request, maxFileSize);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
+        }
+      } else {
+        body = request.body;
+      }
+    }
+
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  /**
+   * Parse multipart/form-data using @fastify/busboy.
+   * Converts file uploads to Buffers and parses JSON field values.
+   *
+   * @param request - The Express request object
+   * @param maxFileSize - Optional maximum file size in bytes
+   */
+  private parseMultipartFormData(request: Request, maxFileSize?: number): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const result: Record<string, unknown> = {};
+
+      const busboy = new Busboy({
+        headers: {
+          'content-type': request.headers['content-type'] as string,
+        },
+        limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
+      });
+
+      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
+        const chunks: Buffer[] = [];
+        let limitExceeded = false;
+
+        file.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        file.on('limit', () => {
+          limitExceeded = true;
+          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+        });
+
+        file.on('end', () => {
+          if (!limitExceeded) {
+            result[fieldname] = Buffer.concat(chunks);
+          }
+        });
+      });
+
+      busboy.on('field', (fieldname: string, value: string) => {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[fieldname] = JSON.parse(value);
+        } catch {
+          result[fieldname] = value;
+        }
+      });
+
+      busboy.on('finish', () => {
+        resolve(result);
+      });
+
+      busboy.on('error', (error: Error) => {
+        reject(error);
+      });
+
+      request.pipe(busboy);
+    });
   }
 
   async sendResponse(route: ServerRoute, response: Response, result: unknown, request?: Request): Promise<void> {

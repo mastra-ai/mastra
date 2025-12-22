@@ -3109,7 +3109,7 @@ Mastra can run against any of these runtime environments:
 
 Mastra provides a [server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently. Use the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
 
-See the [Mastra server deployment guide](/docs/v1/deployment/mastra-server).
+Visit the [Mastra server deployment guide](/docs/v1/deployment/mastra-server).
 
 ### Monorepo
 
@@ -3145,10 +3145,9 @@ Learn more in the [Mastra Cloud docs](/docs/v1/mastra-cloud/overview).
 
 ## Workflow Runners
 
-Mastra supports deploying workflows to specialized workflow execution platforms that handle orchestration, monitoring, and reliability. [Inngest](https://www.inngest.com) is a developer platform for running background workflows without managing infrastructure. Mastra workflows can be deployed to Inngest, which provides step memoization, automatic retries, real-time monitoring, and suspend/resume capabilities.
+Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
 
-- [Inngest deployment guide](/guides/v1/deployment/inngest)
-- [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest)
+Visit the [Workflow Runners guide](/docs/v1/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/guides/v1/deployment/inngest) for setup instructions.
 
 
 ---
@@ -3211,6 +3210,23 @@ export default defineConfig({
   output: "server",
 });
 ```
+
+
+---
+title: "Workflow Runners | Deployment"
+description: "Deploy Mastra workflows to specialized workflow execution platforms"
+---
+
+# Workflow Runners
+[EN] Source: https://mastra.ai/en/docs/deployment/workflow-runners
+
+Mastra [workflows](../workflows/overview.mdx) can be executed using the built-in workflow runner or deployed to specialized workflow execution platforms that handle orchestration, monitoring, and reliability.
+
+## Inngest
+
+Inngest is a developer platform for running background workflows without managing infrastructure. Mastra workflows can be deployed to Inngest, which provides step memoization, automatic retries, real-time monitoring, and suspend/resume capabilities.
+
+Visit the [Inngest deployment guide](/guides/v1/deployment/inngest) for setup instructions and the [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest) for a complete implementation.
 
 
 ---
@@ -4695,7 +4711,7 @@ Studio provides an interactive UI for building and testing your agents, along wi
 
 As your project evolves, Studio's development environment helps you iterate on your agent quickly. Meanwhile, Observability and Scorer features give you visibility into performance at every stage.
 
-To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](https://mastra.ai/docs/mastra-cloud/setting-up) to collaborate with your team.
+To get started, run Studio locally using the instructions below, or [create a project in Mastra Cloud](/docs/v1/mastra-cloud/setup) to collaborate with your team.
 
 <YouTube id="ojGu6Bi4wYk" />
 
@@ -4918,147 +4934,84 @@ We can't wait to see what you build ✌️
 
 
 ---
-title: "Navigating the Dashboard | Mastra Cloud"
-description: Details of each feature available in Mastra Cloud
+title: "Deployment | Mastra Cloud"
+description: Deploy your Mastra application to production
 ---
 
-# Navigating the Dashboard
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/dashboard
+# Deployment
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/deployment
 
-This page explains how to navigate the Mastra Cloud dashboard, where you can configure your project, view deployment details, and interact with agents and workflows using the built-in [Studio](/docs/v1/mastra-cloud/dashboard#studio).
+Deploy your Mastra application to production and expose your agents, tools, and workflows as REST API endpoints.
 
-## Overview
+:::info
+Mastra Cloud is currently in beta, but many teams are already using it to deploy their agents. It's the easiest way to run Mastra agents in a managed environment.
+:::
 
-The **Overview** page provides details about your application, including its domain URL, status, latest deployment, and connected agents and workflows.
+## Enable deployments
+
+After [setting up your project](/docs/v1/mastra-cloud/setup), click **Deployment** in the sidebar and select **Enable Deployments**.
+
+Once enabled, your project automatically builds and deploys. Future pushes to your main branch trigger automatic redeployments.
+
+## Dashboard
+
+The **Overview** page shows your project's domain URL, status, latest deployment, and connected agents and workflows.
 
 ![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
 
-Key features:
+Click the **Deployments** menu item to view build logs. Open **Settings** to configure environment variables, branch, storage, and endpoint URLs. 
 
-Each project shows its current deployment status, active domains, and environment variables, so you can quickly understand how your application is running.
+:::note
+Changes to settings require a new deployment to take effect
+:::
 
-## Deployments
+## Using your deployment
 
-The **Deployments** page shows recent builds and gives you quick access to detailed build logs. Click any row to view more information about a specific deployment.
-
-![Dashboard deployment](/img/mastra-cloud/mastra-cloud-dashboard-deployments.jpg)
-
-Key features:
-
-Each deployment includes its current status, the Git branch it was deployed from, and a title generated from the commit hash.
-
-## Logs
-
-The **Logs** page is where you'll find detailed information to help debug and monitor your application's behavior in the production environment.
-
-![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
-
-Each log includes a severity level and detailed messages showing agent, workflow, and storage activity.
-
-## Settings
-
-On the **Settings** page you can modify the configuration of your application.
-
-![Dashboard settings](/img/mastra-cloud/mastra-cloud-dashboard-settings.jpg)
-
-Key features:
-
-You can manage environment variables, edit key project settings like the name and branch, configure storage with LibSQLStore, and set a stable URL for your endpoints.
-
-> Changes to configuration require a new deployment before taking effect.
-
-## Studio
-
-### Agents
-
-On the **Agents** page you'll see all agents used in your application. Click any agent to interact using the chat interface.
-
-![Dashboard Studio agents](/img/mastra-cloud/mastra-cloud-dashboard-playground-agents.jpg)
-
-Key features:
-
-Test your agents in real time using the chat interface, review traces of each interaction, and see evaluation scores for every response.
-
-### Workflows
-
-On the **Workflows** page you'll see all workflows used in your application. Click any workflow to interact using the runner interface.
-
-![Dashboard Studio workflows](/img/mastra-cloud/mastra-cloud-dashboard-playground-workflows.jpg)
-
-Key features:
-
-Visualize your workflow with a step-by-step graph, view execution traces, and run workflows directly using the built-in runner.
-
-### Tools
-
-On the **Tools** page you'll see all tools used by your agents. Click any tool to interact using the input interface.
-
-![Dashboard Studio tools](/img/mastra-cloud/mastra-cloud-dashboard-playground-tools.jpg)
-
-Key features:
-
-Test your tools by providing an input that matches the schema and viewing the structured output.
-
-## MCP Servers
-
-The **MCP Servers** page lists all MCP Servers included in your application. Click any MCP Server for more information.
-
-![Dashboard Studio mcp servers](/img/mastra-cloud/mastra-cloud-dashboard-playground-mcpservers.jpg)
-
-Key features:
-
-Each MCP Server includes API endpoints for HTTP and SSE, along with IDE configuration snippets for tools like Cursor and Windsurf.
+After deployment, interact with your agents using the [Mastra Client](/docs/v1/server/mastra-client) or call the REST API endpoints directly.
 
 ## Next steps
 
-- [Understanding Tracing and Logs](/docs/v1/mastra-cloud/observability)
+- [Studio](/docs/v1/mastra-cloud/studio) - Test your agents in the cloud
+- [Observability](/docs/v1/mastra-cloud/observability) - Monitor traces and logs
 
 
 ---
-title: "Understanding Tracing and Logs | Mastra Cloud"
+title: "Observability | Mastra Cloud"
 description: Monitoring and debugging tools for Mastra Cloud deployments
 ---
 
-# Understanding Tracing and Logs
+# Observability
 [EN] Source: https://mastra.ai/en/docs/mastra-cloud/observability
 
-Mastra Cloud provides full observability for production applications, giving you insight into how your agents and workflows behave. Observability can be enabled whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
+Cloud provides observability for production applications, giving you insight into how your agents and workflows behave. Observability works whether your application is deployed to Mastra Cloud, running locally, or hosted on your own infrastructure. Any Mastra project can send traces and logs to the platform regardless of where it's running.
 
 For details on configuring observability, see the [Cloud Exporter](/docs/v1/observability/tracing/exporters/cloud) docs.
 
 ## Traces
 
-More detailed traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of our [supported providers](/docs/v1/observability/tracing/overview#exporters).
+Traces are available for both agents and workflows by enabling [observability](/docs/v1/observability/tracing/overview) using one of the [supported providers](/docs/v1/observability/tracing/overview#exporters).
 
 ### Agents
 
-With observability enabled, you can view detailed outputs from your agents in the **Traces** section in Studio.
+With observability enabled, you can view detailed outputs from your agents in the **Traces** section in [Studio](/docs/v1/mastra-cloud/studio).
 
 ![observability agents](/img/mastra-cloud/mastra-cloud-observability-agents.jpg)
 
-Key features:
-
-Agent traces break a run into clear steps, model calls, tool calls, and intermediate chunks, each with timing, inputs, outputs, and errors. You can drill into any span to inspect prompts, token usage, and results, making it easy to diagnose issues and understand how the agent produced its output.
+Agent traces break a run into clear steps: model calls, tool calls, and intermediate chunks. Each includes timing, inputs, outputs, and errors. Drill into any span to inspect prompts, token usage, and results.
 
 ### Workflows
 
-With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in Studio.
+With observability enabled, you can view detailed outputs from your workflows in the **Traces** section in [Studio](/docs/v1/mastra-cloud/studio).
 
 ![observability workflows](/img/mastra-cloud/mastra-cloud-observability-workflows.jpg)
 
-Key features:
-
-Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls inside the workflow. You can inspect inputs, outputs, and errors for every step, making it easy to debug long-running or multi-step processes and understand how data flows through the workflow.
+Workflow traces capture each step in the run, including transitions, branching, timing, and any tool calls. Inspect inputs, outputs, and errors for every step to debug long-running or multi-step processes.
 
 ## Logs
 
-You can view detailed logs for debugging and monitoring your application's behavior on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page of the Dashboard.
+The **Logs** page in the [project dashboard](/docs/v1/mastra-cloud/deployment#project-dashboard) displays detailed information for debugging and monitoring your application's behavior.
 
 ![Dashboard logs](/img/mastra-cloud/mastra-cloud-dashboard-logs.jpg)
-
-Key features:
 
 Each log entry includes its severity level and a detailed message showing agent, workflow, or storage activity.
 
@@ -5076,169 +5029,135 @@ description: Deployment and monitoring service for Mastra applications
 # Mastra Cloud
 [EN] Source: https://mastra.ai/en/docs/mastra-cloud/overview
 
-[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/v1/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
+[Mastra Cloud](https://cloud.mastra.ai) is a platform for deploying, managing, and monitoring Mastra applications. [Import your project](/docs/v1/mastra-cloud/setup) to get started.
 
-## Platform features
+## Studio
 
-Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
+Run [Studio](/docs/v1/mastra-cloud/studio) in the cloud and share access with your team via a link. Team members can test agents and workflows, tweak system prompts, and give feedback without running the project locally.
 
-![Platform features](/img/mastra-cloud/mastra-cloud-platform-features.jpg)
+## Deploy
 
-Key features:
+Enable [deployments](/docs/v1/mastra-cloud/deployment) and Mastra Cloud hosts your server for you. Connect your GitHub repository for automatic deployments whenever you push to your configured branch. Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
 
-Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
+Once deployed, the project dashboard gives you visibility into:
 
-## Project Dashboard
+- Deployment status and history
+- Build logs and configuration
+- Environment variables and settings
 
-Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
+## Observability
 
-![Project dashboard](/img/mastra-cloud/mastra-cloud-project-dashboard.jpg)
+[Observability](/docs/v1/mastra-cloud/observability) provides insight into how your agents and workflows behave in production. View detailed traces of agent runs, workflow executions, and logs to debug issues and understand performance.
 
-Key features:
+:::info
+You don’t need to deploy to Mastra Cloud to use Observability. You can send traces to Mastra from any environment
+:::
 
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a Studio for testing agents and workflows.
-
-## Project structure
-
-Use a standard Mastra project structure for proper detection and deployment.
-
-```shell
-src
-└── mastra
-    ├── agents
-    │   └── agent-name.ts
-    ├── tools
-    │   └── tool-name.ts
-    ├── workflows
-    │   └── workflow-name.ts
-    └── index.ts
-package.json
-```
-
-Mastra Cloud scans your repository for:
-
-- **Agents**: Defined using: `new Agent({...})`
-- **Tools**: Defined using: `createTool({...})`
-- **Workflows**: Defined using: `createWorkflow({...})`
-- **Steps**: Defined using: `createStep({...})`
-- **Environment Variables**: API keys and configuration variables
-
-## Technical implementation
-
-Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
-
-## Next steps
-
-- [Setting Up and Deploying](/docs/v1/mastra-cloud/setting-up)
 
 
 ---
-title: "Setting Up and Deploying | Mastra Cloud"
-description: Configuration steps for Mastra Cloud projects
+title: "Setup | Mastra Cloud"
+description: Import your Mastra project to Mastra Cloud
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Setting Up and Deploying
-[EN] Source: https://mastra.ai/en/docs/mastra-cloud/setting-up
+# Setup
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/setup
 
-This page explains how to set up a project on [Mastra Cloud](https://mastra.ai/cloud) with automatic deployments using our GitHub integration.
+Import your Mastra project to [Mastra Cloud](https://cloud.mastra.ai) to use [Studio](/docs/v1/mastra-cloud/studio) and optionally [deploy](/docs/v1/mastra-cloud/deployment) your agent.
 
-## Prerequisites
+## Before you begin
 
-- A [Mastra Cloud](https://mastra.ai/cloud) account
-- A GitHub account / repository containing a Mastra application
+- [Sign in](https://cloud.mastra.ai) to Cloud
+- Push your [Mastra project](/docs/v1/getting-started/start) to GitHub
 
-:::info
+## Options
 
-Visit our [Getting started](/guides/v1/getting-started/quickstart) guide to scaffold out a new Mastra project with sensible defaults.
 
-:::
+![Select project type](/img/mastra-cloud/mastra-cloud-select.png)
 
-## Setup and Deploy process
+When you create a new project, you can choose from three options:
+
+1. **Create from GitHub** - Import a Mastra project from GitHub
+2. **Create from your server** - Connect a self-hosted Mastra instance to [Studio](/docs/v1/mastra-cloud/studio)
+3. **Create from template** - Start from a [pre-built template](https://mastra.ai/templates)
+
+
+To create a project from GitHub, follow these steps:
+
+## Create from GitHub
 
 <Steps>
 
 <StepItem>
+Connect to GitHub when prompted
 
-Head over to [https://cloud.mastra.ai/](https://cloud.mastra.ai) and sign in with either:
-
-- **GitHub**
-- **Google**
-
+![Deployment details](/img/mastra-cloud/mastra-cloud-connect.png)
 </StepItem>
 
 <StepItem>
+Search for your repository and click **Import**
 
-When prompted, install the Mastra GitHub app.
-
-![Install GitHub](/img/mastra-cloud/mastra-cloud-install-github.jpg)
-
+![Deployment details](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
 </StepItem>
 
 <StepItem>
-
-Click the **Create new project** button to create a new project.
-
-![Create new project](/img/mastra-cloud/mastra-cloud-create-new-project.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Search for a repository, then click **Import**.
-
-![Import Git repository](/img/mastra-cloud/mastra-cloud-import-git-repository.jpg)
-
-</StepItem>
-
-<StepItem>
-
-Mastra Cloud automatically detects the right build settings, but you can customize them using the options described below.
+Configure your project settings. Mastra Cloud auto-detects most settings, but you'll still need to enter the environment variables for your configured [model provider](/models/v1):
 
 ![Deployment details](/img/mastra-cloud/mastra-cloud-deployment-details.jpg)
-
-- **Importing from GitHub**: The GitHub repository name
-- **Project name**: Customize the project name
-- **Branch**: The branch to deploy from
-- **Project root**: The root directory of your project
-- **Mastra directory**: Where Mastra files are located
-- **Environment variables**: Add environment variables used by the application
-- **Build and Store settings**:
-  - **Install command**: Runs pre-build to install project dependencies
-  - **Project setup command**: Runs pre-build to prepare any external dependencies
-  - **Port**: The network port the server will use
-  - **Store settings**: Use Mastra Cloud's built-in [LibSQLStore](/reference/v1/storage/libsql) storage
-- **Deploy Project**: Starts the deployment process
-
 </StepItem>
 
 <StepItem>
 
-Click **Deploy Project** to create and deploy your application using the configuration you've set.
-
+Click **Create Project**
 </StepItem>
-
 </Steps>
-
-## Successful deployment
-
-After a successful deployment you'll be shown the **Overview** screen where you can view your project's status, domains, latest deployments and connected agents and workflows.
-
-![Successful deployment](/img/mastra-cloud/mastra-cloud-successful-deployment.jpg)
-
-## Continuous integration
-
-Your project is now configured with automatic deployments which occur whenever you push to the configured branch of your GitHub repository.
-
-## Testing your application
-
-After a successful deployment you can test your agents and workflows [Studio](/docs/v1/mastra-cloud/dashboard#studio) in Mastra Cloud, or interact with them using our [Client SDK](/docs/v1/server/mastra-client).
 
 ## Next steps
 
-- [Navigating the Dashboard](/docs/v1/mastra-cloud/dashboard)
+Once your project is imported, [Studio](/docs/v1/mastra-cloud/studio) automatically creates a sandbox where you can interact with your agents and share access with your team.
+
+When you're ready for production, enable [Deployment](/docs/v1/mastra-cloud/deployment) settings and hit deploy!
+
+
+---
+title: "Studio | Mastra Cloud"
+description: Run Studio in the cloud for team collaboration
+---
+
+import YouTube from "@site/src/components/YouTube-player";
+
+# Studio
+[EN] Source: https://mastra.ai/en/docs/mastra-cloud/studio
+
+<YouTube id="ojGu6Bi4wYk" />
+
+Mastra Cloud provides a hosted version of [Studio](/docs/v1/getting-started/studio) that gives your team a shared environment for interacting with and testing your agents. Team members can chat with agents, review traces, give feedback, and tweak system prompts - without needing to run the project locally.
+
+[Set up your project](/docs/v1/mastra-cloud/setup) to access Studio in the cloud.
+
+See the [Studio documentation](/docs/v1/getting-started/studio) for details on features like the Agents playground, Workflows runner, Tools testing, and MCP Servers.
+
+:::note
+You don't need to deploy your agent to use Studio. Studio runs in a sandbox environment separate from your production deployment
+:::
+
+## Sharing access
+
+To invite team members, go to [Mastra Cloud](https://cloud.mastra.ai), click **Team Settings**, then **Members** to add them. Once invited, they can sign in and access your project's Studio.
+
+![Invite team members](/img/mastra-cloud/mastra-cloud-invite.png)
+
+:::warning
+Team members can view environment variables and delete projects. Only invite people you trust.
+:::
+
+## Next steps
+
+- [Deployment](/docs/v1/mastra-cloud/deployment) - Manage deployments and settings
+- [Observability](/docs/v1/mastra-cloud/observability) - Monitor traces and logs
 
 
 ---
@@ -18693,371 +18612,6 @@ const handleDelete = async () => {
 
 
 ---
-title: "Inngest Workflow | Workflows"
-description: "Inngest workflow allows you to run Mastra workflows with Inngest"
----
-
-# Inngest Workflow
-[EN] Source: https://mastra.ai/en/docs/workflows/inngest-workflow
-
-[Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
-
-## How Inngest Works with Mastra
-
-Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow` and `createStep` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
-
-The `serve` function bridges the two systems by registering Mastra workflows as Inngest functions and setting up the necessary event handlers for execution and monitoring.
-
-When an event triggers a workflow, Inngest executes it step by step, memoizing each step’s result. This means if a workflow is retried or resumed, completed steps are skipped, ensuring efficient and reliable execution. Control flow primitives in Mastra, such as loops, conditionals, and nested workflows are seamlessly translated into the same Inngest’s function/step model, preserving advanced workflow features like composition, branching, and suspension.
-
-Real-time monitoring, suspend/resume, and step-level observability are enabled via Inngest’s publish-subscribe system and dashboard. As each step executes, its state and output are tracked using Mastra storage and can be resumed as needed.
-
-## Setup
-
-```sh
-npm install @mastra/inngest@beta @mastra/core@beta @mastra/deployer@beta
-```
-
-## Building an Inngest Workflow
-
-This guide walks through creating a workflow with Inngest and Mastra, demonstrating a counter application that increments a value until it reaches 10.
-
-### Inngest Initialization
-
-Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
-
-In development
-
-```ts title="src/mastra/inngest/index.ts"
-import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
-
-export const inngest = new Inngest({
-  id: "mastra",
-  baseUrl: "http://localhost:8288",
-  isDev: true,
-  middleware: [realtimeMiddleware()],
-});
-```
-
-In production
-
-```ts title="src/mastra/inngest/index.ts"
-import { Inngest } from "inngest";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
-
-export const inngest = new Inngest({
-  id: "mastra",
-  middleware: [realtimeMiddleware()],
-});
-```
-
-### Creating Steps
-
-Define the individual steps that will compose your workflow:
-
-```ts title="src/mastra/workflows/index.ts"
-import { z } from "zod";
-import { inngest } from "../inngest";
-import { init } from "@mastra/inngest";
-
-// Initialize Inngest with Mastra, pointing to your local Inngest server
-const { createWorkflow, createStep } = init(inngest);
-
-// Step: Increment the counter value
-const incrementStep = createStep({
-  id: "increment",
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 };
-  },
-});
-```
-
-### Creating the Workflow
-
-Compose the steps into a workflow using the `dountil` loop pattern. The createWorkflow function creates a function on inngest server that is invocable.
-
-```ts title="src/mastra/workflows/index.ts"
-// workflow that is registered as a function on inngest server
-const workflow = createWorkflow({
-  id: "increment-workflow",
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-}).then(incrementStep);
-
-workflow.commit();
-
-export { workflow as incrementWorkflow };
-```
-
-### Configuring the Mastra Instance and Executing the Workflow
-
-Register the workflow with Mastra and configure the Inngest API endpoint:
-
-```ts title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { serve as inngestServe } from "@mastra/inngest";
-import { incrementWorkflow } from "./workflows";
-import { inngest } from "./inngest";
-import { PinoLogger } from "@mastra/loggers";
-
-// Configure Mastra with the workflow and Inngest API endpoint
-export const mastra = new Mastra({
-  workflows: {
-    incrementWorkflow,
-  },
-  server: {
-    // The server configuration is required to allow local docker container can connect to the mastra server
-    host: "0.0.0.0",
-    apiRoutes: [
-      // This API route is used to register the Mastra workflow (inngest function) on the inngest server
-      {
-        path: "/api/inngest",
-        method: "ALL",
-        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-        // The inngestServe function integrates Mastra workflows with Inngest by:
-        // 1. Creating Inngest functions for each workflow with unique IDs (workflow.${workflowId})
-        // 2. Setting up event handlers that:
-        //    - Generate unique run IDs for each workflow execution
-        //    - Create an InngestExecutionEngine to manage step execution
-        //    - Handle workflow state persistence and real-time updates
-        // 3. Establishing a publish-subscribe system for real-time monitoring
-        //    through the workflow:${workflowId}:${runId} channel
-        //
-        // Optional: You can also pass additional Inngest functions to serve alongside workflows:
-        // createHandler: async ({ mastra }) => inngestServe({
-        //   mastra,
-        //   inngest,
-        //   functions: [customFunction1, customFunction2] // User-defined Inngest functions
-        // }),
-      },
-    ],
-  },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-```
-
-### Running the Workflow locally
-
-> **Prerequisites:**
->
-> - Docker installed and running
-> - Mastra project set up
-> - Dependencies installed (`npm install`)
-
-1. Run `npx mastra dev` to start the Mastra server on local to serve the server on port 4111.
-2. Start the Inngest Dev Server (via Docker)
-   In a new terminal, run:
-
-```sh
-docker run --rm -p 8288:8288 \
-  inngest/inngest \
-  inngest dev -u http://host.docker.internal:4111/api/inngest
-```
-
-> **Note:** The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint.
-
-3. Open the Inngest Dashboard
-
-- Visit [http://localhost:8288](http://localhost:8288) in your browser.
-- Go to the **Apps** section in the sidebar.
-- You should see your Mastra workflow registered.
-  ![Inngest Dashboard](/img/inngest-apps-dashboard.png)
-
-4. Invoke the Workflow
-
-- Go to the **Functions** section in the sidebar.
-- Select your Mastra workflow.
-- Click **Invoke** and use the following input:
-
-```json
-{
-  "data": {
-    "inputData": {
-      "value": 5
-    }
-  }
-}
-```
-
-![Inngest Function](/img/inngest-function-dashboard.png)
-
-5. **Monitor the Workflow Execution**
-
-- Go to the **Runs** tab in the sidebar.
-- Click on the latest run to see step-by-step execution progress.
-  ![Inngest Function Run](/img/inngest-runs-dashboard.png)
-
-### Running the Workflow in Production
-
-> **Prerequisites:**
->
-> - Vercel account and Vercel CLI installed (`npm i -g vercel`)
-> - Inngest account
-> - Vercel token (recommended: set as environment variable)
-
-1. Add Vercel Deployer to Mastra instance
-
-```ts title="src/mastra/index.ts"
-import { VercelDeployer } from "@mastra/deployer-vercel";
-
-export const mastra = new Mastra({
-  deployer: new VercelDeployer({
-    teamSlug: "your_team_slug",
-    projectName: "your_project_name",
-    // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
-    // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
-    token: "your_vercel_token",
-  }),
-});
-```
-
-> **Note:** Set your Vercel token in your environment:
->
-> ```sh
-> export VERCEL_TOKEN=your_vercel_token
-> ```
-
-2. Build the mastra instance
-
-```sh
-npx mastra build
-```
-
-3. Deploy to Vercel
-
-```sh
-cd .mastra/output
-vercel --prod
-```
-
-> **Tip:** If you haven't already, log in to Vercel CLI with `vercel login`.
-
-4. Sync with Inngest Dashboard
-
-- Go to the [Inngest dashboard](https://app.inngest.com/env/production/apps).
-- Click **Sync new app with Vercel** and follow the instructions.
-- You should see your Mastra workflow registered as an app.
-  ![Inngest Dashboard](/img/inngest-apps-dashboard-prod.png)
-
-5. Invoke the Workflow
-
-- In the **Functions** section, select `workflow.increment-workflow`.
-- Click **All actions** (top right) > **Invoke**.
-- Provide the following input:
-
-```json
-{
-  "data": {
-    "inputData": {
-      "value": 5
-    }
-  }
-}
-```
-
-![Inngest Function Run](/img/inngest-function-dashboard-prod.png)
-
-6.  Monitor Execution
-
-- Go to the **Runs** tab.
-- Click the latest run to see step-by-step execution progress.
-  ![Inngest Function Run](/img/inngest-runs-dashboard-prod.png)
-
-## Advanced Usage: Adding Custom Inngest Functions
-
-You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `inngestServe`.
-
-### Creating Custom Functions
-
-First, create your custom Inngest functions:
-
-```ts title="src/inngest/custom-functions.ts"
-import { inngest } from "./inngest";
-
-// Define custom Inngest functions
-export const customEmailFunction = inngest.createFunction(
-  { id: "send-welcome-email" },
-  { event: "user/registered" },
-  async ({ event }) => {
-    // Custom email logic here
-    console.log(`Sending welcome email to ${event.data.email}`);
-    return { status: "email_sent" };
-  },
-);
-
-export const customWebhookFunction = inngest.createFunction(
-  { id: "process-webhook" },
-  { event: "webhook/received" },
-  async ({ event }) => {
-    // Custom webhook processing
-    console.log(`Processing webhook: ${event.data.type}`);
-    return { processed: true };
-  },
-);
-```
-
-### Serving Custom Functions with Workflows
-
-Update your Mastra configuration to include the custom functions:
-
-```ts title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { serve as inngestServe } from "@mastra/inngest";
-import { incrementWorkflow } from "./workflows";
-import { inngest } from "./inngest";
-import {
-  customEmailFunction,
-  customWebhookFunction,
-} from "./inngest/custom-functions";
-
-export const mastra = new Mastra({
-  workflows: {
-    incrementWorkflow,
-  },
-  server: {
-    host: "0.0.0.0",
-    apiRoutes: [
-      {
-        path: "/api/inngest",
-        method: "ALL",
-        createHandler: async ({ mastra }) =>
-          inngestServe({
-            mastra,
-            inngest,
-            functions: [customEmailFunction, customWebhookFunction], // Add your custom functions
-          }),
-      },
-    ],
-  },
-});
-```
-
-### Function Registration
-
-When you include custom functions:
-
-1. **Mastra workflows** are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
-2. **Custom functions** retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
-3. **All functions** are served together on the same `/api/inngest` endpoint
-
-This allows you to combine Mastra's workflow orchestration with your existing Inngest functions seamlessly.
-
-
----
 title: "Input Data Mapping | Workflows"
 description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows."
 ---
@@ -19178,7 +18732,7 @@ import TabItem from "@theme/TabItem";
 # Workflows overview
 [EN] Source: https://mastra.ai/en/docs/workflows/overview
 
-Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when.
+Workflows let you define complex sequences of tasks using clear, structured steps rather than relying on the reasoning of a single agent. They give you full control over how tasks are broken down, how data moves between them, and what gets executed when. Workflows run using the built-in execution engine by default, or can be deployed to [workflow runners](/docs/v1/deployment/workflow-runners) like Inngest for managed infrastructure.
 
 ![Workflows overview](/img/workflows/workflows-overview.jpg)
 
@@ -25122,18 +24676,18 @@ title: "Inngest | Deployment"
 description: "Deploy Mastra workflows with Inngest"
 ---
 
-# Inngest Workflow
+# Inngest workflow
 [EN] Source: https://mastra.ai/en/guides/deployment/inngest
 
 [Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
 
 For a complete example with advanced flow control features, see the [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest).
 
-## How Inngest Works with Mastra
+## How Inngest works with Mastra
 
-Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow` and `createStep` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
+Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow()` and `createStep()` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
 
-The `serve` function bridges the two systems by registering Mastra workflows as Inngest functions and setting up the necessary event handlers for execution and monitoring.
+The `serve()` function bridges the two systems by registering Mastra workflows as Inngest functions and setting up the necessary event handlers for execution and monitoring.
 
 When an event triggers a workflow, Inngest executes it step by step, memoizing each step's result. This means if a workflow is retried or resumed, completed steps are skipped, ensuring efficient and reliable execution. Control flow primitives in Mastra, such as loops, conditionals, and nested workflows are seamlessly translated into the same Inngest's function/step model, preserving advanced workflow features like composition, branching, and suspension.
 
@@ -25141,19 +24695,19 @@ Real-time monitoring, suspend/resume, and step-level observability are enabled v
 
 ## Setup
 
-Install the required Inngest package:
+Install the required packages:
 
 ```sh
-npm install @mastra/inngest@beta
+npm install @mastra/inngest@beta inngest @inngest/realtime
 ```
 
-## Building an Inngest Workflow
+## Building an Inngest workflow
 
 This guide walks through creating a workflow with Inngest and Mastra, demonstrating a counter application that increments a value until it reaches 10.
 
-### Inngest Initialization
+### Inngest initialization
 
-Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
+Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The `createWorkflow()` and `createStep()` functions are used to create workflow and step objects that are compatible with Mastra and inngest.
 
 In development:
 
@@ -25181,7 +24735,7 @@ export const inngest = new Inngest({
 });
 ```
 
-### Creating Steps
+### Creating steps
 
 Define the individual steps that will compose your workflow:
 
@@ -25208,9 +24762,9 @@ const incrementStep = createStep({
 });
 ```
 
-### Creating the Workflow
+### Creating the workflow
 
-Compose the steps into a workflow using the `dountil` loop pattern. The createWorkflow function creates a function on inngest server that is invocable.
+Compose the steps into a workflow using the `dountil` loop pattern. The `createWorkflow()` function creates a function on Inngest server that is invocable.
 
 ```ts title="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
@@ -25229,95 +24783,53 @@ workflow.commit();
 export { workflow as incrementWorkflow };
 ```
 
-### Configuring the Mastra Instance and Executing the Workflow
+### Configuring the Mastra instance
 
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { serve as inngestServe } from "@mastra/inngest";
+import { serve } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
 import { PinoLogger } from "@mastra/loggers";
 
-// Configure Mastra with the workflow and Inngest API endpoint
 export const mastra = new Mastra({
-  workflows: {
-    incrementWorkflow,
-  },
+  workflows: { incrementWorkflow },
   server: {
-    // The server configuration is required to allow local docker container can connect to the mastra server
     host: "0.0.0.0",
     apiRoutes: [
-      // This API route is used to register the Mastra workflow (inngest function) on the inngest server
       {
         path: "/api/inngest",
         method: "ALL",
-        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-        // The inngestServe function integrates Mastra workflows with Inngest by:
-        // 1. Creating Inngest functions for each workflow with unique IDs (workflow.${workflowId})
-        // 2. Setting up event handlers that:
-        //    - Generate unique run IDs for each workflow execution
-        //    - Create an InngestExecutionEngine to manage step execution
-        //    - Handle workflow state persistence and real-time updates
-        // 3. Establishing a publish-subscribe system for real-time monitoring
-        //    through the workflow:${workflowId}:${runId} channel
-        //
-        // Optional: You can also pass additional Inngest functions to serve alongside workflows:
-        // createHandler: async ({ mastra }) => inngestServe({
-        //   mastra,
-        //   inngest,
-        //   functions: [customFunction1, customFunction2] // User-defined Inngest functions
-        // }),
+        createHandler: async ({ mastra }) => {
+          return serve({ mastra, inngest });
+        },
       },
     ],
   },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
+  logger: new PinoLogger({ name: "Mastra", level: "info" }),
 });
 ```
 
-### Running the Workflow locally
+## Running workflows
 
-:::info[Prerequisites]
+### Running locally
 
-- Docker installed and running
-- Mastra project set up
-- Dependencies installed (`npm install`)
-
-:::
-
-1. Run `npx mastra dev` to start the Mastra server on local to serve the server on port 4111.
-2. Start the Inngest Dev Server (via Docker)
-   In a new terminal, run:
+1. Run `npx mastra dev` to start the Mastra server locally on port 4111
+2. Start the Inngest Dev Server. In a new terminal, run:
 
     ```sh
-    docker run --rm -p 8288:8288 \
-      inngest/inngest \
-      inngest dev -u http://host.docker.internal:4111/api/inngest
+    npx inngest-cli@latest dev -u http://localhost:4111/api/inngest
     ```
 
     :::note
-
-    The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint.
-
+    The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint
     :::
 
-3. Open the Inngest Dashboard
+3. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
 
-    - Visit [http://localhost:8288](http://localhost:8288) in your browser.
-    - Go to the **Apps** section in the sidebar.
-    - You should see your Mastra workflow registered.
-
-    ![Inngest Dashboard](/img/inngest-apps-dashboard.png)
-
-4. Invoke the Workflow
-
-    - Go to the **Functions** section in the sidebar.
-    - Select your Mastra workflow.
-    - Click **Invoke** and use the following input:
+4. Invoke the workflow by going to **Functions**, selecting your workflow, and clicking **Invoke** with the following input:
 
     ```json
     {
@@ -25329,26 +24841,24 @@ export const mastra = new Mastra({
     }
     ```
 
-    ![Inngest Function](/img/inngest-function-dashboard.png)
+5. Monitor the workflow execution in the **Runs** tab to see step-by-step execution progress
 
-5. **Monitor the Workflow Execution**
+### Running in production
 
-    - Go to the **Runs** tab in the sidebar.
-    - Click on the latest run to see step-by-step execution progress.
-
-    ![Inngest Function Run](/img/inngest-runs-dashboard.png)
-
-### Running the Workflow in Production
-
-:::info[Prerequisites]
+Before you begin, make sure you have:
 
 - Vercel account and Vercel CLI installed (`npm i -g vercel`)
 - Inngest account
-- Vercel token (recommended: set as environment variable)
+- Vercel token
 
-:::
 
-1. Add Vercel Deployer to Mastra instance
+1. Set your Vercel token in your environment:
+
+    ```sh title=".env"
+    export VERCEL_TOKEN=your_vercel_token
+    ```
+
+2. Add `VercelDeployer` to Mastra instance
 
     ```ts title="src/mastra/index.ts"
     import { VercelDeployer } from "@mastra/deployer-vercel";
@@ -25359,53 +24869,29 @@ export const mastra = new Mastra({
         projectName: "your_project_name",
         // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
         // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
-        token: "your_vercel_token",
+        token: process.env.VERCEL_TOKEN,
       }),
     });
     ```
 
-    :::note
 
-    Set your Vercel token in your environment:
-
-    ```sh
-    export VERCEL_TOKEN=your_vercel_token
-    ```
-
-    :::
-
-2. Build the mastra instance
+3. Build the mastra instance
 
     ```sh
     npx mastra build
     ```
 
-3. Deploy to Vercel
+4. Deploy to Vercel
 
     ```sh
     cd .mastra/output
+    vercel login
     vercel --prod
     ```
 
-    :::tip
+5. Sync with the [Inngest dashboard](https://app.inngest.com/env/production/apps) by clicking **Sync new app with Vercel** and following the instructions
 
-    If you haven't already, log in to Vercel CLI with `vercel login`.
-
-    :::
-
-4. Sync with Inngest Dashboard
-
-    - Go to the [Inngest dashboard](https://app.inngest.com/env/production/apps).
-    - Click **Sync new app with Vercel** and follow the instructions.
-    - You should see your Mastra workflow registered as an app.
-
-    ![Inngest Dashboard](/img/inngest-apps-dashboard-prod.png)
-
-5. Invoke the Workflow
-
-    - In the **Functions** section, select `workflow.increment-workflow`.
-    - Click **All actions** (top right) > **Invoke**.
-    - Provide the following input:
+6. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, clicking **All actions** > **Invoke**, and providing the following input:
 
     ```json
     {
@@ -25417,25 +24903,18 @@ export const mastra = new Mastra({
     }
     ```
 
-    ![Inngest Function Run](/img/inngest-function-dashboard-prod.png)
+7. Monitor execution in the **Runs** tab to see step-by-step progress
 
-6.  Monitor Execution
+## Adding custom Inngest functions
 
-    - Go to the **Runs** tab.
-    - Click the latest run to see step-by-step execution progress.
+You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `serve()`.
 
-        ![Inngest Function Run](/img/inngest-runs-dashboard-prod.png)
-
-## Advanced Usage: Adding Custom Inngest Functions
-
-You can serve additional Inngest functions alongside your Mastra workflows by using the optional `functions` parameter in `inngestServe`.
-
-### Creating Custom Functions
+### Creating custom functions
 
 First, create your custom Inngest functions:
 
 ```ts title="src/inngest/custom-functions.ts"
-import { inngest } from "./inngest";
+import { inngest } from "../inngest";
 
 // Define custom Inngest functions
 export const customEmailFunction = inngest.createFunction(
@@ -25459,51 +24938,184 @@ export const customWebhookFunction = inngest.createFunction(
 );
 ```
 
-### Serving Custom Functions with Workflows
+### Serving custom functions with workflows
 
-Update your Mastra configuration to include the custom functions:
+Update your Mastra configuration to import and include the custom functions. The highlighted lines show the additions:
 
-```ts title="src/mastra/index.ts"
+```ts title="src/mastra/index.ts" {5-8,23}
 import { Mastra } from "@mastra/core";
-import { serve as inngestServe } from "@mastra/inngest";
+import { serve } from "@mastra/inngest";
 import { incrementWorkflow } from "./workflows";
 import { inngest } from "./inngest";
 import {
   customEmailFunction,
   customWebhookFunction,
 } from "./inngest/custom-functions";
+import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
-  workflows: {
-    incrementWorkflow,
-  },
+  workflows: { incrementWorkflow },
   server: {
     host: "0.0.0.0",
     apiRoutes: [
       {
         path: "/api/inngest",
         method: "ALL",
-        createHandler: async ({ mastra }) =>
-          inngestServe({
+        createHandler: async ({ mastra }) => {
+          return serve({
             mastra,
             inngest,
-            functions: [customEmailFunction, customWebhookFunction], // Add your custom functions
-          }),
+            functions: [customEmailFunction, customWebhookFunction],
+          });
+        },
       },
     ],
+  },
+  logger: new PinoLogger({ name: "Mastra", level: "info" }),
+});
+```
+
+### Function registration
+
+When you include custom functions:
+
+1. Mastra workflows are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
+2. Custom functions retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
+3. All functions are served together on the same `/api/inngest` endpoint
+
+This allows you to combine Mastra's workflow orchestration with your existing Inngest functions.
+
+## Flow control
+
+Inngest workflows support flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These options are configured in the `createWorkflow()` call and help manage workflow execution at scale.
+
+### Concurrency
+
+Control how many workflow instances can run simultaneously:
+
+```ts
+const workflow = createWorkflow({
+  id: "user-processing-workflow",
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ result: z.string() }),
+  steps: [processUserStep],
+  // Limit to 10 concurrent executions, scoped by user ID
+  concurrency: {
+    limit: 10,
+    key: "event.data.userId",
   },
 });
 ```
 
-### Function Registration
+### Rate limiting
 
-When you include custom functions:
+Limit the number of workflow executions within a time period:
 
-1. **Mastra workflows** are automatically converted to Inngest functions with IDs like `workflow.${workflowId}`
-2. **Custom functions** retain their specified IDs (e.g., `send-welcome-email`, `process-webhook`)
-3. **All functions** are served together on the same `/api/inngest` endpoint
+```ts
+const workflow = createWorkflow({
+  id: "api-sync-workflow",
+  inputSchema: z.object({ endpoint: z.string() }),
+  outputSchema: z.object({ status: z.string() }),
+  steps: [apiSyncStep],
+  // Maximum 1000 executions per hour
+  rateLimit: {
+    period: "1h",
+    limit: 1000,
+  },
+});
+```
 
-This allows you to combine Mastra's workflow orchestration with your existing Inngest functions seamlessly.
+### Throttling
+
+Ensure minimum time between workflow executions:
+
+```ts
+const workflow = createWorkflow({
+  id: "email-notification-workflow",
+  inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
+  outputSchema: z.object({ sent: z.boolean() }),
+  steps: [sendEmailStep],
+  // Only one execution per 10 seconds per organization
+  throttle: {
+    period: "10s",
+    limit: 1,
+    key: "event.data.organizationId",
+  },
+});
+```
+
+### Debouncing
+
+Delay execution until no new events arrive within a time window:
+
+```ts
+const workflow = createWorkflow({
+  id: "search-index-workflow",
+  inputSchema: z.object({ documentId: z.string() }),
+  outputSchema: z.object({ indexed: z.boolean() }),
+  steps: [indexDocumentStep],
+  // Wait 5 seconds of no updates before indexing
+  debounce: {
+    period: "5s",
+    key: "event.data.documentId",
+  },
+});
+```
+
+### Priority
+
+Set execution priority for workflows:
+
+```ts
+const workflow = createWorkflow({
+  id: "order-processing-workflow",
+  inputSchema: z.object({
+    orderId: z.string(),
+    priority: z.number().optional(),
+  }),
+  outputSchema: z.object({ processed: z.boolean() }),
+  steps: [processOrderStep],
+  // Higher priority orders execute first
+  priority: {
+    run: "event.data.priority ?? 50",
+  },
+});
+```
+
+### Combining flow control options
+
+Multiple flow control options can be combined in a single workflow:
+
+```ts
+const workflow = createWorkflow({
+  id: "comprehensive-workflow",
+  inputSchema: z.object({
+    userId: z.string(),
+    organizationId: z.string(),
+    priority: z.number().optional(),
+  }),
+  outputSchema: z.object({ result: z.string() }),
+  steps: [comprehensiveStep],
+  concurrency: {
+    limit: 5,
+    key: "event.data.userId",
+  },
+  rateLimit: {
+    period: "1m",
+    limit: 100,
+  },
+  throttle: {
+    period: "10s",
+    limit: 1,
+    key: "event.data.organizationId",
+  },
+  priority: {
+    run: "event.data.priority ?? 0",
+  },
+});
+```
+
+All flow control options are optional. If not specified, workflows run with Inngest's default behavior. For more information, see the [Inngest flow control documentation](https://www.inngest.com/docs/guides/flow-control).
 
 
 ---
@@ -31856,21 +31468,29 @@ To migrate, use `MastraDBMessage` for storage or AI SDK v5 message formats direc
 
 The `processors` config option in the Memory constructor has been deprecated and now throws an error. Processors should be configured at the Agent level instead. This change provides clearer configuration boundaries and better encapsulation.
 
-To migrate, move processor configuration from Memory to Agent.
+To migrate, move processor configuration from Memory to Agent using `inputProcessors` and/or `outputProcessors`.
 
 ```diff
++ import { TokenLimiter } from '@mastra/core/processors';
++
   const memory = new Memory({
     storage,
     vector,
     embedder,
 -   processors: [/* ... */],
   });
-  
+
   const agent = new Agent({
     memory,
-+   processors: [/* ... */],
++   inputProcessors: [
++     new TokenLimiter({ limit: 4000 }), // Limits historical messages to fit context window
++   ],
   });
 ```
+
+Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/v1/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
+
+For more information on using processors with agents, see the [Processors docs](/docs/v1/agents/processors). For a complete example with memory, see the [TokenLimiter reference](/reference/v1/processors/token-limiter-processor#extended-usage-example).
 
 
 ---
@@ -32049,6 +31669,17 @@ If you have used `InputProcessor`, replace it with `Processor` which implements 
 ```diff
 - import { InputProcessor, ModerationProcessor } from '@mastra/core/agent/input-processors/processors';
 + import { Processor, ModerationProcessor } from '@mastra/core/processors';
+```
+
+### Memory processor exports moved to core
+
+The `@mastra/memory/processors` export has been removed. All processors are now exported from `@mastra/core/processors`. This change consolidates all processor exports in a single location.
+
+To migrate, update your import paths from `@mastra/memory/processors` to `@mastra/core/processors`.
+
+```diff
+- import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
++ import { TokenLimiter, ToolCallFilter } from '@mastra/core/processors';
 ```
 
 
@@ -35022,7 +34653,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 61+ AI providers and 1450+ models through Mastra's model router."
+description: "Access 63+ AI providers and 1471+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -35035,7 +34666,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1450 models from 61 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1471 models from 63 providers through a single API.
 
 ## Features
 
@@ -35163,7 +34794,7 @@ Browse the directory of available models using the navigation on the left, or ex
             <span>Google</span>
           </div>
         </div>
-        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 54 more</div>
+        <div className="text-sm text-gray-600 dark:text-gray-400 mt-3">+ 56 more</div>
       </div>
     </CardGridItem>
 </CardGrid>
@@ -39943,7 +39574,7 @@ const agent = new Agent({
 
 ---
 title: "Deep Infra | Models | Mastra"
-description: "Use Deep Infra models with Mastra. 6 models available."
+description: "Use Deep Infra models with Mastra. 8 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -39954,7 +39585,7 @@ import TabItem from "@theme/TabItem";
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 [EN] Source: https://mastra.ai/en/models/providers/deepinfra
 
-Access 6 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 8 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -39969,7 +39600,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct"
+  model: "deepinfra/MiniMaxAI/MiniMax-M2"
 });
 
 // Generate a response
@@ -39993,6 +39624,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "deepinfra/MiniMaxAI/MiniMax-M2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": 0.254,
+    "outputCost": 1.02
+  },
+  {
     "model": "deepinfra/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -40002,6 +39645,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 131072,
     "maxOutput": 32768,
     "inputCost": 0.5,
+    "outputCost": 2
+  },
+  {
+    "model": "deepinfra/moonshotai/Kimi-K2-Thinking",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.47,
     "outputCost": 2
   },
   {
@@ -40077,7 +39732,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.deepinfra.com/v1/openai",
-    id: "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    id: "deepinfra/MiniMaxAI/MiniMax-M2",
     apiKey: process.env.DEEPINFRA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -40096,7 +39751,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "deepinfra/zai-org/GLM-4.5"
-      : "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct";
+      : "deepinfra/MiniMaxAI/MiniMax-M2";
   }
 });
 ```
@@ -44282,7 +43937,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/cortecs.svg"
     />    <CardGridItem
       title="Deep Infra"
-      description="6 models"
+      description="8 models"
       href="/models/v1/providers/deepinfra"
       logo="https://models.dev/logos/deepinfra.svg"
     />    <CardGridItem
@@ -44387,12 +44042,17 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/nebius.svg"
     />    <CardGridItem
       title="Nvidia"
-      description="24 models"
+      description="25 models"
       href="/models/v1/providers/nvidia"
       logo="https://models.dev/logos/nvidia.svg"
     />    <CardGridItem
+      title="Ollama Cloud"
+      description="12 models"
+      href="/models/v1/providers/ollama-cloud"
+      logo="https://models.dev/logos/ollama-cloud.svg"
+    />    <CardGridItem
       title="OpenCode Zen"
-      description="24 models"
+      description="25 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -44466,13 +44126,18 @@ Direct access to individual AI model providers. Each provider offers unique mode
       href="/models/v1/providers/wandb"
       logo="https://models.dev/logos/wandb.svg"
     />    <CardGridItem
+      title="Xiaomi"
+      description="1 models"
+      href="/models/v1/providers/xiaomi"
+      logo="https://models.dev/logos/xiaomi.svg"
+    />    <CardGridItem
       title="Z.AI"
-      description="6 models"
+      description="7 models"
       href="/models/v1/providers/zai"
       logo="https://models.dev/logos/zai.svg"
     />    <CardGridItem
       title="Z.AI Coding Plan"
-      description="6 models"
+      description="7 models"
       href="/models/v1/providers/zai-coding-plan"
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
@@ -44482,12 +44147,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
       title="Zhipu AI"
-      description="7 models"
+      description="8 models"
       href="/models/v1/providers/zhipuai"
       logo="https://models.dev/logos/zhipuai.svg"
     />    <CardGridItem
       title="Zhipu AI Coding Plan"
-      description="7 models"
+      description="8 models"
       href="/models/v1/providers/zhipuai-coding-plan"
       logo="https://models.dev/logos/zhipuai-coding-plan.svg"
     />
@@ -47309,7 +46974,7 @@ const agent = new Agent({
 
 ---
 title: "Nvidia | Models | Mastra"
-description: "Use Nvidia models with Mastra. 24 models available."
+description: "Use Nvidia models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -47319,7 +46984,7 @@ description: "Use Nvidia models with Mastra. 24 models available."
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 [EN] Source: https://mastra.ai/en/models/providers/nvidia
 
-Access 24 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 25 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -47550,6 +47215,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "nvidia/nvidia/nemotron-3-nano-30b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "nvidia/nvidia/nvidia-nemotron-nano-9b-v2",
     "imageInput": false,
     "audioInput": false,
@@ -47678,6 +47355,240 @@ const agent = new Agent({
     return useAdvanced
       ? "nvidia/qwen/qwen3-next-80b-a3b-thinking"
       : "nvidia/black-forest-labs/flux.1-dev";
+  }
+});
+```
+
+
+
+
+---
+title: "Ollama Cloud | Models | Mastra"
+description: "Use Ollama Cloud models with Mastra. 12 models available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/ollama-cloud.svg" alt="Ollama Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ollama Cloud
+[EN] Source: https://mastra.ai/en/models/providers/ollama-cloud
+
+Access 12 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
+
+Learn more in the [Ollama Cloud documentation](https://docs.ollama.com/cloud).
+
+```bash
+OLLAMA_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "ollama-cloud/cogito-2.1:671b-cloud"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Ollama Cloud documentation](https://docs.ollama.com/cloud) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "ollama-cloud/cogito-2.1:671b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 160000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/deepseek-v3.1:671b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 160000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/gemini-3-pro-preview:latest",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 1000000,
+    "maxOutput": 64000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/glm-4.6:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/gpt-oss:120b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/gpt-oss:20b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/kimi-k2-thinking:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/kimi-k2:1t-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 256000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/minimax-m2:cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/qwen3-coder:480b-cloud",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/qwen3-vl-235b-cloud",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "ollama-cloud/qwen3-vl-235b-instruct-cloud",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://ollama.com/v1",
+    id: "ollama-cloud/cogito-2.1:671b-cloud",
+    apiKey: process.env.OLLAMA_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "ollama-cloud/qwen3-vl-235b-instruct-cloud"
+      : "ollama-cloud/cogito-2.1:671b-cloud";
   }
 });
 ```
@@ -48407,7 +48318,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 24 models available."
+description: "Use OpenCode Zen models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -48417,7 +48328,7 @@ description: "Use OpenCode Zen models with Mastra. 24 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 24 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 25 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -48480,7 +48391,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "opencode/alpha-minimax-m2",
+    "model": "opencode/alpha-glm-4.7",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -48488,8 +48399,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode/big-pickle",
@@ -48730,6 +48641,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.4,
     "outputCost": 2.5
+  },
+  {
+    "model": "opencode/minimax-m2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode/qwen3-coder",
@@ -54034,7 +53957,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 6,
     "outputCost": 30
   },
@@ -54044,9 +53967,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 163840,
-    "maxOutput": 8192,
+    "maxOutput": 40960,
     "inputCost": 0.4,
     "outputCost": 1
   },
@@ -54057,20 +53980,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 256576,
+    "contextWindow": 262144,
     "maxOutput": 65536,
     "inputCost": 0.7,
     "outputCost": 3.75
   },
   {
     "model": "venice/gemini-3-pro-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 2.5,
     "outputCost": 15
   },
@@ -54082,7 +54005,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 0.12,
     "outputCost": 0.2
   },
@@ -54094,7 +54017,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 1.25
   },
@@ -54106,7 +54029,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 1.1,
     "outputCost": 3
   },
@@ -54118,7 +54041,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3.2
   },
@@ -54130,7 +54053,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.6
   },
@@ -54141,8 +54064,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 8192,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
     "inputCost": 0.7,
     "outputCost": 2.8
   },
@@ -54154,19 +54077,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.5,
     "outputCost": 2
   },
   {
     "model": "venice/openai-gpt-52",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 128000,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
     "inputCost": 2.19,
     "outputCost": 17.5
   },
@@ -54178,21 +54101,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.07,
     "outputCost": 0.3
-  },
-  {
-    "model": "venice/qwen3-235b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.45,
-    "outputCost": 3.5
   },
   {
     "model": "venice/qwen3-235b-a22b-instruct-2507",
@@ -54202,7 +54113,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.15,
     "outputCost": 0.75
   },
@@ -54214,7 +54125,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 8192,
+    "maxOutput": 32768,
     "inputCost": 0.45,
     "outputCost": 3.5
   },
@@ -54238,7 +54149,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3
   },
@@ -54250,7 +54161,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 8192,
+    "maxOutput": 65536,
     "inputCost": 0.35,
     "outputCost": 1.9
   },
@@ -54274,9 +54185,21 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 202752,
-    "maxOutput": 8192,
+    "maxOutput": 50688,
     "inputCost": 0.85,
     "outputCost": 2.75
+  },
+  {
+    "model": "venice/zai-org-glm-4.6v",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.39,
+    "outputCost": 1.13
   }
 ]}
 />
@@ -54309,7 +54232,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "venice/zai-org-glm-4.6"
+      ? "venice/zai-org-glm-4.6v"
       : "venice/claude-opus-45";
   }
 });
@@ -55076,8 +54999,110 @@ For detailed provider-specific documentation, see the [AI SDK xAI provider docs]
 
 
 ---
+title: "Xiaomi | Models | Mastra"
+description: "Use Xiaomi models with Mastra. 1 model available."
+---
+
+{/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
+
+
+
+# <img src="https://models.dev/logos/xiaomi.svg" alt="Xiaomi logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Xiaomi
+[EN] Source: https://mastra.ai/en/models/providers/xiaomi
+
+Access 1 Xiaomi model through Mastra's model router. Authentication is handled automatically using the `XIAOMI_API_KEY` environment variable.
+
+Learn more in the [Xiaomi documentation](https://platform.xiaomimimo.com/#/docs).
+
+```bash
+XIAOMI_API_KEY=your-api-key
+```
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "xiaomi/mimo-v2-flash"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Xiaomi documentation](https://platform.xiaomimimo.com/#/docs) for details.
+
+:::
+
+## Models
+
+<ProviderModelsTable
+  models={[
+  {
+    "model": "xiaomi/mimo-v2-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 32000,
+    "inputCost": 0.07,
+    "outputCost": 0.21
+  }
+]}
+/>
+
+## Advanced Configuration
+
+### Custom Headers
+
+```typescript
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "https://api.xiaomimimo.com/v1",
+    id: "xiaomi/mimo-v2-flash",
+    apiKey: process.env.XIAOMI_API_KEY,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic Model Selection
+
+```typescript
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "xiaomi/mimo-v2-flash"
+      : "xiaomi/mimo-v2-flash";
+  }
+});
+```
+
+
+
+
+---
 title: "Z.AI Coding Plan | Models | Mastra"
-description: "Use Z.AI Coding Plan models with Mastra. 6 models available."
+description: "Use Z.AI Coding Plan models with Mastra. 7 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55087,7 +55112,7 @@ description: "Use Z.AI Coding Plan models with Mastra. 6 models available."
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zai-coding-plan
 
-Access 6 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 7 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI Coding Plan documentation](https://docs.z.ai/devpack/overview).
 
@@ -55196,6 +55221,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -55228,7 +55265,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai-coding-plan/glm-4.6v"
+      ? "zai-coding-plan/glm-4.7"
       : "zai-coding-plan/glm-4.5";
   }
 });
@@ -55239,7 +55276,7 @@ const agent = new Agent({
 
 ---
 title: "Z.AI | Models | Mastra"
-description: "Use Z.AI models with Mastra. 6 models available."
+description: "Use Z.AI models with Mastra. 7 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55249,7 +55286,7 @@ description: "Use Z.AI models with Mastra. 6 models available."
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
 [EN] Source: https://mastra.ai/en/models/providers/zai
 
-Access 6 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 7 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -55358,6 +55395,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.3,
     "outputCost": 0.9
+  },
+  {
+    "model": "zai/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -55390,7 +55439,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai/glm-4.6v"
+      ? "zai/glm-4.7"
       : "zai/glm-4.5";
   }
 });
@@ -55755,7 +55804,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI Coding Plan | Models | Mastra"
-description: "Use Zhipu AI Coding Plan models with Mastra. 7 models available."
+description: "Use Zhipu AI Coding Plan models with Mastra. 8 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55765,7 +55814,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 7 models available."
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai-coding-plan
 
-Access 7 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 8 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview).
 
@@ -55886,6 +55935,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai-coding-plan/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -55918,7 +55979,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai-coding-plan/glm-4.6v-flash"
+      ? "zhipuai-coding-plan/glm-4.7"
       : "zhipuai-coding-plan/glm-4.5";
   }
 });
@@ -55929,7 +55990,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI | Models | Mastra"
-description: "Use Zhipu AI models with Mastra. 7 models available."
+description: "Use Zhipu AI models with Mastra. 8 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55939,7 +56000,7 @@ description: "Use Zhipu AI models with Mastra. 7 models available."
 # <img src="https://models.dev/logos/zhipuai.svg" alt="Zhipu AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai
 
-Access 7 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 8 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -56060,6 +56121,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -56092,7 +56165,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai/glm-4.6v-flash"
+      ? "zhipuai/glm-4.7"
       : "zhipuai/glm-4.5";
   }
 });
@@ -71334,7 +71407,7 @@ description: Documentation for PinoLogger, which provides methods to record even
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/observability#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Usage example
 
@@ -78131,13 +78204,16 @@ export const agent = new Agent({
 
 ---
 title: "Reference: Token Limiter Processor | Processors"
-description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in AI responses."
+description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in messages."
 ---
 
 # TokenLimiterProcessor
 [EN] Source: https://mastra.ai/en/reference/processors/token-limiter-processor
 
-The `TokenLimiterProcessor` is an **output processor** that limits the number of tokens in AI responses. This processor helps control response length by implementing token counting with configurable strategies for handling exceeded limits, including truncation and abortion options for both streaming and non-streaming scenarios.
+The `TokenLimiterProcessor` limits the number of tokens in messages. It can be used as both an input and output processor:
+
+- **Input processor**: Filters historical messages to fit within the context window, prioritizing recent messages
+- **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits
 
 ## Usage example
 
@@ -78215,6 +78291,12 @@ const processor = new TokenLimiterProcessor({
       isOptional: true,
     },
     {
+      name: "processInput",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
+      description: "Filters input messages to fit within token limit, prioritizing recent messages while preserving system messages",
+      isOptional: false,
+    },
+    {
       name: "processOutputStream",
       type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
       description: "Processes streaming output parts to limit token count during streaming",
@@ -78222,20 +78304,8 @@ const processor = new TokenLimiterProcessor({
     },
     {
       name: "processOutputResult",
-      type: "(args: { messages: MastraMessageV2[]; abort: (reason?: string) => never }) => Promise<MastraMessageV2[]>",
+      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
       description: "Processes final output results to limit token count in non-streaming scenarios",
-      isOptional: false,
-    },
-    {
-      name: "reset",
-      type: "() => void",
-      description: "Reset the token counter (useful for testing or reusing the processor)",
-      isOptional: false,
-    },
-    {
-      name: "getCurrentTokens",
-      type: "() => number",
-      description: "Get the current token count",
       isOptional: false,
     },
     {
@@ -78249,14 +78319,38 @@ const processor = new TokenLimiterProcessor({
 
 ## Extended usage example
 
-```typescript title="src/mastra/agents/limited-agent.ts"
+### As an input processor (limit context window)
+
+Use `inputProcessors` to limit historical messages sent to the model, which helps stay within context window limits:
+
+```typescript title="src/mastra/agents/context-limited-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { TokenLimiterProcessor } from "@mastra/core/processors";
+
+export const agent = new Agent({
+  name: "context-limited-agent",
+  instructions: "You are a helpful assistant",
+  model: "openai/gpt-4o",
+  memory: new Memory({ /* ... */ }),
+  inputProcessors: [
+    new TokenLimiterProcessor({ limit: 4000 }) // Limits historical messages to ~4000 tokens
+  ]
+});
+```
+
+### As an output processor (limit response length)
+
+Use `outputProcessors` to limit the length of generated responses:
+
+```typescript title="src/mastra/agents/response-limited-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiterProcessor } from "@mastra/core/processors";
 
 export const agent = new Agent({
-  name: "limited-agent",
+  name: "response-limited-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-5.1",
+  model: "openai/gpt-4o",
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,

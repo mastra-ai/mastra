@@ -116,12 +116,23 @@ export type StepWaiting<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepPaused<P, R, S, T> = {
+  status: 'paused';
+  payload: P;
+  suspendPayload?: S;
+  resumePayload?: R;
+  suspendOutput?: T;
+  startedAt: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
-  | StepWaiting<P, R, S, T>;
+  | StepWaiting<P, R, S, T>
+  | StepPaused<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -140,7 +151,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
-  | StepWaiting<P, R, S, T>;
+  | StepWaiting<P, R, S, T>
+  | StepPaused<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,
@@ -235,7 +247,8 @@ export type WorkflowRunStatus =
   | 'waiting'
   | 'pending'
   | 'canceled'
-  | 'bailed';
+  | 'bailed'
+  | 'paused';
 
 // Type to get the inferred type at a specific path in a Zod schema
 export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
@@ -564,6 +577,22 @@ export type WorkflowResult<
       };
       suspendPayload: any;
       suspended: [string[], ...string[][]];
+    } & TracingProperties)
+  | ({
+      status: 'paused';
+      state?: z.infer<TState>;
+      resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
+      input: z.infer<TInput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
+      };
     } & TracingProperties);
 
 export type WorkflowStreamResult<

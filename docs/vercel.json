@@ -387,12 +387,12 @@
     },
     {
       "source": "/docs/v1/deployment/mastra-cloud/setting-up",
-      "destination": "/docs/v1/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setup",
       "permanent": true
     },
     {
       "source": "/docs/v1/deployment/mastra-cloud/dashboard",
-      "destination": "/docs/v1/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/studio",
       "permanent": true
     },
     {
@@ -483,6 +483,81 @@
     {
       "source": "/docs/v1/memory/conversation-history",
       "destination": "/docs/v1/memory/message-history",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/mastra-cloud/setting-up",
+      "destination": "/docs/v1/mastra-cloud/setup",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/mastra-cloud/dashboard",
+      "destination": "/docs/v1/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel-deployer",
+      "destination": "/docs/deployment/cloud-providers/vercel-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/netlify-deployer",
+      "destination": "/docs/deployment/cloud-providers/netlify-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/digital-ocean",
+      "destination": "/docs/deployment/cloud-providers/digital-ocean",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare-deployer",
+      "destination": "/docs/deployment/cloud-providers/cloudflare-deployer",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/azure-app-services",
+      "destination": "/docs/deployment/cloud-providers/azure-app-services",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/aws-lambda",
+      "destination": "/docs/deployment/cloud-providers/aws-lambda",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/amazon-ec2",
+      "destination": "/docs/deployment/cloud-providers/amazon-ec2",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment",
+      "destination": "/docs/deployment/cloud-providers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/text-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/speech-to-text",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/speech-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1/voice/turn-taking",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1",
+      "destination": "/docs/v1",
       "permanent": true
     }
   ]

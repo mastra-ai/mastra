@@ -8,29 +8,113 @@ import type {
   CreateSpanRecord,
   PaginationInfo,
   UpdateSpanRecord,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityMSSQL extends ObservabilityStorage {
   public pool: ConnectionPool;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
   private schema?: string;
+  private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
+  private indexes?: CreateIndexOptions[];
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema?: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SPANS] as const;
+
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
-    this.schema = schema;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
+    this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (ObservabilityMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the observability domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.schema ? `${this.schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['traceId', 'startedAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['parentSpanId', 'startedAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+        table: TABLE_SPANS,
+        columns: ['name'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['spanType', 'startedAt DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_SPANS });
   }
 
   public get tracingStrategy(): {
@@ -55,7 +139,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         // Note: createdAt/updatedAt will be set by default values
       };
 
-      return this.operations.insert({ tableName: TABLE_SPANS, record });
+      return this.db.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -141,7 +225,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       }
       // Note: updatedAt will be set automatically
 
-      await this.operations.update({
+      await this.db.update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -287,7 +371,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
 
     try {
-      await this.operations.batchInsert({
+      await this.db.batchInsert({
         tableName: TABLE_SPANS,
         records: args.records.map(span => ({
           ...span,
@@ -337,7 +421,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         };
       });
 
-      await this.operations.batchUpdate({
+      await this.db.batchUpdate({
         tableName: TABLE_SPANS,
         updates,
       });
@@ -364,7 +448,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     try {
       const keys = args.traceIds.map(traceId => ({ traceId }));
 
-      await this.operations.batchDelete({
+      await this.db.batchDelete({
         tableName: TABLE_SPANS,
         keys,
       });

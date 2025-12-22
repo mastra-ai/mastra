@@ -207,7 +207,8 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel, perStep } =
+          event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -236,6 +237,7 @@ export class InngestWorkflow<
           requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
           resume,
           timeTravel,
+          perStep,
           format,
           abortController: new AbortController(),
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
@@ -256,10 +258,12 @@ export class InngestWorkflow<
         // Final step to invoke lifecycle callbacks and check workflow status
         // Wrapped in step.run for durability - callbacks are memoized on replay
         await step.run(`workflow.${this.id}.finalize`, async () => {
-          // Invoke lifecycle callbacks (onFinish and onError)
-          // Use invokeLifecycleCallbacksInternal to call the real implementation
-          // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
-          await engine.invokeLifecycleCallbacksInternal(result as any);
+          if (result.status !== 'paused') {
+            // Invoke lifecycle callbacks (onFinish and onError)
+            // Use invokeLifecycleCallbacksInternal to call the real implementation
+            // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
+            await engine.invokeLifecycleCallbacksInternal(result as any);
+          }
 
           // Throw NonRetriableError if failed to ensure Inngest marks the run as failed
           if (result.status === 'failed') {

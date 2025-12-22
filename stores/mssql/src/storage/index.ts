@@ -7,9 +7,7 @@ import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import type {
   PaginationInfo,
-  StorageColumn,
   StorageResourceType,
-  TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
   StoragePagination,
@@ -18,20 +16,25 @@ import type {
   TraceRecord,
   TracesPaginatedArg,
   UpdateSpanRecord,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
-import { StoreOperationsMSSQL } from './domains/operations';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
+/**
+ * MSSQL configuration type.
+ *
+ * Accepts either:
+ * - A pre-configured connection pool: `{ id, pool, schemaName? }`
+ * - Connection string: `{ id, connectionString, ... }`
+ * - Server/port config: `{ id, server, port, database, user, password, ... }`
+ */
 export type MSSQLConfigType = {
   id: string;
   schemaName?: string;
@@ -55,7 +58,62 @@ export type MSSQLConfigType = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * When true, default indexes will not be created during initialization.
+   * This is useful when:
+   * 1. You want to manage indexes separately or use custom indexes only
+   * 2. Default indexes don't match your query patterns
+   * 3. You want to reduce initialization time in development
+   *
+   * @default false
+   */
+  skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which table it belongs to. The store will route each index
+   * to the appropriate domain based on the table name.
+   *
+   * @example
+   * ```typescript
+   * const store = new MSSQLStore({
+   *   connectionString: '...',
+   *   indexes: [
+   *     { name: 'my_threads_type_idx', table: 'mastra_threads', columns: ['JSON_VALUE(metadata, \'$.type\')'] },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: CreateIndexOptions[];
 } & (
+  | {
+      /**
+       * Pre-configured mssql ConnectionPool.
+       * Use this when you need to configure the pool before initialization,
+       * e.g., to add pool listeners or set connection-level settings.
+       *
+       * @example
+       * ```typescript
+       * import sql from 'mssql';
+       *
+       * const pool = new sql.ConnectionPool({
+       *   server: 'localhost',
+       *   database: 'mydb',
+       *   user: 'user',
+       *   password: 'password',
+       * });
+       *
+       * // Custom setup before using
+       * pool.on('connect', () => {
+       *   console.log('Pool connected');
+       * });
+       *
+       * const store = new MSSQLStore({ id: 'my-store', pool });
+       * ```
+       */
+      pool: sql.ConnectionPool;
+    }
   | {
       server: string;
       port: number;
@@ -71,6 +129,13 @@ export type MSSQLConfigType = {
 
 export type MSSQLConfig = MSSQLConfigType;
 
+/**
+ * Type guard for pre-configured pool config
+ */
+const isPoolConfig = (config: MSSQLConfigType): config is MSSQLConfigType & { pool: sql.ConnectionPool } => {
+  return 'pool' in config;
+};
+
 export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
@@ -83,7 +148,13 @@ export class MSSQLStore extends MastraStorage {
     }
     super({ id: config.id, name: 'MSSQLStore', disableInit: config.disableInit });
     try {
-      if ('connectionString' in config) {
+      this.schema = config.schemaName || 'dbo';
+
+      // Handle pre-configured pool vs creating new connection
+      if (isPoolConfig(config)) {
+        // User provided a pre-configured ConnectionPool
+        this.pool = config.pool;
+      } else if ('connectionString' in config) {
         if (
           !config.connectionString ||
           typeof config.connectionString !== 'string' ||
@@ -91,6 +162,7 @@ export class MSSQLStore extends MastraStorage {
         ) {
           throw new Error('MSSQLStore: connectionString must be provided and cannot be empty.');
         }
+        this.pool = new sql.ConnectionPool(config.connectionString);
       } else {
         const required = ['server', 'database', 'user', 'password'];
         for (const key of required) {
@@ -98,29 +170,28 @@ export class MSSQLStore extends MastraStorage {
             throw new Error(`MSSQLStore: ${key} must be provided and cannot be empty.`);
           }
         }
+        this.pool = new sql.ConnectionPool({
+          server: config.server,
+          database: config.database,
+          user: config.user,
+          password: config.password,
+          port: config.port,
+          options: config.options || { encrypt: true, trustServerCertificate: true },
+        });
       }
 
-      this.schema = config.schemaName || 'dbo';
-      this.pool =
-        'connectionString' in config
-          ? new sql.ConnectionPool(config.connectionString)
-          : new sql.ConnectionPool({
-              server: config.server,
-              database: config.database,
-              user: config.user,
-              password: config.password,
-              port: config.port,
-              options: config.options || { encrypt: true, trustServerCertificate: true },
-            });
-
-      const operations = new StoreOperationsMSSQL({ pool: this.pool, schemaName: this.schema });
-      const scores = new ScoresMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const workflows = new WorkflowsMSSQL({ pool: this.pool, operations, schema: this.schema });
-      const memory = new MemoryMSSQL({ pool: this.pool, schema: this.schema, operations });
-      const observability = new ObservabilityMSSQL({ pool: this.pool, operations, schema: this.schema });
+      const domainConfig = {
+        pool: this.pool,
+        schemaName: this.schema,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+        indexes: config.indexes,
+      };
+      const scores = new ScoresMSSQL(domainConfig);
+      const workflows = new WorkflowsMSSQL(domainConfig);
+      const memory = new MemoryMSSQL(domainConfig);
+      const observability = new ObservabilityMSSQL(domainConfig);
 
       this.stores = {
-        operations,
         scores,
         workflows,
         memory,
@@ -144,17 +215,8 @@ export class MSSQLStore extends MastraStorage {
     }
     try {
       await this.isConnected;
+      // Each domain creates its own indexes during init()
       await super.init();
-
-      // Create automatic performance indexes by default
-      // This is done after table creation and is safe to run multiple times
-      try {
-        await (this.stores.operations as StoreOperationsMSSQL).createAutomaticIndexes();
-      } catch (indexError) {
-        // Log the error but don't fail initialization
-        // Indexes are performance optimizations, not critical for functionality
-        this.logger?.warn?.('Failed to create indexes:', indexError);
-      }
     } catch (error) {
       this.isConnected = null;
       throw new MastraError(
@@ -177,16 +239,7 @@ export class MSSQLStore extends MastraStorage {
     }
   }
 
-  public get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    listScoresBySpan: boolean;
-    observabilityInstance: boolean;
-    indexManagement: boolean;
-  } {
+  public get supports() {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
@@ -197,48 +250,6 @@ export class MSSQLStore extends MastraStorage {
       observabilityInstance: true,
       indexManagement: true,
     };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    return this.stores.operations.createTable({ tableName, schema });
-  }
-
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    return this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    return this.stores.operations.dropTable({ tableName });
-  }
-
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert({ tableName, record });
-  }
-
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert({ tableName, records });
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
   }
 
   /**
@@ -388,27 +399,13 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the MSSQL connection pool.
+   *
+   * This will close the connection pool, including pre-configured pools.
+   */
   async close(): Promise<void> {
     await this.pool.close();
-  }
-
-  /**
-   * Index Management
-   */
-  async createIndex(options: CreateIndexOptions): Promise<void> {
-    return (this.stores.operations as StoreOperationsMSSQL).createIndex(options);
-  }
-
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return (this.stores.operations as StoreOperationsMSSQL).listIndexes(tableName);
-  }
-
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    return (this.stores.operations as StoreOperationsMSSQL).describeIndex(indexName);
-  }
-
-  async dropIndex(indexName: string): Promise<void> {
-    return (this.stores.operations as StoreOperationsMSSQL).dropIndex(indexName);
   }
 
   /**
