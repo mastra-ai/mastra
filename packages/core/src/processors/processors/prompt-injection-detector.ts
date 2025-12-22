@@ -87,6 +87,14 @@ export interface PromptInjectionOptions {
    * ```
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * If true, only checks the latest user message instead of all messages.
+   * This dramatically reduces LLM calls for conversations with history.
+   * When enabled, only the most recent user message is analyzed for prompt injection.
+   * @default false (checks all messages for backward compatibility)
+   */
+  latestMessageOnly?: boolean;
 }
 
 /**
@@ -107,6 +115,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
   private includeScores: boolean;
   private structuredOutputOptions?: PromptInjectionOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private latestMessageOnly: boolean;
 
   // Default detection categories based on OWASP LLM01 and common attack patterns
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -125,6 +134,7 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
     this.includeScores = options.includeScores ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.latestMessageOnly = options.latestMessageOnly ?? false;
 
     this.detectionAgent = new Agent({
       id: 'prompt-injection-detector',
@@ -149,7 +159,50 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
       const results: PromptInjectionResult[] = [];
       const processedMessages: MastraDBMessage[] = [];
 
-      // Evaluate each message
+      // If latestMessageOnly is enabled, only check the latest user message
+      if (this.latestMessageOnly) {
+        // Find the latest user message
+        let latestUserMessage: MastraDBMessage | null = null;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i]?.role === 'user') {
+            latestUserMessage = messages[i];
+            break;
+          }
+        }
+
+        if (latestUserMessage) {
+          const textContent = this.extractTextContent(latestUserMessage);
+          if (textContent.trim()) {
+            const detectionResult = await this.detectPromptInjection(textContent, tracingContext);
+            results.push(detectionResult);
+
+            if (this.isInjectionFlagged(detectionResult)) {
+              // If injection is detected, handle it based on strategy
+              this.handleDetectedInjection(latestUserMessage, detectionResult, this.strategy, abort);
+              
+              // For 'filter' strategy, exclude the flagged message
+              if (this.strategy === 'filter') {
+                // Return all messages except the flagged one
+                return messages.filter(msg => msg.id !== latestUserMessage!.id);
+              }
+              
+              // For 'rewrite' strategy, replace the message
+              if (this.strategy === 'rewrite' && detectionResult.rewritten_content) {
+                const rewrittenMessage = this.createRewrittenMessage(latestUserMessage, detectionResult.rewritten_content);
+                return messages.map(msg => msg.id === latestUserMessage!.id ? rewrittenMessage : msg);
+              }
+              
+              // For 'warn' strategy, continue with all messages
+              // For 'block' strategy, abort() will throw, so we won't reach here
+            }
+          }
+        }
+        
+        // No injection detected, return all messages as-is
+        return messages;
+      }
+
+      // Original behavior: Evaluate each message
       for (const message of messages) {
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
