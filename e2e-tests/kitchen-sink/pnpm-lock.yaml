@@ -26,6 +26,9 @@ importers:
       tsx:
         specifier: ^4.20.6
         version: 4.21.0
+      validator:
+        specifier: 13.15.20
+        version: 13.15.20
       verdaccio:
         specifier: ^6.2.0
         version: 6.2.4(typanion@3.14.0)
@@ -2036,6 +2039,10 @@ packages:
 
   validate-npm-package-name@3.0.0:
     resolution: {integrity: sha512-M6w37eVCMMouJ9V/sdPGnC5H4uDr73/+xdq0FBLO3TFFX1+7wiUY6Es328NN+y43tmY+doUdN9g9J21vqB7iLw==}
+
+  validator@13.15.20:
+    resolution: {integrity: sha512-KxPOq3V2LmfQPP4eqf3Mq/zrT0Dqp2Vmx2Bn285LwVahLc+CsxOM0crBHczm8ijlcjZ0Q5Xd6LW3z3odTPnlrw==}
+    engines: {node: '>= 0.10'}
 
   validator@13.15.23:
     resolution: {integrity: sha512-4yoz1kEWqUjzi5zsPbAS/903QXSYp0UOtHsPpp7p9rHAw/W+dkInskAE386Fat3oKRROwO98d9ZB0G4cObgUyw==}
@@ -4201,6 +4208,8 @@ snapshots:
   validate-npm-package-name@3.0.0:
     dependencies:
       builtins: 1.0.3
+
+  validator@13.15.20: {}
 
   validator@13.15.23: {}
 
