@@ -531,6 +531,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@internal/playground':
+        specifier: workspace:*
+        version: link:../../packages/playground
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder

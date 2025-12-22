@@ -646,7 +646,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
-                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message.`;
+                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
+                      `;
                 }
 
                 return message;
