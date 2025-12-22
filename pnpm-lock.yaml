@@ -1807,6 +1807,9 @@ importers:
       get-port:
         specifier: ^7.1.0
         version: 7.1.0
+      local-pkg:
+        specifier: ^1.1.2
+        version: 1.1.2
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
@@ -3020,6 +3023,9 @@ importers:
       remark-rehype:
         specifier: ^11.1.2
         version: 11.1.2
+      semver:
+        specifier: ^7.7.2
+        version: 7.7.3
       shiki:
         specifier: ^1.29.2
         version: 1.29.2
@@ -3078,6 +3084,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.1.7
         version: 19.2.2(@types/react@19.2.2)
+      '@types/semver':
+        specifier: ^7.7.1
+        version: 7.7.1
       '@vitejs/plugin-react':
         specifier: ^5.0.4
         version: 5.0.4(vite@7.1.11(@types/node@22.13.17)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.1))

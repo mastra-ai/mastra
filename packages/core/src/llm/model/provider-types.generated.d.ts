@@ -23,7 +23,15 @@ export type ProviderModelsMap = {
     'kimi-k2-thinking-turbo',
     'kimi-k2-turbo-preview',
   ];
-  readonly 'zai-coding-plan': readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly 'zai-coding-plan': readonly [
+    'glm-4.5',
+    'glm-4.5-air',
+    'glm-4.5-flash',
+    'glm-4.5v',
+    'glm-4.6',
+    'glm-4.6v',
+    'glm-4.7',
+  ];
   readonly 'ollama-cloud': readonly [
     'cogito-2.1:671b-cloud',
     'deepseek-v3.1:671b-cloud',
@@ -359,7 +367,6 @@ export type ProviderModelsMap = {
   readonly venice: readonly [
     'claude-opus-45',
     'deepseek-v3.2',
-    'devstral-2-2512',
     'gemini-3-flash-preview',
     'gemini-3-pro-preview',
     'google-gemma-3-27b-it',
@@ -793,6 +800,7 @@ export type ProviderModelsMap = {
   readonly opencode: readonly [
     'alpha-doubao-seed-code',
     'alpha-gd4',
+    'alpha-glm-4.7',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -996,6 +1004,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'glm-4.6v',
     'glm-4.6v-flash',
+    'glm-4.7',
   ];
   readonly 'minimax-cn': readonly ['MiniMax-M2'];
   readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
@@ -1243,6 +1252,7 @@ export type ProviderModelsMap = {
     'glm-4.6',
     'glm-4.6v',
     'glm-4.6v-flash',
+    'glm-4.7',
   ];
   readonly submodel: readonly [
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
@@ -1255,7 +1265,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
-  readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v'];
+  readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v', 'glm-4.7'];
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',

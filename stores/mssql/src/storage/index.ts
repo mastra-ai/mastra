@@ -16,15 +16,12 @@ import type {
   TraceRecord,
   TracesPaginatedArg,
   UpdateSpanRecord,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
@@ -61,6 +58,34 @@ export type MSSQLConfigType = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * When true, default indexes will not be created during initialization.
+   * This is useful when:
+   * 1. You want to manage indexes separately or use custom indexes only
+   * 2. Default indexes don't match your query patterns
+   * 3. You want to reduce initialization time in development
+   *
+   * @default false
+   */
+  skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which table it belongs to. The store will route each index
+   * to the appropriate domain based on the table name.
+   *
+   * @example
+   * ```typescript
+   * const store = new MSSQLStore({
+   *   connectionString: '...',
+   *   indexes: [
+   *     { name: 'my_threads_type_idx', table: 'mastra_threads', columns: ['JSON_VALUE(metadata, \'$.type\')'] },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       /**
@@ -115,7 +140,6 @@ export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
-  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -156,8 +180,12 @@ export class MSSQLStore extends MastraStorage {
         });
       }
 
-      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
-      const domainConfig = { pool: this.pool, db: this.#db, schema: this.schema };
+      const domainConfig = {
+        pool: this.pool,
+        schemaName: this.schema,
+        skipDefaultIndexes: config.skipDefaultIndexes,
+        indexes: config.indexes,
+      };
       const scores = new ScoresMSSQL(domainConfig);
       const workflows = new WorkflowsMSSQL(domainConfig);
       const memory = new MemoryMSSQL(domainConfig);
@@ -187,17 +215,8 @@ export class MSSQLStore extends MastraStorage {
     }
     try {
       await this.isConnected;
+      // Each domain creates its own indexes during init()
       await super.init();
-
-      // Create automatic performance indexes by default
-      // This is done after table creation and is safe to run multiple times
-      try {
-        await this.#db.createAutomaticIndexes();
-      } catch (indexError) {
-        // Log the error but don't fail initialization
-        // Indexes are performance optimizations, not critical for functionality
-        this.logger?.warn?.('Failed to create indexes:', indexError);
-      }
     } catch (error) {
       this.isConnected = null;
       throw new MastraError(
@@ -380,27 +399,13 @@ export class MSSQLStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the MSSQL connection pool.
+   *
+   * This will close the connection pool, including pre-configured pools.
+   */
   async close(): Promise<void> {
     await this.pool.close();
-  }
-
-  /**
-   * Index Management
-   */
-  async createIndex(options: CreateIndexOptions): Promise<void> {
-    return this.#db.createIndex(options);
-  }
-
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return this.#db.listIndexes(tableName);
-  }
-
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    return this.#db.describeIndex(indexName);
-  }
-
-  async dropIndex(indexName: string): Promise<void> {
-    return this.#db.dropIndex(indexName);
   }
 
   /**
