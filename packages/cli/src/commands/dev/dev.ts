@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
@@ -9,6 +10,8 @@ import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { createLogger } from '../../utils/logger.js';
+import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
+import { getMastraPackages } from '../../utils/mastra-packages.js';
 
 import { DevBundler } from './DevBundler';
 
@@ -27,6 +30,7 @@ interface StartOptions {
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
+  mastraPackages?: MastraPackageInfo[];
 }
 
 const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
@@ -90,6 +94,12 @@ const startServer = async (
 
     commands.push('index.mjs');
 
+    // Write mastra packages to a file and pass the file path via env var
+    const packagesFilePath = join(dotMastraPath, '..', 'mastra-packages.json');
+    if (startOptions.mastraPackages) {
+      writeFileSync(packagesFilePath, JSON.stringify(startOptions.mastraPackages), 'utf-8');
+    }
+
     currentServerProcess = execa(process.execPath, commands, {
       cwd: dotMastraPath,
       env: {
@@ -98,6 +108,7 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
+        MASTRA_PACKAGES_FILE: packagesFilePath,
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
@@ -385,7 +396,10 @@ export async function dev({
     httpsOptions = { key, cert };
   }
 
-  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions };
+  // Extract mastra packages from the project's package.json
+  const mastraPackages = await getMastraPackages(rootDir);
+
+  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions, mastraPackages };
 
   await bundler.prepare(dotMastraPath);
 
