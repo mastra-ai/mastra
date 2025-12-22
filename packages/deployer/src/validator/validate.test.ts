@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
 import { pathToFileURL } from 'node:url';
+
+import { describe, it, expect } from 'vitest';
 
 // Reproducing the pattern from validate.ts
 function slash(path: string) {
