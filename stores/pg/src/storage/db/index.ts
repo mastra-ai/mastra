@@ -3,10 +3,6 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_THREADS,
-  TABLE_MESSAGES,
-  TABLE_TRACES,
-  TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_SCHEMAS,
   getSqlType,
@@ -40,6 +36,10 @@ export interface PgDomainClientConfig {
   client: IDatabase<{}>;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
@@ -48,6 +48,10 @@ export interface PgDomainClientConfig {
 export type PgDomainRestConfig = {
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       host: string;
@@ -67,22 +71,32 @@ export type PgDomainRestConfig = {
  * Resolves PgDomainConfig to a pg-promise database instance and schema.
  * Handles creating a new client if config is provided.
  */
-export function resolvePgConfig(config: PgDomainConfig): { client: IDatabase<{}>; schemaName?: string } {
+export function resolvePgConfig(config: PgDomainConfig): {
+  client: IDatabase<{}>;
+  schemaName?: string;
+  skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
+} {
   // Existing client
   if ('client' in config) {
-    return { client: config.client, schemaName: config.schemaName };
+    return {
+      client: config.client,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
   }
 
   // Config to create new client
   const pgp = pgPromise();
   const client = pgp(config as any);
-  return { client, schemaName: config.schemaName };
+  return {
+    client,
+    schemaName: config.schemaName,
+    skipDefaultIndexes: config.skipDefaultIndexes,
+    indexes: config.indexes,
+  };
 }
-
-/**
- * @deprecated Use PgDomainConfig instead. This type is kept for backwards compatibility.
- */
-export type PgDBConfig = PgDomainClientConfig;
 
 function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
@@ -101,13 +115,18 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 export interface PgDBInternalConfig {
   client: IDatabase<{}>;
   schemaName?: string;
+  skipDefaultIndexes?: boolean;
 }
+
+// Static map to track schema setup across all PgDB instances
+// Key: schemaName, Value: { promise, complete }
+// This prevents race conditions when multiple domains try to create the same schema concurrently
+const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
 
 export class PgDB extends MastraBase {
   public client: IDatabase<{}>;
   public schemaName?: string;
-  private setupSchemaPromise: Promise<void> | null = null;
-  private schemaSetupComplete: boolean | undefined = undefined;
+  public skipDefaultIndexes?: boolean;
 
   constructor(config: PgDBInternalConfig) {
     super({
@@ -117,6 +136,7 @@ export class PgDB extends MastraBase {
 
     this.client = config.client;
     this.schemaName = config.schemaName;
+    this.skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -187,14 +207,21 @@ export class PgDB extends MastraBase {
   }
 
   private async setupSchema() {
-    if (!this.schemaName || this.schemaSetupComplete) {
+    if (!this.schemaName) {
       return;
     }
 
-    const schemaName = getSchemaName(this.schemaName);
+    // Use static registry to coordinate schema setup across all PgDB instances
+    let registryEntry = schemaSetupRegistry.get(this.schemaName);
+    if (registryEntry?.complete) {
+      return;
+    }
 
-    if (!this.setupSchemaPromise) {
-      this.setupSchemaPromise = (async () => {
+    const quotedSchemaName = getSchemaName(this.schemaName);
+
+    if (!registryEntry?.promise) {
+      const schemaNameCapture = this.schemaName;
+      const setupPromise = (async () => {
         try {
           const schemaExists = await this.client.oneOrNone(
             `
@@ -203,35 +230,41 @@ export class PgDB extends MastraBase {
                   WHERE schema_name = $1
                 )
               `,
-            [this.schemaName],
+            [schemaNameCapture],
           );
 
           if (!schemaExists?.exists) {
             try {
-              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-              this.logger.info(`Schema "${this.schemaName}" created successfully`);
+              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName}`);
+              this.logger.info(`Schema "${schemaNameCapture}" created successfully`);
             } catch (error) {
-              this.logger.error(`Failed to create schema "${this.schemaName}"`, { error });
+              this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
               throw new Error(
-                `Unable to create schema "${this.schemaName}". This requires CREATE privilege on the database. ` +
+                `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
                   `Either create the schema manually or grant CREATE privilege to the user.`,
               );
             }
           }
 
-          this.schemaSetupComplete = true;
-          this.logger.debug(`Schema "${schemaName}" is ready for use`);
+          // Mark as complete in the registry
+          const entry = schemaSetupRegistry.get(schemaNameCapture);
+          if (entry) {
+            entry.complete = true;
+          }
+          this.logger.debug(`Schema "${quotedSchemaName}" is ready for use`);
         } catch (error) {
-          this.schemaSetupComplete = undefined;
-          this.setupSchemaPromise = null;
+          // On error, clear the registry entry so retry is possible
+          schemaSetupRegistry.delete(schemaNameCapture);
           throw error;
-        } finally {
-          this.setupSchemaPromise = null;
         }
       })();
+
+      // Register the promise immediately so concurrent callers can await it
+      schemaSetupRegistry.set(this.schemaName, { promise: setupPromise, complete: false });
+      registryEntry = schemaSetupRegistry.get(this.schemaName);
     }
 
-    await this.setupSchemaPromise;
+    await registryEntry!.promise;
   }
 
   protected getSqlType(type: StorageColumn['type']): string {
@@ -753,75 +786,6 @@ export class PgDB extends MastraBase {
                 tableName,
               }
             : {},
-        },
-        error,
-      );
-    }
-  }
-
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-    return [
-      {
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'createdAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'createdAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
-        table: TABLE_TRACES,
-        columns: ['name', 'startTime DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
-        table: TABLE_SCORERS,
-        columns: ['traceId', 'spanId', 'createdAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['traceId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['parentSpanId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_SPANS,
-        columns: ['name'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['spanType', 'startedAt DESC'],
-      },
-    ];
-  }
-
-  async createAutomaticIndexes(): Promise<void> {
-    try {
-      const indexes = this.getAutomaticIndexDefinitions();
-
-      for (const indexOptions of indexes) {
-        try {
-          await this.createIndex(indexOptions);
-        } catch (error) {
-          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'CREATE_AUTOMATIC_INDEXES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
         },
         error,
       );

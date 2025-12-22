@@ -13,6 +13,7 @@ import type {
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -21,16 +22,63 @@ import { getTableName, getSchemaName } from '../utils';
 export class AgentsPG extends AgentsStorage {
   #db: PgDB;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_AGENTS] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName });
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (AgentsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  /**
+   * Returns default index definitions for the agents domain tables.
+   * Currently no default indexes are defined for agents.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for agents.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for agents domain
   }
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

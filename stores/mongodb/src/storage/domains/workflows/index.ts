@@ -15,14 +15,24 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (WorkflowsStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
   }
 
   private async getCollection(name: string) {
@@ -30,13 +40,60 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   }
 
   async init(): Promise<void> {
-    const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
-    await collection.createIndex({ workflow_name: 1, run_id: 1 }, { unique: true });
-    await collection.createIndex({ run_id: 1 });
-    await collection.createIndex({ workflow_name: 1 });
-    await collection.createIndex({ resourceId: 1 });
-    await collection.createIndex({ createdAt: -1 });
-    await collection.createIndex({ 'snapshot.status': 1 });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain collections.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { workflow_name: 1, run_id: 1 }, options: { unique: true } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { run_id: 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { workflow_name: 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { resourceId: 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { createdAt: -1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { 'snapshot.status': 1 } },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {

@@ -18,6 +18,7 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -46,12 +47,20 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 export class MemoryPG extends MemoryStorage {
   #db: PgDB;
   #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
+
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
 
   constructor(config: PgDomainConfig) {
     super();
-    const { client, schemaName } = resolvePgConfig(config);
-    this.#db = new PgDB({ client, schemaName });
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
     this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (MemoryPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
   async init(): Promise<void> {
@@ -63,6 +72,63 @@ export class MemoryPG extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the memory domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
+        table: TABLE_THREADS,
+        columns: ['resourceId', 'createdAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id', 'createdAt DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
