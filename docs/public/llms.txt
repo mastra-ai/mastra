@@ -173,7 +173,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 63+ AI providers and 1466+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 63+ AI providers and 1471+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -221,7 +221,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Ollama Cloud | Models | Mastra](https://mastra.ai/en/models/providers/ollama-cloud): Use Ollama Cloud models with Mastra. 12 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
 - [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 39 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 24 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 25 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 108 models available.
@@ -238,11 +238,11 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.
 - [Xiaomi | Models | Mastra](https://mastra.ai/en/models/providers/xiaomi): Use Xiaomi models with Mastra. 1 model available.
-- [Z.AI Coding Plan | Models | Mastra](https://mastra.ai/en/models/providers/zai-coding-plan): Use Z.AI Coding Plan models with Mastra. 6 models available.
-- [Z.AI | Models | Mastra](https://mastra.ai/en/models/providers/zai): Use Z.AI models with Mastra. 6 models available.
+- [Z.AI Coding Plan | Models | Mastra](https://mastra.ai/en/models/providers/zai-coding-plan): Use Z.AI Coding Plan models with Mastra. 7 models available.
+- [Z.AI | Models | Mastra](https://mastra.ai/en/models/providers/zai): Use Z.AI models with Mastra. 7 models available.
 - [ZenMux | Models | Mastra](https://mastra.ai/en/models/providers/zenmux): Use ZenMux models with Mastra. 22 models available.
-- [Zhipu AI Coding Plan | Models | Mastra](https://mastra.ai/en/models/providers/zhipuai-coding-plan): Use Zhipu AI Coding Plan models with Mastra. 7 models available.
-- [Zhipu AI | Models | Mastra](https://mastra.ai/en/models/providers/zhipuai): Use Zhipu AI models with Mastra. 7 models available.
+- [Zhipu AI Coding Plan | Models | Mastra](https://mastra.ai/en/models/providers/zhipuai-coding-plan): Use Zhipu AI Coding Plan models with Mastra. 8 models available.
+- [Zhipu AI | Models | Mastra](https://mastra.ai/en/models/providers/zhipuai): Use Zhipu AI models with Mastra. 8 models available.
 
 ## EN - reference
 - [Reference: Agent Class | Agents](https://mastra.ai/en/reference/agents/agent): Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities.
