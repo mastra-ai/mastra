@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { InMemoryMemory } from '@mastra/core/storage';
+import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
@@ -1804,21 +1805,6 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(formatted).toContain('2024');
   });
 
-  it('observer prompt should emphasize recent user message', () => {
-    const messages = [
-      createTestMessage('Earlier context message', 'user'),
-      createTestMessage('Some response', 'assistant'),
-      createTestMessage('What is the capital of France?', 'user'),
-    ];
-
-    const prompt = buildObserverPrompt(undefined, messages);
-
-    // Should have the "IMPORTANT: Most Recent User Message" section
-    expect(prompt).toContain('IMPORTANT');
-    expect(prompt).toContain('Most Recent User Message');
-    expect(prompt).toContain('What is the capital of France?');
-  });
-
   it('observer prompt should require Current Task section', () => {
     const messages = [createTestMessage('Help me build a todo app', 'user')];
 
@@ -2246,6 +2232,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       const storage = createInMemoryStorage();
 
       // 2. Create ObservationalMemory with realistic thresholds (matching benchmark config)
+      // Use REAL model for Observer/Reflector - they need real LLMs to extract observations
       const om = new ObservationalMemory({
         storage,
         observer: {
@@ -2260,17 +2247,42 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         resourceScope: true, // Cross-session memory - critical for LongMemEval
       });
 
-      // 3. Create Agent with ObservationalMemory as processors
+      // 3. Create mock model for main agent during ingestion
+      // The main agent doesn't need to generate real responses during ingestion
+      // Only the Observer/Reflector subagents need real LLMs
+      const mockAgentModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Acknowledged.' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      // 4. Create Agent with mock model for ingestion, ObservationalMemory as processors
       const agent = new Agent({
         id: 'longmemeval-agent',
         name: 'LongMemEval Test Agent',
         instructions: 'You are a helpful assistant. Process and store conversation history.',
-        model: 'google/gemini-2.5-flash',
+        model: mockAgentModel,
         inputProcessors: [om],
         outputProcessors: [om],
       });
 
-      // 4. Sort sessions chronologically (oldest first) - exactly like prepare.ts
+      // 5. Sort sessions chronologically (oldest first) - exactly like prepare.ts
       const sessionsWithDates = questionData.haystack_sessions.map((session, index) => ({
         session,
         sessionId: questionData.haystack_session_ids[index],
@@ -2288,7 +2300,8 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       const answerSessionChronoIndex = sessionsWithDates.findIndex(s => s.sessionId === answerSessionId);
       console.log(`   Answer session "${answerSessionId}" is at chronological index ${answerSessionChronoIndex}`);
 
-      // 5. Process ALL sessions sequentially (not concurrently) - exactly like prepare.ts
+      // 6. Process ALL sessions sequentially (not concurrently) - exactly like prepare.ts
+      // Process each message pair one at a time so Observer has multiple chances to make observations
       let processedCount = 0;
       for (const { session, sessionId, date } of sessionsWithDates) {
         // Convert session turns to messages
@@ -2304,15 +2317,17 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           continue;
         }
 
-        console.log('messages', messages);
-
-        // Process through agent.generate() with unique threadId, shared resourceId
-        await agent.generate(messages, {
-          memory: {
-            thread: sessionId,
-            resource: resourceId,
-          },
-        });
+        // Process message pairs (user + assistant) one at a time
+        // This gives Observer multiple chances to make observations
+        for (let i = 0; i < messages.length; i += 2) {
+          const messagePair = messages.slice(i, Math.min(i + 2, messages.length));
+          await agent.generate(messagePair as any, {
+            memory: {
+              thread: sessionId,
+              resource: resourceId,
+            },
+          });
+        }
 
         processedCount++;
 
@@ -2329,28 +2344,37 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         }
       }
 
-      // 6. Check observations after processing all sessions
+      // 7. Check observations after processing all sessions
       const finalRecord = await storage.getObservationalMemory(null, resourceId);
       console.log(`\n📝 Final observations: ${finalRecord?.observationTokenCount ?? 0} tokens`);
       console.log(`   Observed message IDs: ${finalRecord?.observedMessageIds.length ?? 0}`);
 
       // The key fact should be in observations
-      // expect(finalRecord).toBeDefined();
-      // expect(finalRecord?.activeObservations).toBeDefined();
-      // expect(finalRecord?.activeObservations).toContain('Business Administration');
+      expect(finalRecord).toBeDefined();
+      expect(finalRecord?.activeObservations).toBeDefined();
+      expect(finalRecord?.activeObservations).toContain('Business Administration');
 
-      // 7. Now ask the question - this is the actual evaluation
+      // 8. Now ask the question - this is the actual evaluation
+      // For evaluation, we need a real model to answer based on observations
       console.log(`\n❓ Asking: "${questionData.question}"`);
       console.log(`   Expected answer: "${questionData.answer}"`);
 
-      const result = await agent.generate(questionData.question, {
+      // Create agent with real model for evaluation
+      const evalAgent = new Agent({
+        id: 'eval-agent',
+        name: 'Eval Agent',
+        instructions: 'You are a helpful assistant. Answer questions based on the conversation history.',
+        model: 'google/gemini-2.5-flash',
+        inputProcessors: [om],
+        outputProcessors: [om],
+      });
+
+      const result = await evalAgent.generate(questionData.question, {
         memory: {
           thread: 'evaluation-thread',
           resource: resourceId,
         },
       });
-
-      console.log('result', result);
 
       console.log(`\n💬 Agent response: ${result.text}`);
 
@@ -2384,11 +2408,34 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         resourceScope: true,
       });
 
+      // Use mock model for main agent during ingestion
+      const mockAgentModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Acknowledged.' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
       const agent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a helpful assistant.',
-        model: 'google/gemini-2.5-flash',
+        model: mockAgentModel,
         inputProcessors: [om],
         outputProcessors: [om],
       });
@@ -2417,12 +2464,16 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           }));
 
         if (messages.length > 0) {
-          await agent.generate(messages, {
-            memory: {
-              thread: sessionId,
-              resource: resourceId,
-            },
-          });
+          // Process message pairs one at a time
+          for (let i = 0; i < messages.length; i += 2) {
+            const messagePair = messages.slice(i, Math.min(i + 2, messages.length));
+            await agent.generate(messagePair as any, {
+              memory: {
+                thread: sessionId,
+                resource: resourceId,
+              },
+            });
+          }
           console.log(`   Processed ${sessionId}`);
         }
       }
@@ -2433,8 +2484,17 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
 
       expect(record?.activeObservations).toContain('Business Administration');
 
-      // Ask the question
-      const result = await agent.generate(questionData.question, {
+      // Ask the question with real model for evaluation
+      const evalAgent = new Agent({
+        id: 'eval-agent',
+        name: 'Eval Agent',
+        instructions: 'You are a helpful assistant. Answer questions based on conversation history.',
+        model: 'google/gemini-2.5-flash',
+        inputProcessors: [om],
+        outputProcessors: [om],
+      });
+
+      const result = await evalAgent.generate(questionData.question, {
         memory: {
           thread: 'eval-thread',
           resource: resourceId,

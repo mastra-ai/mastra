@@ -3,7 +3,7 @@ import { Memory } from '@mastra/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { ObservationalMemory } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
-import { MockLanguageModelV1 } from '../test-utils/mock-model';
+import { MockLanguageModelV1, MockLanguageModelV2 } from '../test-utils/mock-model';
 import { openai } from '@ai-sdk/openai';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import { embeddingCacheStats } from '../embeddings';
@@ -485,21 +485,58 @@ export class PrepareCommand {
     let messageHistory: MessageHistory | undefined;
     let omStorage: PersistableInMemoryMemory | undefined;
 
+    // Debug state for OM events (will be initialized after questionDir is known)
+    const omDebugState = {
+      debugLogFile: '',
+      eventCount: 0,
+    };
+
     if (usesObservationalMemory) {
       // Use PersistableInMemoryMemory for ObservationalMemory (has persist/hydrate)
       omStorage = new PersistableInMemoryMemory();
 
+      // For OM: use REAL model for Observer/Reflector subagents (they need real LLMs to extract observations)
       observationalMemory = new ObservationalMemory({
         storage: omStorage,
         observer: {
-          model: model,
+          model: model, // Real model for Observer
           historyThreshold: observationalMemoryConfig.historyThreshold,
         },
         reflector: {
-          model: model,
+          model: model, // Real model for Reflector
           observationThreshold: observationalMemoryConfig.observationThreshold,
         },
         resourceScope: observationalMemoryConfig.resourceScope,
+        // Debug callback to log all observation events to a file
+        onDebugEvent: async (event: any) => {
+          if (!omDebugState.debugLogFile) return; // Skip if not initialized yet
+          omDebugState.eventCount++;
+          const logEntry = {
+            eventNumber: omDebugState.eventCount,
+            ...event,
+            timestamp: event.timestamp.toISOString(),
+          };
+          // Write to debug log file (append)
+          await writeFile(
+            omDebugState.debugLogFile,
+            (omDebugState.eventCount === 1 ? '' : '\n') + JSON.stringify(logEntry, null, 2),
+            { flag: 'a' },
+          );
+          // Also log summary to console
+          if (event.type === 'observation_triggered') {
+            console.log(
+              chalk.yellow(`  [OM DEBUG] Observation triggered with ${event.messages?.length ?? 0} messages`),
+            );
+          } else if (event.type === 'observation_complete') {
+            console.log(chalk.green(`  [OM DEBUG] Observation complete: ${event.observations?.substring(0, 100)}...`));
+          } else if (event.type === 'tokens_accumulated') {
+            console.log(
+              chalk.dim(
+                `  [OM DEBUG] Tokens accumulated: ${event.sessionTokens} (total: ${event.totalPendingTokens}/${event.threshold})`,
+              ),
+            );
+          }
+        },
       });
 
       // MessageHistory for persisting messages
@@ -509,6 +546,19 @@ export class PrepareCommand {
       });
     }
 
+    // For OM: use mock model for main agent (it doesn't generate real responses during ingestion)
+    // Only the Observer/Reflector subagents need real LLMs
+    const mockAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Acknowledged.' }],
+        warnings: [],
+      }),
+      // No streaming needed for ingestion
+    });
+
     // Create agent with appropriate model and processors
     const agent = new Agent({
       id: 'prep-agent',
@@ -516,7 +566,7 @@ export class PrepareCommand {
       instructions: usesObservationalMemory
         ? `You are a helpful assistant. Process and store conversation history.`
         : "You are a helpful assistant. Process and store conversation history. Only store working memory information if it's in the template. Other information is not relevant",
-      model: model,
+      model: usesObservationalMemory ? mockAgentModel : model,
       memory: usesObservationalMemory ? undefined : memory,
       // For OM, use processors instead of memory
       inputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
@@ -551,6 +601,15 @@ export class PrepareCommand {
       question.question_id,
     );
     await mkdir(questionDir, { recursive: true });
+
+    // Initialize OM debug log file path now that questionDir is known
+    if (usesObservationalMemory) {
+      omDebugState.debugLogFile = join(questionDir, 'om-debug.jsonl');
+      // Clear any existing debug log
+      if (existsSync(omDebugState.debugLogFile)) {
+        await unlink(omDebugState.debugLogFile);
+      }
+    }
 
     // Check if this question has partial progress saved
     const progressFile = join(questionDir, 'progress.json');
@@ -697,22 +756,48 @@ export class PrepareCommand {
         }
 
         if (messages.length > 0) {
-          // Process through agent to save to memory
-          try {
-            await agent.generate(messages, {
-              memory: {
-                thread: sessionId, // Use haystack session ID as thread ID
-                resource: resourceId,
-                options: memoryOptions.options,
-              },
-              modelSettings: {
-                temperature: 0,
-                // frequencyPenalty: 0.3,
-              },
-            });
-          } catch (error) {
-            console.error(`Error in agent.generate for ${question.question_id}, session ${sessionId}:`, error);
-            throw error;
+          // For OM: process each message one at a time so Observer has multiple chances to make observations
+          // If we send all messages at once, Observer only gets one chance to observe
+          if (usesObservationalMemory) {
+            // Process message pairs (user + assistant) one at a time
+            for (let i = 0; i < messages.length; i += 2) {
+              const messagePair = messages.slice(i, Math.min(i + 2, messages.length));
+              try {
+                await agent.generate(messagePair, {
+                  memory: {
+                    thread: sessionId,
+                    resource: resourceId,
+                    options: memoryOptions.options,
+                  },
+                  modelSettings: {
+                    temperature: 0,
+                  },
+                });
+              } catch (error) {
+                console.error(
+                  `Error in agent.generate for ${question.question_id}, session ${sessionId}, message ${i}:`,
+                  error,
+                );
+                throw error;
+              }
+            }
+          } else {
+            // For non-OM configs, process all messages at once (existing behavior)
+            try {
+              await agent.generate(messages, {
+                memory: {
+                  thread: sessionId, // Use haystack session ID as thread ID
+                  resource: resourceId,
+                  options: memoryOptions.options,
+                },
+                modelSettings: {
+                  temperature: 0,
+                },
+              });
+            } catch (error) {
+              console.error(`Error in agent.generate for ${question.question_id}, session ${sessionId}:`, error);
+              throw error;
+            }
           }
         }
 

@@ -30,6 +30,35 @@ import type {
 } from './types';
 
 /**
+ * Debug event emitted when observation-related events occur.
+ * Useful for understanding what the Observer is doing.
+ */
+export interface ObservationDebugEvent {
+  type:
+    | 'observation_triggered'
+    | 'observation_complete'
+    | 'reflection_triggered'
+    | 'reflection_complete'
+    | 'tokens_accumulated';
+  timestamp: Date;
+  threadId: string;
+  resourceId: string;
+  /** Messages that were sent to the Observer */
+  messages?: Array<{ role: string; content: string }>;
+  /** Token counts */
+  pendingTokens?: number;
+  sessionTokens?: number;
+  totalPendingTokens?: number;
+  threshold?: number;
+  /** The observations that were generated */
+  observations?: string;
+  /** Previous observations (before this event) */
+  previousObservations?: string;
+  /** Observer's raw output */
+  rawObserverOutput?: string;
+}
+
+/**
  * Configuration for ObservationalMemory
  */
 export interface ObservationalMemoryConfig {
@@ -62,6 +91,13 @@ export interface ObservationalMemoryConfig {
    * while recent sections remain fully expanded.
    */
   collapse?: CollapseConfig;
+
+  /**
+   * Debug callback for observation events.
+   * Called whenever observation-related events occur.
+   * Useful for debugging and understanding the observation flow.
+   */
+  onDebugEvent?: (event: ObservationDebugEvent) => void;
 }
 
 /**
@@ -194,6 +230,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private observerConfig: ResolvedObserverConfig;
   private reflectorConfig: ResolvedReflectorConfig;
   private collapseConfig: ResolvedCollapseConfig;
+  private onDebugEvent?: (event: ObservationDebugEvent) => void;
 
   /**
    * Store collapsed sections for retrieval.
@@ -260,9 +297,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     };
 
     this.tokenCounter = new TokenCounter();
+    this.onDebugEvent = config.onDebugEvent;
 
     // Validate bufferEvery is less than threshold
     this.validateBufferConfig();
+  }
+
+  /**
+   * Emit a debug event if the callback is configured
+   */
+  private emitDebugEvent(event: ObservationDebugEvent): void {
+    if (this.onDebugEvent) {
+      this.onDebugEvent(event);
+    }
   }
 
   /**
@@ -981,6 +1028,22 @@ ${continuityMessage}
       console.log(`[OM] Accumulating ${currentSessionTokens} pending tokens (total will be ${totalPendingTokens})`);
       // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
       await (this.storage as any).addPendingMessageTokens(record.id, currentSessionTokens);
+
+      // Emit debug event for token accumulation
+      this.emitDebugEvent({
+        type: 'tokens_accumulated',
+        timestamp: new Date(),
+        threadId,
+        resourceId: resourceId ?? '',
+        pendingTokens,
+        sessionTokens: currentSessionTokens,
+        totalPendingTokens,
+        threshold,
+        messages: unobservedMessages.map(m => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        })),
+      });
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1006,6 +1069,19 @@ ${continuityMessage}
     unobservedMessages: MastraDBMessage[],
   ): Promise<void> {
     const messageIdsToObserve = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
+
+    // Emit debug event for observation triggered
+    this.emitDebugEvent({
+      type: 'observation_triggered',
+      timestamp: new Date(),
+      threadId,
+      resourceId: record.resourceId ?? '',
+      previousObservations: record.activeObservations,
+      messages: unobservedMessages.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      })),
+    });
 
     await this.storage.setObservingFlag(record.id, true);
 
@@ -1040,6 +1116,21 @@ ${continuityMessage}
       });
 
       console.log(`[OM] Observations stored successfully`);
+
+      // Emit debug event for observation complete
+      this.emitDebugEvent({
+        type: 'observation_complete',
+        timestamp: new Date(),
+        threadId,
+        resourceId: record.resourceId ?? '',
+        observations: newObservations,
+        rawObserverOutput: result.observations,
+        previousObservations: record.activeObservations,
+        messages: unobservedMessages.map(m => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        })),
+      });
 
       // Check for reflection
       await this.maybeReflect({ ...record, activeObservations: newObservations }, totalTokenCount);

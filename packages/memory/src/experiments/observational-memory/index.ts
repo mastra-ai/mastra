@@ -12,7 +12,11 @@
  */
 
 // Main processor
-export { ObservationalMemory, type ObservationalMemoryConfig } from './observational-memory';
+export {
+  ObservationalMemory,
+  type ObservationalMemoryConfig,
+  type ObservationDebugEvent,
+} from './observational-memory';
 
 // Types
 export type {
