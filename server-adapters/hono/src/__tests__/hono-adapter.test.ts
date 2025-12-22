@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { serve } from '@hono/node-server';
 import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
 import {
   createRouteAdapterTestSuite,
@@ -7,7 +8,6 @@ import {
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
-import { serve } from '@hono/node-server';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeEach } from 'vitest';
