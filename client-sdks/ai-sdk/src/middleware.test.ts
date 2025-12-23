@@ -463,7 +463,8 @@ describe('withMastra middleware', () => {
       threadId = `thread-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       // Create the thread
-      await storage.saveThread({
+      const memoryStore = await storage.getStore('memory');
+      await memoryStore!.saveThread({
         thread: {
           id: threadId,
           resourceId,
@@ -481,7 +482,8 @@ describe('withMastra middleware', () => {
 
     it('should retrieve historical messages from storage', async () => {
       // Seed historical messages using real storage
-      await storage.saveMessages({
+      const memoryStore = await storage.getStore('memory');
+      await memoryStore!.saveMessages({
         messages: [
           {
             id: 'hist-msg-1',
@@ -506,7 +508,7 @@ describe('withMastra middleware', () => {
       });
 
       // Verify messages were saved
-      const { messages: storedMessages } = await storage.listMessages({ threadId });
+      const { messages: storedMessages } = await memoryStore!.listMessages({ threadId });
       expect(storedMessages).toHaveLength(2);
 
       // Track messages seen during output processing
@@ -566,7 +568,8 @@ describe('withMastra middleware', () => {
       });
 
       // Check that messages were persisted to storage
-      const { messages: storedMessages } = await storage.listMessages({
+      const memoryStore = await storage.getStore('memory');
+      const { messages: storedMessages } = await memoryStore!.listMessages({
         threadId,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
@@ -603,10 +606,11 @@ describe('withMastra middleware', () => {
         });
       }
 
-      await storage.saveMessages({ messages: historicalMessages });
+      const memoryStore = await storage.getStore('memory');
+      await memoryStore!.saveMessages({ messages: historicalMessages });
 
       // Verify all 10 messages were saved
-      const { messages: allMessages } = await storage.listMessages({ threadId });
+      const { messages: allMessages } = await memoryStore!.listMessages({ threadId });
       expect(allMessages).toHaveLength(10);
 
       let receivedMessageCount = 0;

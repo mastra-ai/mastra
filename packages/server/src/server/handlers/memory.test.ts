@@ -724,7 +724,7 @@ describe('Memory Handlers', () => {
         },
         storage,
       });
-      vi.spyOn(storage, 'getThreadById').mockResolvedValue(null);
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(null);
       await expect(
         LIST_MESSAGES_ROUTE.handler({
           ...createTestServerContext({ mastra }),
@@ -767,7 +767,7 @@ describe('Memory Handlers', () => {
       });
 
       vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
-      vi.spyOn(storage, 'listMessages').mockResolvedValue(mockResult);
+      vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
 
       const result = await LIST_MESSAGES_ROUTE.handler({
         ...createTestServerContext({ mastra }),
@@ -783,7 +783,7 @@ describe('Memory Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
-      expect(storage.listMessages).toHaveBeenCalledWith({
+      expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
         perPage: 10,

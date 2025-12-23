@@ -33,20 +33,42 @@ const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
   }) as any;
 
-// Mock storage instance
-const createMockStorage = (): Partial<MastraStorage> => ({
+// Mock observability store
+const createMockObservabilityStore = () => ({
   getTrace: vi.fn(),
   getTracesPaginated: vi.fn(),
+  listScoresBySpan: vi.fn(),
+});
+
+// Mock scores store
+const createMockScoresStore = () => ({
+  listScoresBySpan: vi.fn(),
+});
+
+// Mock storage instance with getStore pattern
+const createMockStorage = (
+  observabilityStore = createMockObservabilityStore(),
+  scoresStore = createMockScoresStore(),
+): Partial<MastraStorage> => ({
+  getStore: vi.fn((domain: string) => {
+    if (domain === 'observability') return Promise.resolve(observabilityStore);
+    if (domain === 'scores') return Promise.resolve(scoresStore);
+    return Promise.resolve(undefined);
+  }),
 });
 
 describe('Observability Handlers', () => {
+  let mockObservabilityStore: ReturnType<typeof createMockObservabilityStore>;
+  let mockScoresStore: ReturnType<typeof createMockScoresStore>;
   let mockStorage: ReturnType<typeof createMockStorage>;
   let mockMastra: Mastra;
   let handleErrorSpy: ReturnType<typeof vi.mocked<typeof errorHandler.handleError>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockStorage = createMockStorage();
+    mockObservabilityStore = createMockObservabilityStore();
+    mockScoresStore = createMockScoresStore();
+    mockStorage = createMockStorage(mockObservabilityStore, mockScoresStore);
     mockMastra = createMockMastra(mockStorage);
     handleErrorSpy = vi.mocked(errorHandler.handleError);
     handleErrorSpy.mockImplementation(error => {
@@ -61,7 +83,7 @@ describe('Observability Handlers', () => {
         spans: [],
       };
 
-      (mockStorage.getTrace as any).mockResolvedValue(mockTrace);
+      (mockObservabilityStore.getTrace as any).mockResolvedValue(mockTrace);
 
       const result = await getTraceHandler({
         mastra: mockMastra,
@@ -69,12 +91,12 @@ describe('Observability Handlers', () => {
       });
 
       expect(result).toEqual(mockTrace);
-      expect(mockStorage.getTrace).toHaveBeenCalledWith('test-trace-123');
+      expect(mockObservabilityStore.getTrace).toHaveBeenCalledWith('test-trace-123');
       expect(handleErrorSpy).not.toHaveBeenCalled();
     });
 
     it('should throw 404 when trace not found', async () => {
-      (mockStorage.getTrace as any).mockResolvedValue(null);
+      (mockObservabilityStore.getTrace as any).mockResolvedValue(null);
 
       await expect(
         getTraceHandler({
@@ -139,7 +161,7 @@ describe('Observability Handlers', () => {
 
     it('should call handleError when storage throws', async () => {
       const storageError = new Error('Database connection failed');
-      (mockStorage.getTrace as any).mockRejectedValue(storageError);
+      (mockObservabilityStore.getTrace as any).mockRejectedValue(storageError);
 
       await expect(
         getTraceHandler({
@@ -162,7 +184,7 @@ describe('Observability Handlers', () => {
         perPage: 10,
       };
 
-      (mockStorage.getTracesPaginated as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.getTracesPaginated as any).mockResolvedValue(mockResult);
 
       const result = await getTracesPaginatedHandler({
         mastra: mockMastra,
@@ -171,7 +193,7 @@ describe('Observability Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.getTracesPaginated).toHaveBeenCalledWith({
         filters: { name: 'test' },
         pagination: { page: 1, perPage: 10 },
       });
@@ -187,14 +209,14 @@ describe('Observability Handlers', () => {
         perPage: 20,
       };
 
-      (mockStorage.getTracesPaginated as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.getTracesPaginated as any).mockResolvedValue(mockResult);
 
       const result = await getTracesPaginatedHandler({
         mastra: mockMastra,
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({});
+      expect(mockObservabilityStore.getTracesPaginated).toHaveBeenCalledWith({});
     });
 
     it('should throw 500 when storage is not available', async () => {
@@ -260,7 +282,7 @@ describe('Observability Handlers', () => {
 
       it('should allow page and perPage of 0', async () => {
         const mockResult = { traces: [], totalItems: 0, totalPages: 0, currentPage: 0, perPage: 0 };
-        (mockStorage.getTracesPaginated as any).mockResolvedValue(mockResult);
+        (mockObservabilityStore.getTracesPaginated as any).mockResolvedValue(mockResult);
 
         const result = await getTracesPaginatedHandler({
           mastra: mockMastra,
@@ -268,7 +290,7 @@ describe('Observability Handlers', () => {
         });
 
         expect(result).toEqual(mockResult);
-        expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.getTracesPaginated).toHaveBeenCalledWith({
           pagination: { page: 0, perPage: 0 },
         });
       });
@@ -277,7 +299,7 @@ describe('Observability Handlers', () => {
     describe('date range validation', () => {
       it('should accept valid Date objects', async () => {
         const mockResult = { traces: [], totalItems: 0, totalPages: 0, currentPage: 1, perPage: 10 };
-        (mockStorage.getTracesPaginated as any).mockResolvedValue(mockResult);
+        (mockObservabilityStore.getTracesPaginated as any).mockResolvedValue(mockResult);
 
         const startDate = new Date('2024-01-01');
         const endDate = new Date('2024-01-31');
@@ -293,7 +315,7 @@ describe('Observability Handlers', () => {
         });
 
         expect(result).toEqual(mockResult);
-        expect(mockStorage.getTracesPaginated).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.getTracesPaginated).toHaveBeenCalledWith({
           filters: {},
           pagination: {
             dateRange: { start: startDate, end: endDate },
@@ -368,7 +390,7 @@ describe('Observability Handlers', () => {
           perPage: 10,
         };
 
-        (mockStorage.getTracesPaginated as any).mockResolvedValue(mockResult);
+        (mockObservabilityStore.getTracesPaginated as any).mockResolvedValue(mockResult);
 
         // Simulate how the route receives dateRange as JSON string from query params
         const dateRangeJson = JSON.stringify({
@@ -385,13 +407,13 @@ describe('Observability Handlers', () => {
 
         expect(result).toEqual(mockResult);
         // After the fix, this should be called with properly converted Date objects
-        expect(mockStorage.getTracesPaginated).toHaveBeenCalled();
+        expect(mockObservabilityStore.getTracesPaginated).toHaveBeenCalled();
       });
     });
 
     it('should call handleError when storage throws', async () => {
       const storageError = new Error('Database query failed');
-      (mockStorage.getTracesPaginated as any).mockRejectedValue(storageError);
+      (mockObservabilityStore.getTracesPaginated as any).mockRejectedValue(storageError);
 
       await expect(
         getTracesPaginatedHandler({
@@ -572,8 +594,8 @@ describe('Observability Handlers', () => {
       ];
       const pagination = { page: 0, perPage: 10 };
 
-      // Mock the storage method to return our test data
-      mockStorage.listScoresBySpan = vi.fn().mockResolvedValue({
+      // Mock the scores store method to return our test data
+      (mockScoresStore.listScoresBySpan as any).mockResolvedValue({
         scores: mockScores,
         pagination: {
           total: 1,
@@ -590,7 +612,7 @@ describe('Observability Handlers', () => {
         ...pagination,
       });
 
-      expect(mockStorage.listScoresBySpan).toHaveBeenCalledWith({
+      expect(mockScoresStore.listScoresBySpan).toHaveBeenCalledWith({
         traceId: 'test-trace-1',
         spanId: 'test-span-1',
         pagination,
@@ -645,7 +667,7 @@ describe('Observability Handlers', () => {
         status: 404,
       };
 
-      mockStorage.listScoresBySpan = vi.fn().mockRejectedValue(apiError);
+      (mockScoresStore.listScoresBySpan as any).mockRejectedValue(apiError);
 
       try {
         await listScoresBySpan({
