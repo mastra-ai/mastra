@@ -90,62 +90,60 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
 
-      if (inputData?.some(toolCall => toolCall?.result === undefined)) {
-        const errorResults = inputData.filter(toolCall => toolCall?.error);
+      // Separate tool calls into those with errors and those with results
+      const errorResults = inputData?.filter(toolCall => toolCall?.error) ?? [];
+      const successResults = inputData?.filter(toolCall => toolCall?.result !== undefined && !toolCall?.error) ?? [];
 
+      // Handle tool errors - emit tool-error chunks and add error messages
+      if (errorResults.length) {
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
-        if (errorResults?.length) {
-          for (const toolCall of errorResults) {
-            const chunk: ChunkType<OUTPUT> = {
-              type: 'tool-error',
-              runId: rest.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                error: toolCall.error,
-                args: toolCall.args,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata,
-              },
-            };
-            await processAndEnqueueChunk(chunk);
-          }
-
-          const msg: MastraDBMessage = {
-            id: toolResultMessageId || '',
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: errorResults.map(toolCallErrorResult => {
-                return {
-                  type: 'tool-invocation' as const,
-                  toolInvocation: {
-                    state: 'result' as const,
-                    toolCallId: toolCallErrorResult.toolCallId,
-                    toolName: toolCallErrorResult.toolName,
-                    args: toolCallErrorResult.args,
-                    result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
-                  },
-                  ...(toolCallErrorResult.providerMetadata
-                    ? { providerMetadata: toolCallErrorResult.providerMetadata }
-                    : {}),
-                };
-              }),
+        for (const toolCall of errorResults) {
+          const chunk: ChunkType<OUTPUT> = {
+            type: 'tool-error',
+            runId: rest.runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              error: toolCall.error,
+              args: toolCall.args,
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              providerMetadata: toolCall.providerMetadata,
             },
-            createdAt: new Date(),
           };
-          rest.messageList.add(msg, 'response');
+          await processAndEnqueueChunk(chunk);
         }
 
-        // Only set isContinued = false if this is NOT a retry scenario
-        // When stepResult.reason is 'retry', the llm-execution-step has already set
-        // isContinued = true and we should preserve that to allow the agentic loop to continue
-        if (initialResult.stepResult.reason !== 'retry') {
-          initialResult.stepResult.isContinued = false;
-        }
+        const msg: MastraDBMessage = {
+          id: toolResultMessageId || '',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: errorResults.map(toolCallErrorResult => {
+              return {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: toolCallErrorResult.toolCallId,
+                  toolName: toolCallErrorResult.toolName,
+                  args: toolCallErrorResult.args,
+                  result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
+                },
+                ...(toolCallErrorResult.providerMetadata
+                  ? { providerMetadata: toolCallErrorResult.providerMetadata }
+                  : {}),
+              };
+            }),
+          },
+          createdAt: new Date(),
+        };
+        rest.messageList.add(msg, 'response');
+      }
 
-        // Update messages field to include any error messages we added to messageList
+      // Handle undefined results (no error, no result) - bail in this case as it's unexpected
+      const undefinedResults = inputData?.filter(toolCall => toolCall?.result === undefined && !toolCall?.error) ?? [];
+      if (undefinedResults.length && initialResult.stepResult.reason !== 'retry') {
+        initialResult.stepResult.isContinued = false;
         return bail({
           ...initialResult,
           messages: {
@@ -156,8 +154,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         });
       }
 
-      if (inputData?.length) {
-        for (const toolCall of inputData) {
+      // Handle successful tool results
+      if (successResults.length) {
+        for (const toolCall of successResults) {
           const chunk: ChunkType<OUTPUT> = {
             type: 'tool-result',
             runId: rest.runId,
@@ -190,7 +189,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: inputData.map(toolCall => {
+            parts: successResults.map(toolCall => {
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
@@ -208,19 +207,18 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         };
 
         rest.messageList.add(toolResultMessage, 'response');
-
-        return {
-          ...initialResult,
-          messages: {
-            all: rest.messageList.get.all.aiV5.model(),
-            user: rest.messageList.get.input.aiV5.model(),
-            nonUser: rest.messageList.get.response.aiV5.model(),
-          },
-        };
       }
 
-      // Fallback: if inputData is empty or undefined, return initialResult as-is
-      return initialResult;
+      // Return with updated messages (includes both error and success messages added above)
+      // Don't return early - allow the loop to continue even with errors so LLM can retry
+      return {
+        ...initialResult,
+        messages: {
+          all: rest.messageList.get.all.aiV5.model(),
+          user: rest.messageList.get.input.aiV5.model(),
+          nonUser: rest.messageList.get.response.aiV5.model(),
+        },
+      };
     },
   });
 }

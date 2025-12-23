@@ -487,6 +487,15 @@ export class CoreToolBuilder extends MastraBase {
         );
         logger.trackException(mastraError);
         logger.error(error, { ...rest, model: logModelObject, error: mastraError, args });
+
+        // For AI SDK Language Model v2+, throw the error so tool-call-step can catch it
+        // and emit a proper tool-error chunk. For v1 models (legacy) or when no model
+        // is provided, return the error as the result to maintain backward compatibility
+        // with the AI SDK which treats thrown errors as fatal.
+        const specVersion = model?.specificationVersion;
+        if (specVersion === 'v2' || specVersion === 'v3') {
+          throw mastraError;
+        }
         return mastraError;
       }
     };
