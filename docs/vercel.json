@@ -559,6 +559,67 @@
       "source": "/examples/v1",
       "destination": "/docs/v1/getting-started/start",
       "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setup",
+      "destination": "/docs/deployment/mastra-cloud/setting-up",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/deployment",
+      "destination": "/docs/deployment/mastra-cloud/setting-up"
+    },
+    {
+      "source": "/docs/deployment/workflow-runners",
+      "destination": "/reference/workflows/run"
+    },
+    {
+      "source": "/docs/mastra-cloud/studio",
+      "destination": "/docs/getting-started/studio"
+    },
+    {
+      "source": "/docs/memory/message-history",
+      "destination": "/reference/client-js/memory"
+    },
+    {
+      "source": "/models/providers/siliconflow-cn",
+      "destination": "/models/providers/siliconflow"
+    },
+    {
+      "source": "/guides/deployment/:path*",
+      "destination": "/docs/deployment/cloud-providers/:path*"
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/docs/auth/:path*"
+    },
+    {
+      "source": "/docs/deployment/mastra-server",
+      "destination": "/docs/deployment/building-mastra"
+    },
+    {
+      "source": "/guides/deployment",
+      "destination": "/docs/deployment/overview"
+    },
+    {
+      "source": "/docs/rag/graph-rag",
+      "destination": "/reference/rag/graph-rag"
+    },
+    {
+      "source": "/docs/server/middleware",
+      "destination": "/docs/server-db/middleware"
+    },
+    {
+      "source": "/docs/server/auth/firebase",
+      "destination": "/reference/auth/firebase"
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/docs/frameworks/agentic-uis/ai-sdk"
+    },
+    {
+      "source": "/reference/server/express-adapter",
+      "destination": "/docs/frameworks/servers/express"
     }
   ]
 }
