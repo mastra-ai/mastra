@@ -43,6 +43,8 @@
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@^2.0.0",
     "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@latest",
     "@ai-sdk/react": "^1.2.1",
+    "@ai-sdk/react-v5": "npm:@ai-sdk/react@^2.0.0",
+    "@ai-sdk/react-v6": "npm:@ai-sdk/react@latest",
     "@mastra/ai-sdk": "latest",
     "@mastra/client-js": "latest",
     "@mastra/fastembed": "*",

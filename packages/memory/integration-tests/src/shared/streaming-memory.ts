@@ -16,18 +16,6 @@ function isV5PlusModel(model: MastraModelConfig): boolean {
   return false;
 }
 
-// Helper to find an available port
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, () => {
-      const { port } = server.address() as { port: number };
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
-}
-
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'http://localhost',
@@ -187,6 +175,143 @@ export async function setupStreamingMemoryTest({
         }
         expect(customIds).contains(message.id);
       }
+    });
+
+    describe('data-* parts persistence (issue #10477 and #10936)', () => {
+      it('should preserve data-* parts through save → recall → UI conversion round-trip', async () => {
+        const threadId = randomUUID();
+        const resourceId = 'test-data-parts-resource';
+
+        // Create a thread first
+        await memory.createThread({
+          threadId,
+          resourceId,
+          title: 'Data Parts Test Thread',
+        });
+
+        // Save messages with data-* custom parts (simulating what writer.custom() would produce)
+        const messagesWithDataParts = [
+          {
+            id: randomUUID(),
+            threadId,
+            resourceId,
+            role: 'user' as const,
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'Upload my file please' }],
+            },
+            createdAt: new Date(),
+          },
+          {
+            id: randomUUID(),
+            threadId,
+            resourceId,
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'Processing your file...' },
+                {
+                  type: 'data-upload-progress' as const,
+                  data: {
+                    fileName: 'document.pdf',
+                    progress: 50,
+                    status: 'uploading',
+                  },
+                },
+              ],
+            },
+            createdAt: new Date(Date.now() + 1000),
+          },
+          {
+            id: randomUUID(),
+            threadId,
+            resourceId,
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [
+                { type: 'text' as const, text: 'File uploaded successfully!' },
+                {
+                  type: 'data-file-reference' as const,
+                  data: {
+                    fileId: 'file-123',
+                    fileName: 'document.pdf',
+                    fileSize: 1024,
+                  },
+                },
+              ],
+            },
+            createdAt: new Date(Date.now() + 2000),
+          },
+        ];
+
+        // Save messages to storage
+        await memory.saveMessages({ messages: messagesWithDataParts as any });
+
+        // Recall messages from storage
+        const recallResult = await memory.recall({
+          threadId,
+          resourceId,
+        });
+
+        expect(recallResult.messages.length).toBe(3);
+
+        // Verify data-* parts are present in recalled messages (DB format)
+        const assistantMessages = recallResult.messages.filter((m: any) => m.role === 'assistant');
+        expect(assistantMessages.length).toBe(2);
+
+        // Check first assistant message has data-upload-progress
+        const uploadProgressMsg = assistantMessages.find((m: any) =>
+          m.content.parts.some((p: any) => p.type === 'data-upload-progress'),
+        );
+        expect(uploadProgressMsg).toBeDefined();
+        const uploadProgressPart = uploadProgressMsg!.content.parts.find((p: any) => p.type === 'data-upload-progress');
+        expect(uploadProgressPart).toBeDefined();
+        expect((uploadProgressPart as any).data.progress).toBe(50);
+
+        // Check second assistant message has data-file-reference
+        const fileRefMsg = assistantMessages.find((m: any) =>
+          m.content.parts.some((p: any) => p.type === 'data-file-reference'),
+        );
+        expect(fileRefMsg).toBeDefined();
+        const fileRefPart = fileRefMsg!.content.parts.find((p: any) => p.type === 'data-file-reference');
+        expect(fileRefPart).toBeDefined();
+        expect((fileRefPart as any).data.fileId).toBe('file-123');
+
+        // Now convert to AIV5 UI format (this is what the frontend would receive)
+        const { MessageList } = await import('@mastra/core/agent');
+        const uiMessages = recallResult.messages.map((m: any) => MessageList.mastraDBMessageToAIV5UIMessage(m));
+
+        expect(uiMessages.length).toBe(3);
+
+        // Verify data-* parts are preserved in UI format
+        const uiAssistantMessages = uiMessages.filter((m: any) => m.role === 'assistant');
+        expect(uiAssistantMessages.length).toBe(2);
+
+        // Check data-upload-progress is preserved in UI format
+        const uiUploadProgressMsg = uiAssistantMessages.find((m: any) =>
+          m.parts.some((p: any) => p.type === 'data-upload-progress'),
+        );
+        expect(uiUploadProgressMsg).toBeDefined();
+        const uiUploadProgressPart = uiUploadProgressMsg!.parts.find((p: any) => p.type === 'data-upload-progress');
+        expect(uiUploadProgressPart).toBeDefined();
+        expect((uiUploadProgressPart as any).data.progress).toBe(50);
+        expect((uiUploadProgressPart as any).data.fileName).toBe('document.pdf');
+
+        // Check data-file-reference is preserved in UI format
+        const uiFileRefMsg = uiAssistantMessages.find((m: any) =>
+          m.parts.some((p: any) => p.type === 'data-file-reference'),
+        );
+        expect(uiFileRefMsg).toBeDefined();
+        const uiFileRefPart = uiFileRefMsg!.parts.find((p: any) => p.type === 'data-file-reference');
+        expect(uiFileRefPart).toBeDefined();
+        expect((uiFileRefPart as any).data.fileId).toBe('file-123');
+        expect((uiFileRefPart as any).data.fileName).toBe('document.pdf');
+
+        // Clean up
+        await memory.deleteThread(threadId);
+      });
     });
   });
 }

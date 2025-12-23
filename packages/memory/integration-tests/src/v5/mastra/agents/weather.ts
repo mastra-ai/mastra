@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { ToolCallFilter } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
@@ -34,7 +34,7 @@ export const weatherAgent = new Agent({
   name: 'test',
   instructions:
     'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code. When asked for clipboard contents use the clipboard tool to get the clipboard contents.',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4o',
   memory,
   tools: {
     get_weather: weatherTool,
