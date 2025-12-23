@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/memory';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import type { MastraDBMessage } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
@@ -101,7 +101,7 @@ async function agentGenerate(agent: Agent, message: string | any[], options: any
   }
 }
 
-export function getWorkingMemoryTests({ model }: { model: MastraModelConfig }) {
+export function getWorkingMemoryTests(model: MastraModelConfig) {
   const modelName = typeof model === 'string' ? model : (model as any).modelId || (model as any).id || 'sdk-model';
   describe(`Working Memory Tests (${modelName})`, () => {
     let memory: Memory;
@@ -113,7 +113,6 @@ export function getWorkingMemoryTests({ model }: { model: MastraModelConfig }) {
       beforeEach(async () => {
         // Create a new unique database file in the temp directory for each test
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-${Date.now()}`)), 'test.db');
-        console.log('dbPath', dbPath);
 
         storage = new LibSQLStore({
           id: 'working-memory-template-storage',
@@ -399,7 +398,6 @@ export function getWorkingMemoryTests({ model }: { model: MastraModelConfig }) {
 
         for (const message of history.messages) {
           if (message.role === `assistant`) {
-            console.log('message', JSON.stringify(message, null, 2));
             for (const part of message.content.parts) {
               if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === `updateWorkingMemory`) {
                 memoryArgs.push(part.toolInvocation.args.memory);
@@ -952,7 +950,7 @@ export function getWorkingMemoryTests({ model }: { model: MastraModelConfig }) {
 
       it('should handle required and optional fields correctly with JSONSchema7', async () => {
         // Test with only required fields
-        const res = await agentGenerate(
+        const _res = await agentGenerate(
           agent,
           'My name is Jane Smith and I live in Portland.',
           {
@@ -1060,7 +1058,6 @@ export function getWorkingMemoryTests({ model }: { model: MastraModelConfig }) {
       beforeEach(async () => {
         // Create a new unique database file in the temp directory for each test
         const dbPath = join(await mkdtemp(join(tmpdir(), `memory-resource-working-test-`)), 'test.db');
-        console.log('dbPath', dbPath);
 
         storage = new LibSQLStore({
           id: 'resource-scoped-storage',

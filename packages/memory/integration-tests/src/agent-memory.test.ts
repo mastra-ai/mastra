@@ -1,9 +1,9 @@
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import { config } from 'dotenv';
+import { getAgentMemoryTests } from './shared/agent-memory';
 import { weatherTool as weatherToolV4, weatherToolCity as weatherToolCityV4 } from './v4/mastra/tools/weather';
 import { weatherTool as weatherToolV5, weatherToolCity as weatherToolCityV5 } from './v5/mastra/tools/weather';
-import { getAgentMemoryTests } from './shared/agent-memory';
-import { config } from 'dotenv';
 
 config();
 

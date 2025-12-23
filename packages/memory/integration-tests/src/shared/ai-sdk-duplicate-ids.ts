@@ -8,7 +8,7 @@
  * so when an agent does TEXT -> TOOL -> TEXT, both text blocks get id="0".
  */
 
-import { MastraModelConfig } from '@mastra/core/llm';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { stepCountIs } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -26,7 +26,7 @@ export function getAiSdkDuplicateIdsTests(models: ModelConfig[]) {
     for (const { name, model, envVar, streamTextFunction, expectsDuplicates } of models) {
       it(`should ${expectsDuplicates ? 'detect duplicate' : 'verify unique'} text-start IDs from ${name} in multi-step flow`, async () => {
         if (!process.env[envVar]) {
-          console.log(`Skipping: ${envVar} not set`);
+          console.info(`Skipping: ${envVar} not set`);
           return;
         }
 
@@ -52,38 +52,38 @@ export function getAiSdkDuplicateIdsTests(models: ModelConfig[]) {
           stopWhen: stepCountIs(3),
         });
 
-        console.log(`\n=== Streaming from ${name} ===\n`);
+        console.info(`\n=== Streaming from ${name} ===\n`);
 
         for await (const chunk of result.fullStream) {
           if (chunk.type === 'text-start') {
-            console.log(`[Step ${currentStep}] text-start id="${chunk.id}"`);
+            console.info(`[Step ${currentStep}] text-start id="${chunk.id}"`);
             textIds.push({ type: 'text-start', id: chunk.id, step: currentStep });
           } else if (chunk.type === 'text-end') {
-            console.log(`[Step ${currentStep}] text-end id="${chunk.id}"`);
+            console.info(`[Step ${currentStep}] text-end id="${chunk.id}"`);
             textIds.push({ type: 'text-end', id: chunk.id, step: currentStep });
           } else if (chunk.type === 'text-delta') {
             process.stdout.write(chunk.text);
           } else if (chunk.type === 'tool-call') {
-            console.log(`\n[Step ${currentStep}] tool-call: ${chunk.toolName}`);
+            console.info(`\n[Step ${currentStep}] tool-call: ${chunk.toolName}`);
           } else if (chunk.type === 'finish-step') {
             currentStep++;
-            console.log(`\n--- FINISHED STEP, now at ${currentStep} ---`);
+            console.info(`\n--- FINISHED STEP, now at ${currentStep} ---`);
           }
         }
 
-        console.log('\n\n=== TEXT ID ANALYSIS ===');
-        console.log('All text IDs:', textIds);
+        console.info('\n\n=== TEXT ID ANALYSIS ===');
+        console.info('All text IDs:', textIds);
 
         // Check for duplicate text-start IDs
         const textStartIds = textIds.filter(t => t.type === 'text-start').map(t => t.id);
         const uniqueTextStartIds = new Set(textStartIds);
 
-        console.log(`\ntext-start IDs: [${textStartIds.join(', ')}]`);
-        console.log(`Unique: ${uniqueTextStartIds.size}, Total: ${textStartIds.length}`);
+        console.info(`\ntext-start IDs: [${textStartIds.join(', ')}]`);
+        console.info(`Unique: ${uniqueTextStartIds.size}, Total: ${textStartIds.length}`);
 
         if (uniqueTextStartIds.size < textStartIds.length) {
-          console.log('\n❌ DUPLICATE TEXT-START IDs DETECTED!');
-          console.log(`This confirms the upstream bug in @ai-sdk/${name.toLowerCase()}`);
+          console.info('\n❌ DUPLICATE TEXT-START IDs DETECTED!');
+          console.info(`This confirms the upstream bug in @ai-sdk/${name.toLowerCase()}`);
 
           // Find duplicates
           const idCounts: Record<string, number> = {};
@@ -93,9 +93,9 @@ export function getAiSdkDuplicateIdsTests(models: ModelConfig[]) {
           const duplicates = Object.entries(idCounts)
             .filter(([, count]) => count > 1)
             .map(([id]) => id);
-          console.log('Duplicate IDs:', duplicates);
+          console.info('Duplicate IDs:', duplicates);
         } else {
-          console.log(`\n✅ ${name} produces unique text-start IDs`);
+          console.info(`\n✅ ${name} produces unique text-start IDs`);
         }
 
         // Assert based on expected behavior

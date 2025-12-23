@@ -1,8 +1,8 @@
+import type { EmbeddingModelV1 } from '@internal/ai-sdk-v4';
+import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 import { fastembed } from '@mastra/fastembed';
 import { embed as embedV1 } from 'ai';
-import type { EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { embed as embedV2 } from 'ai-v5';
-import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 import { embed as embedV3 } from 'ai-v6';
 
 import { describe, it, expect } from 'vitest';

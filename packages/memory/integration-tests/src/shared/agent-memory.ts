@@ -1,17 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { Agent, UIMessageWithMetadata } from '@mastra/core/agent';
+import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openaiV6 } from '@ai-sdk/openai-v6';
-import { Memory } from '@mastra/memory';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import type { UIMessageWithMetadata } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { MastraModelConfig, CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import { MastraModelConfig, CoreMessage } from '@mastra/core/llm';
 import { ToolCallFilter } from '@mastra/core/processors';
-import { MockStore } from '@mastra/core/storage';
-import { randomUUID } from 'crypto';
-import { fastembed } from '@mastra/fastembed';
-import { z } from 'zod';
 import { RequestContext } from '@mastra/core/request-context';
+import { MockStore } from '@mastra/core/storage';
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 export function getAgentMemoryTests({
   model,

@@ -67,19 +67,19 @@ function compareOrders(
   const rawSeq = rawStorageOrder.map(o => o.type).join(' -> ');
   const recallSeq = recallOrder.map(o => o.type).join(' -> ');
 
-  console.log('\n=== ORDER COMPARISON ===');
-  console.log('STREAM order:      ', streamSeq);
-  console.log('RAW STORAGE order: ', rawSeq);
-  console.log('RECALL order:      ', recallSeq);
+  console.info('\n=== ORDER COMPARISON ===');
+  console.info('STREAM order:      ', streamSeq);
+  console.info('RAW STORAGE order: ', rawSeq);
+  console.info('RECALL order:      ', recallSeq);
 
   const streamVsRaw = streamSeq === rawSeq;
   const streamVsRecall = streamSeq === recallSeq;
   const rawVsRecall = rawSeq === recallSeq;
 
-  console.log('\n=== MATCH RESULTS ===');
-  console.log(`Stream vs Raw Storage: ${streamVsRaw ? '✅ MATCH' : '❌ MISMATCH'}`);
-  console.log(`Stream vs Recall:      ${streamVsRecall ? '✅ MATCH' : '❌ MISMATCH'}`);
-  console.log(`Raw Storage vs Recall: ${rawVsRecall ? '✅ MATCH' : '❌ MISMATCH'}`);
+  console.info('\n=== MATCH RESULTS ===');
+  console.info(`Stream vs Raw Storage: ${streamVsRaw ? '✅ MATCH' : '❌ MISMATCH'}`);
+  console.info(`Stream vs Recall:      ${streamVsRecall ? '✅ MATCH' : '❌ MISMATCH'}`);
+  console.info(`Raw Storage vs Recall: ${rawVsRecall ? '✅ MATCH' : '❌ MISMATCH'}`);
 
   return { streamVsRaw, streamVsRecall, rawVsRecall };
 }
@@ -108,10 +108,10 @@ function verifyNoTextIdDuplicates(textBlockIds: { id: string; type: string; idx:
   const textEndDuplicates = findDuplicates(textEndIds);
 
   if (textStartDuplicates.length > 0) {
-    console.log(`❌ DUPLICATE text-start IDs found: ${textStartDuplicates.join(', ')}`);
+    console.info(`❌ DUPLICATE text-start IDs found: ${textStartDuplicates.join(', ')}`);
   }
   if (textEndDuplicates.length > 0) {
-    console.log(`❌ DUPLICATE text-end IDs found: ${textEndDuplicates.join(', ')}`);
+    console.info(`❌ DUPLICATE text-end IDs found: ${textEndDuplicates.join(', ')}`);
   }
 
   return { textStartDuplicates, textEndDuplicates };
@@ -122,18 +122,18 @@ function verifyTextBeforeTool(order: OrderEntry[], source: string): boolean {
   const firstText = order.findIndex(o => o.type === 'TEXT');
   const firstTool = order.findIndex(o => o.type === 'TOOL');
 
-  console.log(`\n${source}: TEXT at ${firstText}, TOOL at ${firstTool}`);
+  console.info(`\n${source}: TEXT at ${firstText}, TOOL at ${firstTool}`);
 
   if (firstText !== -1 && firstTool !== -1) {
     if (firstText < firstTool) {
-      console.log(`✅ ${source}: Text appears BEFORE tool`);
+      console.info(`✅ ${source}: Text appears BEFORE tool`);
       return true;
     } else {
-      console.log(`❌ ${source}: Text appears AFTER tool - BUG!`);
+      console.info(`❌ ${source}: Text appears AFTER tool - BUG!`);
       return false;
     }
   } else if (firstTool !== -1 && firstText === -1) {
-    console.log(`📝 ${source}: No text before tool (model went straight to tool)`);
+    console.info(`📝 ${source}: No text before tool (model went straight to tool)`);
     return true; // Not a bug, just model behavior
   }
   return true;
@@ -206,7 +206,7 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
 
       const skipIfNoApiKey = () => {
         if (!process.env[modelConfig.envVar]) {
-          console.log(`Skipping: ${modelConfig.envVar} not set`);
+          console.info(`Skipping: ${modelConfig.envVar} not set`);
           return true;
         }
         return false;
@@ -230,10 +230,10 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const threadId = randomUUID();
         const resourceId = 'ordering-test-user';
 
-        console.log('\n========================================');
-        console.log(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name} ${version})`);
-        console.log('========================================');
-        console.log('Thread ID:', threadId);
+        console.info('\n========================================');
+        console.info(`TEST: Stream -> Raw Storage -> Recall (${modelConfig.name} ${version})`);
+        console.info('========================================');
+        console.info('Thread ID:', threadId);
 
         // === 1. STREAM AND TRACK ORDER ===
         const streamOrder: OrderEntry[] = [];
@@ -271,8 +271,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         }
 
         // Analyze text block IDs for duplicates
-        console.log('\n--- TEXT BLOCK ID ANALYSIS ---');
-        console.log('Text IDs:', textBlockIds);
+        console.info('\n--- TEXT BLOCK ID ANALYSIS ---');
+        console.info('Text IDs:', textBlockIds);
 
         const { textStartDuplicates, textEndDuplicates } = verifyNoTextIdDuplicates(textBlockIds);
         expect(textStartDuplicates, 'Duplicate text-start IDs detected').toHaveLength(0);
@@ -284,21 +284,21 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const rawStorageResult = await memory.storage.listMessages({ threadId, resourceId });
         const rawAssistantMsgs = rawStorageResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
 
-        console.log('\n=== RAW STORAGE ===');
-        console.log('Total messages:', rawStorageResult.messages.length);
-        console.log('Assistant messages:', rawAssistantMsgs.length);
+        console.info('\n=== RAW STORAGE ===');
+        console.info('Total messages:', rawStorageResult.messages.length);
+        console.info('Assistant messages:', rawAssistantMsgs.length);
 
         const rawStorageOrder: OrderEntry[] = [];
         for (const msg of rawAssistantMsgs) {
-          console.log(`\nMessage ${msg.id}:`);
+          console.info(`\nMessage ${msg.id}:`);
           const parts = msg.content.parts || [];
           parts.forEach((p: MessagePart, i: number) => {
             if (p.type === 'text') {
-              console.log(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
+              console.info(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
             } else if (p.type === 'tool-invocation') {
-              console.log(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
+              console.info(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
             } else if (p.type === 'step-start') {
-              console.log(`  [${i}] STEP`);
+              console.info(`  [${i}] STEP`);
             }
           });
           rawStorageOrder.push(...extractOrder(parts));
@@ -308,21 +308,21 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const recallResult = await memory.recall({ threadId, resourceId });
         const recallAssistantMsgs = recallResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
 
-        console.log('\n=== RECALL OUTPUT ===');
-        console.log('Total messages:', recallResult.messages.length);
-        console.log('Assistant messages:', recallAssistantMsgs.length);
+        console.info('\n=== RECALL OUTPUT ===');
+        console.info('Total messages:', recallResult.messages.length);
+        console.info('Assistant messages:', recallAssistantMsgs.length);
 
         const recallOrder: OrderEntry[] = [];
         for (const msg of recallAssistantMsgs) {
-          console.log(`\nMessage ${msg.id}:`);
+          console.info(`\nMessage ${msg.id}:`);
           const parts = msg.content.parts || [];
           parts.forEach((p: MessagePart, i: number) => {
             if (p.type === 'text') {
-              console.log(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
+              console.info(`  [${i}] TEXT: "${p.text?.substring(0, 50)}..."`);
             } else if (p.type === 'tool-invocation') {
-              console.log(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
+              console.info(`  [${i}] TOOL: ${p.toolInvocation?.toolName}`);
             } else if (p.type === 'step-start') {
-              console.log(`  [${i}] STEP`);
+              console.info(`  [${i}] STEP`);
             }
           });
           recallOrder.push(...extractOrder(parts));
@@ -349,8 +349,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const rawTextCount = rawStorageOrder.filter(o => o.type === 'TEXT').length;
         const recallTextCount = recallOrder.filter(o => o.type === 'TEXT').length;
 
-        console.log(`\n=== TEXT COUNT ===`);
-        console.log(`Stream: ${streamTextCount}, Raw: ${rawTextCount}, Recall: ${recallTextCount}`);
+        console.info(`\n=== TEXT COUNT ===`);
+        console.info(`Stream: ${streamTextCount}, Raw: ${rawTextCount}, Recall: ${recallTextCount}`);
 
         expect(rawTextCount).toBeGreaterThanOrEqual(streamTextCount);
         expect(recallTextCount).toBeGreaterThanOrEqual(streamTextCount);
@@ -374,9 +374,9 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const threadId = randomUUID();
         const resourceId = 'multi-tool-test';
 
-        console.log('\n========================================');
-        console.log(`TEST: Multiple Tool Calls Ordering (${modelConfig.name} ${version})`);
-        console.log('========================================');
+        console.info('\n========================================');
+        console.info(`TEST: Multiple Tool Calls Ordering (${modelConfig.name} ${version})`);
+        console.info('========================================');
 
         // === 1. STREAM ===
         const streamOrder: OrderEntry[] = [];
@@ -414,8 +414,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         }
 
         // Analyze text block IDs for duplicates
-        console.log('\n--- TEXT BLOCK ID ANALYSIS ---');
-        console.log('Text IDs:', textBlockIds);
+        console.info('\n--- TEXT BLOCK ID ANALYSIS ---');
+        console.info('Text IDs:', textBlockIds);
 
         const { textStartDuplicates, textEndDuplicates } = verifyNoTextIdDuplicates(textBlockIds);
         expect(textStartDuplicates, 'Duplicate text-start IDs detected').toHaveLength(0);
@@ -469,9 +469,9 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const threadId = randomUUID();
         const resourceId = 'exact-match-test';
 
-        console.log('\n========================================');
-        console.log(`TEST: Exact Stream-Storage Match (${modelConfig.name} ${version})`);
-        console.log('========================================');
+        console.info('\n========================================');
+        console.info(`TEST: Exact Stream-Storage Match (${modelConfig.name} ${version})`);
+        console.info('========================================');
 
         // === STREAM ===
         const streamOrder: OrderEntry[] = [];
@@ -509,8 +509,8 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         }
 
         // Analyze text block IDs for duplicates
-        console.log('\n--- TEXT BLOCK ID ANALYSIS ---');
-        console.log('Text IDs:', textBlockIds);
+        console.info('\n--- TEXT BLOCK ID ANALYSIS ---');
+        console.info('Text IDs:', textBlockIds);
 
         const { textStartDuplicates, textEndDuplicates } = verifyNoTextIdDuplicates(textBlockIds);
         expect(textStartDuplicates, 'Duplicate text-start IDs detected').toHaveLength(0);
@@ -542,16 +542,16 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         const streamFirstTool = streamOrder.findIndex(o => o.type === 'TOOL');
 
         if (streamFirstText !== -1 && streamFirstTool !== -1 && streamFirstText < streamFirstTool) {
-          console.log('\n🔍 Stream had TEXT before TOOL - this MUST be preserved');
+          console.info('\n🔍 Stream had TEXT before TOOL - this MUST be preserved');
 
           const rawFirstText = rawStorageOrder.findIndex(o => o.type === 'TEXT');
           const rawFirstTool = rawStorageOrder.findIndex(o => o.type === 'TOOL');
 
           if (rawFirstText === -1) {
-            console.log('❌ BUG (Issue #9909): Text MISSING in raw storage!');
+            console.info('❌ BUG (Issue #9909): Text MISSING in raw storage!');
             expect.fail('Text that was streamed is missing from raw storage');
           } else if (rawFirstText >= rawFirstTool) {
-            console.log('❌ BUG (Issue #9909): Text appears AFTER tool in raw storage!');
+            console.info('❌ BUG (Issue #9909): Text appears AFTER tool in raw storage!');
             expect(rawFirstText).toBeLessThan(rawFirstTool);
           }
 
@@ -559,10 +559,10 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
           const recallFirstTool = recallOrder.findIndex(o => o.type === 'TOOL');
 
           if (recallFirstText === -1) {
-            console.log('❌ BUG (Issue #9909): Text MISSING in recall!');
+            console.info('❌ BUG (Issue #9909): Text MISSING in recall!');
             expect.fail('Text that was streamed is missing from recall');
           } else if (recallFirstText >= recallFirstTool) {
-            console.log('❌ BUG (Issue #9909): Text appears AFTER tool in recall!');
+            console.info('❌ BUG (Issue #9909): Text appears AFTER tool in recall!');
             expect(recallFirstText).toBeLessThan(recallFirstTool);
           }
         }

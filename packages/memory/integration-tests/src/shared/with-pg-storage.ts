@@ -377,7 +377,7 @@ export function getPgStorageTests(connectionString: string) {
         await memory.saveMessages({ messages: messages as any });
 
         // Test 1: Query with pagination - page 0, perPage 3
-        console.log('Testing pagination: page 0, perPage 3');
+        console.info('Testing pagination: page 0, perPage 3');
         const result1 = await memory.recall({
           threadId,
           resourceId,
@@ -394,7 +394,7 @@ export function getPgStorageTests(connectionString: string) {
         expect(getTextContent(result1.messages[2])).toBe('Message 10');
 
         // Test 2: Query with pagination - page 1, perPage 3
-        console.log('Testing pagination: page 1, perPage 3');
+        console.info('Testing pagination: page 1, perPage 3');
         const result2 = await memory.recall({
           threadId,
           resourceId,
@@ -409,7 +409,7 @@ export function getPgStorageTests(connectionString: string) {
         expect(getTextContent(result2.messages[2])).toBe('Message 7');
 
         // Test 3: Query with pagination - page 0, perPage 1
-        console.log('Testing pagination: page 0, perPage 1 (original bug report)');
+        console.info('Testing pagination: page 0, perPage 1 (original bug report)');
         const result3 = await memory.recall({
           threadId,
           resourceId,
@@ -422,7 +422,7 @@ export function getPgStorageTests(connectionString: string) {
         expect(getTextContent(result3.messages[0])).toBe('Message 10');
 
         // Test 4: Query with pagination - page 9, perPage 1 (last page)
-        console.log('Testing pagination: page 9, perPage 1 (last page)');
+        console.info('Testing pagination: page 9, perPage 1 (last page)');
         const result4 = await memory.recall({
           threadId,
           resourceId,
@@ -435,7 +435,7 @@ export function getPgStorageTests(connectionString: string) {
         expect(getTextContent(result4.messages[0])).toBe('Message 1');
 
         // Test 5: Query with pagination - page 1, perPage 5 (partial last page)
-        console.log('Testing pagination: page 1, perPage 5 (partial last page)');
+        console.info('Testing pagination: page 1, perPage 5 (partial last page)');
         const result5 = await memory.recall({
           threadId,
           resourceId,
@@ -449,7 +449,7 @@ export function getPgStorageTests(connectionString: string) {
         expect(getTextContent(result5.messages[4])).toBe('Message 5');
 
         // Test 6: Query without pagination should still work
-        console.log('Testing query without pagination (backward compatibility)');
+        console.info('Testing query without pagination (backward compatibility)');
         const result6 = await memory.recall({
           threadId,
           resourceId,
@@ -480,7 +480,7 @@ export function getPgStorageTests(connectionString: string) {
         await memory.saveMessages({ messages: messages as any });
 
         // Test: Page beyond available data
-        console.log('Testing pagination beyond available data');
+        console.info('Testing pagination beyond available data');
         const result1 = await memory.recall({
           threadId,
           resourceId,
@@ -491,7 +491,7 @@ export function getPgStorageTests(connectionString: string) {
         expect(result1.messages, 'Page beyond available data should return empty array').toHaveLength(0);
 
         // Test: perPage larger than total messages
-        console.log('Testing perPage larger than total messages');
+        console.info('Testing perPage larger than total messages');
         const result2 = await memory.recall({
           threadId,
           resourceId,

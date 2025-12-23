@@ -1,12 +1,11 @@
-import { createServer } from 'node:net';
-import { randomUUID, type UUID } from 'node:crypto';
-import { JSDOM } from 'jsdom';
-import { describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import type { UUID } from 'node:crypto';
 import { toAISdkStream } from '@mastra/ai-sdk';
-import type { MastraModelConfig } from '@mastra/core/llm';
 import { Agent } from '@mastra/core/agent';
-import { MastraMemory } from '@mastra/core/memory';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
+import type { MastraMemory } from '@mastra/core/memory';
+import { describe, expect, it } from 'vitest';
 
 function isV5PlusModel(model: MastraModelConfig): boolean {
   if (typeof model === 'string') return true;
@@ -15,22 +14,6 @@ function isV5PlusModel(model: MastraModelConfig): boolean {
   }
   return false;
 }
-
-// Set up JSDOM environment for React testing
-const dom = new JSDOM('<!doctype html><html><body></body></html>', {
-  url: 'http://localhost',
-  pretendToBeVisual: true,
-  resources: 'usable',
-});
-
-// @ts-ignore - JSDOM types don't match exactly but this works for testing
-global.window = dom.window;
-global.document = dom.window.document;
-Object.defineProperty(global, 'navigator', {
-  value: dom.window.navigator,
-  writable: false,
-});
-global.fetch = global.fetch || fetch;
 
 export async function setupStreamingMemoryTest({
   model,
@@ -164,16 +147,13 @@ export async function setupStreamingMemoryTest({
       const agentMemory = (await agent.getMemory())!;
       const { messages } = await agentMemory.recall({ threadId });
 
-      console.log('Custom IDs: ', customIds);
-      console.log('Messages: ', messages);
-
       expect(messages).toHaveLength(2);
       expect(messages.length).toBeLessThan(customIds.length);
       for (const message of messages) {
         if (!(`id` in message)) {
           throw new Error(`Expected message.id`);
         }
-        expect(customIds).contains(message.id);
+        expect(customIds).toContain(message.id);
       }
     });
 

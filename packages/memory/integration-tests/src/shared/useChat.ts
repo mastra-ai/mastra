@@ -1,6 +1,8 @@
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
+import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
-import { useChat as useChatV5 } from '@ai-sdk/react-v5';
-import { useChat as useChatV6 } from '@ai-sdk/react-v6';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
 import { MessageList } from '@mastra/core/agent';
@@ -8,12 +10,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai-v5';
 import type { UIMessage } from 'ai-v5';
-import { spawn } from 'child_process';
-import { randomUUID } from 'crypto';
-import { createServer } from 'net';
-import path from 'path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { weatherAgent } from '../v4/mastra/agents/weather';
 import { weatherAgent as weatherAgentV5 } from '../v5/mastra/agents/weather';
 
@@ -25,13 +23,13 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
 });
 
 // @ts-ignore - JSDOM types don't match exactly but this works for testing
-global.window = dom.window;
-global.document = dom.window.document;
-Object.defineProperty(global, 'navigator', {
+(globalThis as any).window = dom.window;
+(globalThis as any).document = dom.window.document;
+Object.defineProperty(globalThis, 'navigator', {
   value: dom.window.navigator,
   writable: false,
 });
-global.fetch = global.fetch || fetch;
+(globalThis as any).fetch = (globalThis as any).fetch || fetch;
 
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
@@ -79,7 +77,6 @@ export function setupUseChatV4() {
         let output = '';
         mastraServer.stdout?.on('data', data => {
           output += data.toString();
-          console.log(output);
           if (output.includes('http://localhost:')) {
             resolve();
           }
@@ -116,7 +113,7 @@ export function setupUseChatV4() {
             };
           },
           onFinish(message) {
-            console.log('useChat finished', message.id);
+            console.info('useChat finished', message.id);
           },
           onError(e) {
             error = e;
@@ -186,14 +183,13 @@ export function setupUseChatV4() {
             };
           },
           onFinish(message) {
-            console.log('useChat finished', message.id);
+            console.info('useChat finished', message.id);
           },
           onError(e) {
             error = e;
             console.error('useChat error:', error);
           },
           onToolCall: async ({ toolCall }) => {
-            console.log(toolCall);
             if (toolCall.toolName === `clipboard`) {
               await new Promise(res => setTimeout(res, 10));
               return state.clipboard;
@@ -272,7 +268,6 @@ export function setupUseChatV4() {
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any; version: 'v5' | 'v6' }) {
   describe('should stream via useChat after tool call (v5+)', () => {
     let mastraServer: ReturnType<typeof spawn>;
@@ -306,7 +301,6 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
         let output = '';
         mastraServer.stdout?.on('data', data => {
           output += data.toString();
-          console.log(output);
           if (output.includes('http://localhost:')) {
             resolve();
           }
@@ -346,7 +340,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
             },
           }),
           onFinish(message: any) {
-            console.log('useChat finished', message);
+            console.info('useChat finished', message);
           },
           onError(e: any) {
             error = e;
@@ -420,7 +414,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
           }),
           messages: initialMessages,
           onFinish(message: any) {
-            console.log('useChat finished', message);
+            console.info('useChat finished', message);
           },
           onError(e: any) {
             error = e;
