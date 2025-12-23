@@ -2,6 +2,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
+import type { StorageSupports } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';
@@ -178,14 +179,17 @@ export class D1Store extends MastraStorage {
     };
   }
 
-  get supports() {
+  get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
+      observability: false,
+      indexManagement: false,
       listScoresBySpan: true,
+      agents: false,
     };
   }
 

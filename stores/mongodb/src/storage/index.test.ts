@@ -499,10 +499,11 @@ describe('MongoDB Specific Tests', () => {
 
       const observabilityStore = await store.getStore('observability');
       expect(observabilityStore).toBeDefined();
-      await expect(observabilityStore?.createSpan(span)).resolves.not.toThrow();
+
+      await expect(observabilityStore?.createSpan({ span: span as any })).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await observabilityStore?.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace({ traceId });
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe(spanId);
@@ -536,7 +537,7 @@ describe('MongoDB Specific Tests', () => {
 
       const observabilityStore = await store.getStore('observability');
       expect(observabilityStore).toBeDefined();
-      await observabilityStore?.createSpan(initialSpan);
+      await observabilityStore?.createSpan({ span: initialSpan as any });
 
       // Update with complex nested data
       const updates = {
@@ -577,7 +578,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await observabilityStore?.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace({ traceId });
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });

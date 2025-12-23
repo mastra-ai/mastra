@@ -116,8 +116,7 @@ export async function runScorerOnTarget({
       text: 'Observability storage domain is not available',
     });
   }
-  const trace = await observabilityStore.getTrace(target.traceId);
-
+  const trace = await observabilityStore.getTrace({ traceId: target.traceId });
   if (!trace) {
     throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
   }
@@ -152,7 +151,7 @@ export async function runScorerOnTarget({
     },
     traceId: target.traceId,
     spanId: target.spanId,
-    entityId: span.name,
+    entityId: span.entityId || span.entityName || 'unknown',
     entityType: span.spanType,
     entity: { traceId: span.traceId, spanId: span.spanId },
     source: 'TEST',

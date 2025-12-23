@@ -1,11 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions, StorageSupports } from '@mastra/core/storage';
+import type { MastraDBMessage } from '@mastra/core/memory';
+
+export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import sql from 'mssql';
+import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 
 /**
  * MSSQL configuration type.
@@ -142,6 +147,7 @@ export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
+  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -181,6 +187,8 @@ export class MSSQLStore extends MastraStorage {
           options: config.options || { encrypt: true, trustServerCertificate: true },
         });
       }
+
+      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
 
       const domainConfig = {
         pool: this.pool,
@@ -241,16 +249,17 @@ export class MSSQLStore extends MastraStorage {
     }
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      listScoresBySpan: true,
-      observabilityInstance: true,
+      observability: true,
       indexManagement: true,
+      listScoresBySpan: true,
+      agents: false,
     };
   }
 

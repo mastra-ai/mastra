@@ -421,21 +421,15 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     const observability = await storage.getStore('observability');
     if (observability) {
       await observability.createSpan({
-        spanId: 'test-span-1',
-        traceId: 'test-trace',
-        parentSpanId: null,
-        name: 'test-span',
-        scope: null,
-        spanType: SpanType.GENERIC,
-        attributes: {},
-        metadata: null,
-        links: null,
-        startedAt: new Date(),
-        endedAt: new Date(),
-        input: null,
-        output: null,
-        error: null,
-        isEvent: false,
+        span: {
+          spanId: 'test-span-1',
+          traceId: 'test-trace',
+          name: 'test-span',
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          isEvent: false,
+        },
       });
     }
 

@@ -6,7 +6,7 @@ import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
-
+import type { StorageSupports } from './types';
 /**
  * In-memory storage implementation for testing and development.
  *
@@ -54,14 +54,14 @@ export class InMemoryStore extends MastraStorage {
     };
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
-      observabilityInstance: true,
+      observability: true,
       indexManagement: false,
       listScoresBySpan: true,
       agents: true,

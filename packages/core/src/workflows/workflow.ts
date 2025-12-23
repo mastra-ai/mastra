@@ -17,7 +17,7 @@ import type { Event } from '../events/types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import { ProcessorRunner } from '../processors';
 import type { Processor } from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
@@ -2379,10 +2379,9 @@ export class Run<
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       input: inputData,
-      attributes: {
-        workflowId: this.workflowId,
-      },
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3160,10 +3159,9 @@ export class Run<
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       input: resumeDataToUse,
-      attributes: {
-        workflowId: this.workflowId,
-      },
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3294,9 +3292,8 @@ export class Run<
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
-      attributes: {
-        workflowId: this.workflowId,
-      },
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3431,9 +3428,8 @@ export class Run<
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
-      attributes: {
-        workflowId: this.workflowId,
-      },
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,

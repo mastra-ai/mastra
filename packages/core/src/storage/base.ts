@@ -2,6 +2,8 @@ import { MastraBase } from '../base';
 
 import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 
+import type { StorageSupports } from './types';
+
 export type StorageDomains = {
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
@@ -110,28 +112,14 @@ export abstract class MastraStorage extends MastraBase {
     this.disableInit = disableInit ?? false;
   }
 
-  /**
-   * Indicates what features this storage adapter supports.
-   * Override in subclasses to declare supported capabilities.
-   */
-  public get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    observabilityInstance?: boolean;
-    indexManagement?: boolean;
-    listScoresBySpan?: boolean;
-    agents?: boolean;
-  } {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      observabilityInstance: false,
+      observability: false,
       indexManagement: false,
       listScoresBySpan: false,
       agents: false,

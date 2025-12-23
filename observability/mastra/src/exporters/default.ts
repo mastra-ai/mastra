@@ -1,12 +1,13 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type {
-  TracingEvent,
-  AnyExportedSpan,
-  InitExporterOptions,
-  TracingStorageStrategy,
-} from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
-import type { MastraStorage, CreateSpanRecord, UpdateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
+import type {
+  MastraStorage,
+  CreateSpanRecord,
+  UpdateSpanRecord,
+  ObservabilityStorage,
+  TracingStorageStrategy,
+} from '@mastra/core/storage';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 
@@ -74,6 +75,16 @@ function resolveTracingStorageStrategy(
     });
   }
   return observability.tracingStrategy.preferred;
+}
+
+// Helper to safely extract string from metadata
+function getStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+// Helper to safely extract object from metadata
+function getObjectOrNull(value: unknown): Record<string, any> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
 export class DefaultExporter extends BaseExporter {
@@ -373,22 +384,50 @@ export class DefaultExporter extends BaseExporter {
   }
 
   private buildCreateRecord(span: AnyExportedSpan): CreateSpanRecord {
+    const metadata = span.metadata ?? {};
+
     return {
       traceId: span.traceId,
       spanId: span.id,
       parentSpanId: span.parentSpanId ?? null,
       name: span.name,
-      scope: null,
+
+      // Entity identification - from span
+      entityType: span.entityType ?? null,
+      entityId: span.entityId ?? null,
+      entityName: span.entityName ?? null,
+
+      // Identity & Tenancy - extracted from metadata if present
+      userId: getStringOrNull(metadata.userId),
+      organizationId: getStringOrNull(metadata.organizationId),
+      resourceId: getStringOrNull(metadata.resourceId),
+
+      // Correlation IDs - extracted from metadata if present
+      runId: getStringOrNull(metadata.runId),
+      sessionId: getStringOrNull(metadata.sessionId),
+      threadId: getStringOrNull(metadata.threadId),
+      requestId: getStringOrNull(metadata.requestId),
+
+      // Deployment context - extracted from metadata if present
+      environment: getStringOrNull(metadata.environment),
+      source: getStringOrNull(metadata.source),
+      serviceName: getStringOrNull(metadata.serviceName),
+      scope: getObjectOrNull(metadata.scope),
+
+      // Span data
       spanType: span.type,
       attributes: this.serializeAttributes(span),
-      metadata: span.metadata ?? null,
+      metadata: span.metadata ?? null, // Keep all metadata including extracted fields
+      tags: span.tags ?? null,
       links: null,
+      input: span.input ?? null,
+      output: span.output ?? null,
+      error: span.errorInfo ?? null,
+      isEvent: span.isEvent,
+
+      // Timestamps
       startedAt: span.startTime,
       endedAt: span.endTime ?? null,
-      input: span.input,
-      output: span.output,
-      error: span.errorInfo,
-      isEvent: span.isEvent,
     };
   }
 
@@ -402,7 +441,7 @@ export class DefaultExporter extends BaseExporter {
       endedAt: span.endTime ?? null,
       input: span.input,
       output: span.output,
-      error: span.errorInfo,
+      error: span.errorInfo ?? null,
     };
   }
 
@@ -416,7 +455,7 @@ export class DefaultExporter extends BaseExporter {
     // Event spans only have an end event
     if (span.isEvent) {
       if (event.type === TracingEventType.SPAN_ENDED) {
-        await observability.createSpan(this.buildCreateRecord(event.exportedSpan));
+        await observability.createSpan({ span: this.buildCreateRecord(event.exportedSpan) });
         // For event spans in realtime, we don't need to track them since they're immediately complete
       } else {
         this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
@@ -424,7 +463,7 @@ export class DefaultExporter extends BaseExporter {
     } else {
       switch (event.type) {
         case TracingEventType.SPAN_STARTED:
-          await observability.createSpan(this.buildCreateRecord(event.exportedSpan));
+          await observability.createSpan({ span: this.buildCreateRecord(event.exportedSpan) });
           // Track this span as created persistently
           this.allCreatedSpans.add(spanKey);
           break;

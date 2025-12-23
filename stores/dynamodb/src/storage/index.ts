@@ -1,8 +1,9 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains } from '@mastra/core/storage';
+
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 import { MemoryStorageDynamoDB } from './domains/memory';
@@ -176,14 +177,17 @@ export class DynamoDBStore extends MastraStorage {
     // so we don't need to create multiple tables
   }
 
-  get supports() {
+  get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
       deleteMessages: true,
+      observability: false,
+      indexManagement: false,
       listScoresBySpan: true,
+      agents: false,
     };
   }
 

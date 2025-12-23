@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import {
   validateConfig,
@@ -163,14 +163,14 @@ export class PostgresStore extends MastraStorage {
     return this.#pgp;
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      observabilityInstance: true,
+      observability: true,
       indexManagement: true,
       listScoresBySpan: true,
       agents: true,

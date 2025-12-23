@@ -2,7 +2,7 @@ import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions } from '@lancedb/lancedb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
 import { StoreMemoryLance } from './domains/memory';
 import { StoreScoresLance } from './domains/scores';
 import { StoreWorkflowsLance } from './domains/workflows';
@@ -172,14 +172,17 @@ export class LanceStorage extends MastraStorage {
     this.stores = {} as StorageDomains;
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
+      observability: false,
+      indexManagement: false,
       listScoresBySpan: true,
+      agents: false,
     };
   }
 }

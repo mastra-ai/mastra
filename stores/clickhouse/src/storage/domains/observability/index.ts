@@ -1,13 +1,29 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  listTracesArgsSchema,
+  ObservabilityStorage,
+  SPAN_SCHEMA,
+  TABLE_SPANS,
+  TraceStatus,
+} from '@mastra/core/storage';
 import type {
   SpanRecord,
-  CreateSpanRecord,
-  UpdateSpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
+  ListTracesArgs,
   PaginationInfo,
+  TracingStorageStrategy,
+  UpdateSpanArgs,
+  BatchDeleteTracesArgs,
+  BatchUpdateSpansArgs,
+  BatchCreateSpansArgs,
+  CreateSpanArgs,
+  GetSpanArgs,
+  GetSpanResponse,
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  GetTraceArgs,
+  GetTraceResponse,
 } from '@mastra/core/storage';
 import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
 import type { ClickhouseDomainConfig } from '../../db';
@@ -32,11 +48,28 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     await this.#db.clearTable({ tableName: TABLE_SPANS });
   }
 
-  async createSpan(span: CreateSpanRecord): Promise<void> {
+  public override get tracingStrategy(): {
+    preferred: TracingStorageStrategy;
+    supported: TracingStorageStrategy[];
+  } {
+    // ClickHouse is optimized for append-only workloads, so the tracing exporter
+    // should use insert-only mode (wait for trace-end events, then insert complete spans).
+    // Note: updateSpan/batchUpdateSpans are still available for manual modifications.
+    return {
+      preferred: 'insert-only',
+      supported: ['insert-only'],
+    };
+  }
+
+  async createSpan(args: CreateSpanArgs): Promise<void> {
+    const { span } = args;
     try {
-      const now = new Date().toISOString();
+      const now = Date.now();
       const record = {
         ...span,
+        // Convert Date objects to millisecond timestamps for DateTime64(3)
+        startedAt: span.startedAt instanceof Date ? span.startedAt.getTime() : span.startedAt,
+        endedAt: span.endedAt instanceof Date ? span.endedAt.getTime() : span.endedAt,
         createdAt: now,
         updatedAt: now,
       };
@@ -59,12 +92,103 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
+  async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
+    const { traceId, spanId } = args;
     try {
       const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
       const result = await this.client.query({
         query: `
-          SELECT * 
+          SELECT *
+          FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          WHERE traceId = {traceId:String} AND spanId = {spanId:String}
+          LIMIT 1
+        `,
+        query_params: { traceId, spanId },
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = (await result.json()) as any[];
+      if (!rows || rows.length === 0) {
+        return null;
+      }
+
+      const spans = transformRows(rows) as SpanRecord[];
+      const span = spans[0];
+      if (!span) {
+        return null;
+      }
+      return { span };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId, spanId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
+    const { traceId } = args;
+    try {
+      const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
+      const result = await this.client.query({
+        query: `
+          SELECT *
+          FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          WHERE traceId = {traceId:String} AND (parentSpanId IS NULL OR parentSpanId = '')
+          LIMIT 1
+        `,
+        query_params: { traceId },
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+
+      const rows = (await result.json()) as any[];
+      if (!rows || rows.length === 0) {
+        return null;
+      }
+
+      const spans = transformRows(rows) as SpanRecord[];
+      const span = spans[0];
+      if (!span) {
+        return null;
+      }
+      return { span };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'GET_ROOT_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
+    const { traceId } = args;
+    try {
+      const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
+      const result = await this.client.query({
+        query: `
+          SELECT *
           FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
           WHERE traceId = {traceId:String}
           ORDER BY startedAt DESC
@@ -101,15 +225,8 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
-  async updateSpan({
-    spanId,
-    traceId,
-    updates,
-  }: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<UpdateSpanRecord>;
-  }): Promise<void> {
+  async updateSpan(args: UpdateSpanArgs): Promise<void> {
+    const { traceId, spanId, updates } = args;
     try {
       // Load existing span
       const existing = await this.#db.load<SpanRecord>({
@@ -126,11 +243,20 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         });
       }
 
+      // Handle Date conversions to millisecond timestamps for DateTime64(3)
+      const data: Record<string, any> = { ...updates };
+      if (data.endedAt instanceof Date) {
+        data.endedAt = data.endedAt.getTime();
+      }
+      if (data.startedAt instanceof Date) {
+        data.startedAt = data.startedAt.getTime();
+      }
+
       // Merge updates and re-insert (ClickHouse uses ReplacingMergeTree)
       const updated = {
         ...existing,
-        ...updates,
-        updatedAt: new Date().toISOString(),
+        ...data,
+        updatedAt: Date.now(),
       };
 
       await this.client.insert({
@@ -157,68 +283,209 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
-    filters,
-    pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const { entityId, entityType, ...actualFilters } = filters || {};
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    // Parse args through schema to apply defaults
+    const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+    const { page, perPage } = pagination;
 
     try {
       // ClickHouse stores null strings as empty strings, so check for both
       const conditions: string[] = [`(parentSpanId IS NULL OR parentSpanId = '')`];
       const values: Record<string, any> = {};
+      let paramIndex = 0;
 
-      // Apply filters
-      if (actualFilters.spanType) {
-        conditions.push(`spanType = {spanType:String}`);
-        values.spanType = actualFilters.spanType;
-      }
-
-      if (actualFilters.name) {
-        conditions.push(`name = {name:String}`);
-        values.name = actualFilters.name;
-      }
-
-      // Apply date range filter
-      if (pagination?.dateRange) {
-        if (pagination.dateRange.start) {
-          conditions.push(`startedAt >= {startDate:DateTime64(3)}`);
-          values.startDate = pagination.dateRange.start.toISOString().replace('Z', '');
+      if (filters) {
+        // Date range filters
+        if (filters.startedAt?.start) {
+          conditions.push(`startedAt >= {startedAtStart:DateTime64(3)}`);
+          // Use Unix timestamp in milliseconds for DateTime64(3)
+          values.startedAtStart = filters.startedAt.start.getTime();
         }
-        if (pagination.dateRange.end) {
-          conditions.push(`startedAt <= {endDate:DateTime64(3)}`);
-          values.endDate = pagination.dateRange.end.toISOString().replace('Z', '');
+        if (filters.startedAt?.end) {
+          conditions.push(`startedAt <= {startedAtEnd:DateTime64(3)}`);
+          values.startedAtEnd = filters.startedAt.end.getTime();
         }
-      }
+        if (filters.endedAt?.start) {
+          conditions.push(`endedAt >= {endedAtStart:DateTime64(3)}`);
+          values.endedAtStart = filters.endedAt.start.getTime();
+        }
+        if (filters.endedAt?.end) {
+          conditions.push(`endedAt <= {endedAtEnd:DateTime64(3)}`);
+          values.endedAtEnd = filters.endedAt.end.getTime();
+        }
 
-      // Apply entity filter
-      if (entityId && entityType) {
-        let name = '';
-        if (entityType === 'workflow') {
-          name = `workflow run: '${entityId}'`;
-        } else if (entityType === 'agent') {
-          name = `agent run: '${entityId}'`;
-        } else {
-          throw new MastraError({
-            id: createStorageErrorId('CLICKHOUSE', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { entityType },
-            text: `Cannot filter by entity type: ${entityType}`,
-          });
+        // Span type filter
+        if (filters.spanType !== undefined) {
+          conditions.push(`spanType = {spanType:String}`);
+          values.spanType = filters.spanType;
         }
-        conditions.push(`name = {entityName:String}`);
-        values.entityName = name;
+
+        // Entity filters
+        if (filters.entityType !== undefined) {
+          conditions.push(`entityType = {entityType:String}`);
+          values.entityType = filters.entityType;
+        }
+        if (filters.entityId !== undefined) {
+          conditions.push(`entityId = {entityId:String}`);
+          values.entityId = filters.entityId;
+        }
+        if (filters.entityName !== undefined) {
+          conditions.push(`entityName = {entityName:String}`);
+          values.entityName = filters.entityName;
+        }
+
+        // Identity & Tenancy filters
+        if (filters.userId !== undefined) {
+          conditions.push(`userId = {userId:String}`);
+          values.userId = filters.userId;
+        }
+        if (filters.organizationId !== undefined) {
+          conditions.push(`organizationId = {organizationId:String}`);
+          values.organizationId = filters.organizationId;
+        }
+        if (filters.resourceId !== undefined) {
+          conditions.push(`resourceId = {resourceId:String}`);
+          values.resourceId = filters.resourceId;
+        }
+
+        // Correlation ID filters
+        if (filters.runId !== undefined) {
+          conditions.push(`runId = {runId:String}`);
+          values.runId = filters.runId;
+        }
+        if (filters.sessionId !== undefined) {
+          conditions.push(`sessionId = {sessionId:String}`);
+          values.sessionId = filters.sessionId;
+        }
+        if (filters.threadId !== undefined) {
+          conditions.push(`threadId = {threadId:String}`);
+          values.threadId = filters.threadId;
+        }
+        if (filters.requestId !== undefined) {
+          conditions.push(`requestId = {requestId:String}`);
+          values.requestId = filters.requestId;
+        }
+
+        // Deployment context filters
+        if (filters.environment !== undefined) {
+          conditions.push(`environment = {environment:String}`);
+          values.environment = filters.environment;
+        }
+        if (filters.source !== undefined) {
+          conditions.push(`source = {source:String}`);
+          values.source = filters.source;
+        }
+        if (filters.serviceName !== undefined) {
+          conditions.push(`serviceName = {serviceName:String}`);
+          values.serviceName = filters.serviceName;
+        }
+
+        // Scope filter (JSON field - use JSONExtractString for each key)
+        if (filters.scope != null) {
+          for (const [key, value] of Object.entries(filters.scope)) {
+            // Validate key to prevent injection in JSON path
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+              throw new MastraError({
+                id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'INVALID_FILTER_KEY'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { key },
+              });
+            }
+            const paramName = `scope_${key}_${paramIndex++}`;
+            conditions.push(`JSONExtractString(scope, '${key}') = {${paramName}:String}`);
+            values[paramName] = typeof value === 'string' ? value : JSON.stringify(value);
+          }
+        }
+
+        // Metadata filter (JSON field)
+        if (filters.metadata != null) {
+          for (const [key, value] of Object.entries(filters.metadata)) {
+            // Validate key to prevent injection in JSON path
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+              throw new MastraError({
+                id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'INVALID_FILTER_KEY'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { key },
+              });
+            }
+            const paramName = `metadata_${key}_${paramIndex++}`;
+            conditions.push(`JSONExtractString(metadata, '${key}') = {${paramName}:String}`);
+            values[paramName] = typeof value === 'string' ? value : JSON.stringify(value);
+          }
+        }
+
+        // Tags filter (all tags must be present)
+        // ClickHouse stores tags as JSON array string, use JSONExtract to check
+        if (filters.tags != null && filters.tags.length > 0) {
+          for (const tag of filters.tags) {
+            const paramName = `tag_${paramIndex++}`;
+            conditions.push(`has(JSONExtract(tags, 'Array(String)'), {${paramName}:String})`);
+            values[paramName] = tag;
+          }
+        }
+
+        // Status filter (derived from error and endedAt)
+        if (filters.status !== undefined) {
+          switch (filters.status) {
+            case TraceStatus.ERROR:
+              // ClickHouse stores null as empty string for String columns
+              conditions.push(`(error IS NOT NULL AND error != '')`);
+              break;
+            case TraceStatus.RUNNING:
+              conditions.push(`(endedAt IS NULL OR endedAt = '') AND (error IS NULL OR error = '')`);
+              break;
+            case TraceStatus.SUCCESS:
+              conditions.push(`(endedAt IS NOT NULL AND endedAt != '') AND (error IS NULL OR error = '')`);
+              break;
+          }
+        }
+
+        // hasChildError filter (requires subquery)
+        if (filters.hasChildError !== undefined) {
+          const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
+          const finalClause = engine.startsWith('ReplacingMergeTree') ? 'FINAL' : '';
+          if (filters.hasChildError) {
+            conditions.push(`EXISTS (
+              SELECT 1 FROM ${TABLE_SPANS} ${finalClause} c
+              WHERE c.traceId = ${TABLE_SPANS}.traceId AND c.error IS NOT NULL AND c.error != ''
+            )`);
+          } else {
+            conditions.push(`NOT EXISTS (
+              SELECT 1 FROM ${TABLE_SPANS} ${finalClause} c
+              WHERE c.traceId = ${TABLE_SPANS}.traceId AND c.error IS NOT NULL AND c.error != ''
+            )`);
+          }
+        }
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const engine = TABLE_ENGINES[TABLE_SPANS] ?? 'MergeTree()';
+      const finalClause = engine.startsWith('ReplacingMergeTree') ? 'FINAL' : '';
+
+      // Order by clause with proper NULL handling for endedAt
+      // For endedAt DESC: NULLs FIRST (running spans on top when viewing newest)
+      // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
+      // startedAt is never null (required field), so no special handling needed
+      // Note: ClickHouse stores null endedAt as empty strings, so we check for both
+      const sortField = orderBy.field;
+      const sortDirection = orderBy.direction;
+      let orderClause: string;
+      if (sortField === 'endedAt') {
+        // Use CASE WHEN to handle NULLs and empty strings for endedAt
+        // DESC: NULLs first (0 sorts before 1)
+        // ASC: NULLs last (1 sorts after 0)
+        const nullSortValue = sortDirection === 'DESC' ? 0 : 1;
+        const nonNullSortValue = sortDirection === 'DESC' ? 1 : 0;
+        orderClause = `ORDER BY CASE WHEN ${sortField} IS NULL OR ${sortField} = '' THEN ${nullSortValue} ELSE ${nonNullSortValue} END, ${sortField} ${sortDirection}`;
+      } else {
+        orderClause = `ORDER BY ${sortField} ${sortDirection}`;
+      }
 
       // Get total count
       const countResult = await this.client.query({
-        query: `SELECT COUNT(*) as count FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''} ${whereClause}`,
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SPANS} ${finalClause} ${whereClause}`,
         query_params: values,
         format: 'JSONEachRow',
       });
@@ -236,13 +503,13 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       const result = await this.client.query({
         query: `
           SELECT *
-          FROM ${TABLE_SPANS} ${engine.startsWith('ReplacingMergeTree') ? 'FINAL' : ''}
+          FROM ${TABLE_SPANS} ${finalClause}
           ${whereClause}
-          ORDER BY startedAt DESC
-          LIMIT ${perPage}
-          OFFSET ${page * perPage}
+          ${orderClause}
+          LIMIT {limit:UInt32}
+          OFFSET {offset:UInt32}
         `,
-        query_params: values,
+        query_params: { ...values, limit: perPage, offset: page * perPage },
         format: 'JSONEachRow',
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
@@ -268,22 +535,25 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: createStorageErrorId('CLICKHOUSE', 'GET_TRACES_PAGINATED', 'FAILED'),
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
         },
         error,
       );
     }
   }
 
-  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     try {
-      const now = new Date().toISOString();
+      const now = Date.now();
       await this.#db.batchInsert({
         tableName: TABLE_SPANS,
         records: args.records.map(record => ({
           ...record,
+          // Convert Date objects to millisecond timestamps for DateTime64(3)
+          startedAt: record.startedAt instanceof Date ? record.startedAt.getTime() : record.startedAt,
+          endedAt: record.endedAt instanceof Date ? record.endedAt.getTime() : record.endedAt,
           createdAt: now,
           updatedAt: now,
         })),
@@ -300,16 +570,14 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
-      const now = new Date().toISOString();
+      const now = Date.now();
 
+      // Note: ClickHouse doesn't support traditional UPDATE operations with MergeTree engines.
+      // Updates are performed by loading existing data, merging changes, and re-inserting.
+      // This sequential processing may be slow for large batches - consider batching at the
+      // application level if high-volume updates are needed.
       // For each update, load existing, merge, and re-insert
       for (const record of args.records) {
         const existing = await this.#db.load<SpanRecord>({
@@ -318,9 +586,18 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
         });
 
         if (existing) {
+          // Convert Date objects to millisecond timestamps for DateTime64(3)
+          const updates: Record<string, any> = { ...record.updates };
+          if (updates.startedAt instanceof Date) {
+            updates.startedAt = updates.startedAt.getTime();
+          }
+          if (updates.endedAt instanceof Date) {
+            updates.endedAt = updates.endedAt.getTime();
+          }
+
           const updated = {
             ...existing,
-            ...record.updates,
+            ...updates,
             updatedAt: now,
           };
 
@@ -348,7 +625,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     try {
       if (args.traceIds.length === 0) return;
 
