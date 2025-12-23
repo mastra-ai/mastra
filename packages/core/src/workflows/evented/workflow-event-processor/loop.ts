@@ -193,7 +193,8 @@ export async function processWorkflowForEach(
     const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
-    await mastra.getStorage()?.updateWorkflowResults({
+    const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,
       runId,
       stepId: step.step.id,
@@ -231,7 +232,8 @@ export async function processWorkflowForEach(
   }
 
   (currentResult as any).output.push(null);
-  await mastra.getStorage()?.updateWorkflowResults({
+  const workflowsStore2 = await mastra.getStorage()?.getStore('workflows');
+  await workflowsStore2?.updateWorkflowResults({
     workflowName: workflowId,
     runId,
     stepId: step.step.id,

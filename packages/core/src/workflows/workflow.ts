@@ -1591,7 +1591,8 @@ export class Workflow<
     }
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -2248,7 +2249,8 @@ export class Run<
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
     try {
-      await this.mastra?.getStorage()?.updateWorkflowState({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.updateWorkflowState({
         workflowName: this.workflowId,
         runId: this.runId,
         opts: {
@@ -3057,7 +3059,8 @@ export class Run<
     forEachIndex?: number;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -3233,7 +3236,8 @@ export class Run<
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -3375,7 +3379,8 @@ export class Run<
       throw new Error('Step is required and must be a valid step or array of steps');
     }
 
-    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });

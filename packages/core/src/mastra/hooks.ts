@@ -1,7 +1,7 @@
 import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
-import type { ScoringHookInput } from '../evals/types';
+import type { SaveScorePayload, ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
 import type { MastraStorage } from '../storage';
 
@@ -115,8 +115,17 @@ export function createOnScorerHook(mastra: Mastra) {
 }
 
 export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
+  const scoresStore = await storage.getStore('scores');
+  if (!scoresStore) {
+    throw new MastraError({
+      id: 'MASTRA_SCORES_STORAGE_NOT_AVAILABLE',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Scores storage domain is not available',
+    });
+  }
   const payloadToSave = saveScorePayloadSchema.parse(payload);
-  await storage?.saveScore(payloadToSave);
+  await scoresStore.saveScore(payloadToSave as SaveScorePayload);
 }
 
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {

@@ -391,7 +391,8 @@ export class EventedWorkflow<
     });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -491,7 +492,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -575,7 +577,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore2 = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore2?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -648,7 +651,8 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -757,7 +761,8 @@ export class EventedRun<
 
   async cancel() {
     // Update storage directly for immediate status update (same pattern as Inngest)
-    await this.mastra?.getStorage()?.updateWorkflowState({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
       opts: {
