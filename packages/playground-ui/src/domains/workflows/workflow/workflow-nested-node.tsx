@@ -4,8 +4,7 @@ import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lu
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { cn } from '@/lib/utils';
-import { useContext } from 'react';
-import { WorkflowNestedGraphContext } from '../context/workflow-nested-graph-context';
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
@@ -41,7 +40,7 @@ export function WorkflowNestedNode({
   stepsFlow,
 }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps } = useCurrentRun();
-  const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
+  const { showNestedGraph } = useWorkflowStepDetail();
 
   const {
     label,
