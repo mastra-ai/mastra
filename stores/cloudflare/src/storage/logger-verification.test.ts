@@ -126,13 +126,12 @@ describe('Logger Verification - No PII Leakage', () => {
       trackException: vi.fn(),
     };
 
-    // Inject logger
-    (store.stores.memory as any).logger = mockLogger;
-
     const resourceId = 'test-resource-2';
     const threadId = 'test-thread-2';
 
     const memoryStore = await store.getStore('memory');
+    // Inject logger
+    (memoryStore as any).logger = mockLogger;
     expect(memoryStore).toBeDefined();
 
     await memoryStore?.saveResource({

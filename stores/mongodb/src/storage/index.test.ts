@@ -397,7 +397,8 @@ describe('MongoDB Specific Tests', () => {
       const result = await memoryStore?.saveMessages({ messages: [complexMessage] });
       expect(result?.messages).toHaveLength(1);
 
-      const { messages } = await memoryStore!.listMessagesById({ messageIds: [messageId] });
+      const messagesResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const messages = messagesResult?.messages ?? [];
       expect(messages).toHaveLength(1);
       expect(messages[0]?.content).toBeDefined();
     });
@@ -501,7 +502,7 @@ describe('MongoDB Specific Tests', () => {
       await expect(observabilityStore?.createSpan(span)).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await observabilityStore!.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace(traceId);
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe(spanId);
