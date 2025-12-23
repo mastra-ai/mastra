@@ -1,9 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
+import { weatherAgent, weatherToolLoopAgent } from './agents';
+import { PinoLogger } from '@mastra/loggers';
 import { Observability } from '@mastra/observability';
-
-import { weatherAgent } from './agents';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -13,6 +12,7 @@ const storage = new LibSQLStore({
 export const mastra = new Mastra({
   storage,
   agents: {
+    weatherToolLoopAgent,
     weatherAgent,
   },
   bundler: {

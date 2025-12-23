@@ -188,6 +188,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   text?: string;
   /** All system messages */
   systemMessages: CoreMessageV4[];
+  /** All completed steps so far (including the current step) */
+  steps: Array<StepResult<any>>;
 }
 
 /**
