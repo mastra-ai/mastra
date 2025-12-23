@@ -1,24 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
-import type {
-  PaginationInfo,
-  StoragePagination,
-  StorageResourceType,
-  WorkflowRun,
-  WorkflowRuns,
-  StorageDomains,
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  StorageListWorkflowRunsInput,
-  UpdateWorkflowStateOptions,
-} from '@mastra/core/storage';
-
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StorageDomains } from '@mastra/core/storage';
 import { AgentsLibSQL } from './domains/agents';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
@@ -72,6 +55,24 @@ export type LibSQLConfig =
       client: Client;
     });
 
+/**
+ * LibSQL/Turso storage adapter for Mastra.
+ *
+ * Access domain-specific storage via `getStore()`:
+ *
+ * @example
+ * ```typescript
+ * const storage = new LibSQLStore({ id: 'my-store', url: 'file:./dev.db' });
+ *
+ * // Access memory domain
+ * const memory = await storage.getStore('memory');
+ * await memory?.saveThread({ thread });
+ *
+ * // Access workflows domain
+ * const workflows = await storage.getStore('workflows');
+ * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ * ```
+ */
 export class LibSQLStore extends MastraStorage {
   private client: Client;
   private readonly maxRetries: number;
@@ -146,236 +147,6 @@ export class LibSQLStore extends MastraStorage {
       listScoresBySpan: true,
       agents: true,
     };
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    const result = await this.stores.memory.saveMessages({ messages: args.messages });
-    return { messages: result.messages };
-  }
-
-  async updateMessages({
-    messages,
-  }: {
-    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
-      id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-    })[];
-  }): Promise<MastraDBMessage[]> {
-    return this.stores.memory.updateMessages({ messages });
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id });
-  }
-
-  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(score);
-  }
-
-  async listScoresByScorerId({
-    scorerId,
-    entityId,
-    entityType,
-    source,
-    pagination,
-  }: {
-    scorerId: string;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
-  }
-
-  async listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByRunId({ runId, pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
-  }
-
-  /**
-   * WORKFLOWS
-   */
-
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
-    workflowName: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
-  }
-
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
-    workflowName: string;
-    runId: string;
-    opts: UpdateWorkflowStateOptions;
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
-  }
-
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
-  }
-
-  async loadWorkflowSnapshot({
-    workflowName,
-    runId,
-  }: {
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
-  }
-
-  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns(args);
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  async createSpan(span: SpanRecord): Promise<void> {
-    return this.stores.observability!.createSpan(span);
-  }
-
-  async updateSpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    return this.stores.observability!.updateSpan(params);
-  }
-
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    return this.stores.observability!.getTrace(traceId);
-  }
-
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.stores.observability!.getTracesPaginated(args);
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
-  }
-
-  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
-    return this.stores.observability!.batchCreateSpans(args);
-  }
-
-  async batchUpdateSpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
-  }): Promise<void> {
-    return this.stores.observability!.batchUpdateSpans(args);
   }
 }
 
