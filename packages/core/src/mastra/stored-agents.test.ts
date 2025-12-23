@@ -54,8 +54,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should return an Agent instance by default', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
 
       const mastra = new Mastra({
         storage,
@@ -71,8 +71,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should return raw StorageAgentType when raw option is true', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
 
       const mastra = new Mastra({ storage });
 
@@ -87,8 +87,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should resolve tools from registered tools', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
 
       const mastra = new Mastra({
         storage,
@@ -103,8 +103,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should warn when referenced tool is not registered', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
 
       const warnSpy = vi.fn();
       const mastra = new Mastra({
@@ -129,8 +129,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should throw error when model config is invalid', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({
         agent: {
           id: 'invalid-model-agent',
           name: 'Invalid Model Agent',
@@ -165,9 +165,9 @@ describe('Mastra Stored Agents', () => {
 
     it('should return Agent instances by default', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
-      await agentsStore.createAgent({ agent: sampleStoredAgent2 });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.createAgent({ agent: sampleStoredAgent2 });
 
       const mastra = new Mastra({ storage });
 
@@ -181,9 +181,9 @@ describe('Mastra Stored Agents', () => {
 
     it('should return raw StorageAgentType array when raw option is true', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
-      await agentsStore.createAgent({ agent: sampleStoredAgent2 });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
+      await agentsStore?.createAgent({ agent: sampleStoredAgent2 });
 
       const mastra = new Mastra({ storage });
 
@@ -197,11 +197,11 @@ describe('Mastra Stored Agents', () => {
 
     it('should return pagination info correctly', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
+      const agentsStore = await storage.getStore('agents');
 
       // Create 25 agents
       for (let i = 0; i < 25; i++) {
-        await agentsStore.createAgent({
+        await agentsStore?.createAgent({
           agent: {
             ...sampleStoredAgent,
             id: `agent-${i}`,
@@ -225,8 +225,8 @@ describe('Mastra Stored Agents', () => {
   describe('Agent instance creation from stored config', () => {
     it('should create agent with correct model string format', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
 
       const mastra = new Mastra({ storage });
 
@@ -238,8 +238,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should resolve workflows from stored config', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-workflow',
@@ -270,8 +270,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should resolve sub-agents from stored config', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({
         agent: {
           ...sampleStoredAgent,
           id: 'agent-with-sub-agent',
@@ -302,8 +302,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should pass defaultOptions to created agent', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
 
       const mastra = new Mastra({ storage });
 
@@ -317,8 +317,8 @@ describe('Mastra Stored Agents', () => {
   describe('Type inference', () => {
     it('should have correct return type for getStoredAgentById without raw option', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const mastra = new Mastra({ storage });
 
       const result = await mastra.getStoredAgentById('stored-agent-1');
@@ -332,8 +332,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should have correct return type for getStoredAgentById with raw: true', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const mastra = new Mastra({ storage });
 
       const result = await mastra.getStoredAgentById('stored-agent-1', { raw: true });
@@ -348,8 +348,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should have correct return type for listStoredAgents without raw option', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const mastra = new Mastra({ storage });
 
       const result = await mastra.listStoredAgents();
@@ -362,8 +362,8 @@ describe('Mastra Stored Agents', () => {
 
     it('should have correct return type for listStoredAgents with raw: true', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
-      await agentsStore.createAgent({ agent: sampleStoredAgent });
+      const agentsStore = await storage.getStore('agents');
+      await agentsStore?.createAgent({ agent: sampleStoredAgent });
       const mastra = new Mastra({ storage });
 
       const result = await mastra.listStoredAgents({ raw: true });
@@ -379,7 +379,7 @@ describe('Mastra Stored Agents', () => {
   describe('Full primitive resolution', () => {
     it('should resolve tools and workflows from stored config', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
+      const agentsStore = await storage.getStore('agents');
 
       // Create registered primitives
       const registeredTool = createTool({
@@ -425,7 +425,7 @@ describe('Mastra Stored Agents', () => {
         metadata: { version: '2.0', feature: 'full-test' },
       };
 
-      await agentsStore.createAgent({ agent: fullStoredAgent });
+      await agentsStore?.createAgent({ agent: fullStoredAgent });
 
       const mastra = new Mastra({
         storage,
@@ -444,7 +444,7 @@ describe('Mastra Stored Agents', () => {
 
     it('should resolve scorers with sampling config from stored config', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
+      const agentsStore = await storage.getStore('agents');
 
       const registeredScorer = createScorer({
         id: 'registered-scorer',
@@ -464,7 +464,7 @@ describe('Mastra Stored Agents', () => {
         },
       };
 
-      await agentsStore.createAgent({ agent: storedAgentWithScorers });
+      await agentsStore?.createAgent({ agent: storedAgentWithScorers });
 
       const mastra = new Mastra({
         storage,
@@ -479,7 +479,7 @@ describe('Mastra Stored Agents', () => {
 
     it('should resolve scorers by id when key lookup fails', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
+      const agentsStore = await storage.getStore('agents');
 
       const registeredScorer = createScorer({
         id: 'scorer-by-id',
@@ -497,7 +497,7 @@ describe('Mastra Stored Agents', () => {
         },
       };
 
-      await agentsStore.createAgent({ agent: storedAgent });
+      await agentsStore?.createAgent({ agent: storedAgent });
 
       const mastra = new Mastra({
         storage,
@@ -511,7 +511,7 @@ describe('Mastra Stored Agents', () => {
 
     it('should handle missing primitives gracefully with warnings', async () => {
       const storage = new InMemoryStore();
-      const agentsStore = (await storage.getStore('agents'))!;
+      const agentsStore = await storage.getStore('agents');
 
       const storedAgent = {
         id: 'agent-with-missing-refs',
@@ -525,7 +525,7 @@ describe('Mastra Stored Agents', () => {
         scorers: { 'missing-scorer': {} },
       };
 
-      await agentsStore.createAgent({ agent: storedAgent });
+      await agentsStore?.createAgent({ agent: storedAgent });
 
       const warnSpy = vi.fn();
       const mastra = new Mastra({
