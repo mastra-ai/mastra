@@ -27,6 +27,9 @@ importers:
       '@ai-sdk/provider':
         specifier: ^3.0.0
         version: 3.0.0
+      '@mastra/ai-sdk':
+        specifier: link:../../client-sdks/ai-sdk
+        version: link:../../client-sdks/ai-sdk
       '@mastra/client-js':
         specifier: link:../../client-sdks/client-js
         version: link:../../client-sdks/client-js
