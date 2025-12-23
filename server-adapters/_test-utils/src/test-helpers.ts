@@ -418,35 +418,35 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Add test trace by creating a span with that traceId
   const storage = mastra.getStorage();
   if (storage) {
-    await storage.createSpan({
-      spanId: 'test-span-1',
-      traceId: 'test-trace',
-      parentSpanId: null,
-      name: 'test-span',
-      scope: null,
-      spanType: SpanType.GENERIC,
-      attributes: {},
-      metadata: null,
-      links: null,
-      startedAt: new Date(),
-      endedAt: new Date(),
-      input: null,
-      output: null,
-      error: null,
-      isEvent: false,
-    });
+    const observability = await storage.getStore('observability');
+    if (observability) {
+      await observability.createSpan({
+        span: {
+          spanId: 'test-span-1',
+          traceId: 'test-trace',
+          name: 'test-span',
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          isEvent: false,
+        },
+      });
+    }
 
     // Add test stored agent for stored agents routes
     if (storage.supports.agents) {
-      await storage.createAgent({
-        agent: {
-          id: 'test-stored-agent',
-          name: 'Test Stored Agent',
-          description: 'A test stored agent for integration tests',
-          instructions: 'Test instructions for stored agent',
-          model: { provider: 'openai', name: 'gpt-4o' },
-        },
-      });
+      const agents = await storage.getStore('agents');
+      if (agents) {
+        await agents.createAgent({
+          agent: {
+            id: 'test-stored-agent',
+            name: 'Test Stored Agent',
+            description: 'A test stored agent for integration tests',
+            instructions: 'Test instructions for stored agent',
+            model: { provider: 'openai', name: 'gpt-4o' },
+          },
+        });
+      }
     }
   }
 

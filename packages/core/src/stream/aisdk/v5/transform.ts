@@ -4,7 +4,7 @@ import type {
   LanguageModelV2Usage,
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
-import type { LanguageModelV3Usage } from '@ai-sdk/provider-v6';
+import type { LanguageModelV3FinishReason, LanguageModelV3Usage } from '@ai-sdk/provider-v6';
 import type { ModelMessage, ObjectStreamPart, TextStreamPart, ToolSet } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../../../agent/message-list';
 import type { OutputSchema, PartialSchemaOutput } from '../../base/schema';
@@ -222,7 +222,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
         from: ChunkFrom.AGENT,
         payload: {
           stepResult: {
-            reason: value.finishReason,
+            reason: normalizeFinishReason(value.finishReason),
           },
           output: {
             // Normalize usage to handle both V2 (flat) and V3 (nested) formats
@@ -529,4 +529,43 @@ function normalizeUsage(usage: LanguageModelV2Usage | LanguageModelV3Usage | und
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     raw: usage,
   };
+}
+
+/**
+ * Type guard to check if a finish reason is V3 format (object with unified/raw properties)
+ */
+function isV3FinishReason(
+  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+): finishReason is LanguageModelV3FinishReason {
+  return typeof finishReason === 'object' && finishReason !== null && 'unified' in finishReason;
+}
+
+/**
+ * Normalize finish reason from either V2/V5 (string) or V3/V6 (object) format to a string.
+ *
+ * V2/V5 format: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown'
+ * V3/V6 format: { unified: 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other', raw: string | undefined }
+ *
+ * We normalize to the unified string value for internal Mastra use.
+ * Note: V6 removed 'unknown' and merged it into 'other'.
+ */
+function normalizeFinishReason(
+  finishReason: LanguageModelV2FinishReason | LanguageModelV3FinishReason | 'tripwire' | 'retry' | undefined,
+): LanguageModelV2FinishReason | 'tripwire' | 'retry' {
+  if (!finishReason) {
+    return 'other';
+  }
+
+  // Handle Mastra-specific finish reasons
+  if (finishReason === 'tripwire' || finishReason === 'retry') {
+    return finishReason;
+  }
+
+  // V3/V6 format - extract unified value
+  if (isV3FinishReason(finishReason)) {
+    return finishReason.unified;
+  }
+
+  // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
+  return finishReason === 'unknown' ? 'other' : finishReason;
 }

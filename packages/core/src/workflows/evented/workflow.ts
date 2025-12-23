@@ -386,10 +386,13 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -470,10 +473,12 @@ export class EventedRun<
     inputData,
     initialState,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -487,7 +492,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -531,6 +537,7 @@ export class EventedRun<
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
+      perStep,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -551,10 +558,12 @@ export class EventedRun<
     inputData,
     initialState,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
+    perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -568,7 +577,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -605,6 +615,7 @@ export class EventedRun<
         prevResult: { status: 'success', output: inputDataToUse },
         requestContext: Object.fromEntries(requestContext.entries()),
         initialState: initialStateToUse,
+        perStep,
       },
     });
 
@@ -625,6 +636,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     let steps: string[] = [];
     if (typeof params.step === 'string') {
@@ -639,24 +651,31 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error('Cannot resume workflow: workflows store is required');
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
 
-    const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     if (!resumePath) {
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`,
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
       );
     }
 
     console.dir(
-      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
+      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
       { depth: null },
     );
     // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot
@@ -697,6 +716,7 @@ export class EventedRun<
         pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
+        perStep: params.perStep,
       })
       .then(result => {
         if (result.status !== 'suspended') {
@@ -747,7 +767,8 @@ export class EventedRun<
 
   async cancel() {
     // Update storage directly for immediate status update (same pattern as Inngest)
-    await this.mastra?.getStorage()?.updateWorkflowState({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
       opts: {

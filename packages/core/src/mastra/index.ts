@@ -776,7 +776,20 @@ export class Mastra<
       throw error;
     }
 
-    const storedAgent = await storage.getAgentById({ id });
+    const agentsStore = await storage.getStore('agents');
+    if (!agentsStore) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_STORED_AGENT_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Agents storage domain is not available',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const storedAgent = await agentsStore.getAgentById({ id });
 
     if (!storedAgent) {
       return null;
@@ -891,7 +904,20 @@ export class Mastra<
       throw error;
     }
 
-    const result = await storage.listAgents({
+    const agentsStore = await storage.getStore('agents');
+    if (!agentsStore) {
+      const error = new MastraError({
+        id: 'MASTRA_LIST_STORED_AGENTS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Agents storage domain is not available',
+        details: { status: 400 },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+
+    const result = await agentsStore.listAgents({
       page: args?.page,
       perPage: args?.perPage,
       orderBy: args?.orderBy,

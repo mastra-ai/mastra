@@ -291,7 +291,9 @@ for (const modelConfig of MODEL_CONFIGS) {
       await delay(500);
 
       // === 2. GET RAW STORAGE ORDER ===
-      const rawStorageResult = await memory.storage.listMessages({ threadId, resourceId });
+      const memoryStore = await memory.storage.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      const rawStorageResult = await memoryStore?.listMessages({ threadId, resourceId });
       const rawAssistantMsgs = rawStorageResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
 
       console.log('\n=== RAW STORAGE ===');
@@ -434,7 +436,9 @@ for (const modelConfig of MODEL_CONFIGS) {
       await delay(500);
 
       // === 2. RAW STORAGE ===
-      const rawResult = await memory.storage.listMessages({ threadId, resourceId });
+      const memoryStore = await memory.storage.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      const rawResult = await memoryStore?.listMessages({ threadId, resourceId });
       const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
       const rawStorageOrder: OrderEntry[] = [];
       for (const msg of rawAssistant) {
@@ -529,7 +533,9 @@ for (const modelConfig of MODEL_CONFIGS) {
       await delay(500);
 
       // === RAW STORAGE ===
-      const rawResult = await memory.storage.listMessages({ threadId, resourceId });
+      const memoryStore = await memory.storage.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      const rawResult = await memoryStore?.listMessages({ threadId, resourceId });
       const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
       const rawStorageOrder: OrderEntry[] = [];
       for (const msg of rawAssistant) {

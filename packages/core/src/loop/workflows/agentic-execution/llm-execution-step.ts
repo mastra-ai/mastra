@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
@@ -268,10 +268,12 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         messageList.add(message, 'response');
 
-        // Reset reasoning state
+        // Reset reasoning state - clear providerOptions to prevent reasoning metadata
+        // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
           isReasoning: false,
           reasoningDeltas: [],
+          providerOptions: undefined,
         });
 
         if (isControllerOpen(controller)) {
@@ -417,11 +419,17 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
       while (attempt <= maxRetries) {
         try {
           const isLastModel = attempt === maxRetries && index === models.length;
-          const result = await callback(modelConfig.model, isLastModel);
+          const result = await callback(modelConfig, isLastModel);
           finalResult = result;
           done = true;
           break;
         } catch (err) {
+          // TripWire errors should be re-thrown immediately - they are intentional aborts
+          // from processors (e.g., processInputStep) and should not trigger model retries
+          if (err instanceof TripWire) {
+            throw err;
+          }
+
           attempt++;
 
           console.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
@@ -466,7 +474,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   inputProcessors,
   logger,
   agentId,
-  headers,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -493,7 +500,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
-      }>(models)(async (model, isLastModel) => {
+      }>(models)(async (modelConfig, isLastModel) => {
+        const model = modelConfig.model;
+        const modelHeaders = modelConfig.headers;
         // Reset system messages to original before each step execution
         // This ensures that system message modifications in prepareStep/processInputStep/processors
         // don't persist across steps - each step starts fresh with original system messages
@@ -555,6 +564,51 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
+            // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
+            if (error instanceof TripWire) {
+              // Emit tripwire chunk to the stream
+              if (isControllerOpen(controller)) {
+                controller.enqueue({
+                  type: 'tripwire',
+                  runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    reason: error.message,
+                    retry: error.options?.retry,
+                    metadata: error.options?.metadata,
+                    processorId: error.processorId,
+                  },
+                });
+              }
+
+              // Create a minimal runState for the bail response
+              const runState = new AgenticRunState({
+                _internal: _internal!,
+                model,
+              });
+
+              // Return via bail to properly signal the tripwire
+              return {
+                callBail: true,
+                outputStream: new MastraModelOutput({
+                  model: {
+                    modelId: model.modelId,
+                    provider: model.provider,
+                    version: model.specificationVersion,
+                  },
+                  stream: new ReadableStream({
+                    start(c) {
+                      c.close();
+                    },
+                  }),
+                  messageList,
+                  messageId,
+                  options: { runId },
+                }),
+                runState,
+                stepTools: tools,
+              };
+            }
             console.error('Error in processInputStep processors:', error);
             throw error;
           }
@@ -594,7 +648,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                       resumeData can not be an empty object nor null/undefined.
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
-                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message.`;
+                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
+                      `;
                 }
 
                 return message;
@@ -619,7 +674,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 modelSettings: currentStep.modelSettings,
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
-                headers,
+                // Merge headers: modelConfig headers first, then modelSettings overrides them
+                // Only create object if there are actual headers to avoid passing empty {}
+                headers:
+                  modelHeaders || currentStep.modelSettings?.headers
+                    ? { ...modelHeaders, ...currentStep.modelSettings?.headers }
+                    : undefined,
                 methodType,
                 generateId: _internal?.generateId,
                 onResult: ({

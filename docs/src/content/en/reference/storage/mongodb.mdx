@@ -47,7 +47,7 @@ const storage = new MongoDBStore({
       name: "options",
       type: "MongoClientOptions",
       description:
-        "MongoDB client options for advanced configuration (SSL, connection pooling, etc.). See advanced configuration [here](https://www.mongodb.com/docs/drivers/node/current/connect/connection-options/).",
+        "MongoDB client options for advanced configuration (SSL, connection pooling, etc.).",
       isOptional: true,
     },
   ]}
@@ -117,6 +117,7 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
+  id: 'mongodb-storage',
   url: process.env.MONGODB_URL,
   dbName: process.env.MONGODB_DATABASE,
 });
@@ -124,8 +125,9 @@ const storage = new MongoDBStore({
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning
@@ -181,4 +183,77 @@ const results = await vectorStore.query({
     category: "technical",
   },
 });
+```
+
+## Usage Example
+
+### Adding memory to an agent
+
+To add MongoDB memory to an agent use the `Memory` class and create a new `storage` key using `MongoDBStore`. The configuration supports both local and remote MongoDB instances.
+
+```typescript title="src/mastra/agents/example-mongodb-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { MongoDBStore } from "@mastra/mongodb";
+
+export const mongodbAgent = new Agent({
+  id: "mongodb-agent",
+  name: "mongodb-agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new MongoDBStore({
+      url: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    options: {
+      threads: {
+        generateTitle: true,
+      },
+    },
+  }),
+});
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-mongodb-agent.ts"
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("mongodbAgent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
 ```

@@ -224,14 +224,25 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inputData: any;
     pubsub: PubSub;
     startedAt: number;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
       return null;
     }
 
-    const { step, stepResults, executionContext, resume, timeTravel, prevOutput, inputData, pubsub, startedAt } =
-      params;
+    const {
+      step,
+      stepResults,
+      executionContext,
+      resume,
+      timeTravel,
+      prevOutput,
+      inputData,
+      pubsub,
+      startedAt,
+      perStep,
+    } = params;
 
     const isResume = !!resume?.steps?.length;
     let result: WorkflowResult<any, any, any, any>;
@@ -242,7 +253,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     try {
       if (isResume) {
         runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
-        const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: runId,
         });
@@ -261,13 +273,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
             },
             outputOptions: { includeState: true },
+            perStep,
           },
         })) as any;
         result = invokeResp.result;
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else if (isTimeTravel) {
-        const snapshot: any = (await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+        const workflowsStoreForTimeTravel = await this.mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = (await workflowsStoreForTimeTravel?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: executionContext.runId,
         })) ?? { context: {} };
@@ -287,6 +301,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             runId: executionContext.runId,
             outputOptions: { includeState: true },
+            perStep,
           },
         })) as any;
         result = invokeResp.result;
@@ -299,6 +314,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
+            perStep,
           },
         })) as any;
         result = invokeResp.result;
@@ -345,7 +361,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          return { executionContext, result: { status: 'failed', error: result?.error } };
+          return { executionContext, result: { status: 'failed', error: result?.error, endedAt: Date.now() } };
         } else if (result.status === 'suspended') {
           const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
             const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -372,6 +388,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               executionContext,
               result: {
                 status: 'suspended',
+                suspendedAt: Date.now(),
                 payload: stepResult.payload,
                 suspendPayload: {
                   ...(stepResult as any)?.suspendPayload,
@@ -385,6 +402,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             executionContext,
             result: {
               status: 'suspended',
+              suspendedAt: Date.now(),
               payload: {},
             },
           };
@@ -408,8 +426,34 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             result: {
               status: 'tripwire',
               tripwire: result?.tripwire,
+              endedAt: Date.now(),
             },
           };
+        } else if (perStep || result.status === 'paused') {
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-result',
+              payload: {
+                id: step.id,
+                status: 'paused',
+              },
+            },
+          });
+
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-finish',
+              payload: {
+                id: step.id,
+                metadata: {},
+              },
+            },
+          });
+          return { executionContext, result: { status: 'paused' } };
         }
 
         await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
@@ -437,7 +481,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         });
 
-        return { executionContext, result: { status: 'success', output: result?.result } };
+        return { executionContext, result: { status: 'success', output: result?.result, endedAt: Date.now() } };
       },
     );
 
@@ -445,7 +489,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     return {
       ...res.result,
       startedAt,
-      endedAt: Date.now(),
       payload: inputData,
       resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
       resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,

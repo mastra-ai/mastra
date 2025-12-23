@@ -112,18 +112,21 @@ instructions: {
 }
 ```
 
-> See the [Agent reference doc](/reference/v1/agents/agent) for more information.
+:::info
+
+Visit [Agent reference](/reference/v1/agents/agent) for more information.
+
+:::
 
 ### Registering an agent
 
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
-```typescript {6} title="src/mastra/index.ts"
+```typescript {5} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { testAgent } from "./agents/test-agent";
 
 export const mastra = new Mastra({
-  // ...
   agents: { testAgent },
 });
 ```
@@ -208,13 +211,21 @@ for await (const chunk of stream.textStream) {
   </TabItem>
 </Tabs>
 
-> See [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [.generate()](/reference/v1/agents/generate) or [.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ## Structured output
 
 Agents can return structured, type-safe data using Zod or JSON Schema. The parsed result is available on `response.object`.
 
-> See [Structured Output](/docs/v1/agents/structured-output) for more information.
+:::info
+
+Visit [Structured Output](/docs/v1/agents/structured-output) for more information.
+
+:::
 
 ## Analyzing images
 
@@ -240,7 +251,6 @@ const response = await testAgent.generate([
 
 console.log(response.text);
 ```
-
 
 ## Using `maxSteps`
 
@@ -276,12 +286,15 @@ Agents can use tools to go beyond language generation, enabling structured inter
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   tools: { testTool },
 });
 ```
 
-> See [Using Tools](/docs/v1/agents/using-tools) for more information.
+:::info
+
+Visit [Using Tools](/docs/v1/agents/using-tools) for more information.
+
+:::
 
 ## Using `RequestContext`
 
@@ -295,7 +308,6 @@ export type UserTier = {
 export const testAgent = new Agent({
   id: "test-agent",
   name: "Test Agent",
-  // ...
   model: ({ requestContext }) => {
     const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
 
@@ -306,7 +318,11 @@ export const testAgent = new Agent({
 });
 ```
 
-> See [Request Context](/docs/v1/server/request-context) for more information.
+:::info
+
+See [Request Context](/docs/v1/server/request-context) for more information.
+
+:::
 
 ## Testing with Studio
 

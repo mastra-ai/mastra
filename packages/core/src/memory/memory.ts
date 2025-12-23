@@ -1,9 +1,9 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
-import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
+import { ModelRouterEmbeddingModel } from '../llm/model';
+import type { EmbeddingModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type {
   InputProcessor,
@@ -23,7 +23,7 @@ import type {
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
-import type { MastraVector } from '../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
 import type {
   SharedMemoryConfig,
@@ -96,7 +96,8 @@ export abstract class MastraMemory extends MastraBase {
 
   protected _storage?: MastraStorage;
   vector?: MastraVector;
-  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
+  embedder?: MastraEmbeddingModel<string>;
+  embedderOptions?: MastraEmbeddingOptions;
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
@@ -200,8 +201,12 @@ https://mastra.ai/en/docs/memory/overview`,
     this.vector = vector;
   }
 
-  public setEmbedder(embedder: EmbeddingModel<string>) {
-    this.embedder = embedder;
+  public setEmbedder(embedder: EmbeddingModelId | MastraEmbeddingModel<string>) {
+    if (typeof embedder === 'string') {
+      this.embedder = new ModelRouterEmbeddingModel(embedder);
+    } else {
+      this.embedder = embedder;
+    }
   }
 
   /**
@@ -457,7 +462,7 @@ https://mastra.ai/en/docs/memory/overview`,
    */
   abstract getWorkingMemoryTemplate({
     memoryConfig,
-  }?: {
+  }: {
     memoryConfig?: MemoryConfig;
   }): Promise<WorkingMemoryTemplate | null>;
 
@@ -496,10 +501,11 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of input processors configured for this memory instance
    */
-  getInputProcessors(
+  async getInputProcessors(
     configuredProcessors: InputProcessorOrWorkflow[] = [],
     context?: RequestContext,
-  ): InputProcessor[] {
+  ): Promise<InputProcessor[]> {
+    const memoryStore = await this.storage.getStore('memory');
     const processors: InputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
@@ -512,7 +518,7 @@ https://mastra.ai/en/docs/memory/overview`,
       typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
 
     if (isWorkingMemoryEnabled) {
-      if (!this.storage?.stores?.memory)
+      if (!memoryStore)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
@@ -535,7 +541,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
         processors.push(
           new WorkingMemory({
-            storage: this.storage.stores.memory,
+            storage: memoryStore,
             template,
             scope: typeof effectiveConfig.workingMemory === 'object' ? effectiveConfig.workingMemory.scope : undefined,
             useVNext:
@@ -550,7 +556,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const lastMessages = effectiveConfig.lastMessages;
     if (lastMessages) {
-      if (!this.storage?.stores?.memory)
+      if (!memoryStore)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
@@ -564,7 +570,7 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasMessageHistory) {
         processors.push(
           new MessageHistory({
-            storage: this.storage.stores.memory,
+            storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
           }),
         );
@@ -573,7 +579,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
     // Add semantic recall input processor if configured
     if (effectiveConfig.semanticRecall) {
-      if (!this.storage?.stores?.memory)
+      if (!memoryStore)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
@@ -608,7 +614,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
         processors.push(
           new SemanticRecall({
-            storage: this.storage.stores.memory,
+            storage: memoryStore,
             vector: this.vector,
             embedder: this.embedder,
             indexName,
@@ -629,10 +635,11 @@ https://mastra.ai/en/docs/memory/overview`,
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
    * @returns Array of output processors configured for this memory instance
    */
-  getOutputProcessors(
+  async getOutputProcessors(
     configuredProcessors: OutputProcessorOrWorkflow[] = [],
     context?: RequestContext,
-  ): OutputProcessor[] {
+  ): Promise<OutputProcessor[]> {
+    const memoryStore = await this.storage.getStore('memory');
     const processors: OutputProcessor[] = [];
 
     // Extract runtime memoryConfig from context if available
@@ -646,7 +653,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
     // Add SemanticRecall output processor if configured
     if (effectiveConfig.semanticRecall) {
-      if (!this.storage?.stores?.memory)
+      if (!memoryStore)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
@@ -682,7 +689,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
         processors.push(
           new SemanticRecall({
-            storage: this.storage.stores.memory,
+            storage: memoryStore,
             vector: this.vector,
             embedder: this.embedder,
             indexName,
@@ -694,7 +701,7 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const lastMessages = effectiveConfig.lastMessages;
     if (lastMessages) {
-      if (!this.storage?.stores?.memory)
+      if (!memoryStore)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
@@ -708,7 +715,7 @@ https://mastra.ai/en/docs/memory/overview`,
       if (!hasMessageHistory) {
         processors.push(
           new MessageHistory({
-            storage: this.storage.stores.memory,
+            storage: memoryStore,
             lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
           }),
         );

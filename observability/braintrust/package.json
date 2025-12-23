@@ -1,6 +1,6 @@
 {
   "name": "@mastra/braintrust",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.7",
   "description": "Braintrust observability provider for Mastra - includes tracing and future observability features",
   "type": "module",
   "main": "dist/index.js",
@@ -35,7 +35,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "braintrust": "^0.4.9"
+    "braintrust": "^1.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

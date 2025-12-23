@@ -41,7 +41,6 @@ describe('PostgresStore stores initialization', () => {
     // and only populates it in the async init() method
     expect(storage.stores).toBeDefined();
     expect(storage.stores.memory).toBeDefined();
-    expect(storage.stores.operations).toBeDefined();
     expect(storage.stores.workflows).toBeDefined();
     expect(storage.stores.scores).toBeDefined();
   });

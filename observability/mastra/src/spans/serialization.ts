@@ -7,39 +7,6 @@
  */
 
 /**
- * Configuration limits for serialization.
- * These defaults are intentionally conservative to prevent OOM issues.
- */
-export interface SerializationLimits {
-  /** Maximum characters for any single attribute string (default: 1024) */
-  maxAttrChars: number;
-  /** Maximum depth for recursive serialization (default: 6) */
-  maxDepth: number;
-  /** Maximum object keys to serialize (default: 50) */
-  maxKeys: number;
-  /** Maximum array elements to serialize (default: 50) */
-  maxArrayItems: number;
-  /** Maximum total output characters (default: 8192) */
-  maxTotalChars: number;
-}
-
-export const DEFAULT_SERIALIZATION_LIMITS: SerializationLimits = {
-  maxAttrChars: 1024,
-  maxDepth: 6,
-  maxKeys: 50,
-  maxArrayItems: 50,
-  maxTotalChars: 8192,
-};
-
-/**
- * Hard-cap any string to prevent unbounded growth.
- */
-export function truncateString(s: string, maxChars: number): string {
-  if (s.length <= maxChars) return s;
-  return s.slice(0, maxChars) + '…[truncated]';
-}
-
-/**
  * Default keys to strip from objects during deep cleaning.
  * These are typically internal/sensitive fields that shouldn't be traced.
  */
@@ -52,11 +19,30 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
 ]);
 
 export interface DeepCleanOptions {
-  keysToStrip?: Set<string>;
-  maxDepth?: number;
-  maxStringLength?: number;
-  maxArrayLength?: number;
-  maxObjectKeys?: number;
+  keysToStrip: Set<string>;
+  maxDepth: number;
+  maxStringLength: number;
+  maxArrayLength: number;
+  maxObjectKeys: number;
+}
+
+export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
+  keysToStrip: DEFAULT_KEYS_TO_STRIP,
+  maxDepth: 6,
+  maxStringLength: 1024,
+  maxArrayLength: 50,
+  maxObjectKeys: 50,
+});
+
+/**
+ * Hard-cap any string to prevent unbounded growth.
+ */
+export function truncateString(s: string, maxChars: number): string {
+  if (s.length <= maxChars) {
+    return s;
+  }
+
+  return s.slice(0, maxChars) + '…[truncated]';
 }
 
 /**
@@ -69,14 +55,8 @@ export interface DeepCleanOptions {
  * @param options - Optional configuration for cleaning behavior
  * @returns A cleaned version of the input with size limits enforced
  */
-export function deepClean(value: any, options: DeepCleanOptions = {}): any {
-  const {
-    keysToStrip = DEFAULT_KEYS_TO_STRIP,
-    maxDepth = DEFAULT_SERIALIZATION_LIMITS.maxDepth,
-    maxStringLength = DEFAULT_SERIALIZATION_LIMITS.maxAttrChars,
-    maxArrayLength = DEFAULT_SERIALIZATION_LIMITS.maxArrayItems,
-    maxObjectKeys = DEFAULT_SERIALIZATION_LIMITS.maxKeys,
-  } = options;
+export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_CLEAN_OPTIONS): any {
+  const { keysToStrip, maxDepth, maxStringLength, maxArrayLength, maxObjectKeys } = options;
 
   const seen = new WeakSet<any>();
 
@@ -92,10 +72,7 @@ export function deepClean(value: any, options: DeepCleanOptions = {}): any {
 
     // Handle strings - enforce length limit
     if (typeof val === 'string') {
-      if (val.length > maxStringLength) {
-        return val.slice(0, maxStringLength) + '…[truncated]';
-      }
-      return val;
+      return truncateString(val, maxStringLength);
     }
 
     // Handle other non-object primitives explicitly
@@ -121,11 +98,7 @@ export function deepClean(value: any, options: DeepCleanOptions = {}): any {
     if (val instanceof Error) {
       return {
         name: val.name,
-        message: val.message
-          ? val.message.length > maxStringLength
-            ? val.message.slice(0, maxStringLength) + '…[truncated]'
-            : val.message
-          : undefined,
+        message: val.message ? truncateString(val.message, maxStringLength) : undefined,
       };
     }
 

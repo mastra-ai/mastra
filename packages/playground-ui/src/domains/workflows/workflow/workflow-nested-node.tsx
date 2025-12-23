@@ -32,9 +32,14 @@ export type NestedNode = Node<
 
 export interface WorkflowNestedNodeProps {
   parentWorkflowName?: string;
+  stepsFlow: Record<string, string[]>;
 }
 
-export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
+export function WorkflowNestedNode({
+  data,
+  parentWorkflowName,
+  stepsFlow,
+}: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps } = useCurrentRun();
   const { showNestedGraph } = useContext(WorkflowNestedGraphContext);
 
@@ -148,6 +153,7 @@ export function WorkflowNestedNode({ data, parentWorkflowName }: NodeProps<Neste
           onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
           status={displayStatus}
           stepKey={stepKey}
+          stepsFlow={stepsFlow}
         />
       </div>
       {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}

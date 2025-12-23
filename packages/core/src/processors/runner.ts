@@ -6,7 +6,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
-import { SpanType } from '../observability';
+import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
@@ -42,8 +42,9 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
     this.span = parentSpan?.createChildSpan({
       type: SpanType.PROCESSOR_RUN,
       name: `output processor: ${processorName}`,
+      entityType: EntityType.OUTPUT_PROCESSOR,
+      entityName: processorName,
       attributes: {
-        processorName: processorName,
         processorType: 'output',
         processorIndex: processorIndex ?? 0,
       },
@@ -186,8 +187,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `output processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.OUTPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'output',
             processorIndex: index,
           },
@@ -237,8 +240,10 @@ export class ProcessorRunner {
       const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `output processor: ${processor.id}`,
+        entityType: EntityType.OUTPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'output',
           processorIndex: index,
         },
@@ -544,8 +549,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `input processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.INPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'input',
             processorIndex: index,
           },
@@ -597,8 +604,10 @@ export class ProcessorRunner {
       const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input processor: ${processor.id}`,
+        entityType: EntityType.INPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'input',
           processorIndex: index,
         },
@@ -778,8 +787,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `input step processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.INPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'input',
             processorIndex: index,
           },
@@ -850,8 +861,10 @@ export class ProcessorRunner {
       const processorSpan = currentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input step processor: ${processor.id}`,
+        entityType: EntityType.INPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'input',
           processorIndex: index,
         },
@@ -1001,8 +1014,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `output step processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.OUTPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'output',
             processorIndex: index,
           },
@@ -1058,8 +1073,10 @@ export class ProcessorRunner {
       const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `output step processor: ${processor.id}`,
+        entityType: EntityType.OUTPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'output',
           processorIndex: index,
         },

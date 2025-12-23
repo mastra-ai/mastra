@@ -23,14 +23,7 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type {
-  TraceRecord,
-  SpanRecord,
-  PaginationInfo,
-  WorkflowRun,
-  WorkflowRuns,
-  StorageListMessagesInput,
-} from '@mastra/core/storage';
+import type { PaginationInfo, WorkflowRun, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -189,7 +182,7 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WorkflowState;
+export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -426,10 +419,21 @@ export interface McpServerToolListResponse {
   tools: McpToolInfo[];
 }
 
+/**
+ * Client version of ScoreRowData with dates serialized as strings (from JSON)
+ */
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-} & { spanId?: string };
+};
+
+/**
+ * Response for listing scores (client version with serialized dates)
+ */
+export type ListScoresResponse = {
+  pagination: PaginationInfo;
+  scores: ClientScoreRowData[];
+};
 
 // Scores-related types
 export interface ListScoresByRunIdParams {
@@ -453,25 +457,8 @@ export interface ListScoresByEntityIdParams {
   perPage?: number;
 }
 
-export interface ListScoresBySpanParams {
-  traceId: string;
-  spanId: string;
-  page?: number;
-  perPage?: number;
-}
-
 export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
-}
-
-export interface ListScoresResponse {
-  pagination: {
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  };
-  scores: ClientScoreRowData[];
 }
 
 export interface SaveScoreResponse {
@@ -501,15 +488,6 @@ export interface TemplateInstallationRequest {
   targetPath?: string;
   /** Environment variables for template */
   variables?: Record<string, string>;
-}
-
-export interface GetTraceResponse {
-  trace: TraceRecord;
-}
-
-export interface GetTracesResponse {
-  spans: SpanRecord[];
-  pagination: PaginationInfo;
 }
 
 export interface StreamVNextChunkType {
@@ -558,6 +536,7 @@ export interface TimeTravelParams {
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
   requestContext?: RequestContext | Record<string, any>;
   tracingOptions?: TracingOptions;
+  perStep?: boolean;
 }
 
 // ============================================================================
@@ -678,4 +657,17 @@ export interface Provider {
   connected: boolean;
   docUrl?: string;
   models: string[];
+}
+
+// ============================================================================
+// System Types
+// ============================================================================
+
+export interface MastraPackage {
+  name: string;
+  version: string;
+}
+
+export interface GetSystemPackagesResponse {
+  packages: MastraPackage[];
 }

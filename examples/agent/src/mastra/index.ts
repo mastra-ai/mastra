@@ -45,7 +45,7 @@ const testScorer = createScorer({
   return 1;
 });
 
-export const mastra = new Mastra({
+const config = {
   agents: {
     chefAgent,
     chefAgentResponses,
@@ -100,4 +100,8 @@ export const mastra = new Mastra({
   observability: new Observability({
     default: { enabled: true },
   }),
+};
+
+export const mastra = new Mastra({
+  ...config,
 });

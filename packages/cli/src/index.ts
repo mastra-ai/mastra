@@ -65,7 +65,11 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
+  .option(
+    '-m, --mcp <editor>',
+    'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
+    parseMcp,
+  )
   .option(
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
@@ -86,7 +90,11 @@ program
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
+  .option(
+    '-m, --mcp <editor>',
+    'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
+    parseMcp,
+  )
   .action(initProject);
 
 program
@@ -126,6 +134,7 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra Folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('-s, --studio', 'Bundle the studio UI with the build')
   .option('--debug', 'Enable debug logs', false)
   .action(buildProject);
 
@@ -141,6 +150,9 @@ program
   .description('Start the Mastra studio')
   .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the studio')
+  .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
+  .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
+  .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .action(studio);
 
 const scorersCommand = program.command('scorers').description('Manage scorers for evaluating AI outputs');
