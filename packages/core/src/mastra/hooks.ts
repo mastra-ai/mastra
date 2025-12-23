@@ -125,7 +125,7 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
     });
   }
   const payloadToSave = saveScorePayloadSchema.parse(payload);
-  await scoresStore.saveScore(payloadToSave as SaveScorePayload);
+  await scoresStore.saveScore(payloadToSave);
 }
 
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {

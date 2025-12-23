@@ -173,7 +173,7 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
     });
   }
   const payloadToSave = saveScorePayloadSchema.parse(scorerResult);
-  const result = await scoresStore.saveScore(payloadToSave as SaveScorePayload);
+  const result = await scoresStore.saveScore(payloadToSave);
   return result.score;
 }
 
