@@ -15,8 +15,6 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   return !!(
     tool &&
     !(tool instanceof Tool) &&
-    'execute' in tool &&
-    typeof tool.execute === 'function' &&
-    ('parameters' in tool || 'inputSchema' in tool)
+    ('parameters' in tool || ('execute' in tool && typeof tool.execute === 'function' && 'inputSchema' in tool))
   );
 }
