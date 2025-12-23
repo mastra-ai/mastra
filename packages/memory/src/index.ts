@@ -1,8 +1,10 @@
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
+import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -570,11 +572,31 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    const promise = (this.embedder.specificationVersion === `v2` ? embedManyV5 : embedMany)({
+    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
+
+    if (this.embedder.specificationVersion === `v3`) {
+      embedFn = embedManyV6;
+    } else if (this.embedder.specificationVersion === `v2`) {
+      embedFn = embedManyV5;
+    } else {
+      embedFn = embedMany;
+    }
+
+    if (!embedFn) {
+      throw new MastraError({
+        id: 'EMBEDDER_INVALID_REQUEST',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.USER,
+        text: `Tried to embed message content but this Memory instance doesn't have an attached embedder.`,
+      });
+    }
+
+    const promise = embedFn({
       values: chunks,
       maxRetries: 3,
       // @ts-ignore
       model: this.embedder,
+      ...(this.embedderOptions || {}),
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
