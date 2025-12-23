@@ -182,8 +182,14 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
       // Wait for async memory operations
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      const memoryStore = await storage.getStore('memory');
+
+      if (!memoryStore) {
+        throw new Error('Memory store not found');
+      }
+
       // Retrieve messages from storage directly
-      const { messages: savedMessages } = await storage.listMessages({
+      const { messages: savedMessages } = await memoryStore.listMessages({
         threadId,
       });
 
@@ -278,8 +284,14 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
       // Wait for async memory operations
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      const memoryStore = await storage.getStore('memory');
+
+      if (!memoryStore) {
+        throw new Error('Memory store not found');
+      }
+
       // Retrieve messages from storage directly
-      const { messages: savedMessages } = await storage.listMessages({
+      const { messages: savedMessages } = await memoryStore.listMessages({
         threadId,
       });
 
@@ -469,8 +481,14 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
       // Wait for async operations
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      const memoryStore = await storage.getStore('memory');
+
+      if (!memoryStore) {
+        throw new Error('Memory store not found');
+      }
+
       // Retrieve from storage
-      const { messages: savedMessages } = await storage.listMessages({
+      const { messages: savedMessages } = await memoryStore.listMessages({
         threadId,
       });
 
@@ -606,8 +624,14 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
       // Wait for memory persistence
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      const memoryStore = await storage.getStore('memory');
+
+      if (!memoryStore) {
+        throw new Error('Memory store not found');
+      }
+
       // Simulate page refresh - retrieve messages from storage
-      const { messages: messagesAfterRefresh } = await storage.listMessages({
+      const { messages: messagesAfterRefresh } = await memoryStore.listMessages({
         threadId,
       });
 

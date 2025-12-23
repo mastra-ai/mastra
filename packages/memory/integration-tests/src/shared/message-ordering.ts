@@ -281,7 +281,11 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         await delay(500);
 
         // === 2. GET RAW STORAGE ORDER ===
-        const rawStorageResult = await memory.storage.listMessages({ threadId, resourceId });
+        const memoryStore = await memory.storage.getStore('memory');
+        if (!memoryStore) {
+          throw new Error('Memory store not found');
+        }
+        const rawStorageResult = await memoryStore.listMessages({ threadId, resourceId });
         const rawAssistantMsgs = rawStorageResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
 
         console.info('\n=== RAW STORAGE ===');
@@ -424,7 +428,11 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         await delay(500);
 
         // === 2. RAW STORAGE ===
-        const rawResult = await memory.storage.listMessages({ threadId, resourceId });
+        const memoryStore = await memory.storage.getStore('memory');
+        if (!memoryStore) {
+          throw new Error('Memory store not found');
+        }
+        const rawResult = await memoryStore.listMessages({ threadId, resourceId });
         const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
         const rawStorageOrder: OrderEntry[] = [];
         for (const msg of rawAssistant) {
@@ -519,7 +527,11 @@ export function getMessageOrderingTests(config: MessageOrderingTestConfig) {
         await delay(500);
 
         // === RAW STORAGE ===
-        const rawResult = await memory.storage.listMessages({ threadId, resourceId });
+        const memoryStore = await memory.storage.getStore('memory');
+        if (!memoryStore) {
+          throw new Error('Memory store not found');
+        }
+        const rawResult = await memoryStore.listMessages({ threadId, resourceId });
         const rawAssistant = rawResult.messages.filter((m: MastraDBMessage) => m.role === 'assistant');
         const rawStorageOrder: OrderEntry[] = [];
         for (const msg of rawAssistant) {
