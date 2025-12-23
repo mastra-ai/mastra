@@ -3,7 +3,6 @@ import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StorageDomains, CreateIndexOptions, StorageSupports } from '@mastra/core/storage';
 
 import sql from 'mssql';
-import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
@@ -144,7 +143,6 @@ export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
-  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -184,8 +182,6 @@ export class MSSQLStore extends MastraStorage {
           options: config.options || { encrypt: true, trustServerCertificate: true },
         });
       }
-
-      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
 
       const domainConfig = {
         pool: this.pool,
