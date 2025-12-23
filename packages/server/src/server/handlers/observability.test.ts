@@ -20,6 +20,29 @@ vi.mock('./error', () => ({
   }),
 }));
 
+// Mock observability store
+const createMockObservabilityStore = () => ({
+  getTrace: vi.fn(),
+  listTraces: vi.fn(),
+});
+
+// Mock scores store
+const createMockScoresStore = () => ({
+  listScoresBySpan: vi.fn(),
+});
+
+// Mock storage with getStore method
+const createMockStorage = (
+  observabilityStore: ReturnType<typeof createMockObservabilityStore>,
+  scoresStore: ReturnType<typeof createMockScoresStore>,
+): Partial<MastraStorage> => ({
+  getStore: vi.fn((domain: string) => {
+    if (domain === 'observability') return Promise.resolve(observabilityStore);
+    if (domain === 'scores') return Promise.resolve(scoresStore);
+    return Promise.resolve(undefined);
+  }) as MastraStorage['getStore'],
+});
+
 // Mock Mastra instance
 const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
   ({
@@ -27,13 +50,6 @@ const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
     getScorerById: vi.fn(),
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
   }) as unknown as Mastra;
-
-// Mock storage instance
-const createMockStorage = (): Partial<MastraStorage> => ({
-  getTrace: vi.fn(),
-  listTraces: vi.fn(),
-  listScoresBySpan: vi.fn(),
-});
 
 // Sample span for testing
 const createSampleSpan = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
@@ -71,14 +87,17 @@ const createSampleSpan = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
   ...overrides,
 });
 
-describe('Observability Route Handlers', () => {
-  let mockStorage: ReturnType<typeof createMockStorage>;
+describe('Observability Handlers', () => {
+  let mockObservabilityStore: ReturnType<typeof createMockObservabilityStore>;
+  let mockScoresStore: ReturnType<typeof createMockScoresStore>;
   let mockMastra: Mastra;
   let handleErrorSpy: ReturnType<typeof vi.mocked<typeof errorHandler.handleError>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockStorage = createMockStorage();
+    mockObservabilityStore = createMockObservabilityStore();
+    mockScoresStore = createMockScoresStore();
+    const mockStorage = createMockStorage(mockObservabilityStore, mockScoresStore);
     mockMastra = createMockMastra(mockStorage);
     handleErrorSpy = vi.mocked(errorHandler.handleError);
     handleErrorSpy.mockImplementation(error => {
@@ -93,7 +112,7 @@ describe('Observability Route Handlers', () => {
         spans: [createSampleSpan()],
       };
 
-      (mockStorage.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(mockTrace);
+      (mockObservabilityStore.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(mockTrace);
 
       const result = await GET_TRACE_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
@@ -101,12 +120,12 @@ describe('Observability Route Handlers', () => {
       });
 
       expect(result).toEqual(mockTrace);
-      expect(mockStorage.getTrace).toHaveBeenCalledWith({ traceId: 'test-trace-123' });
+      expect(mockObservabilityStore.getTrace).toHaveBeenCalledWith({ traceId: 'test-trace-123' });
       expect(handleErrorSpy).not.toHaveBeenCalled();
     });
 
     it('should throw 404 when trace not found', async () => {
-      (mockStorage.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      (mockObservabilityStore.getTrace as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
       await expect(
         GET_TRACE_ROUTE.handler({
@@ -151,7 +170,7 @@ describe('Observability Route Handlers', () => {
 
     it('should call handleError when storage throws', async () => {
       const storageError = new Error('Database connection failed');
-      (mockStorage.getTrace as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+      (mockObservabilityStore.getTrace as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
         GET_TRACE_ROUTE.handler({
@@ -176,14 +195,14 @@ describe('Observability Route Handlers', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const result = await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {},
         pagination: {},
         orderBy: {},
@@ -202,7 +221,7 @@ describe('Observability Route Handlers', () => {
         spans: [createSampleSpan()],
       };
 
-      (mockStorage.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const result = await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
@@ -214,7 +233,7 @@ describe('Observability Route Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: { entityType: 'AGENT' },
         pagination: { page: 1, perPage: 10 },
         orderBy: { field: 'startedAt', direction: 'DESC' },
@@ -243,7 +262,7 @@ describe('Observability Route Handlers', () => {
 
     it('should call handleError when storage throws', async () => {
       const storageError = new Error('Database query failed');
-      (mockStorage.listTraces as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
         LIST_TRACES_ROUTE.handler({
@@ -441,7 +460,7 @@ describe('Observability Route Handlers', () => {
         },
       };
 
-      (mockStorage.listScoresBySpan as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+      (mockScoresStore.listScoresBySpan as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const result = await LIST_SCORES_BY_SPAN_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
@@ -451,7 +470,7 @@ describe('Observability Route Handlers', () => {
         perPage: 10,
       });
 
-      expect(mockStorage.listScoresBySpan).toHaveBeenCalledWith({
+      expect(mockScoresStore.listScoresBySpan).toHaveBeenCalledWith({
         traceId: 'test-trace-1',
         spanId: 'test-span-1',
         pagination: { page: 0, perPage: 10 },
@@ -496,7 +515,7 @@ describe('Observability Route Handlers', () => {
 
     it('should call handleError when storage throws', async () => {
       const storageError = new Error('Database query failed');
-      (mockStorage.listScoresBySpan as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
+      (mockScoresStore.listScoresBySpan as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
 
       await expect(
         LIST_SCORES_BY_SPAN_ROUTE.handler({

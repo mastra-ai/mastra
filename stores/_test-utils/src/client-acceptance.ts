@@ -1,3 +1,4 @@
+import type { MemoryStorage } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
 /**
@@ -26,9 +27,7 @@ export interface ClientAcceptanceTestConfig {
   createStoreWithClient: () => {
     name?: string;
     init(): Promise<void>;
-    saveThread(params: { thread: ThreadData }): Promise<{ id: string; title?: string }>;
-    getThreadById(params: { threadId: string }): Promise<{ id: string; title?: string } | null>;
-    deleteThread(params: { threadId: string }): Promise<void>;
+    getStore(domain: 'memory'): Promise<MemoryStorage | undefined>;
   };
 
   /**
@@ -78,6 +77,9 @@ export function createClientAcceptanceTests(config: ClientAcceptanceTestConfig) 
       const store = createStoreWithClient();
       await store.init();
 
+      const memory = await store.getStore('memory');
+      expect(memory).toBeDefined();
+
       const thread: ThreadData = {
         id: `thread-client-test-${Date.now()}`,
         resourceId: 'test-resource',
@@ -88,15 +90,15 @@ export function createClientAcceptanceTests(config: ClientAcceptanceTestConfig) 
       };
 
       try {
-        const savedThread = await store.saveThread({ thread });
+        const savedThread = await memory!.saveThread({ thread });
         expect(savedThread.id).toBe(thread.id);
 
-        const retrievedThread = await store.getThreadById({ threadId: thread.id });
+        const retrievedThread = await memory!.getThreadById({ threadId: thread.id });
         expect(retrievedThread).toBeDefined();
         expect(retrievedThread?.title).toBe('Test Thread');
       } finally {
         // Clean up
-        await store.deleteThread({ threadId: thread.id });
+        await memory!.deleteThread({ threadId: thread.id });
       }
     });
 

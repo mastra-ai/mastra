@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
-import type { MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage, ScoresStorage, ObservabilityStorage } from '@mastra/core/storage';
 import {
   tracesFilterSchema,
   tracesOrderBySchema,
@@ -86,6 +86,24 @@ function getStorage(mastra: Mastra): MastraStorage {
   return storage;
 }
 
+async function getObservabilityStore(mastra: Mastra): Promise<ObservabilityStorage> {
+  const storage = getStorage(mastra);
+  const observability = await storage.getStore('observability');
+  if (!observability) {
+    throw new HTTPException(500, { message: 'Observability storage domain is not available' });
+  }
+  return observability;
+}
+
+async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
+  const storage = getStorage(mastra);
+  const scores = await storage.getStore('scores');
+  if (!scores) {
+    throw new HTTPException(500, { message: 'Scores storage domain is not available' });
+  }
+  return scores;
+}
+
 export const LIST_TRACES_ROUTE = createRoute({
   method: 'GET',
   path: '/api/observability/traces',
@@ -110,7 +128,8 @@ export const LIST_TRACES_ROUTE = createRoute({
       const pagination = pickParams(paginationArgsSchema, transformedParams);
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
 
-      return await getStorage(mastra).listTraces({ filters, pagination, orderBy });
+      const observabilityStore = await getObservabilityStore(mastra);
+      return await observabilityStore.listTraces({ filters, pagination, orderBy });
     } catch (error) {
       handleError(error, 'Error listing traces');
     }
@@ -128,7 +147,8 @@ export const GET_TRACE_ROUTE = createRoute({
   tags: ['Observability'],
   handler: async ({ mastra, traceId }) => {
     try {
-      const trace = await getStorage(mastra).getTrace({ traceId });
+      const observabilityStore = await getObservabilityStore(mastra);
+      const trace = await observabilityStore.getTrace({ traceId });
 
       if (!trace) {
         throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
@@ -197,7 +217,9 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
       const pagination = pickParams(paginationArgsSchema, params);
       const spanIds = pickParams(spanIdsSchema, params);
 
-      return await getStorage(mastra).listScoresBySpan({
+      const scoresStore = await getScoresStore(mastra);
+
+      return await scoresStore.listScoresBySpan({
         ...spanIds,
         pagination,
       });
