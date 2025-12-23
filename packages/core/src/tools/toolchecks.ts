@@ -9,6 +9,6 @@ import type { VercelTool } from './types';
  */
 export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   // Checks if this tool is not an instance of Tool
-  // AI SDK v4/v5 tools have 'parameters', v6 tools have 'inputSchema'
+  // AI SDK v4 tools have 'parameters', v5/v6 tools have 'inputSchema'
   return !!(tool && !(tool instanceof Tool) && ('parameters' in tool || 'inputSchema' in tool));
 }
