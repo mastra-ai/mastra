@@ -771,7 +771,7 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
 
         if (editor === `antigravity`) {
           const confirm = await p.select({
-            message: `Antigravity uses a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+            message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
             options: [
               { value: 'yes', label: 'Yes, I understand' },
               { value: 'skip', label: 'No, skip for now' },
