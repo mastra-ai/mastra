@@ -1,3 +1,4 @@
+import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
@@ -22,7 +23,6 @@ import type {
   RunProcessInputStepResult,
   ToolCallInfo,
 } from './index';
-import type { StepResult } from '@internal/ai-sdk-v5';
 
 /**
  * Implementation of processor state management

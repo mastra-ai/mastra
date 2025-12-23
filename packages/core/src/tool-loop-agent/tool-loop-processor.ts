@@ -5,7 +5,7 @@ import type {
   StepResult,
   ToolLoopAgentSettings,
 } from '@internal/ai-v6';
-import { isSupportedLanguageModel, convertMessages } from '../agent';
+import { isSupportedLanguageModel } from '../agent';
 import type { AgentExecutionOptions, AgentInstructions } from '../agent';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../llm/model/shared.types';

@@ -1,4 +1,5 @@
 import * as crypto from 'node:crypto';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -8,7 +9,6 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
-import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 
 /**
  * PII categories for detection and redaction
