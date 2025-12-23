@@ -4,6 +4,8 @@ import path from 'node:path';
 import { customProvider as customProviderV2 } from '@internal/ai-sdk-v5';
 import { customProvider as customProviderLegacy } from '@internal/ai-sdk-v4';
 import type { EmbeddingModelV3 } from '@internal/ai-v6';
+import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import type { EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { customProvider as customProviderV3 } from '@internal/ai-v6';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
@@ -121,7 +123,14 @@ const fastEmbedProviderV3 = customProviderV3({
   },
 });
 
-export const fastembed: EmbeddingModelV3 = Object.assign(fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`), {
+export const fastembed: EmbeddingModelV3 & {
+  small: EmbeddingModelV3;
+  base: EmbeddingModelV3;
+  smallV2: EmbeddingModelV2<string>;
+  baseV2: EmbeddingModelV2<string>;
+  smallLegacy: EmbeddingModelV1<string>;
+  baseLegacy: EmbeddingModelV1<string>;
+} = Object.assign(fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`), {
   small: fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`),
   base: fastEmbedProviderV3.embeddingModel(`bge-base-en-v1.5`),
   smallV2: fastEmbedProviderV2.textEmbeddingModel(`bge-small-en-v1.5`),
