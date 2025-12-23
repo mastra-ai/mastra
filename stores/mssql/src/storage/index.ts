@@ -1,26 +1,8 @@
-import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
-import type { StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions, StorageSupports } from '@mastra/core/storage';
 
-export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
-import type {
-  StorageResourceType,
-  WorkflowRun,
-  WorkflowRuns,
-  StoragePagination,
-  StorageDomains,
-  CreateIndexOptions,
-  IndexInfo,
-  StorageIndexStats,
-  StorageListWorkflowRunsInput,
-  UpdateWorkflowStateOptions,
-  StorageSupports,
-} from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
@@ -135,11 +117,32 @@ const isPoolConfig = (config: MSSQLConfigType): config is MSSQLConfigType & { po
   return 'pool' in config;
 };
 
+/**
+ * MSSQL storage adapter for Mastra.
+ *
+ * Access domain-specific storage via `getStore()`:
+ *
+ * @example
+ * ```typescript
+ * const storage = new MSSQLStore({ id: 'my-store', connectionString: '...' });
+ *
+ * // Access memory domain
+ * const memory = await storage.getStore('memory');
+ * await memory?.saveThread({ thread });
+ *
+ * // Access workflows domain
+ * const workflows = await storage.getStore('workflows');
+ * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ *
+ * // Access observability domain
+ * const observability = await storage.getStore('observability');
+ * await observability?.createSpan(span);
+ * ```
+ */
 export class MSSQLStore extends MastraStorage {
   public pool: sql.ConnectionPool;
   private schema?: string;
   private isConnected: Promise<boolean> | null = null;
-  #db: MssqlDB;
   stores: StorageDomains;
 
   constructor(config: MSSQLConfigType) {
@@ -179,8 +182,6 @@ export class MSSQLStore extends MastraStorage {
           options: config.options || { encrypt: true, trustServerCertificate: true },
         });
       }
-
-      this.#db = new MssqlDB({ pool: this.pool, schemaName: this.schema });
 
       const domainConfig = {
         pool: this.pool,
@@ -256,248 +257,11 @@ export class MSSQLStore extends MastraStorage {
   }
 
   /**
-   * Memory
-   */
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.listMessagesById({ messageIds });
-  }
-
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.stores.memory.saveMessages(args);
-  }
-
-  async updateMessages({
-    messages,
-  }: {
-    messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
-      id: string;
-      content?: {
-        metadata?: MastraMessageContentV2['metadata'];
-        content?: MastraMessageContentV2['content'];
-      };
-    })[];
-  }): Promise<MastraDBMessage[]> {
-    return this.stores.memory.updateMessages({ messages });
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  /**
-   * Workflows
-   */
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
-    workflowName: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, requestContext });
-  }
-
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
-    workflowName: string;
-    runId: string;
-    opts: UpdateWorkflowStateOptions;
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
-  }
-
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
-  }
-
-  async loadWorkflowSnapshot({
-    workflowName,
-    runId,
-  }: {
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
-  }
-
-  async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.listWorkflowRuns(args);
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
-  }
-
-  /**
    * Closes the MSSQL connection pool.
    *
    * This will close the connection pool, including pre-configured pools.
    */
   async close(): Promise<void> {
     await this.pool.close();
-  }
-
-  /**
-   * Index Management
-   */
-  async createIndex(options: CreateIndexOptions): Promise<void> {
-    return this.#db.createIndex(options);
-  }
-
-  async listIndexes(tableName?: string): Promise<IndexInfo[]> {
-    return this.#db.listIndexes(tableName);
-  }
-
-  async describeIndex(indexName: string): Promise<StorageIndexStats> {
-    return this.#db.describeIndex(indexName);
-  }
-
-  async dropIndex(indexName: string): Promise<void> {
-    return this.#db.dropIndex(indexName);
-  }
-
-  /**
-   * Scorers
-   */
-  async getScoreById({ id: _id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id: _id });
-  }
-
-  async listScoresByScorerId({
-    scorerId: _scorerId,
-    pagination: _pagination,
-    entityId: _entityId,
-    entityType: _entityType,
-    source: _source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<ListScoresResponse> {
-    return this.stores.scores.listScoresByScorerId({
-      scorerId: _scorerId,
-      pagination: _pagination,
-      entityId: _entityId,
-      entityType: _entityType,
-      source: _source,
-    });
-  }
-
-  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(score);
-  }
-
-  async listScoresByRunId({
-    runId: _runId,
-    pagination: _pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<ListScoresResponse> {
-    return this.stores.scores.listScoresByRunId({ runId: _runId, pagination: _pagination });
-  }
-
-  async listScoresByEntityId({
-    entityId: _entityId,
-    entityType: _entityType,
-    pagination: _pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<ListScoresResponse> {
-    return this.stores.scores.listScoresByEntityId({
-      entityId: _entityId,
-      entityType: _entityType,
-      pagination: _pagination,
-    });
-  }
-
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination: _pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<ListScoresResponse> {
-    return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination: _pagination });
   }
 }

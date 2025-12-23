@@ -175,7 +175,9 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const { messages: savedMessages } = await storage.listMessages({
+    const memoryStore = await storage.getStore('memory');
+    expect(memoryStore).toBeDefined();
+    const { messages: savedMessages } = await memoryStore?.listMessages({
       threadId,
     });
 
@@ -271,7 +273,9 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve messages from storage directly
-    const { messages: savedMessages } = await storage.listMessages({
+    const memoryStore = await storage.getStore('memory');
+    expect(memoryStore).toBeDefined();
+    const { messages: savedMessages } = await memoryStore?.listMessages({
       threadId,
     });
 
@@ -462,7 +466,9 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Retrieve from storage
-    const { messages: savedMessages } = await storage.listMessages({
+    const memoryStore = await storage.getStore('memory');
+    expect(memoryStore).toBeDefined();
+    const { messages: savedMessages } = await memoryStore?.listMessages({
       threadId,
     });
 
@@ -599,7 +605,9 @@ describe('Output Processor Memory Persistence Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Simulate page refresh - retrieve messages from storage
-    const { messages: messagesAfterRefresh } = await storage.listMessages({
+    const memoryStoreAfterRefresh = await storage.getStore('memory');
+    expect(memoryStoreAfterRefresh).toBeDefined();
+    const { messages: messagesAfterRefresh } = await memoryStoreAfterRefresh?.listMessages({
       threadId,
     });
 

@@ -1,5 +1,5 @@
 import { createSampleThread } from '@internal/storage-test-utils';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PostgresStoreConfig } from '../shared/config';
@@ -319,8 +319,9 @@ export function pgTests() {
           try {
             await expect(async () => {
               await restrictedDB.init();
+              const memory = await restrictedDB.getStore('memory');
               const thread = createSampleThread();
-              await restrictedDB.saveThread({ thread });
+              await memory!.saveThread({ thread });
             }).rejects.toThrow(
               `Unable to create schema "${testSchema}". This requires CREATE privilege on the database.`,
             );
@@ -423,10 +424,12 @@ export function pgTests() {
       let testThreadId: string;
       let testResourceId: string;
       let testMessageId: string;
+      let memory: MemoryStorage;
 
       beforeAll(async () => {
         store = new PostgresStore(TEST_CONFIG);
         await store.init();
+        memory = (await store.getStore('memory'))!;
       });
       afterAll(async () => {
         try {
@@ -443,7 +446,7 @@ export function pgTests() {
       it('should use createdAtZ over createdAt for messages when both exist', async () => {
         // Create a thread first
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Directly insert a message with both createdAt and createdAtZ where they differ
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
@@ -456,14 +459,14 @@ export function pgTests() {
         );
 
         // Test listMessagesById
-        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        const messagesByIdResult = await memory.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test listMessages
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
         });
         expect(messagesResult.messages.length).toBe(1);
@@ -475,7 +478,7 @@ export function pgTests() {
       it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
         // Create a thread first
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Directly insert a message with only createdAt (simulating old records)
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
@@ -487,13 +490,13 @@ export function pgTests() {
         );
 
         // Test listMessagesById
-        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        const messagesByIdResult = await memory.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test listMessages
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
         });
         expect(messagesResult.messages.length).toBe(1);
@@ -506,11 +509,11 @@ export function pgTests() {
         const threadCreatedAt = new Date('2024-01-01T10:00:00Z');
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
         thread.createdAt = threadCreatedAt;
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Save a message through the normal API with a different timestamp
         const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
-        await store.saveMessages({
+        await memory.saveMessages({
           messages: [
             {
               id: testMessageId,
@@ -524,13 +527,13 @@ export function pgTests() {
         });
 
         // Get thread
-        const retrievedThread = await store.getThreadById({ threadId: testThreadId });
+        const retrievedThread = await memory.getThreadById({ threadId: testThreadId });
         expect(retrievedThread).toBeTruthy();
         expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
         expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
-        const messagesResult = await store.listMessages({ threadId: testThreadId });
+        const messagesResult = await memory.listMessages({ threadId: testThreadId });
         expect(messagesResult.messages.length).toBe(1);
         expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
@@ -539,7 +542,7 @@ export function pgTests() {
       it('should handle included messages with correct timestamp fallback', async () => {
         // Create a thread
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Create multiple messages
         const msg1Id = `${testMessageId}-1`;
@@ -574,7 +577,7 @@ export function pgTests() {
         );
 
         // Test listMessages with include
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
           include: [
             {
@@ -588,17 +591,17 @@ export function pgTests() {
         expect(messagesResult.messages.length).toBe(3);
 
         // Find each message and verify correct timestamps
-        const message1 = messagesResult.messages.find(m => m.id === msg1Id);
+        const message1 = messagesResult.messages.find((m: any) => m.id === msg1Id);
         expect(message1).toBeDefined();
         expect(message1?.createdAt).toBeInstanceOf(Date);
         expect(message1?.createdAt.getTime()).toBe(date1.getTime());
 
-        const message2 = messagesResult.messages.find(m => m.id === msg2Id);
+        const message2 = messagesResult.messages.find((m: any) => m.id === msg2Id);
         expect(message2).toBeDefined();
         expect(message2?.createdAt).toBeInstanceOf(Date);
         expect(message2?.createdAt.getTime()).toBe(date2.getTime());
 
-        const message3 = messagesResult.messages.find(m => m.id === msg3Id);
+        const message3 = messagesResult.messages.find((m: any) => m.id === msg3Id);
         expect(message3).toBeDefined();
         expect(message3?.createdAt).toBeInstanceOf(Date);
         // Should use createdAtZ (date2Z), not createdAt (date3)

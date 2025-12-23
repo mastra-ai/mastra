@@ -3192,7 +3192,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: 'agentic-loop',
       runId: streamOptions?.runId ?? '',
     });

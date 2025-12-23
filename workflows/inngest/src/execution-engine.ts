@@ -253,7 +253,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     try {
       if (isResume) {
         runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
-        const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: runId,
         });
@@ -279,7 +280,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else if (isTimeTravel) {
-        const snapshot: any = (await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+        const workflowsStoreForTimeTravel = await this.mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = (await workflowsStoreForTimeTravel?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: executionContext.runId,
         })) ?? { context: {} };

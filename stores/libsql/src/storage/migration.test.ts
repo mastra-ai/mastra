@@ -323,7 +323,9 @@ describe('LibSQL Spans Table Migration', () => {
     await store.init();
 
     // Query via storage API - should work after migration
-    const trace = await store.getTrace({ traceId: 'api-test-trace' });
+    const observabilityStore = await store.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+    const trace = await observabilityStore?.getTrace({ traceId: 'api-test-trace' });
     expect(trace).not.toBeNull();
     expect(trace!.spans.length).toBe(1);
     expect(trace!.spans[0]!.spanId).toBe('api-test-span');
