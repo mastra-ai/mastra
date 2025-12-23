@@ -207,20 +207,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
           createdAt: new Date(),
         };
 
-        console.log('[TOOL-APPROVAL-DEBUG] Adding tool result message to messageList:');
-        console.log('[TOOL-APPROVAL-DEBUG] Role:', toolResultMessage.role);
-        console.log(
-          '[TOOL-APPROVAL-DEBUG] Tool results:',
-          JSON.stringify(
-            inputData.map(tc => ({
-              toolName: tc.toolName,
-              result: tc.result,
-            })),
-            null,
-            2,
-          ),
-        );
-
         rest.messageList.add(toolResultMessage, 'response');
 
         // Check if any tool calls were declined (result indicates denial/not approved)
@@ -245,8 +231,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
             `IMPORTANT: The following tool(s) were explicitly DENIED by the user: ${declinedTools}. You MUST NOT retry calling these tools. The user has declined these actions. Acknowledge this and provide alternative assistance without attempting to use these tools again.`,
             'tool-approval-declined',
           );
-
-          console.log('[TOOL-APPROVAL-DEBUG] Added system message for declined tools:', declinedTools);
         }
 
         return {
