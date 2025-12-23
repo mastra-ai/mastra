@@ -495,7 +495,7 @@ export class CoreToolBuilder extends MastraBase {
         // is provided, return the error as the result to maintain backward compatibility
         // with the AI SDK which treats thrown errors as fatal.
         const specVersion = model?.specificationVersion;
-        if (specVersion === 'v2' || specVersion === 'v3') {
+        if (specVersion && specVersion !== 'v1') {
           throw mastraError;
         }
         return mastraError;
