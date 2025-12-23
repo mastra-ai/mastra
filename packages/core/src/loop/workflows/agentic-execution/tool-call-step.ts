@@ -220,12 +220,14 @@ export function createToolCallStep<
         // - undefined (no approval needed)
         // If needsApprovalFn exists, evaluate it with the tool args
         let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
-        if (toolRequiresApproval && (tool as any).needsApprovalFn) {
+        if ((tool as any).needsApprovalFn) {
           // Evaluate the function with the parsed args
           try {
             const needsApprovalResult = await (tool as any).needsApprovalFn(args);
             toolRequiresApproval = needsApprovalResult;
-          } catch {
+          } catch (error) {
+            // Log error to help developers debug faulty needsApprovalFn implementations
+            console.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
             // On error, default to requiring approval to be safe
             toolRequiresApproval = true;
           }
