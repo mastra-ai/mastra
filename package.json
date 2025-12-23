@@ -17,6 +17,7 @@
     "semver": "^7.7.2",
     "turbo": "^2.5.8",
     "typescript": "^5.8.3",
+    "vite": "^7.3.0",
     "vitest": "catalog:"
   },
   "private": true,
