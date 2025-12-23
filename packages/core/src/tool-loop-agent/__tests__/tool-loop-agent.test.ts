@@ -18,7 +18,7 @@ function createCapturingMockModel(onCapture?: (options: any) => void) {
     doGenerate: async options => {
       onCapture?.(options);
       return {
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: undefined },
         usage: {
           inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -38,7 +38,7 @@ function createCapturingMockModel(onCapture?: (options: any) => void) {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: undefined },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -64,7 +64,7 @@ function createToolCallingMockModel(toolName: string, toolInput: Record<string, 
       if (callCount === 1) {
         // First call: return tool call
         return {
-          finishReason: 'tool-calls' as const,
+          finishReason: { unified: 'tool-calls', raw: undefined },
           usage: {
             inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
             outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -82,7 +82,7 @@ function createToolCallingMockModel(toolName: string, toolInput: Record<string, 
       }
       // Subsequent calls: return text response
       return {
-        finishReason: 'stop' as const,
+        finishReason: { unified: 'stop', raw: undefined },
         usage: {
           inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -107,7 +107,7 @@ function createToolCallingMockModel(toolName: string, toolInput: Record<string, 
             },
             {
               type: 'finish' as const,
-              finishReason: 'tool-calls' as const,
+              finishReason: { unified: 'tool-calls', raw: undefined },
               usage: {
                 inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                 outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -126,7 +126,7 @@ function createToolCallingMockModel(toolName: string, toolInput: Record<string, 
           { type: 'text-end' as const, id: 'text-1' },
           {
             type: 'finish' as const,
-            finishReason: 'stop' as const,
+            finishReason: { unified: 'stop', raw: undefined },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -625,7 +625,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
         doGenerate: async options => {
           capturedPrompt = options.prompt;
           return {
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: undefined },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -645,7 +645,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
               { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
+                finishReason: { unified: 'stop', raw: undefined },
                 usage: {
                   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                   outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -736,7 +736,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       const originalModel = new MockLanguageModelV3({
         modelId: 'original-model',
         doGenerate: async () => ({
-          finishReason: 'stop',
+          finishReason: { unified: 'stop', raw: undefined },
           usage: {
             inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
             outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -753,7 +753,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
-              finishReason: 'stop',
+              finishReason: { unified: 'stop', raw: undefined },
               usage: {
                 inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                 outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -766,7 +766,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       const overrideModel = new MockLanguageModelV3({
         modelId: 'override-model',
         doGenerate: async () => ({
-          finishReason: 'stop',
+          finishReason: { unified: 'stop', raw: undefined },
           usage: {
             inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
             outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -783,7 +783,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
             { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
-              finishReason: 'stop',
+              finishReason: { unified: 'stop', raw: undefined },
               usage: {
                 inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                 outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -838,7 +838,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
         doGenerate: async options => {
           capturedPrompt = options.prompt;
           return {
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: undefined },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -858,7 +858,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
               { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
+                finishReason: { unified: 'stop', raw: undefined },
                 usage: {
                   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                   outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -920,7 +920,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
         doGenerate: async options => {
           capturedOptions = options;
           return {
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: undefined },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -940,7 +940,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
               { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
+                finishReason: { unified: 'stop', raw: undefined },
                 usage: {
                   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                   outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -1004,7 +1004,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
         doGenerate: async options => {
           capturedPrompt = options.prompt;
           return {
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: undefined },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -1024,7 +1024,7 @@ describe('ToolLoopAgent to Mastra Agent', () => {
               { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
-                finishReason: 'stop',
+                finishReason: { unified: 'stop', raw: undefined },
                 usage: {
                   inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
                   outputTokens: { total: 20, text: 20, reasoning: undefined },
