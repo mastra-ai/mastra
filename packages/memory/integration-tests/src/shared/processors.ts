@@ -32,7 +32,6 @@ const abort: (reason?: string) => never = reason => {
 export interface ProcessorsTestConfig {
   version: 'v5' | 'v6';
   model: MastraModelConfig;
-  legacyModel: MastraModelConfig; // For v4-style model (openai('gpt-4o'))
 }
 
 function isV5PlusModel(model: MastraModelConfig): boolean {
@@ -43,8 +42,20 @@ function isV5PlusModel(model: MastraModelConfig): boolean {
   return false;
 }
 
+async function agentGenerate(
+  agent: Agent,
+  prompt: string | { role: string; content: string }[],
+  model: MastraModelConfig,
+  options: { threadId: string; resourceId: string },
+) {
+  if (isV5PlusModel(model)) {
+    return agent.generate(prompt as any, options);
+  }
+  return agent.generateLegacy(prompt as any, options);
+}
+
 export function getProcessorsTests(config: ProcessorsTestConfig) {
-  const { version, model, legacyModel } = config;
+  const { version, model } = config;
 
   describe(`Memory with Processors (${version})`, () => {
     let memory: Memory;
@@ -391,31 +402,10 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
 
       const userMessage = 'Tell me something interesting about space';
 
-      const res = await (isV5PlusModel(model)
-        ? agent.generate(
-            [
-              {
-                role: 'user',
-                content: userMessage,
-              },
-            ],
-            {
-              threadId: thread.id,
-              resourceId,
-            },
-          )
-        : agent.generateLegacy(
-            [
-              {
-                role: 'user',
-                content: userMessage,
-              },
-            ],
-            {
-              threadId: thread.id,
-              resourceId,
-            },
-          ));
+      const res = await agentGenerate(agent, [{ role: 'user', content: userMessage }], model, {
+        threadId: thread.id,
+        resourceId,
+      });
 
       const requestBody = typeof res.request.body === 'string' ? JSON.parse(res.request.body) : res.request.body;
       const requestInputMessages = requestBody.input || requestBody.messages;
@@ -431,31 +421,10 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
 
       const userMessage2 = 'Tell me something else interesting about space';
 
-      const res2 = await (isV5PlusModel(model)
-        ? agent.generate(
-            [
-              {
-                role: 'user',
-                content: userMessage2,
-              },
-            ],
-            {
-              threadId: thread.id,
-              resourceId,
-            },
-          )
-        : agent.generateLegacy(
-            [
-              {
-                role: 'user',
-                content: userMessage2,
-              },
-            ],
-            {
-              threadId: thread.id,
-              resourceId,
-            },
-          ));
+      const res2 = await agentGenerate(agent, [{ role: 'user', content: userMessage2 }], model, {
+        threadId: thread.id,
+        resourceId,
+      });
 
       const requestBody2 = typeof res2.request.body === 'string' ? JSON.parse(res2.request.body) : res2.request.body;
       const requestInputMessages2 = requestBody2.input || requestBody2.messages;
@@ -524,12 +493,12 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const instructions =
         'You are a helpful assistant with access to weather and calculator tools. Use them when appropriate.';
 
-      // Create agent with memory and tools - use legacyModel for consistent behavior
+      // Create agent with memory and tools
       const agent = new Agent({
         id: 'processor-test-agent',
         name: 'processor-test-agent',
         instructions,
-        model: legacyModel,
+        model,
         memory,
         tools: {
           get_weather: weatherTool,
@@ -537,20 +506,12 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
         },
       });
 
-      // Helper function for generating with the appropriate method
-      const agentGenerate = async (prompt: string) => {
-        if (isV5PlusModel(legacyModel)) {
-          return agent.generate(prompt, { threadId, resourceId });
-        }
-        return agent.generateLegacy(prompt, { threadId, resourceId });
-      };
-
       // First message - use weather tool
-      await agentGenerate('What is the weather in Seattle?');
+      await agentGenerate(agent, 'What is the weather in Seattle?', model, { threadId, resourceId });
       // Second message - use calculator tool
-      await agentGenerate('Calculate 123 * 456');
+      await agentGenerate(agent, 'Calculate 123 * 456', model, { threadId, resourceId });
       // Third message - simple text response
-      await agentGenerate('Tell me something interesting about space');
+      await agentGenerate(agent, 'Tell me something interesting about space', model, { threadId, resourceId });
 
       // Query with no processors to verify baseline message count
       const queryResult = await memory.recall({
