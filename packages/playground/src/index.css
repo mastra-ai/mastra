@@ -89,6 +89,10 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
     --top-bar-height: 40px;
+
+    /* overrides  allotment/dist/style.css */
+    --focus-border: hsl(var(--muted-foreground) / 50%);
+    --separator-border: 'transparent';
   }
   .dark {
     --background: 0 0% 3.92% 1;
@@ -128,6 +132,10 @@
     --color-thumb: rgb(64, 64, 64);
     --color-thumb-hover: rgb(96, 96, 96);
     --color-track: transparent;
+
+    /* overrides  allotment/dist/style.css */
+    --focus-border: hsl(var(--muted-foreground) / 50%);
+    --separator-border: 'transparent';
   }
 }
 

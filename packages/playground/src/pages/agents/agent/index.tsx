@@ -1,6 +1,5 @@
 import {
   AgentChat,
-  MainContentContent,
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
@@ -12,11 +11,14 @@ import {
   TracingSettingsProvider,
   type AgentSettingsType,
 } from '@mastra/playground-ui';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
+import { Allotment } from 'allotment';
+import 'allotment/dist/style.css';
 
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
+import { useLayoutColumnSizes } from '@/hooks/use-layout-column-sizes';
 
 function Agent() {
   const { agentId, threadId } = useParams();
@@ -30,6 +32,7 @@ function Agent() {
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
   } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: !!memory?.result });
+  const { columnSizes, storeColumnSizes } = useLayoutColumnSizes('agent-layout-sizes');
 
   useEffect(() => {
     if (memory?.result && !threadId) {
@@ -91,17 +94,23 @@ function Agent() {
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
           <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
             <ThreadInputProvider>
-              <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+              <Allotment defaultSizes={columnSizes} onChange={storeColumnSizes}>
                 {withSidebar && (
-                  <AgentSidebar
-                    agentId={agentId!}
-                    threadId={threadId!}
-                    threads={threads || []}
-                    isLoading={isThreadsLoading}
-                  />
+                  <Allotment.Pane preferredSize={200} minSize={150} maxSize={300}>
+                    <AgentSidebar
+                      agentId={agentId!}
+                      threadId={threadId!}
+                      threads={threads || []}
+                      isLoading={isThreadsLoading}
+                    />
+                  </Allotment.Pane>
                 )}
 
-                <div className="grid overflow-y-auto relative bg-surface1 py-4">
+                <Allotment.Pane
+                  minSize={250}
+                  preferredSize={800}
+                  className="grid overflow-y-auto relative bg-surface1 py-4 h-full"
+                >
                   <AgentChat
                     key={threadId}
                     agentId={agentId!}
@@ -114,10 +123,12 @@ function Agent() {
                     messageId={messageId}
                     isNewThread={isNewThread}
                   />
-                </div>
+                </Allotment.Pane>
 
-                <AgentInformation agentId={agentId!} threadId={threadId!} />
-              </MainContentContent>
+                <Allotment.Pane preferredSize={500} minSize={300}>
+                  <AgentInformation agentId={agentId!} threadId={threadId!} />
+                </Allotment.Pane>
+              </Allotment>
             </ThreadInputProvider>
           </WorkingMemoryProvider>
         </AgentSettingsProvider>

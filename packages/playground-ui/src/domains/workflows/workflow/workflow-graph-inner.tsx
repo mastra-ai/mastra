@@ -1,4 +1,5 @@
-import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant, NodeProps } from '@xyflow/react';
+import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
+
 import '@xyflow/react/dist/style.css';
 import { GetWorkflowResponse } from '@mastra/client-js';
 
@@ -55,6 +56,7 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
         fitView
         fitViewOptions={{
           maxZoom: 1,
+          padding: { bottom: '60px', left: '20px', right: '20px', top: '20px' },
         }}
         minZoom={0.01}
         maxZoom={1}

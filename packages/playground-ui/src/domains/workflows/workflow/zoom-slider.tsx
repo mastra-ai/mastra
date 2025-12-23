@@ -12,7 +12,7 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
   const { zoomTo, zoomIn, zoomOut, fitView } = useReactFlow();
 
   return (
-    <Panel className={cn('flex gap-1 rounded-md bg-primary-foreground p-1 text-foreground', className)} {...props}>
+    <Panel className={cn('flex gap-1 rounded-md bg-primary-foreground p-1 text-foreground !m-2', className)} {...props}>
       <Button variant="ghost" size="icon" onClick={() => zoomOut({ duration: 300 })}>
         <Minus className="h-4 w-4" />
       </Button>
@@ -32,7 +32,22 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
       <Button className="min-w-20 tabular-nums" variant="ghost" onClick={() => zoomTo(1, { duration: 300 })}>
         {(100 * zoom).toFixed(0)}%
       </Button>
-      <Button variant="ghost" size="icon" onClick={() => fitView({ duration: 300, maxZoom: 1 })}>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() =>
+          fitView({
+            duration: 300,
+            maxZoom: 1,
+            padding: {
+              bottom: '60px',
+              left: '20px',
+              right: '20px',
+              top: '20px',
+            },
+          })
+        }
+      >
         <Maximize className="h-4 w-4" />
       </Button>
     </Panel>

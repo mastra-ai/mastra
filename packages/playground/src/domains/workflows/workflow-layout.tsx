@@ -14,14 +14,33 @@ import {
   Txt,
   TracingSettingsProvider,
 } from '@mastra/playground-ui';
+import { Allotment, LayoutPriority } from 'allotment';
+import 'allotment/dist/style.css';
 
 import { WorkflowHeader } from './workflow-header';
 import { WorkflowRunState } from '@mastra/core/workflows';
+import { useLayoutColumnSizes } from '@/hooks/use-layout-column-sizes';
+import { useState } from 'react';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
   const { data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId ?? '', runId ?? '');
+  const { columnSizes, storeColumnSizes } = useLayoutColumnSizes('workflow-layout-sizes');
+  const [showFlow, setShowFlow] = useState(false);
+
+  const handleColumnSizesChange = (newSizes: number[]) => {
+    storeColumnSizes(newSizes);
+
+    // rendering the flow immediately could cause misalignment issue due to allotment resizing,
+    // the flow could not be properly centered in the container
+    // to fix the issue we postpone the flow rendering to the next tick after first columns auto-resize
+    if (!showFlow) {
+      setTimeout(() => {
+        setShowFlow(true);
+      }, 1);
+    }
+  };
 
   if (!workflowId) {
     return (
@@ -74,13 +93,21 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
         <MainContentLayout>
           <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
-          <MainContentContent isDivided={true} hasLeftServiceColumn={true}>
-            <WorkflowRunList workflowId={workflowId} runId={runId} />
+          {columnSizes && (
+            <Allotment defaultSizes={columnSizes} onChange={handleColumnSizesChange} className="flex">
+              <Allotment.Pane preferredSize={200} minSize={150} maxSize={300}>
+                <WorkflowRunList workflowId={workflowId} runId={runId} />
+              </Allotment.Pane>
 
-            {children}
+              <Allotment.Pane preferredSize={800} minSize={400} priority={LayoutPriority.High}>
+                {showFlow && children}
+              </Allotment.Pane>
 
-            <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
-          </MainContentContent>
+              <Allotment.Pane preferredSize={500} minSize={300}>
+                <WorkflowInformation workflowId={workflowId} initialRunId={runId} />
+              </Allotment.Pane>
+            </Allotment>
+          )}
         </MainContentLayout>
       </WorkflowRunProvider>
     </TracingSettingsProvider>
