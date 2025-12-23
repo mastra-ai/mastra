@@ -178,11 +178,8 @@ export class LanceStorage extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: true,
-      observability: false,
       indexManagement: false,
       listScoresBySpan: true,
-      agents: false,
     };
   }
 }

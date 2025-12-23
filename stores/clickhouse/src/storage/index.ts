@@ -185,11 +185,8 @@ export class ClickhouseStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: true,
-      observability: true,
       indexManagement: false,
       listScoresBySpan: true,
-      agents: false,
     };
   }
 

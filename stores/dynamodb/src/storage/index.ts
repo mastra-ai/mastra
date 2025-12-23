@@ -183,11 +183,8 @@ export class DynamoDBStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
-      deleteMessages: true,
-      observability: false,
       indexManagement: false,
       listScoresBySpan: true,
-      agents: false,
     };
   }
 

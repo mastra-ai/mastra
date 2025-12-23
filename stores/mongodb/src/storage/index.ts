@@ -39,11 +39,8 @@ export class MongoDBStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: false,
       createTable: false,
-      deleteMessages: true,
-      observability: true,
       indexManagement: false,
       listScoresBySpan: true,
-      agents: true,
     };
   }
 

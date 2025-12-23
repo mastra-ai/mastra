@@ -42,7 +42,7 @@ export function createTestSuite(storage: MastraStorage) {
       if (observabilityStorage) {
         clearList.push(observabilityStorage.dangerouslyClearAll());
       }
-      if (agentsStorage && storage.supports.agents) {
+      if (agentsStorage) {
         clearList.push(agentsStorage.dangerouslyClearAll());
       }
       // Clear all domain data after tests
@@ -54,7 +54,7 @@ export function createTestSuite(storage: MastraStorage) {
     createWorkflowsTests({ storage });
     createMemoryTest({ storage });
     createScoresTest({ storage });
-    if (storage.supports.observability) {
+    if (storage.stores?.observability) {
       createObservabilityTests({ storage });
     }
     createAgentsTests({ storage });

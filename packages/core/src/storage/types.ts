@@ -14,6 +14,10 @@ export type StorageColumnType = 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integ
 /**
  * Describes capabilities supported by a storage adapter.
  * Providers should override the base class getter to indicate their supported features.
+ *
+ * Note: For checking domain availability (observability, agents), use `storage.stores?.domainName`
+ * or `await storage.getStore('domainName')` instead. These `supports` flags are for specific
+ * method capabilities that may vary between implementations.
  */
 export type StorageSupports = {
   /** Whether the adapter supports filtering by resource scope in queries */
@@ -24,16 +28,10 @@ export type StorageSupports = {
   hasColumn: boolean;
   /** Whether the adapter supports creating tables dynamically */
   createTable: boolean;
-  /** Whether the adapter supports deleting individual messages */
-  deleteMessages: boolean;
-  /** Whether the adapter supports observability (tracing/spans) */
-  observability: boolean;
   /** Whether the adapter supports index management operations */
   indexManagement: boolean;
-  /** Whether the adapter supports listing scores by span */
+  /** Whether the adapter supports listing scores by span (method exists but may throw if false) */
   listScoresBySpan: boolean;
-  /** Whether the adapter supports agent persistence */
-  agents: boolean;
 };
 
 export interface StorageColumn {

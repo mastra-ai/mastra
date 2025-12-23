@@ -248,11 +248,8 @@ export class MSSQLStore extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: true,
-      observability: true,
       indexManagement: true,
       listScoresBySpan: true,
-      agents: false,
     };
   }
 

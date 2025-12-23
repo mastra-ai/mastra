@@ -184,11 +184,8 @@ export class D1Store extends MastraStorage {
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
-      deleteMessages: true,
-      observability: false,
       indexManagement: false,
       listScoresBySpan: true,
-      agents: false,
     };
   }
 
