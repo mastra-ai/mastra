@@ -25,6 +25,22 @@ vi.mock('./error', () => ({
   }),
 }));
 
+// Mock observability store
+const createMockObservabilityStore = () => ({
+  getTrace: vi.fn(),
+  listTraces: vi.fn(),
+});
+
+// Mock storage with getStore method
+const createMockStorage = (
+  observabilityStore: ReturnType<typeof createMockObservabilityStore>,
+): Partial<MastraStorage> => ({
+  getStore: vi.fn((domain: string) => {
+    if (domain === 'observability') return Promise.resolve(observabilityStore);
+    return Promise.resolve(undefined);
+  }) as MastraStorage['getStore'],
+});
+
 // Mock Mastra instance
 const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
   ({
@@ -33,20 +49,15 @@ const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
   }) as unknown as Mastra;
 
-// Mock storage instance
-const createMockStorage = (): Partial<MastraStorage> => ({
-  getTrace: vi.fn(),
-  listTraces: vi.fn(),
-});
-
 describe('Legacy Observability API - Backward Compatibility', () => {
-  let mockStorage: ReturnType<typeof createMockStorage>;
+  let mockObservabilityStore: ReturnType<typeof createMockObservabilityStore>;
   let mockMastra: Mastra;
   let handleErrorSpy: ReturnType<typeof vi.mocked<typeof errorHandler.handleError>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockStorage = createMockStorage();
+    mockObservabilityStore = createMockObservabilityStore();
+    const mockStorage = createMockStorage(mockObservabilityStore);
     mockMastra = createMockMastra(mockStorage);
     handleErrorSpy = vi.mocked(errorHandler.handleError);
     handleErrorSpy.mockImplementation(error => {
@@ -61,7 +72,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const startDate = new Date('2024-01-01T00:00:00.000Z');
       const endDate = new Date('2024-01-31T23:59:59.999Z');
@@ -71,7 +82,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         dateRange: { start: startDate, end: endDate },
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           startedAt: { start: startDate, end: endDate },
         },
@@ -86,7 +97,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const oldDate = new Date('2024-01-01T00:00:00.000Z');
       const newDate = new Date('2024-06-01T00:00:00.000Z');
@@ -97,7 +108,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         startedAt: { start: newDate }, // New param takes precedence
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           startedAt: { start: newDate },
         },
@@ -114,14 +125,14 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: "agent run: 'my-agent-id'",
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           entityId: 'my-agent-id',
           entityType: 'agent',
@@ -137,14 +148,14 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: "workflow run: 'my-workflow-id'",
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           entityId: 'my-workflow-id',
           entityType: 'workflow_run',
@@ -160,7 +171,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
@@ -168,7 +179,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         entityId: 'new-agent', // Explicit entityId takes precedence
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           entityId: 'new-agent',
         },
@@ -183,14 +194,14 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
         name: 'some-random-name', // Doesn't match pattern
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {},
         pagination: {},
         orderBy: {},
@@ -205,7 +216,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
@@ -213,7 +224,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         entityId: 'my-workflow',
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           entityId: 'my-workflow',
           entityType: 'workflow_run',
@@ -231,7 +242,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const startDate = new Date('2024-01-01T00:00:00.000Z');
       const endDate = new Date('2024-01-31T23:59:59.999Z');
@@ -244,7 +255,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spanType: 'agent_run',
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           startedAt: { start: startDate, end: endDate },
           spanType: 'agent_run',
@@ -262,7 +273,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       const startDate = new Date('2024-01-01T00:00:00.000Z');
 
@@ -273,7 +284,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         entityType: 'agent',
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
           startedAt: { start: startDate },
           entityId: 'my-agent',
@@ -290,7 +301,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         spans: [],
       };
 
-      (mockStorage.listTraces as any).mockResolvedValue(mockResult);
+      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
@@ -298,7 +309,7 @@ describe('Legacy Observability API - Backward Compatibility', () => {
         direction: 'ASC',
       });
 
-      expect(mockStorage.listTraces).toHaveBeenCalledWith({
+      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {},
         pagination: {},
         orderBy: { field: 'endedAt', direction: 'ASC' },

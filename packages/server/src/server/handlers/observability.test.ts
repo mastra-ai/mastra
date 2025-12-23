@@ -20,6 +20,29 @@ vi.mock('./error', () => ({
   }),
 }));
 
+// Mock observability store
+const createMockObservabilityStore = () => ({
+  getTrace: vi.fn(),
+  listTraces: vi.fn(),
+});
+
+// Mock scores store
+const createMockScoresStore = () => ({
+  listScoresBySpan: vi.fn(),
+});
+
+// Mock storage with getStore method
+const createMockStorage = (
+  observabilityStore: ReturnType<typeof createMockObservabilityStore>,
+  scoresStore: ReturnType<typeof createMockScoresStore>,
+): Partial<MastraStorage> => ({
+  getStore: vi.fn((domain: string) => {
+    if (domain === 'observability') return Promise.resolve(observabilityStore);
+    if (domain === 'scores') return Promise.resolve(scoresStore);
+    return Promise.resolve(undefined);
+  }) as MastraStorage['getStore'],
+});
+
 // Mock Mastra instance
 const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
   ({
@@ -27,18 +50,6 @@ const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
     getScorerById: vi.fn(),
     getLogger: vi.fn(() => ({ warn: vi.fn(), error: vi.fn() })),
   }) as unknown as Mastra;
-
-// Mock observability store
-const createMockObservabilityStore = () => ({
-  getTrace: vi.fn(),
-  listTraces: vi.fn(),
-  listScoresBySpan: vi.fn(),
-});
-
-// Mock scores store
-const createMockScoresStore = () => ({
-  listScoresBySpan: vi.fn(),
-});
 
 // Sample span for testing
 const createSampleSpan = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
@@ -86,7 +97,8 @@ describe('Observability Handlers', () => {
     vi.clearAllMocks();
     mockObservabilityStore = createMockObservabilityStore();
     mockScoresStore = createMockScoresStore();
-    mockMastra = createMockMastra();
+    const mockStorage = createMockStorage(mockObservabilityStore, mockScoresStore);
+    mockMastra = createMockMastra(mockStorage);
     handleErrorSpy = vi.mocked(errorHandler.handleError);
     handleErrorSpy.mockImplementation(error => {
       throw error;
