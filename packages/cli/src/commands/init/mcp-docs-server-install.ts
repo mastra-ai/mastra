@@ -36,7 +36,7 @@ const createMcpConfig = (editor: Editor, versionTag?: string) => {
       },
     },
   };
-}
+};
 
 function makeConfig(
   original: { mcpServers?: Record<string, unknown>; servers?: Record<string, unknown> },
