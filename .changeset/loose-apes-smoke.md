@@ -24,7 +24,6 @@ const toolLoopAgent = new ToolLoopAgent({
     if (stepNumber === 0) {
       return { toolChoice: 'required' };
     }
-    return {};
   },
 });
 
