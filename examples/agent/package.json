@@ -24,7 +24,7 @@
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
     "typescript": "^5.8.3",
-    "zod": "^3.25.76"
+    "zod": "latest"
   },
   "pnpm": {
     "overrides": {

@@ -207,18 +207,32 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
         };
 
         rest.messageList.add(toolResultMessage, 'response');
+
+        return {
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        };
       }
 
-      // Return with updated messages (includes both error and success messages added above)
-      // Don't return early - allow the loop to continue even with errors so LLM can retry
-      return {
-        ...initialResult,
-        messages: {
-          all: rest.messageList.get.all.aiV5.model(),
-          user: rest.messageList.get.input.aiV5.model(),
-          nonUser: rest.messageList.get.response.aiV5.model(),
-        },
-      };
+      // If we have error results but no success results, we still need to return with messages
+      // so the LLM can see the error and retry
+      if (errorResults.length) {
+        return {
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        };
+      }
+
+      // Fallback: if inputData is empty or undefined, return initialResult as-is
+      return initialResult;
     },
   });
 }
