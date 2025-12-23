@@ -158,6 +158,86 @@ describe('MastraClient', () => {
     });
   });
 
+  describe('Memory Threads', () => {
+    const mockFetchResponse = (data: any) => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: {
+          get: () => 'application/json',
+        },
+        json: async () => data,
+      });
+    };
+
+    describe('getMemoryThreadById', () => {
+      it('should retrieve a thread by ID using direct storage access', async () => {
+        const mockThread = {
+          id: 'thread-123',
+          resourceId: 'resource-1',
+          title: 'Test Thread',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+          metadata: {},
+        };
+
+        mockFetchResponse(mockThread);
+
+        const result = await client.getMemoryThreadById({
+          threadId: 'thread-123',
+          resourceId: 'resource-1',
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-123/direct?resourceId=resource-1',
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'Bearer test-key',
+            }),
+          }),
+        );
+        expect(result).toEqual(mockThread);
+      });
+
+      it('should handle thread not found errors', async () => {
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          headers: {
+            get: () => 'application/json',
+          },
+          json: async () => ({ message: 'Thread not found' }),
+        });
+
+        await expect(
+          client.getMemoryThreadById({
+            threadId: 'nonexistent-thread',
+            resourceId: 'resource-1',
+          }),
+        ).rejects.toThrow();
+      });
+
+      it('should handle resource mismatch errors', async () => {
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden',
+          headers: {
+            get: () => 'application/json',
+          },
+          json: async () => ({ message: 'Thread does not belong to the specified resource' }),
+        });
+
+        await expect(
+          client.getMemoryThreadById({
+            threadId: 'thread-123',
+            resourceId: 'wrong-resource',
+          }),
+        ).rejects.toThrow();
+      });
+    });
+  });
+
   describe('Working Memory', () => {
     const mockFetchResponse = (data: any) => {
       (global.fetch as any).mockResolvedValueOnce({
