@@ -483,8 +483,6 @@ Be thorough in capturing details about people, work, and preferences.`,
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
 
-        console.log('wmRaw', wmRaw);
-
         expect(wmRaw).not.toBeNull();
         expect(wmRaw!.toLowerCase()).toContain('jordan');
         expect(wmRaw!.toLowerCase()).toContain('datacorp');
