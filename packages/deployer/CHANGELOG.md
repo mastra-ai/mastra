@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.24.10-alpha.0
+
+### Patch Changes
+
+- Allow for `bundler.externals: true` to be set. ([#11300](https://github.com/mastra-ai/mastra/pull/11300))
+
+  With this configuration during `mastra build` all dependencies (except workspace dependencies) will be treated as "external" and not bundled. Instead they will be added to the `.mastra/output/package.json` file.
+
+- Fix generate system prompt by updating deprecated function call. ([#11075](https://github.com/mastra-ai/mastra/pull/11075))
+
+- Updated dependencies [[`b5581fb`](https://github.com/mastra-ai/mastra/commit/b5581fbcead57443c885f5397d651bf5df20b14a), [`fe5ea7d`](https://github.com/mastra-ai/mastra/commit/fe5ea7d06d56a3ebd3283a25fb45f94aea12d844), [`0ebadd2`](https://github.com/mastra-ai/mastra/commit/0ebadd21d449bd743e5839e875a745afff9f8b0a)]:
+  - @mastra/core@0.24.10-alpha.0
+  - @mastra/server@0.24.10-alpha.0
+
 ## 0.24.9
 
 ### Patch Changes
