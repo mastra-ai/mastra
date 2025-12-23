@@ -24,7 +24,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "dotenv-cli": "^8.0.0"
+    "dotenv-cli": "^11.0.0"
   },
   "version": "0.0.1",
   "pnpm": {
