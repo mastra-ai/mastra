@@ -1,7 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { MastraDBMessage, MastraModelConfig } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { ProcessInputArgs, ProcessInputResult, Processor } from '@mastra/core/processors';
@@ -20,6 +20,9 @@ import {
   generateConversationHistory,
 } from '../test-utils';
 
+import { createMockModel, createMockModelWithToolCalls } from './mock-models';
+import type { MockModelConfig } from './mock-models';
+
 function v2ToCoreMessages(messages: MastraDBMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'memory').get.all.core();
 }
@@ -28,33 +31,12 @@ const abort: (reason?: string) => never = reason => {
   throw new Error(reason || 'Aborted');
 };
 
-export interface ProcessorsTestConfig {
+export interface ProcessorsTestConfig extends MockModelConfig {
   version: 'v5' | 'v6';
-  model: MastraModelConfig;
-}
-
-function isV5PlusModel(model: MastraModelConfig): boolean {
-  if (typeof model === 'string') return true;
-  if (typeof model === 'object' && 'specificationVersion' in model) {
-    return model.specificationVersion === 'v2' || model.specificationVersion === 'v3';
-  }
-  return false;
-}
-
-async function agentGenerate(
-  agent: Agent,
-  prompt: string | { role: string; content: string }[],
-  model: MastraModelConfig,
-  options: { threadId: string; resourceId: string },
-) {
-  if (isV5PlusModel(model)) {
-    return agent.generate(prompt as any, options);
-  }
-  return agent.generateLegacy(prompt as any, options);
 }
 
 export function getProcessorsTests(config: ProcessorsTestConfig) {
-  const { version, model } = config;
+  const { version } = config;
 
   describe(`Memory with Processors (${version})`, () => {
     let memory: Memory;
@@ -271,7 +253,7 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
 
       // Count parts before and after filtering (both tools excluded)
       const totalPartsBefore3 = messagesV2.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
-      const totalPartsAfter3 = result3.reduce((sum, msg) => sum + (msg.content.parts?.length || 0), 0);
+      const totalPartsAfter3 = result3.reduce((sum, msg) => sum + ((msg.content as any)?.parts?.length || 0), 0);
       expect(totalPartsAfter3).toBeLessThan(totalPartsBefore3);
 
       expect(filterToolCallsByName(result3, 'weather')).toHaveLength(0);
@@ -390,21 +372,25 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
         resourceId,
       });
       const instructions = 'You are a helpful assistant';
+      const mockModel = createMockModel(config);
       const agent = new Agent({
         id: 'processor-test-agent',
         name: 'processor-test-agent',
         instructions,
-        model,
+        model: mockModel,
         memory: testMemory,
         inputProcessors: [new ToolCallFilter(), new ConversationOnlyFilter(), new TokenLimiter(127000)],
       });
 
       const userMessage = 'Tell me something interesting about space';
 
-      const res = await agentGenerate(agent, [{ role: 'user', content: userMessage }], model, {
+      const res = await agent.generate([{ role: 'user', content: userMessage }], {
         threadId: thread.id,
         resourceId,
       });
+
+      // Small delay to ensure message persistence completes
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       const requestBody = typeof res.request.body === 'string' ? JSON.parse(res.request.body) : res.request.body;
       const requestInputMessages = requestBody.input || requestBody.messages;
@@ -420,10 +406,13 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
 
       const userMessage2 = 'Tell me something else interesting about space';
 
-      const res2 = await agentGenerate(agent, [{ role: 'user', content: userMessage2 }], model, {
+      const res2 = await agent.generate([{ role: 'user', content: userMessage2 }], {
         threadId: thread.id,
         resourceId,
       });
+
+      // Small delay to ensure message persistence completes
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       const requestBody2 = typeof res2.request.body === 'string' ? JSON.parse(res2.request.body) : res2.request.body;
       const requestInputMessages2 = requestBody2.input || requestBody2.messages;
@@ -451,10 +440,10 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       expect(remembered.messages.length).toBe(4); // 2 user, 2 assistant. These wont be filtered because they come from memory.recall() directly
     });
 
-    it('should apply processors with a real Mastra agent', async () => {
+    it('should apply processors with tool calls', async () => {
       // Create a thread
       const thread = await memory.createThread({
-        title: 'Real Agent Processor Test Thread',
+        title: 'Tool Processor Test Thread',
         resourceId,
       });
 
@@ -492,25 +481,63 @@ export function getProcessorsTests(config: ProcessorsTestConfig) {
       const instructions =
         'You are a helpful assistant with access to weather and calculator tools. Use them when appropriate.';
 
-      // Create agent with memory and tools
-      const agent = new Agent({
-        id: 'processor-test-agent',
-        name: 'processor-test-agent',
-        instructions,
-        model,
-        memory,
-        tools: {
-          get_weather: weatherTool,
-          calculator: calculatorTool,
+      // Create mock model that returns tool calls
+      const weatherMockModel = createMockModelWithToolCalls(config, [
+        {
+          toolName: 'get_weather',
+          toolCallId: 'call-weather-1',
+          args: { location: 'Seattle' },
+          result: 'The weather in Seattle is sunny.',
         },
+      ]);
+
+      const calculatorMockModel = createMockModelWithToolCalls(config, [
+        {
+          toolName: 'calculator',
+          toolCallId: 'call-calc-1',
+          args: { expression: '123 * 456' },
+          result: 'The result is 56088',
+        },
+      ]);
+
+      const textMockModel = createMockModel(config, 'Space is vast and contains billions of galaxies.');
+
+      // Create agents for each scenario
+      const weatherAgent = new Agent({
+        id: 'weather-agent',
+        name: 'weather-agent',
+        instructions,
+        model: weatherMockModel,
+        memory,
+        tools: { get_weather: weatherTool },
+      });
+
+      const calculatorAgent = new Agent({
+        id: 'calculator-agent',
+        name: 'calculator-agent',
+        instructions,
+        model: calculatorMockModel,
+        memory,
+        tools: { calculator: calculatorTool },
+      });
+
+      const textAgent = new Agent({
+        id: 'text-agent',
+        name: 'text-agent',
+        instructions,
+        model: textMockModel,
+        memory,
       });
 
       // First message - use weather tool
-      await agentGenerate(agent, 'What is the weather in Seattle?', model, { threadId, resourceId });
+      await weatherAgent.generate('What is the weather in Seattle?', { threadId, resourceId });
+      await new Promise(resolve => setTimeout(resolve, 50));
       // Second message - use calculator tool
-      await agentGenerate(agent, 'Calculate 123 * 456', model, { threadId, resourceId });
+      await calculatorAgent.generate('Calculate 123 * 456', { threadId, resourceId });
+      await new Promise(resolve => setTimeout(resolve, 50));
       // Third message - simple text response
-      await agentGenerate(agent, 'Tell me something interesting about space', model, { threadId, resourceId });
+      await textAgent.generate('Tell me something interesting about space', { threadId, resourceId });
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Query with no processors to verify baseline message count
       const queryResult = await memory.recall({

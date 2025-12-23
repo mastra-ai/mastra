@@ -8,11 +8,11 @@ import type { MastraDBMessage } from '@mastra/core/memory';
 import { createTool } from '@mastra/core/tools';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
 import { config } from 'dotenv';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import { Memory } from '@mastra/memory';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;

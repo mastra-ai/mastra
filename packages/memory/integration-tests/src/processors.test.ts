@@ -1,17 +1,39 @@
-import { openai as openaiV6 } from '@ai-sdk/openai-v6';
+import {
+  MockLanguageModelV2 as MockLanguageModelV5,
+  convertArrayToReadableStream as convertArrayToReadableStreamV5,
+} from '@internal/ai-sdk-v5/test';
+import {
+  MockLanguageModelV3 as MockLanguageModelV6,
+  convertArrayToReadableStream as convertArrayToReadableStreamV6,
+} from '@internal/ai-v6/test';
 import { describe } from 'vitest';
+
+import { getInputProcessorsTests } from './shared/input-processors';
+import { getOutputProcessorMemoryTests } from './shared/output-processor-memory';
 import { getProcessorsTests } from './shared/processors';
 
-describe('V5 Processors Tests', () => {
-  getProcessorsTests({
-    version: 'v5',
-    model: 'openai/gpt-4o',
-  });
+// V5 Processor Tests
+describe('V5 Processor Tests', { sequential: true }, () => {
+  const v5Config = {
+    version: 'v5' as const,
+    MockLanguageModel: MockLanguageModelV5,
+    convertArrayToReadableStream: convertArrayToReadableStreamV5,
+  };
+
+  getProcessorsTests(v5Config);
+  getInputProcessorsTests(v5Config);
+  getOutputProcessorMemoryTests(v5Config);
 });
 
-describe('V6 Processors Tests', () => {
-  getProcessorsTests({
-    version: 'v6',
-    model: openaiV6('gpt-4o'),
-  });
+// V6 Processor Tests
+describe('V6 Processor Tests', { sequential: true }, () => {
+  const v6Config = {
+    version: 'v6' as const,
+    MockLanguageModel: MockLanguageModelV6,
+    convertArrayToReadableStream: convertArrayToReadableStreamV6,
+  };
+
+  getProcessorsTests(v6Config);
+  getInputProcessorsTests(v6Config);
+  getOutputProcessorMemoryTests(v6Config);
 });

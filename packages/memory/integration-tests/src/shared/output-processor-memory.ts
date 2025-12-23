@@ -7,14 +7,15 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-interface OutputProcessorTestConfig {
+import { createMockModel } from './mock-models';
+import type { MockModelConfig } from './mock-models';
+
+interface OutputProcessorTestConfig extends MockModelConfig {
   version: string;
-  MockLanguageModel: any;
-  convertArrayToReadableStream: (arr: any[]) => ReadableStream;
 }
 
 export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig) {
-  const { version, MockLanguageModel, convertArrayToReadableStream } = config;
+  const { version } = config;
 
   describe(`Output Processor Memory Persistence Integration (${version})`, () => {
     let memory: Memory;
@@ -114,34 +115,8 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
 
     it('should persist PII-redacted messages to memory using generate', async () => {
       // Create a mock model that returns PII data
-      const mockModel = new MockLanguageModel({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
-          warnings: [],
-          content: [
-            {
-              type: 'text',
-              text: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
-            },
-          ],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'text-delta',
-              id: 'text-1',
-              delta: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
-            },
-          ]),
-        }),
-      });
+      const piiText = 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.';
+      const mockModel = createMockModel(config, piiText);
 
       // Create an agent with the PII redaction processor
       const agent = new Agent({
@@ -216,34 +191,8 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
 
     it('should persist PII-redacted messages to memory using stream', async () => {
       // Create a mock model that returns PII data
-      const mockModel = new MockLanguageModel({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
-          warnings: [],
-          content: [
-            {
-              type: 'text',
-              text: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
-            },
-          ],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'text-delta',
-              id: 'text-1',
-              delta: 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.',
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
-            },
-          ]),
-        }),
-      });
+      const piiText = 'Contact me at john.doe@example.com or call 555-123-4567. My SSN: 123-45-6789.';
+      const mockModel = createMockModel(config, piiText);
 
       // Create an agent with the PII redaction processor
       const agent = new Agent({
@@ -421,34 +370,7 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
         }
       }
 
-      const mockModel = new MockLanguageModel({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
-          warnings: [],
-          content: [
-            {
-              type: 'text',
-              text: 'This is a test message',
-            },
-          ],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'text-delta',
-              id: 'text-1',
-              delta: 'This is a test message',
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
-            },
-          ]),
-        }),
-      });
+      const mockModel = createMockModel(config, 'This is a test message');
 
       const agent = new Agent({
         id: `test-agent-chain-${version}`,
@@ -564,34 +486,7 @@ export function getOutputProcessorMemoryTests(config: OutputProcessorTestConfig)
         }
       }
 
-      const mockModel = new MockLanguageModel({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 5, outputTokens: 8, totalTokens: 13 },
-          warnings: [],
-          content: [
-            {
-              type: 'text',
-              text: 'Your card number is 4532-1234-5678-9012',
-            },
-          ],
-        }),
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'text-delta',
-              id: 'text-1',
-              delta: 'Your card number is 4532-1234-5678-9012',
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 5, outputTokens: 8, totalTokens: 13 },
-            },
-          ]),
-        }),
-      });
+      const mockModel = createMockModel(config, 'Your card number is 4532-1234-5678-9012');
 
       const agent = new Agent({
         id: `test-agent-refresh-${version}`,

@@ -5,8 +5,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import type { Processor } from '@mastra/core/processors';
 import { LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { Memory } from '@mastra/memory';
 
 describe('Output Processor Memory Persistence Integration', () => {
   let memory: Memory;

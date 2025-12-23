@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
-import type { MastraModelConfig } from '@mastra/core/llm';
 import { MockStore } from '@mastra/core/storage';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -8,9 +7,11 @@ import { Memory } from '@mastra/memory';
 import type { CoreMessage } from 'ai-v5';
 import { describe, expect, it } from 'vitest';
 
-interface InputProcessorsTestConfig {
+import { createMockModel } from './mock-models';
+import type { MockModelConfig } from './mock-models';
+
+interface InputProcessorsTestConfig extends MockModelConfig {
   version: string;
-  model: MastraModelConfig;
 }
 
 /**
@@ -21,10 +22,10 @@ interface InputProcessorsTestConfig {
  * 2. WorkingMemory processor adds system messages with user context
  * 3. SemanticRecall processor adds relevant messages from other threads
  *
- * If these tests pass without the processors running, our test coverage is insufficient.
+ * Uses mock models for determinism and speed - we only care about the request, not the response.
  */
 export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
-  const { version, model } = config;
+  const { version } = config;
 
   describe(`Input Processor Verification - MessageHistory (${version})`, () => {
     it('should run MessageHistory input processor and include previous messages in LLM request', async () => {
@@ -36,11 +37,13 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `message-history-test-${version}`,
+        id: `message-history-test-${version}-${randomUUID()}`,
         name: 'Message History Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
@@ -53,11 +56,17 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         resourceId,
       });
 
+      // Small delay to ensure message persistence completes
+      await new Promise(resolve => setTimeout(resolve, 50));
+
       // Second message
       await agent.generate('I live in Paris', {
         threadId,
         resourceId,
       });
+
+      // Small delay to ensure message persistence completes
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Verify messages were saved
       const { messages: savedMessages } = await memory.recall({ threadId });
@@ -116,16 +125,18 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `message-history-limit-test-${version}`,
+        id: `message-history-limit-test-${version}-${randomUUID()}`,
         name: 'Message History Limit Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
       const threadId = `msg-limit-${version}-${randomUUID()}`;
-      const resourceId = `limit-test-resource-${version}`;
+      const resourceId = `limit-test-resource-${version}-${randomUUID()}`;
 
       // Create 3 exchanges (6 messages total)
       await agent.generate('Message 1', { threadId, resourceId, maxSteps: 1 });
@@ -145,8 +156,6 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       // With lastMessages: 2, we fetch the 2 most recent messages from storage
       // After 3 exchanges, that's Message 3 (user) + Response 3 (assistant)
       // Total: system (1) + Message 3 (1) + Response 3 (1) + Message 4 current (1) = 4
-      // However, we're seeing 5-6 messages due to message consolidation or test pollution
-      // TODO: Investigate why MockStore/InMemoryStore has cross-test pollution
       expect(requestMessages.length).toBeLessThanOrEqual(6);
 
       // Should NOT include "Message 1" (too old)
@@ -190,16 +199,18 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `working-memory-test-${version}`,
+        id: `working-memory-test-${version}-${randomUUID()}`,
         name: 'Working Memory Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
       const threadId = `wm-${version}-${randomUUID()}`;
-      const resourceId = `working-memory-resource-${version}`;
+      const resourceId = `working-memory-resource-${version}-${randomUUID()}`;
 
       // Set working memory
       await memory.updateWorkingMemory({
@@ -265,16 +276,18 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `custom-template-test-${version}`,
+        id: `custom-template-test-${version}-${randomUUID()}`,
         name: 'Custom Template Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
       const threadId = `custom-template-${version}-${randomUUID()}`;
-      const resourceId = `custom-template-resource-${version}`;
+      const resourceId = `custom-template-resource-${version}-${randomUUID()}`;
 
       await memory.updateWorkingMemory({
         threadId,
@@ -335,15 +348,17 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `semantic-recall-test-${version}`,
+        id: `semantic-recall-test-${version}-${randomUUID()}`,
         name: 'Semantic Recall Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
-      const resourceId = `semantic-recall-resource-${version}`;
+      const resourceId = `semantic-recall-resource-${version}-${randomUUID()}`;
       const thread1Id = `semantic-thread-1-${version}-${randomUUID()}`;
       const thread2Id = `semantic-thread-2-${version}-${randomUUID()}`;
 
@@ -414,15 +429,17 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `semantic-topk-test-${version}`,
+        id: `semantic-topk-test-${version}-${randomUUID()}`,
         name: 'Semantic TopK Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
-      const resourceId = `topk-resource-${version}`;
+      const resourceId = `topk-resource-${version}-${randomUUID()}`;
       const thread1Id = `topk-thread-1-${version}-${randomUUID()}`;
       const thread2Id = `topk-thread-2-${version}-${randomUUID()}`;
 
@@ -482,15 +499,17 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
         },
       });
 
+      const mockModel = createMockModel(config);
+
       const agent = new Agent({
-        id: `combined-test-${version}`,
+        id: `combined-test-${version}-${randomUUID()}`,
         name: 'Combined Test',
         instructions: 'You are a helpful assistant',
-        model,
+        model: mockModel,
         memory,
       });
 
-      const resourceId = `combined-resource-${version}`;
+      const resourceId = `combined-resource-${version}-${randomUUID()}`;
       const thread1Id = `combined-thread-1-${version}-${randomUUID()}`;
       const thread2Id = `combined-thread-2-${version}-${randomUUID()}`;
 

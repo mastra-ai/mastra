@@ -20,9 +20,9 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { Memory } from '@mastra/memory';
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 type OrderEntry = { type: string; content?: string };
