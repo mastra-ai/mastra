@@ -5,6 +5,7 @@
  * index creation to validate the performance improvements.
  */
 
+import type { MemoryStorage } from '@mastra/core/storage';
 import { PgDB } from '../db';
 import { PostgresStore } from '../index';
 
@@ -33,6 +34,7 @@ interface PerformanceComparison {
 
 export class PostgresPerformanceTest {
   private store: PostgresStore;
+  private memory!: MemoryStorage;
   private dbOps: PgDB;
   private config: PerformanceTestConfig;
 
@@ -48,6 +50,7 @@ export class PostgresPerformanceTest {
 
   async init(): Promise<void> {
     await this.store.init();
+    this.memory = (await this.store.getStore('memory'))!;
   }
 
   async cleanup(): Promise<void> {
@@ -373,7 +376,7 @@ export class PostgresPerformanceTest {
     results.push(
       await this.measureOperation(
         'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
+        () => this.memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );
@@ -384,7 +387,7 @@ export class PostgresPerformanceTest {
       await this.measureOperation(
         'listMessages',
         () =>
-          this.store.listMessages({
+          this.memory.listMessages({
             threadId,
             perPage: 20,
             page: 0,

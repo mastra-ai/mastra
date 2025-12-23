@@ -17,7 +17,7 @@ import type { Event } from '../events/types';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import { ProcessorRunner } from '../processors';
 import type { Processor } from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
@@ -1591,7 +1591,8 @@ export class Workflow<
     }
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -1834,7 +1835,13 @@ export class Workflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow runs. Workflows storage domain is not available');
+      return { runs: [], total: 0 };
+    }
+
+    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
   public async listActiveWorkflowRuns() {
@@ -1878,7 +1885,16 @@ export class Workflow<
         ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow runs. Workflows storage domain is not available');
+      return this.#runs.get(runId)
+        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
 
     return (
       run ??
@@ -1892,7 +1908,14 @@ export class Workflow<
       this.logger.debug('Cannot delete workflow run by ID. Mastra storage is not initialized');
       return;
     }
-    await storage.deleteWorkflowRunById({ runId, workflowName: this.id });
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot delete workflow run. Workflows storage domain is not available');
+      return;
+    }
+
+    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id });
     // deleting the run from the in memory runs
     this.#runs.delete(runId);
   }
@@ -1904,7 +1927,13 @@ export class Workflow<
       return {};
     }
 
-    const run = await storage.getWorkflowRunById({ runId, workflowName: workflowId });
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow run steps. Workflows storage domain is not available');
+      return {};
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -1963,7 +1992,13 @@ export class Workflow<
       return null;
     }
 
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow run execution result. Workflows storage domain is not available');
+      return null;
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
 
     let snapshot: WorkflowRunState | string = run?.snapshot!;
 
@@ -2214,7 +2249,8 @@ export class Run<
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
     try {
-      await this.mastra?.getStorage()?.updateWorkflowState({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.updateWorkflowState({
         workflowName: this.workflowId,
         runId: this.runId,
         opts: {
@@ -2343,10 +2379,9 @@ export class Run<
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       input: inputData,
-      attributes: {
-        workflowId: this.workflowId,
-      },
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3023,7 +3058,8 @@ export class Run<
     forEachIndex?: number;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -3123,10 +3159,9 @@ export class Run<
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       input: resumeDataToUse,
-      attributes: {
-        workflowId: this.workflowId,
-      },
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3199,7 +3234,8 @@ export class Run<
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -3256,9 +3292,8 @@ export class Run<
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
-      attributes: {
-        workflowId: this.workflowId,
-      },
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,
@@ -3341,7 +3376,8 @@ export class Run<
       throw new Error('Step is required and must be a valid step or array of steps');
     }
 
-    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -3392,9 +3428,8 @@ export class Run<
       type: SpanType.WORKFLOW_RUN,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
-      attributes: {
-        workflowId: this.workflowId,
-      },
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
       metadata: {
         resourceId: this.resourceId,
         runId: this.runId,

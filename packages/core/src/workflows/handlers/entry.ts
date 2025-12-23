@@ -59,7 +59,8 @@ export async function persistStepUpdate(
       requestContextObj[key] = value;
     });
 
-    await engine.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       resourceId,

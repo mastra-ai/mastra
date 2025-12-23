@@ -30,23 +30,29 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV4): ZodTypeV4;
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
-      // For OpenAI strict mode, convert .optional() to .nullable() with transform
-      // This ensures all fields are in the required array but can accept null values
-      // The transform converts null -> undefined to match original .optional() semantics
+      // For OpenAI strict mode, convert .optional() to .nullable().optional() with transform
+      // This ensures:
+      // 1. The JSON Schema has the field in the "required" array (due to transform wrapper)
+      // 2. Validation accepts null values (nullable)
+      // 3. Validation accepts omitted/undefined values (optional)
+      // 4. The transform converts null -> undefined to match original .optional() semantics
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
 
       if (innerType) {
-        // If inner is nullable, just process and return it with transform (strips the optional wrapper)
-        // This converts .optional().nullable() -> .nullable() with transform
+        // If inner is nullable, just process and return it with optional + transform
+        // This converts .optional().nullable() -> .nullable().optional() with transform
         if (isNullable(z)(innerType)) {
           const processed = this.processZodType(innerType);
-          return processed.transform((val: any) => (val === null ? undefined : val));
+          return processed.optional().transform((val: any) => (val === null ? undefined : val));
         }
 
-        // Otherwise, process inner, make it nullable, and add transform
-        // This converts .optional() -> .nullable() with transform that converts null to undefined
+        // Otherwise, process inner, make it nullable + optional, and add transform
+        // This converts .optional() -> .nullable().optional() with transform that converts null to undefined
         const processedInner = this.processZodType(innerType);
-        return processedInner.nullable().transform((val: any) => (val === null ? undefined : val));
+        return processedInner
+          .nullable()
+          .optional()
+          .transform((val: any) => (val === null ? undefined : val));
       }
 
       return value;
@@ -54,14 +60,17 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       // Process nullable: unwrap, process inner, and re-wrap with nullable
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
       if (innerType) {
-        // Special case: if inner is optional, strip it and add transform for OpenAI strict mode
-        // This converts .nullable().optional() -> .nullable() with transform
+        // Special case: if inner is optional, make it nullable + optional with transform for OpenAI strict mode
+        // This converts .nullable().optional() -> .nullable().optional() with transform
         if (isOptional(z)(innerType)) {
           const innerInnerType =
             '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
           if (innerInnerType) {
             const processedInnerInner = this.processZodType(innerInnerType);
-            return processedInnerInner.nullable().transform((val: any) => (val === null ? undefined : val));
+            return processedInnerInner
+              .nullable()
+              .optional()
+              .transform((val: any) => (val === null ? undefined : val));
           }
         }
 

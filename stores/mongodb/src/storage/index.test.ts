@@ -170,15 +170,17 @@ describe('MongoDBStore connectorHandler Operations', () => {
       updatedAt: new Date(),
     };
 
-    const savedThread = await store.saveThread({ thread });
-    expect(savedThread.id).toBe(thread.id);
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+    const savedThread = await memoryStore?.saveThread({ thread });
+    expect(savedThread?.id).toBe(thread.id);
 
-    const retrievedThread = await store.getThreadById({ threadId: thread.id });
+    const retrievedThread = await memoryStore?.getThreadById({ threadId: thread.id });
     expect(retrievedThread).toBeDefined();
     expect(retrievedThread?.title).toBe('Test Thread');
 
     // Clean up
-    await store.deleteThread({ threadId: thread.id });
+    await memoryStore?.deleteThread({ threadId: thread.id });
     await store.close();
     await client.close();
   });
@@ -254,7 +256,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB Document Flexibility', () => {
     beforeEach(async () => {
-      await store.stores.memory.dangerouslyClearAll();
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
     });
 
     it('should handle flexible document schemas with complex nested metadata', async () => {
@@ -279,11 +283,13 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should handle this flexible schema without issues
-      const saved = await store.saveThread({ thread });
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      const saved = await memoryStore?.saveThread({ thread });
       expect(saved).toBeTruthy();
-      expect(saved.id).toBe(thread.id);
+      expect(saved?.id).toBe(thread.id);
 
-      const retrieved = await store.getThreadById({ threadId: thread.id });
+      const retrieved = await memoryStore?.getThreadById({ threadId: thread.id });
       expect(retrieved).toBeTruthy();
       expect(retrieved?.metadata).toMatchObject({
         customField: 'custom value',
@@ -311,9 +317,11 @@ describe('MongoDB Specific Tests', () => {
         updatedAt: new Date(),
       };
 
-      await store.saveThread({ thread });
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.saveThread({ thread });
 
-      const retrieved = await store.getThreadById({ threadId: thread.id });
+      const retrieved = await memoryStore?.getThreadById({ threadId: thread.id });
       expect(retrieved).toBeTruthy();
       expect((retrieved?.metadata as any)?.geoLocation?.coordinates).toEqual([-122.4194, 37.7749]);
       expect((retrieved?.metadata as any)?.tags).toEqual(['ai', 'mongodb', 'flexible']);
@@ -322,14 +330,18 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB JSON/JSONB Field Handling', () => {
     beforeEach(async () => {
-      await store.stores.memory.dangerouslyClearAll();
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
     });
 
     it('should handle complex JSON structures in message content', async () => {
       // First create a thread
       const threadId = `thread-json-test-${Date.now()}`;
       const resourceId = 'resource-json-test';
-      await store.saveThread({
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.saveThread({
         thread: {
           id: threadId,
           resourceId,
@@ -381,10 +393,12 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should handle this complex nested structure naturally
-      const result = await store.saveMessages({ messages: [complexMessage] });
-      expect(result.messages).toHaveLength(1);
+      expect(memoryStore).toBeDefined();
+      const result = await memoryStore?.saveMessages({ messages: [complexMessage] });
+      expect(result?.messages).toHaveLength(1);
 
-      const { messages } = await store.listMessagesById({ messageIds: [messageId] });
+      const messagesResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const messages = messagesResult?.messages ?? [];
       expect(messages).toHaveLength(1);
       expect(messages[0]?.content).toBeDefined();
     });
@@ -425,7 +439,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB Span Operations with Complex Data', () => {
     beforeEach(async () => {
-      await store.stores.observability!.dangerouslyClearAll();
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+      await observabilityStore?.dangerouslyClearAll();
     });
 
     it('should handle Span creation with MongoDB-specific nested attributes', async () => {
@@ -481,10 +497,13 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createSpan(span)).resolves.not.toThrow();
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+
+      await expect(observabilityStore?.createSpan({ span: span as any })).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace({ traceId });
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe(spanId);
@@ -516,7 +535,9 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createSpan(initialSpan);
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+      await observabilityStore?.createSpan({ span: initialSpan as any });
 
       // Update with complex nested data
       const updates = {
@@ -549,7 +570,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       await expect(
-        store.updateSpan({
+        observabilityStore?.updateSpan({
           spanId,
           traceId,
           updates,
@@ -557,7 +578,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace({ traceId });
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });

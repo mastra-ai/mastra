@@ -113,6 +113,7 @@ export class InngestRun<
   async getRunOutput(eventId: string, maxWaitMs = 300000) {
     const startTime = Date.now();
     const storage = this.#mastra?.getStorage();
+    const workflowsStore = await storage?.getStore('workflows');
 
     while (Date.now() - startTime < maxWaitMs) {
       let runs;
@@ -136,7 +137,7 @@ export class InngestRun<
 
       // Check failure
       if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await storage?.loadWorkflowSnapshot({
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });
@@ -158,7 +159,7 @@ export class InngestRun<
 
       // Check cancellation
       if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await storage?.loadWorkflowSnapshot({
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });
@@ -183,12 +184,13 @@ export class InngestRun<
       },
     });
 
-    const snapshot = await storage?.loadWorkflowSnapshot({
+    const workflowsStore = await storage?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
     if (snapshot) {
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -233,7 +235,8 @@ export class InngestRun<
     perStep?: boolean;
   }): Promise<{ runId: string }> {
     // Persist initial snapshot
-    await this.#mastra.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -300,7 +303,8 @@ export class InngestRun<
     format?: 'legacy' | 'vnext' | undefined;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    await this.#mastra.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -394,7 +398,8 @@ export class InngestRun<
         typeof step === 'string' ? step : step?.id,
       );
     }
-    const snapshot = await storage?.loadWorkflowSnapshot({
+    const workflowsStore = await storage?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
@@ -505,14 +510,15 @@ export class InngestRun<
     }
 
     const storage = this.#mastra?.getStorage();
+    const workflowsStore = await storage?.getStore('workflows');
 
-    const snapshot = await storage?.loadWorkflowSnapshot({
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
 
     if (!snapshot) {
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,

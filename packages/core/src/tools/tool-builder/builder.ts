@@ -12,10 +12,11 @@ import {
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { isZodObject } from '../../utils/zod-utils';
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
@@ -62,7 +63,7 @@ export class CoreToolBuilder extends MastraBase {
       if (!schema) {
         schema = z.object({});
       }
-      if (schema instanceof z.ZodObject) {
+      if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
           suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
           resumeData: z
@@ -263,8 +264,9 @@ export class CoreToolBuilder extends MastraBase {
         type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
+        entityType: EntityType.TOOL,
+        entityName: options.name,
         attributes: {
-          toolId: options.name,
           toolDescription: options.description,
           toolType: logType || 'tool',
         },

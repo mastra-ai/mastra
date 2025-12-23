@@ -1708,6 +1708,7 @@ export class Agent extends BaseResource {
   resetModel(): Promise<{ message: string }> {
     return this.request(`/api/agents/${this.agentId}/model/reset`, {
       method: 'POST',
+      body: {},
     });
   }
 

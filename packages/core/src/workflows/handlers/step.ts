@@ -4,7 +4,7 @@ import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '..
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
-import { SpanType, wrapMastra } from '../../observability';
+import { EntityType, SpanType, wrapMastra } from '../../observability';
 import type { TracingContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
@@ -138,10 +138,9 @@ export async function executeStep(
   const stepSpan = tracingContext.currentSpan?.createChildSpan({
     name: `workflow step: '${step.id}'`,
     type: SpanType.WORKFLOW_STEP,
+    entityType: EntityType.WORKFLOW_STEP,
+    entityId: step.id,
     input: inputData,
-    attributes: {
-      stepId: step.id,
-    },
     tracingPolicy: engine.options?.tracingPolicy,
   });
 

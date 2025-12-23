@@ -6537,7 +6537,9 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
 
-      await testStorage.persistWorkflowSnapshot({
+      const workflowsStore = await testStorage.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId,
         snapshot: {
