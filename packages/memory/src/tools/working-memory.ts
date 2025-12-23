@@ -71,8 +71,8 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         schema instanceof ZodObject
           ? schema
           : (convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
-            `The JSON formatted working memory content to store.`,
-          ) as ZodObject<any>),
+              `The JSON formatted working memory content to store.`,
+            ) as ZodObject<any>),
     });
   }
 
@@ -118,18 +118,11 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
 
       if (usesMergeSemantics) {
         // Schema-based: fetch existing, merge, save
-        console.info('[updateWorkingMemoryTool] memoryConfig passed to tool:', JSON.stringify(memoryConfig, null, 2));
-        console.info('[updateWorkingMemoryTool] memoryConfig.workingMemory.scope:', memoryConfig?.workingMemory?.scope);
-
         const existingRaw = await memory.getWorkingMemory({
           threadId,
           resourceId,
           memoryConfig,
         });
-
-        // DEBUG: Log what we're getting from storage
-        console.info('[updateWorkingMemoryTool] existingRaw:', existingRaw);
-        console.info('[updateWorkingMemoryTool] threadId:', threadId, 'resourceId:', resourceId);
 
         let existingData: Record<string, unknown> | null = null;
         if (existingRaw) {
@@ -141,8 +134,6 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
           }
         }
 
-        console.info('[updateWorkingMemoryTool] existingData after parse:', existingData);
-
         let newData: unknown;
         if (typeof inputData.memory === 'string') {
           try {
@@ -151,19 +142,14 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
             const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
             throw new Error(
               `Failed to parse working memory input as JSON: ${errorMessage}. ` +
-              `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
+                `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
             );
           }
         } else {
           newData = inputData.memory;
         }
 
-        console.info('[updateWorkingMemoryTool] newData (LLM delta):', newData);
-
         const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
-
-        console.info('[updateWorkingMemoryTool] mergedData:', mergedData);
-
         workingMemory = JSON.stringify(mergedData);
       } else {
         // Template-based (Markdown): use existing replace semantics

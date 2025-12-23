@@ -10,11 +10,11 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
-import type { MastraModelConfig } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
+import type { MastraModelConfig } from '@mastra/core/llm';
 
 const resourceId = 'test-resource';
 
@@ -472,7 +472,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('phoenix');
       });
 
-      it.only('should remove fields when user asks to forget something (null delete)', async () => {
+      it('should remove fields when user asks to forget something (null delete)', async () => {
         // Turn 1: Set up comprehensive data
         await agentGenerate(
           agent,
