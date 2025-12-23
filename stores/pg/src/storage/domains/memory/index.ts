@@ -428,57 +428,80 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  /**
+   * Fetches messages around target messages using cursor-based pagination.
+   *
+   * This replaces the previous ROW_NUMBER() approach which caused severe performance
+   * issues on large tables (see GitHub issue #11150). The old approach required
+   * scanning and sorting ALL messages in a thread to assign row numbers.
+   *
+   * The new approach uses the existing (thread_id, createdAt) index to efficiently
+   * fetch only the messages needed by using createdAt as a cursor.
+   */
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
+    const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    const selectColumns = `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
+
+    // Build a single efficient query that fetches context for all target messages
+    // For each target message, we fetch:
+    // 1. The target message itself plus any previous messages (createdAt <= target)
+    // 2. Any next messages after the target (createdAt > target)
+    // Each subquery is wrapped in parentheses to allow ORDER BY within UNION ALL
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
-    const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      unionQueries.push(
-        `
-            SELECT * FROM (
-              WITH target_thread AS (
-                SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx}
-              ),
-              ordered_messages AS (
-                SELECT
-                  *,
-                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-                FROM ${tableName}
-                WHERE thread_id = (SELECT thread_id FROM target_thread)
-              )
-              SELECT
-                m.id,
-                m.content,
-                m.role,
-                m.type,
-                m."createdAt",
-                m."createdAtZ",
-                m.thread_id AS "threadId",
-                m."resourceId"
-              FROM ordered_messages m
-              WHERE m.id = $${paramIdx}
-              OR EXISTS (
-                SELECT 1 FROM ordered_messages target
-                WHERE target.id = $${paramIdx}
-                AND (
-                  (m.row_num < target.row_num AND m.row_num >= target.row_num - $${paramIdx + 1})
-                  OR
-                  (m.row_num > target.row_num AND m.row_num <= target.row_num + $${paramIdx + 2})
-                )
-              )
-            ) AS query_${paramIdx}
-            `,
-      );
-      params.push(id, withPreviousMessages, withNextMessages);
-      paramIdx += 3;
+
+      // Always fetch the target message, plus any requested previous messages
+      // Uses createdAt <= target's createdAt, ordered DESC, limited to withPreviousMessages + 1
+      // The +1 ensures we always get the target message itself
+      unionQueries.push(`(
+        SELECT ${selectColumns}
+        FROM ${tableName} m
+        WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
+          AND m."createdAt" <= (SELECT "createdAt" FROM ${tableName} WHERE id = $${paramIdx})
+        ORDER BY m."createdAt" DESC
+        LIMIT $${paramIdx + 1}
+      )`);
+      params.push(id, withPreviousMessages + 1); // +1 to include the target message itself
+      paramIdx += 2;
+
+      // Query for messages after the target (only if requested)
+      // Uses createdAt > target's createdAt, ordered ASC, limited to withNextMessages
+      if (withNextMessages > 0) {
+        unionQueries.push(`(
+          SELECT ${selectColumns}
+          FROM ${tableName} m
+          WHERE m.thread_id = (SELECT thread_id FROM ${tableName} WHERE id = $${paramIdx})
+            AND m."createdAt" > (SELECT "createdAt" FROM ${tableName} WHERE id = $${paramIdx})
+          ORDER BY m."createdAt" ASC
+          LIMIT $${paramIdx + 1}
+        )`);
+        params.push(id, withNextMessages);
+        paramIdx += 2;
+      }
     }
-    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+
+    if (unionQueries.length === 0) return null;
+
+    // When there's only one subquery, we don't need UNION ALL or an outer ORDER BY
+    // (the subquery already has its own ORDER BY)
+    // When there are multiple subqueries, we join them and sort the combined result
+    let finalQuery: string;
+    if (unionQueries.length === 1) {
+      // Single query - just use it directly (remove outer parentheses for cleaner SQL)
+      finalQuery = unionQueries[0]!.slice(1, -1); // Remove ( and )
+    } else {
+      // Multiple queries - UNION ALL and sort the result
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC`;
+    }
     const includedRows = await this.#db.client.manyOrNone(finalQuery, params);
+
+    // Deduplicate results (messages may appear in multiple context windows)
     const seen = new Set<string>();
     const dedupedRows = includedRows.filter(row => {
       if (seen.has(row.id)) return false;
