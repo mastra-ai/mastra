@@ -17,9 +17,11 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgresStore } from '../../index';
+import type { MemoryPG } from '.';
 
 describe('ROW_NUMBER Performance Issue #11150', () => {
   let store: PostgresStore;
+  let memoryStore: MemoryPG;
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
 
   // Test configuration - adjust these to reproduce the issue
@@ -40,6 +42,8 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
     });
     await store.init();
 
+    memoryStore = (await store.getStore('memory')) as MemoryPG;
+
     console.log(`\n=== Setting up test data ===`);
     console.log(`Creating ${THREADS_COUNT} threads with ${MESSAGES_PER_THREAD} messages each...`);
     console.log(`Total messages: ${TOTAL_MESSAGES}`);
@@ -49,7 +53,7 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
       const threadId = `${TEST_PREFIX}-thread-${t}`;
       testThreadIds.push(threadId);
 
-      await store.saveThread({
+      await memoryStore?.saveThread({
         thread: {
           id: threadId,
           resourceId: testResourceId,
@@ -165,7 +169,7 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
     // Measure the query time
     const startTime = performance.now();
 
-    const result = await store.listMessages({
+    const result = await memoryStore?.listMessages({
       threadId,
       include,
       perPage: 40,
@@ -250,7 +254,7 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
 
     // Test 1: Simple listMessages without include (should be fast)
     const startWithout = performance.now();
-    const resultWithout = await store.listMessages({
+    const resultWithout = await memoryStore?.listMessages({
       threadId,
       perPage: 40,
       page: 0,
@@ -269,7 +273,7 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
     ];
 
     const startWith = performance.now();
-    const resultWith = await store.listMessages({
+    const resultWith = await memoryStore?.listMessages({
       threadId,
       include,
       perPage: 40,
@@ -310,7 +314,7 @@ describe('ROW_NUMBER Performance Issue #11150', () => {
       }));
 
       const start = performance.now();
-      const result = await store.listMessages({
+      const result = await memoryStore?.listMessages({
         threadId,
         include,
         perPage: 40,
