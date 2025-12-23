@@ -1049,6 +1049,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-01',
     'minimax/minimax-m1',
     'minimax/minimax-m2',
+    'minimax/minimax-m2.1',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-2512:free',
