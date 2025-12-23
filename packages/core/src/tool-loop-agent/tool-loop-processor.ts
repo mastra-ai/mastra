@@ -103,14 +103,17 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
         stopSequences: this.settings.stopSequences,
       };
     }
-
+    if (this.settings.stopWhen) {
+      // TODO: The callback signatures differ (Types of parameters stepResult and event are incompatible)
+      defaultOptions.stopWhen = this.settings.stopWhen as any;
+    }
     if (this.settings.onStepFinish) {
-      // TODO: The callback signatures differ (ReasoningChunk vs ReasoningPart) - need adapter
-      defaultOptions.onStepFinish = this.settings.onStepFinish as unknown as typeof defaultOptions.onStepFinish;
+      // TODO: The callback signatures differ (Types of parameters stepResult and event are incompatible)
+      defaultOptions.onStepFinish = this.settings.onStepFinish as any;
     }
     if (this.settings.onFinish) {
-      // TODO: The callback signatures differ (ReasoningChunk vs ReasoningPart) - need adapter
-      defaultOptions.onFinish = this.settings.onFinish as unknown as typeof defaultOptions.onFinish;
+      // TODO: The callback signatures differ (Types of parameters 'event' and 'event' are incompatible)
+      defaultOptions.onFinish = this.settings.onFinish as any;
     }
 
     return {
@@ -260,28 +263,6 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     }
   }
 
-  // TODO: Should map to stopWhen
-  private async handleStopWhen(args: ProcessInputStepArgs) {
-    const { steps, abort } = args;
-    if (this.settings.stopWhen !== undefined) {
-      if (Array.isArray(this.settings.stopWhen)) {
-        for (const condition of this.settings.stopWhen) {
-          // TODO: Different StepResult type
-          const shouldStop = await condition({ steps: steps as StepResult<any>[] });
-          if (shouldStop) {
-            abort('stopWhen condition met');
-          }
-        }
-      } else if (typeof this.settings.stopWhen === 'function') {
-        // TODO: Different StepResult type
-        const shouldStop = await this.settings.stopWhen({ steps: steps as StepResult<any>[] });
-        if (shouldStop) {
-          abort('stopWhen condition met');
-        }
-      }
-    }
-  }
-
   private async handlePrepareStep(args: ProcessInputStepArgs, currentResult: ProcessInputStepResult) {
     if (this.settings.prepareStep) {
       const { messages, steps, stepNumber } = args;
@@ -339,10 +320,6 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined | void> {
     const { stepNumber } = args;
-
-    if (this.settings.stopWhen !== undefined) {
-      await this.handleStopWhen(args);
-    }
 
     if (stepNumber === 0 && this.settings.prepareCall) {
       await this.handlePrepareCall(args);
