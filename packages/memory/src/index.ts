@@ -157,13 +157,13 @@ export class Memory extends MastraMemory {
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
         ? {
-            topK: defaultTopK,
-            messageRange: defaultRange,
-          }
+          topK: defaultTopK,
+          messageRange: defaultRange,
+        }
         : {
-            topK: config?.semanticRecall?.topK ?? defaultTopK,
-            messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
-          };
+          topK: config?.semanticRecall?.topK ?? defaultTopK,
+          messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
+        };
 
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
@@ -173,7 +173,7 @@ export class Memory extends MastraMemory {
     if (resourceScope && !resourceId && config?.semanticRecall && vectorSearchString) {
       throw new Error(
         `Memory error: Resource-scoped semantic recall is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
+        `Either provide a resourceId or explicitly set semanticRecall.scope to 'thread'.`,
       );
     }
 
@@ -196,11 +196,11 @@ export class Memory extends MastraMemory {
               topK: vectorConfig.topK,
               filter: resourceScope
                 ? {
-                    resource_id: resourceId,
-                  }
+                  resource_id: resourceId,
+                }
                 : {
-                    thread_id: threadId,
-                  },
+                  thread_id: threadId,
+                },
             })),
           );
         }),
@@ -217,19 +217,19 @@ export class Memory extends MastraMemory {
       filter,
       ...(vectorResults?.length
         ? {
-            include: vectorResults.map(r => ({
-              id: r.metadata?.message_id,
-              threadId: r.metadata?.thread_id,
-              withNextMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.after,
-              withPreviousMessages:
-                typeof vectorConfig.messageRange === 'number'
-                  ? vectorConfig.messageRange
-                  : vectorConfig.messageRange.before,
-            })),
-          }
+          include: vectorResults.map(r => ({
+            id: r.metadata?.message_id,
+            threadId: r.metadata?.thread_id,
+            withNextMessages:
+              typeof vectorConfig.messageRange === 'number'
+                ? vectorConfig.messageRange
+                : vectorConfig.messageRange.after,
+            withPreviousMessages:
+              typeof vectorConfig.messageRange === 'number'
+                ? vectorConfig.messageRange
+                : vectorConfig.messageRange.before,
+          })),
+        }
         : {}),
     });
     // Reverse to restore chronological order if we queried DESC to get newest messages
@@ -359,7 +359,7 @@ export class Memory extends MastraMemory {
     if (scope === 'resource' && !resourceId) {
       throw new Error(
         `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+        `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
       );
     }
 
@@ -470,7 +470,7 @@ ${workingMemory}`;
       if (scope === 'resource' && !resourceId) {
         throw new Error(
           `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
-            `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
         );
       }
 
@@ -786,7 +786,7 @@ ${workingMemory}`;
     if (scope === 'resource' && !resourceId) {
       throw new Error(
         `Memory error: Resource-scoped working memory is enabled but no resourceId was provided. ` +
-          `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
+        `Either provide a resourceId or explicitly set workingMemory.scope to 'thread'.`,
       );
     }
 
@@ -874,13 +874,13 @@ ${workingMemory}`;
 
     return this.isVNextWorkingMemoryConfig(memoryConfig)
       ? this.__experimental_getWorkingMemoryToolInstructionVNext({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        })
+        template: workingMemoryTemplate,
+        data: workingMemoryData,
+      })
       : this.getWorkingMemoryToolInstruction({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        });
+        template: workingMemoryTemplate,
+        data: workingMemoryData,
+      });
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -916,22 +916,20 @@ Guidelines:
 2. Update proactively when information changes, no matter how small
 3. Use ${template.format === 'json' ? 'JSON' : 'Markdown'} format for all data
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
-${
-  template.format !== 'json'
-    ? `5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.
+${template.format !== 'json'
+        ? `5. IMPORTANT: When calling updateWorkingMemory, the only valid parameter is the memory field. DO NOT pass an object.
 6. IMPORTANT: ALWAYS pass the data you want to store in the memory field as a string. DO NOT pass an object.
 7. IMPORTANT: Data must only be sent as a string no matter which format is used.`
-    : ''
-}
+        : ''
+      }
 
 
-${
-  template.format !== 'json'
-    ? `<working_memory_template>
+${template.format !== 'json'
+        ? `<working_memory_template>
 ${template.content}
 </working_memory_template>`
-    : ''
-}
+        : ''
+      }
 
 ${hasEmptyWorkingMemoryTemplateObject ? 'When working with json data, the object format below represents the template:' : ''}
 ${hasEmptyWorkingMemoryTemplateObject ? JSON.stringify(emptyWorkingMemoryTemplateObject) : ''}
@@ -978,12 +976,11 @@ ${data}
 
 Notes:
 - Update memory whenever referenced information changes
-${
-  template.content !== this.defaultWorkingMemoryTemplate
-    ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
-    : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
+${template.content !== this.defaultWorkingMemoryTemplate
+        ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
+        : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 `
-}
+      }
 - This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
 - REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it. 
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information if that information is not already stored.
@@ -1008,7 +1005,7 @@ ${
       return {
         updateWorkingMemory: this.isVNextWorkingMemoryConfig(mergedConfig)
           ? // use the new experimental tool
-            __experimental_updateWorkingMemoryToolVNext(mergedConfig)
+          __experimental_updateWorkingMemoryToolVNext(mergedConfig)
           : updateWorkingMemoryTool(mergedConfig),
       };
     }

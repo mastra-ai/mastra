@@ -71,8 +71,8 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         schema instanceof ZodObject
           ? schema
           : (convertSchemaToZod({ jsonSchema: schema } as Schema).describe(
-              `The JSON formatted working memory content to store.`,
-            ) as ZodObject<any>),
+            `The JSON formatted working memory content to store.`,
+          ) as ZodObject<any>),
     });
   }
 
@@ -151,7 +151,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
             const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
             throw new Error(
               `Failed to parse working memory input as JSON: ${errorMessage}. ` +
-                `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
+              `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
             );
           }
         } else {
