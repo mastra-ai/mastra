@@ -12,7 +12,7 @@ import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
-import { cursorGlobalMCPConfigPath, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
+import { cursorGlobalMCPConfigPath, windsurfGlobalMCPConfigPath, antigravityGlobalMCPConfigPath } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
@@ -724,6 +724,10 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
               value: 'vscode',
               label: 'VSCode',
             },
+            {
+              value: 'antigravity',
+              label: 'Antigravity',
+            },
           ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
@@ -760,7 +764,20 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             return undefined;
           }
         }
+        
+        if (editor === `antigravity`) {
+          const confirm = await p.select({
+            message: `Antigravity uses a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
 
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
         return editor;
       },
       initGit: async () => {
