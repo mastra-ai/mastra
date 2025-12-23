@@ -1,4 +1,4 @@
-import { openai } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai-v6';
 import { Agent } from '@mastra/core/agent';
 import { ToolCallFilter } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';

@@ -5,15 +5,14 @@ import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
-import { MastraMemory } from '@mastra/core/memory';
 import type {
-  MastraMessageV1,
   MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
+import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
@@ -36,7 +35,7 @@ import {
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
-export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
+export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -45,8 +44,6 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
-
-import { extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -732,34 +729,7 @@ ${workingMemory}`;
 
     return result;
   }
-  protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
-    if (typeof message?.content === `string`) {
-      return {
-        ...message,
-        content: removeWorkingMemoryTags(message.content).trim(),
-      };
-    } else if (Array.isArray(message?.content)) {
-      // Filter out updateWorkingMemory tool-call/result content items
-      const filteredContent = message.content.filter(
-        content =>
-          (content.type !== 'tool-call' && content.type !== 'tool-result') ||
-          content.toolName !== 'updateWorkingMemory',
-      );
-      const newContent = filteredContent.map(content => {
-        if (content.type === 'text') {
-          return {
-            ...content,
-            text: removeWorkingMemoryTags(content.text).trim(),
-          };
-        }
-        return { ...content };
-      }) as MastraMessageV1['content'];
-      if (!newContent.length) return null;
-      return { ...message, content: newContent };
-    } else {
-      return { ...message };
-    }
-  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
