@@ -214,7 +214,26 @@ export function createToolCallStep<
 
         const isResumeToolCall = !!resumeDataFromArgs;
 
-        if (requireToolApproval || (tool as any).requireApproval) {
+        // Check if approval is required
+        // requireApproval can be:
+        // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
+        // - undefined (no approval needed)
+        // If needsApprovalFn exists, evaluate it with the tool args
+        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
+        if ((tool as any).needsApprovalFn) {
+          // Evaluate the function with the parsed args
+          try {
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args);
+            toolRequiresApproval = needsApprovalResult;
+          } catch (error) {
+            // Log error to help developers debug faulty needsApprovalFn implementations
+            console.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
+            // On error, default to requiring approval to be safe
+            toolRequiresApproval = true;
+          }
+        }
+
+        if (toolRequiresApproval) {
           if (!resumeData) {
             controller.enqueue({
               type: 'tool-call-approval',
