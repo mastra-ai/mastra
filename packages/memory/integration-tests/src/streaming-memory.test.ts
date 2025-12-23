@@ -11,8 +11,8 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { memory, weatherAgent } from './mastra/agents/weather';
-import { weatherTool } from './mastra/tools/weather';
+import { memory, weatherAgent } from './v4/mastra/agents/weather';
+import { weatherTool } from './v4/mastra/tools/weather';
 
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {

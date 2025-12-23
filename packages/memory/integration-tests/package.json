@@ -31,7 +31,10 @@
   "dependencies": {
     "@ai-sdk/google": "^1.2.19",
     "@ai-sdk/openai": "^1.3.0",
+    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@latest",
     "@ai-sdk/react": "^1.2.1",
+    "@mastra/ai-sdk": "latest",
+    "@mastra/client-js": "latest",
     "@mastra/fastembed": "*",
     "@mastra/libsql": "*",
     "@mastra/memory": "*",
@@ -48,6 +51,7 @@
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.13.17",
     "ai": "^4.2.2",
+    "ai-v6": "npm:ai@latest",
     "jsdom": "^26.1.0",
     "mastra": "*",
     "next": "^15.5.7",
@@ -58,6 +62,8 @@
   },
   "pnpm": {
     "overrides": {
+      "@mastra/ai-sdk": "link:../../../client-sdks/ai-sdk",
+      "@mastra/client-js": "link:../../../client-sdks/client-js",
       "@mastra/core": "link:../../core",
       "@mastra/memory": "link:../../memory",
       "@mastra/fastembed": "link:../../fastembed",
