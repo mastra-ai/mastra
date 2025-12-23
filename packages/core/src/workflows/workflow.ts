@@ -1166,8 +1166,8 @@ export class Workflow<
       // @ts-ignore
       const mappingStep: any = createStep({
         id: stepOptions?.id || `mapping_${this.#mastra?.generateId() || randomUUID()}`,
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
+        inputSchema: z.any(),
+        outputSchema: z.any(),
         execute: mappingConfig as any,
       });
 
@@ -3378,6 +3378,7 @@ export class Run<
       snapshot,
       initialState,
       graph: this.executionGraph,
+      perStep,
     });
 
     const requestContextToUse = requestContext ?? new RequestContext();

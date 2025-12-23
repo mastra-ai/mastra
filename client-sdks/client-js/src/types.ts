@@ -558,6 +558,7 @@ export interface TimeTravelParams {
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
   requestContext?: RequestContext | Record<string, any>;
   tracingOptions?: TracingOptions;
+  perStep?: boolean;
 }
 
 // ============================================================================
@@ -678,4 +679,17 @@ export interface Provider {
   connected: boolean;
   docUrl?: string;
   models: string[];
+}
+
+// ============================================================================
+// System Types
+// ============================================================================
+
+export interface MastraPackage {
+  name: string;
+  version: string;
+}
+
+export interface GetSystemPackagesResponse {
+  packages: MastraPackage[];
 }

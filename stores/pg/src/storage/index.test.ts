@@ -3,7 +3,10 @@ import {
   createClientAcceptanceTests,
   createConfigValidationTests,
   createDomainDirectTests,
+  createStoreIndexTests,
+  createDomainIndexTests,
 } from '@internal/storage-test-utils';
+import { TABLE_THREADS } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { vi } from 'vitest';
 
@@ -189,3 +192,111 @@ createConfigValidationTests({
 
 // PG-specific tests (public fields, table quoting, permissions, function namespace, timestamp fallback, Cloud SQL, etc.)
 pgTests();
+
+// Helper to check if a PostgreSQL index exists in a specific schema
+const pgIndexExists = async (store: PostgresStore, namePattern: string): Promise<boolean> => {
+  // PostgresStore exposes schema through .schema property
+  const schemaName = (store as any).schema || 'public';
+  const result = await store.db.oneOrNone(
+    `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname ILIKE $2) AS exists`,
+    [schemaName, `%${namePattern}%`],
+  );
+  return result?.exists === true;
+};
+
+// Store-level index configuration tests
+// Uses unique schema names to avoid index collision between tests
+const storeTestId = Math.floor(Date.now() / 1000) % 100000; // Short unique ID
+createStoreIndexTests({
+  storeName: 'PostgresStore',
+  createDefaultStore: () =>
+    new PostgresStore({ ...TEST_CONFIG, id: 'pg-idx-default', schemaName: `idx_s_${storeTestId}_d` }),
+  createStoreWithSkipDefaults: () =>
+    new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-idx-skip',
+      schemaName: `idx_s_${storeTestId}_s`,
+      skipDefaultIndexes: true,
+    }),
+  createStoreWithCustomIndexes: indexes =>
+    new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-idx-custom',
+      schemaName: `idx_s_${storeTestId}_c`,
+      indexes: indexes as any,
+    }),
+  createStoreWithInvalidTable: indexes =>
+    new PostgresStore({
+      ...TEST_CONFIG,
+      id: 'pg-idx-invalid',
+      schemaName: `idx_s_${storeTestId}_i`,
+      indexes: indexes as any,
+    }),
+  indexExists: (store, pattern) => pgIndexExists(store as PostgresStore, pattern),
+  defaultIndexPattern: 'threads_resourceid_createdat',
+  customIndexName: 'custom_pg_test_idx',
+  customIndexDef: {
+    name: 'custom_pg_test_idx',
+    table: TABLE_THREADS,
+    columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_table_idx',
+    table: 'nonexistent_table_xyz',
+    columns: ['id'],
+  },
+});
+
+// Domain-level index configuration tests (using MemoryPG as representative)
+// Uses unique schema names to avoid index collision between tests
+const domainTestId = (Math.floor(Date.now() / 1000) % 100000) + 1; // Short unique ID (different from store)
+let currentDomainTestSchema = '';
+
+createDomainIndexTests({
+  domainName: 'MemoryPG',
+  createDefaultDomain: () => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_d`;
+    const { client } = createTestClient();
+    return new MemoryPG({ client, schemaName: currentDomainTestSchema });
+  },
+  createDomainWithSkipDefaults: () => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_s`;
+    const { client } = createTestClient();
+    return new MemoryPG({ client, schemaName: currentDomainTestSchema, skipDefaultIndexes: true });
+  },
+  createDomainWithCustomIndexes: indexes => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_c`;
+    const { client } = createTestClient();
+    return new MemoryPG({ client, schemaName: currentDomainTestSchema, indexes: indexes as any });
+  },
+  createDomainWithInvalidTable: indexes => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_i`;
+    const { client } = createTestClient();
+    return new MemoryPG({ client, schemaName: currentDomainTestSchema, indexes: indexes as any });
+  },
+  indexExists: async (_domain, pattern) => {
+    // Create a fresh client to check indexes
+    const { client, pgp } = createTestClient();
+    try {
+      const result = await client.oneOrNone(
+        `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname ILIKE $2) AS exists`,
+        [currentDomainTestSchema, `%${pattern}%`],
+      );
+      return result?.exists === true;
+    } finally {
+      pgp.end();
+    }
+  },
+  defaultIndexPattern: 'threads_resourceid_createdat',
+  customIndexName: 'custom_memory_test_idx',
+  customIndexDef: {
+    name: 'custom_memory_test_idx',
+    table: TABLE_THREADS,
+    columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_domain_table_idx',
+    table: 'nonexistent_table_xyz',
+    columns: ['id'],
+  },
+});

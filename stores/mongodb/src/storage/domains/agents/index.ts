@@ -15,33 +15,88 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class MongoDBAgentsStorage extends AgentsStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_AGENTS] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (MongoDBAgentsStorage.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  /**
+   * Returns default index definitions for the agents domain collections.
+   * These indexes optimize common query patterns for agent lookups.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_AGENTS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_AGENTS, keys: { createdAt: -1 } },
+      { collection: TABLE_AGENTS, keys: { updatedAt: -1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
   }
 
   async init(): Promise<void> {
-    const collection = await this.#connector.getCollection(TABLE_AGENTS);
-
-    // Create indexes for efficient querying
-    await collection.createIndex({ id: 1 }, { unique: true });
-    await collection.createIndex({ createdAt: -1 });
-    await collection.createIndex({ updatedAt: -1 });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const collection = await this.#connector.getCollection(TABLE_AGENTS);
+    const collection = await this.getCollection(TABLE_AGENTS);
     await collection.deleteMany({});
   }
 
   async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
       const result = await collection.findOne<any>({ id });
 
       if (!result) {
@@ -64,7 +119,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
 
       // Check if agent already exists
       const existing = await collection.findOne({ id: agent.id });
@@ -106,7 +161,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
 
       const existingAgent = await collection.findOne<any>({ id });
       if (!existingAgent) {
@@ -173,7 +228,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
 
   async deleteAgent({ id }: { id: string }): Promise<void> {
     try {
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
       // Idempotent delete - no-op if agent doesn't exist
       await collection.deleteOne({ id });
     } catch (error) {
@@ -209,7 +264,7 @@ export class MongoDBAgentsStorage extends AgentsStorage {
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.#connector.getCollection(TABLE_AGENTS);
+      const collection = await this.getCollection(TABLE_AGENTS);
       const total = await collection.countDocuments({});
 
       if (total === 0 || perPage === 0) {

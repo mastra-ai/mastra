@@ -26,7 +26,6 @@ import {
   isClientConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
-import { PgDB } from './db';
 import type { PgDomainConfig } from './db';
 import { AgentsPG } from './domains/agents';
 import { MemoryPG } from './domains/memory';
@@ -34,12 +33,9 @@ import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
-export type { PgDomainConfig, PgDBConfig } from './db';
-
 export class PostgresStore extends MastraStorage {
   #db: pgPromise.IDatabase<{}>;
   #pgp: pgPromise.IMain;
-  #dbOps: PgDB;
   private schema: string;
   private isInitialized: boolean = false;
 
@@ -105,11 +101,9 @@ export class PostgresStore extends MastraStorage {
       // Create all domain instances synchronously in the constructor
       // This is required for Memory to work correctly, as it checks for
       // stores.memory during getInputProcessors() before init() is called
-      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema };
-
-      // Create a PgDB instance for direct operations (createTable, clearTable, etc.)
-      // PgDB expects the internal config format (already resolved client)
-      this.#dbOps = new PgDB({ client: this.#db, schemaName: this.schema });
+      const skipDefaultIndexes = config.skipDefaultIndexes;
+      const indexes = config.indexes;
+      const domainConfig: PgDomainConfig = { client: this.#db, schemaName: this.schema, skipDefaultIndexes, indexes };
 
       const scores = new ScoresPG(domainConfig);
       const workflows = new WorkflowsPG(domainConfig);
@@ -144,17 +138,8 @@ export class PostgresStore extends MastraStorage {
     try {
       this.isInitialized = true;
 
+      // Each domain creates its own indexes during init()
       await super.init();
-
-      // Create automatic performance indexes by default
-      // This is done after table creation and is safe to run multiple times
-      try {
-        await this.#dbOps.createAutomaticIndexes();
-      } catch (indexError) {
-        // Log the error but don't fail initialization
-        // Indexes are performance optimizations, not critical for functionality
-        console.warn('Failed to create indexes:', indexError);
-      }
     } catch (error) {
       this.isInitialized = false;
       throw new MastraError(
@@ -337,6 +322,11 @@ export class PostgresStore extends MastraStorage {
     return this.stores.workflows.deleteWorkflowRunById({ runId, workflowName });
   }
 
+  /**
+   * Closes the pg-promise connection pool.
+   *
+   * This will close ALL connections in the pool, including pre-configured clients.
+   */
   async close(): Promise<void> {
     this.pgp.end();
   }

@@ -1,4 +1,5 @@
 import type { ConnectionOptions } from 'node:tls';
+import type { CreateIndexOptions } from '@mastra/core/storage';
 import type { ClientConfig } from 'pg';
 import type * as pg from 'pg';
 import type pgPromise from 'pg-promise';
@@ -33,6 +34,35 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * When true, default indexes will not be created during initialization.
+   * This is useful when:
+   * 1. You want to manage indexes separately or use custom indexes only
+   * 2. Default indexes don't match your query patterns
+   * 3. You want to reduce initialization time in development
+   *
+   * @default false
+   */
+  skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which table it belongs to. The store will route each index
+   * to the appropriate domain based on the table name.
+   *
+   * @example
+   * ```typescript
+   * const store = new PostgresStore({
+   *   connectionString: '...',
+   *   indexes: [
+   *     { name: 'my_threads_type_idx', table: 'mastra_threads', columns: ['metadata->>\'type\''] },
+   *     { name: 'my_messages_status_idx', table: 'mastra_messages', columns: ['metadata->>\'status\''] },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       host: string;
@@ -86,6 +116,8 @@ export type PostgresStoreConfig =
       client: pgPromise.IDatabase<{}>;
       schemaName?: string;
       disableInit?: boolean;
+      skipDefaultIndexes?: boolean;
+      indexes?: CreateIndexOptions[];
     };
 
 /**
@@ -125,7 +157,14 @@ export const isCloudSqlConfig = <SSLType>(
  */
 export const isClientConfig = (
   cfg: PostgresStoreConfig,
-): cfg is { id: string; client: pgPromise.IDatabase<{}>; schemaName?: string; disableInit?: boolean } => {
+): cfg is {
+  id: string;
+  client: pgPromise.IDatabase<{}>;
+  schemaName?: string;
+  disableInit?: boolean;
+  skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
+} => {
   return 'client' in cfg;
 };
 

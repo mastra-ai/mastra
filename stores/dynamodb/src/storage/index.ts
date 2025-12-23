@@ -408,7 +408,8 @@ export class DynamoDBStore extends MastraStorage {
 
   /**
    * Closes the DynamoDB client connection and cleans up resources.
-   * Should be called when the store is no longer needed, e.g., at the end of tests or application shutdown.
+   *
+   * This will close the DynamoDB client, including pre-configured clients.
    */
   public async close(): Promise<void> {
     this.logger.debug('Closing DynamoDB client for store:', { name: this.name });

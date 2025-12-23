@@ -5,13 +5,14 @@ import { GetWorkflowResponse } from '@mastra/client-js';
 
 import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
-import { WorkflowDefaultNode } from './workflow-default-node';
+import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import { WorkflowNestedNode } from './workflow-nested-node';
+import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
+import { useMemo } from 'react';
 
 export interface WorkflowGraphInnerProps {
   workflow: {
@@ -25,12 +26,31 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const [edges] = useEdgesState(initialEdges);
   const { steps } = useCurrentRun();
 
+  const stepsFlow = useMemo(() => {
+    return initialEdges.reduce(
+      (acc, edge) => {
+        if (edge.data) {
+          const stepId = edge.data.nextStepId as string;
+          const prevStepId = edge.data.previousStepId as string;
+
+          return {
+            ...acc,
+            [stepId]: [...new Set([...(acc[stepId] || []), prevStepId])],
+          };
+        }
+
+        return acc;
+      },
+      {} as Record<string, string[]>,
+    );
+  }, [initialEdges]);
+
   const nodeTypes = {
-    'default-node': WorkflowDefaultNode,
+    'default-node': (props: NodeProps<DefaultNode>) => <WorkflowDefaultNode {...props} stepsFlow={stepsFlow} />,
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': WorkflowNestedNode,
+    'nested-node': (props: NodeProps<NestedNode>) => <WorkflowNestedNode {...props} stepsFlow={stepsFlow} />,
   };
 
   return (

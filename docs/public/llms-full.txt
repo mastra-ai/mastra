@@ -1,8 +1,8 @@
 ---
-title: "Adding Voice to Agents | Agents"
+title: "Voice | Agents"
 ---
 
-# Adding Voice to Agents
+# Voice
 [EN] Source: https://mastra.ai/en/docs/agents/adding-voice
 
 Mastra agents can be enhanced with voice capabilities, allowing them to speak responses and listen to user input. You can configure an agent to use either a single voice provider or combine multiple providers for different operations.
@@ -349,7 +349,12 @@ Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-
 | Azure           | `@mastra/voice-azure`           | TTS, STT                  | [Documentation](/reference/v1/voice/mastra-voice)    |
 | Cloudflare      | `@mastra/voice-cloudflare`      | TTS                       | [Documentation](/reference/v1/voice/mastra-voice)    |
 
-For more details on voice capabilities, see the [Voice API Reference](/reference/v1/voice/mastra-voice).
+## Next Steps
+
+- [Voice API Reference](/reference/v1/voice/mastra-voice) - Detailed API documentation for voice capabilities
+- [Text to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech) - Interactive story generator and other TTS implementations
+- [Speech to Text Examples](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text) - Voice memo app and other STT implementations
+- [Speech to Speech Examples](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech) - Real-time voice conversation with call analysis
 
 
 ---
@@ -16719,7 +16724,7 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [Google Gemini Live Voice](/reference/v1/voice/google-gemini-live)
 - [Deepgram Voice](/reference/v1/voice/deepgram)
 - [PlayAI Voice](/reference/v1/voice/playai)
-- [Voice Examples](/examples/v1/voice/text-to-speech)
+- [Voice Examples](https://github.com/mastra-ai/voice-examples)
 
 
 ---
@@ -20049,1532 +20054,6 @@ const parentWorkflow = createWorkflow({
 - [Step Class](/reference/v1/workflows/step)
 - [Workflow Class](/reference/v1/workflows/workflow)
 
-
-
----
-title: "Examples List: Workflows, Agents, RAG"
-description: "Explore practical examples of AI development with Mastra, including text generation, RAG implementations, structured outputs, and multi-modal interactions. Learn how to build AI applications using OpenAI, Anthropic, and Google Gemini."
----
-
-import { CardItems } from "@site/src/components/CardItems";
-
-# Examples
-[EN] Source: https://mastra.ai/en/examples
-
-The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
-
-<CardItems
-  titles={[
-    "Voice",
-  ]}
-  items={{
-    Voice: [
-      { title: "Text to Speech", href: "/examples/v1/voice/text-to-speech" },
-      { title: "Speech to Text", href: "/examples/v1/voice/speech-to-text" },
-      { title: "Turn Taking", href: "/examples/v1/voice/turn-taking" },
-      { title: "Speech to Speech", href: "/examples/v1/voice/speech-to-speech" },
-    ],
-  }}
-/>
-
-
----
-title: "Example: Call Analysis with Mastra | Voice"
-description: Example of using Mastra to create a speech to speech application.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Call Analysis with Mastra
-[EN] Source: https://mastra.ai/en/examples/voice/speech-to-speech
-
-This guide demonstrates how to build a complete voice conversation system with analytics using Mastra. The example includes real-time speech-to-speech conversation, recording management, and integration with Roark Analytics for call analysis.
-
-## Overview
-
-The system creates a voice conversation with a Mastra agent, records the entire interaction, uploads the recording to Cloudinary for storage, and then sends the conversation data to Roark Analytics for detailed call analysis.
-
-## Setup
-
-### Prerequisites
-
-1. OpenAI API key for speech-to-text and text-to-speech capabilities
-2. Cloudinary account for audio file storage
-3. Roark Analytics API key for call analysis
-
-### Environment Configuration
-
-Create a `.env` file based on the sample provided:
-
-```bash title="speech-to-speech/call-analysis/sample.env"
-OPENAI_API_KEY=
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-ROARK_API_KEY=
-```
-
-### Installation
-
-Install the required dependencies:
-
-```bash
-npm install
-```
-
-## Implementation
-
-### Creating the Mastra Agent
-
-First, we define our agent with voice capabilities:
-
-```ts title="speech-to-speech/call-analysis/src/mastra/agents/index.ts"
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
-import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
-import { z } from "zod";
-
-// Have the agent do something
-export const speechToSpeechServer = new Agent({
-  id: "speech-to-speech-agent",
-  name: "mastra",
-  instructions: "You are a helpful assistant.",
-  voice: new OpenAIRealtimeVoice(),
-  model: "openai/gpt-5.1",
-  tools: {
-    salutationTool: createTool({
-      id: "salutationTool",
-      description: "Read the result of the tool",
-      inputSchema: z.object({ name: z.string() }),
-      outputSchema: z.object({ message: z.string() }),
-      execute: async (inputData) => {
-        return { message: `Hello ${inputData.name}!` };
-      },
-    }),
-  },
-});
-```
-
-### Initializing Mastra
-
-Register the agent with Mastra:
-
-```ts title="speech-to-speech/call-analysis/src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { speechToSpeechServer } from "./agents";
-
-export const mastra = new Mastra({
-  agents: {
-    speechToSpeechServer,
-  },
-});
-```
-
-### Cloudinary Integration for Audio Storage
-
-Set up Cloudinary for storing the recorded audio files:
-
-```ts title="speech-to-speech/call-analysis/src/upload.ts"
-import { v2 as cloudinary } from "cloudinary";
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-export async function uploadToCloudinary(path: string) {
-  const response = await cloudinary.uploader.upload(path, {
-    resource_type: "raw",
-  });
-  console.log(response);
-  return response.url;
-}
-```
-
-### Main Application Logic
-
-The main application orchestrates the conversation flow, recording, and analytics integration:
-
-```ts title="speech-to-speech/call-analysis/src/base.ts"
-import { Roark } from "@roarkanalytics/sdk";
-import chalk from "chalk";
-
-import { mastra } from "./mastra";
-import { createConversation, formatToolInvocations } from "./utils";
-import { uploadToCloudinary } from "./upload";
-import fs from "fs";
-
-const client = new Roark({
-  bearerToken: process.env.ROARK_API_KEY,
-});
-
-async function speechToSpeechServerExample() {
-  const { start, stop } = createConversation({
-    mastra,
-    recordingPath: "./speech-to-speech-server.mp3",
-    providerOptions: {},
-    initialMessage: "Howdy partner",
-    onConversationEnd: async (props) => {
-      // File upload
-      fs.writeFileSync(props.recordingPath, props.audioBuffer);
-      const url = await uploadToCloudinary(props.recordingPath);
-
-      // Send to Roark
-      console.log("Send to Roark", url);
-      const response = await client.callAnalysis.create({
-        recordingUrl: url,
-        startedAt: props.startedAt,
-        callDirection: "INBOUND",
-        interfaceType: "PHONE",
-        participants: [
-          {
-            role: "AGENT",
-            spokeFirst: props.agent.spokeFirst,
-            name: props.agent.name,
-            phoneNumber: props.agent.phoneNumber,
-          },
-          {
-            role: "CUSTOMER",
-            name: "Yujohn Nattrass",
-            phoneNumber: "987654321",
-          },
-        ],
-        properties: props.metadata,
-        toolInvocations: formatToolInvocations(props.toolInvocations),
-      });
-
-      console.log("Call Recording Posted:", response.data);
-    },
-    onWriting: (ev) => {
-      if (ev.role === "assistant") {
-        process.stdout.write(chalk.blue(ev.text));
-      }
-    },
-  });
-
-  await start();
-
-  process.on("SIGINT", async (e) => {
-    await stop();
-  });
-}
-
-speechToSpeechServerExample().catch(console.error);
-```
-
-## Conversation Utilities
-
-The `utils.ts` file contains helper functions for managing the conversation, including:
-
-1. Creating and managing the conversation session
-2. Handling audio recording
-3. Processing tool invocations
-4. Managing conversation lifecycle events
-
-## Running the Example
-
-Start the conversation with:
-
-```bash
-npm run dev
-```
-
-The application will:
-
-1. Start a real-time voice conversation with the Mastra agent
-2. Record the entire conversation
-3. Upload the recording to Cloudinary when the conversation ends
-4. Send the conversation data to Roark Analytics for analysis
-5. Display the analysis results
-
-## Key Features
-
-- **Real-time Speech-to-Speech**: Uses OpenAI's voice models for natural conversation
-- **Conversation Recording**: Captures the entire conversation for later analysis
-- **Tool Invocation Tracking**: Records when and how AI tools are used during the conversation
-- **Analytics Integration**: Sends conversation data to Roark Analytics for detailed analysis
-- **Cloud Storage**: Uploads recordings to Cloudinary for secure storage and access
-
-## Customization
-
-You can customize this example by:
-
-- Modifying the agent's instructions and capabilities
-- Adding additional tools for the agent to use
-- Changing the conversation flow or initial message
-- Extending the analytics integration with custom metadata
-
-To view the full example code, see the [Github repository](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis).
-
-<br />
-<br />
-
-<GithubLink href="https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis" />
-
-
----
-title: "Example: Smart Voice Memo App | Voice"
-description: Example of using Mastra to create a speech to text application.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Smart Voice Memo App
-[EN] Source: https://mastra.ai/en/examples/voice/speech-to-text
-
-The following code snippets provide example implementations of Speech-to-Text (STT) functionality in a smart voice memo application using Next.js with direct integration of Mastra. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/guides/v1/getting-started/next-js) documentation.
-
-## Creating an Agent with STT Capabilities
-
-The following example shows how to initialize a voice-enabled agent with OpenAI's STT capabilities:
-
-```typescript title="src/mastra/agents/index.ts"
-import { Agent } from "@mastra/core/agent";
-import { OpenAIVoice } from "@mastra/voice-openai";
-
-const instructions = `
-You are an AI note assistant tasked with providing concise, structured summaries of their content... // omitted for brevity
-`;
-
-export const noteTakerAgent = new Agent({
-  id: "note-taker-agent",
-  name: "Note Taker Agent",
-  instructions: instructions,
-  model: "openai/gpt-5.1",
-  voice: new OpenAIVoice(), // Add OpenAI voice provider with default configuration
-});
-```
-
-## Registering the Agent with Mastra
-
-This snippet demonstrates how to register the STT-enabled agent with your Mastra instance:
-
-```typescript title="src/mastra/index.ts"
-import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core";
-
-import { noteTakerAgent } from "./agents";
-
-export const mastra = new Mastra({
-  agents: { noteTakerAgent }, // Register the note taker agent
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-```
-
-## Processing Audio for Transcription
-
-The following code shows how to receive audio from a web request and use the agent's STT capabilities to transcribe it:
-
-```typescript title="app/api/audio/route.ts"
-import { mastra } from "@/src/mastra"; // Import the Mastra instance
-import { Readable } from "node:stream";
-
-export async function POST(req: Request) {
-  // Get the audio file from the request
-  const formData = await req.formData();
-  const audioFile = formData.get("audio") as File;
-  const arrayBuffer = await audioFile.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  const readable = Readable.from(buffer);
-
-  // Get the note taker agent from the Mastra instance
-  const noteTakerAgent = mastra.getAgent("noteTakerAgent");
-
-  // Transcribe the audio file
-  const text = await noteTakerAgent.voice?.listen(readable);
-
-  return new Response(JSON.stringify({ text }), {
-    headers: { "Content-Type": "application/json" },
-  });
-}
-```
-
-You can view the complete implementation of the Smart Voice Memo App on our GitHub repository.
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  href={
-    "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text/voice-memo-app"
-  }
-/>
-
-
----
-title: "Example: Interactive Story Generator | Voice"
-description: Example of using Mastra to create a text to speech application.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# Interactive Story Generator
-[EN] Source: https://mastra.ai/en/examples/voice/text-to-speech
-
-The following code snippets provide example implementations of Text-to-Speech (TTS) functionality in an interactive story generator application using Next.js with Mastra as a separate backend integration. This example demonstrates how to use the Mastra client-js SDK to connect to your Mastra backend. For more details on integrating Mastra with Next.js, please refer to our [Integrate with Next.js](/guides/v1/getting-started/next-js) documentation.
-
-## Creating an Agent with TTS Capabilities
-
-The following example shows how to set up a story generator agent with TTS capabilities on the backend:
-
-```typescript title="src/mastra/agents/index.ts"
-import { Agent } from "@mastra/core/agent";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { Memory } from "@mastra/memory";
-
-const instructions = `
-    You are an Interactive Storyteller Agent. Your job is to create engaging
-    short stories with user choices that influence the narrative. // omitted for brevity
-`;
-
-export const storyTellerAgent = new Agent({
-  id: "story-teller-agent",
-  name: "Story Teller Agent",
-  instructions: instructions,
-  model: "openai/gpt-5.1",
-  voice: new OpenAIVoice(),
-});
-```
-
-## Registering the Agent with Mastra
-
-This snippet demonstrates how to register the agent with your Mastra instance:
-
-```typescript title="src/mastra/index.ts"
-import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core";
-import { storyTellerAgent } from "./agents";
-
-export const mastra = new Mastra({
-  agents: { storyTellerAgent },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-```
-
-## Connecting to Mastra from the Frontend
-
-Here we use the Mastra Client SDK to interact with our Mastra server. For more information about the Mastra Client SDK, see the [documentation](/docs/v1/server/mastra-client).
-
-```typescript title="src/app/page.tsx"
-import { MastraClient } from "@mastra/client-js";
-
-export const mastraClient = new MastraClient({
-  baseUrl: "http://localhost:4111", // Replace with your Mastra backend URL
-});
-```
-
-## Generating Story Content and Converting to Speech
-
-This example demonstrates how to get a reference to a Mastra agent, generate story content based on user input, and then convert that content to speech:
-
-```typescript title="/app/components/StoryManager.tsx"
-const handleInitialSubmit = async (formData: FormData) => {
-  setIsLoading(true);
-  try {
-    const agent = mastraClient.getAgent("storyTellerAgent");
-    const message = `Current phase: BEGINNING. Story genre: ${formData.genre}, Protagonist name: ${formData.protagonistDetails.name}, Protagonist age: ${formData.protagonistDetails.age}, Protagonist gender: ${formData.protagonistDetails.gender}, Protagonist occupation: ${formData.protagonistDetails.occupation}, Story Setting: ${formData.setting}`;
-    const storyResponse = await agent.generate({
-      messages: [{ role: "user", content: message }],
-      threadId: storyState.threadId,
-      resourceId: storyState.resourceId,
-    });
-
-    const storyText = storyResponse.text;
-
-    const audioResponse = await agent.voice.speak(storyText);
-
-    if (!audioResponse.body) {
-      throw new Error("No audio stream received");
-    }
-
-    const audio = await readStream(audioResponse.body);
-
-    setStoryState((prev) => ({
-      phase: "beginning",
-      threadId: prev.threadId,
-      resourceId: prev.resourceId,
-      content: {
-        ...prev.content,
-        beginning: storyText,
-      },
-    }));
-
-    setAudioBlob(audio);
-    return audio;
-  } catch (error) {
-    console.error("Error generating story beginning:", error);
-  } finally {
-    setIsLoading(false);
-  }
-};
-```
-
-## Playing the Audio
-
-This snippet demonstrates how to handle text-to-speech audio playback by monitoring for new audio data. When audio is received, the code creates a browser-playable URL from the audio blob, assigns it to an audio element, and attempts to play it automatically:
-
-```typescript title="/app/components/StoryManager.tsx"
-useEffect(() => {
-  if (!audioRef.current || !audioData) return;
-
-  // Store a reference to the HTML audio element
-  const currentAudio = audioRef.current;
-
-  // Convert the Blob/File audio data from Mastra into a URL the browser can play
-  const url = URL.createObjectURL(audioData);
-
-  const playAudio = async () => {
-    try {
-      currentAudio.src = url;
-      await currentAudio.load();
-      await currentAudio.play();
-      setIsPlaying(true);
-    } catch (error) {
-      console.error("Auto-play failed:", error);
-    }
-  };
-
-  playAudio();
-
-  return () => {
-    if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.src = "";
-      URL.revokeObjectURL(url);
-    }
-  };
-}, [audioData]);
-```
-
-You can view the complete implementation of the Interactive Story Generator on our GitHub repository.
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  href={
-    "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/interactive-story"
-  }
-/>
-
-
----
-title: "Example: AI Debate with Turn Taking | Voice"
-description: Example of using Mastra to create a multi-agent debate with turn-taking conversation flow.
----
-
-import GithubLink from "@site/src/components/GithubLink";
-
-# AI Debate with Turn Taking
-[EN] Source: https://mastra.ai/en/examples/voice/turn-taking
-
-The following code snippets demonstrate how to implement a multi-agent conversation system with turn-taking using Mastra. This example creates a debate between two AI agents (an optimist and a skeptic) who discuss a user-provided topic, taking turns to respond to each other's points.
-
-## Creating Agents with Voice Capabilities
-
-First, we need to create two agents with distinct personalities and voice capabilities:
-
-```typescript title="src/mastra/agents/index.ts"
-import { Agent } from "@mastra/core/agent";
-import { OpenAIVoice } from "@mastra/voice-openai";
-
-export const optimistAgent = new Agent({
-  id: "optimist-agent",
-  name: "Optimist",
-  instructions:
-    "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
-  model: "openai/gpt-5.1",
-  voice: new OpenAIVoice({
-    speaker: "alloy",
-  }),
-});
-
-export const skepticAgent = new Agent({
-  id: "skeptic-agent",
-  name: "Skeptic",
-  instructions:
-    "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
-  model: "openai/gpt-5.1",
-  voice: new OpenAIVoice({
-    speaker: "echo",
-  }),
-});
-```
-
-## Registering the Agents with Mastra
-
-Next, register both agents with your Mastra instance:
-
-```typescript title="src/mastra/index.ts"
-import { PinoLogger } from "@mastra/loggers";
-import { Mastra } from "@mastra/core";
-import { optimistAgent, skepticAgent } from "./agents";
-
-export const mastra = new Mastra({
-  agents: {
-    optimistAgent,
-    skepticAgent,
-  },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-```
-
-## Managing Turn-Taking in the Debate
-
-This example demonstrates how to manage the turn-taking flow between agents, ensuring each agent responds to the previous agent's statements:
-
-```typescript title="src/debate/turn-taking.ts"
-import { mastra } from "../../mastra";
-import { playAudio, Recorder } from "@mastra/node-audio";
-import * as p from "@clack/prompts";
-
-// Helper function to format text with line wrapping
-function formatText(text: string, maxWidth: number): string {
-  const words = text.split(" ");
-  let result = "";
-  let currentLine = "";
-
-  for (const word of words) {
-    if (currentLine.length + word.length + 1 <= maxWidth) {
-      currentLine += (currentLine ? " " : "") + word;
-    } else {
-      result += (result ? "\n" : "") + currentLine;
-      currentLine = word;
-    }
-  }
-
-  if (currentLine) {
-    result += (result ? "\n" : "") + currentLine;
-  }
-
-  return result;
-}
-
-// Initialize audio recorder
-const recorder = new Recorder({
-  outputPath: "./debate.mp3",
-});
-
-// Process one turn of the conversation
-async function processTurn(
-  agentName: "optimistAgent" | "skepticAgent",
-  otherAgentName: string,
-  topic: string,
-  previousResponse: string = "",
-) {
-  const agent = mastra.getAgent(agentName);
-  const spinner = p.spinner();
-  spinner.start(`${agent.name} is thinking...`);
-
-  let prompt;
-  if (!previousResponse) {
-    // First turn
-    prompt = `Discuss this topic: ${topic}. Introduce your perspective on it.`;
-  } else {
-    // Responding to the other agent
-    prompt = `The topic is: ${topic}. ${otherAgentName} just said: "${previousResponse}". Respond to their points.`;
-  }
-
-  // Generate text response
-  const { text } = await agent.generate(prompt, {
-    temperature: 0.9,
-  });
-
-  spinner.message(`${agent.name} is speaking...`);
-
-  // Convert to speech and play
-  const audioStream = await agent.voice.speak(text, {
-    speed: 1.2,
-    responseFormat: "wav", // Optional: specify a response format
-  });
-
-  if (audioStream) {
-    audioStream.on("data", (chunk) => {
-      recorder.write(chunk);
-    });
-  }
-
-  spinner.stop(`${agent.name} said:`);
-
-  // Format the text to wrap at 80 characters for better display
-  const formattedText = formatText(text, 80);
-  p.note(formattedText, agent.name);
-
-  if (audioStream) {
-    const speaker = playAudio(audioStream);
-
-    await new Promise<void>((resolve) => {
-      speaker.once("close", () => {
-        resolve();
-      });
-    });
-  }
-
-  return text;
-}
-
-// Main function to run the debate
-export async function runDebate(topic: string, turns: number = 3) {
-  recorder.start();
-
-  p.intro("AI Debate - Two Agents Discussing a Topic");
-  p.log.info(`Starting a debate on: ${topic}`);
-  p.log.info(
-    `The debate will continue for ${turns} turns each. Press Ctrl+C to exit at any time.`,
-  );
-
-  let optimistResponse = "";
-  let skepticResponse = "";
-  const responses = [];
-
-  for (let turn = 1; turn <= turns; turn++) {
-    p.log.step(`Turn ${turn}`);
-
-    // Optimist's turn
-    optimistResponse = await processTurn(
-      "optimistAgent",
-      "Skeptic",
-      topic,
-      skepticResponse,
-    );
-
-    responses.push({
-      agent: "Optimist",
-      text: optimistResponse,
-    });
-
-    // Skeptic's turn
-    skepticResponse = await processTurn(
-      "skepticAgent",
-      "Optimist",
-      topic,
-      optimistResponse,
-    );
-
-    responses.push({
-      agent: "Skeptic",
-      text: skepticResponse,
-    });
-  }
-
-  recorder.end();
-  p.outro("Debate concluded! The full audio has been saved to debate.mp3");
-
-  return responses;
-}
-```
-
-## Running the Debate from the Command Line
-
-Here's a simple script to run the debate from the command line:
-
-```typescript title="src/index.ts"
-import { runDebate } from "./debate/turn-taking";
-import * as p from "@clack/prompts";
-
-async function main() {
-  // Get the topic from the user
-  const topic = await p.text({
-    message: "Enter a topic for the agents to discuss:",
-    placeholder: "Climate change",
-    validate(value) {
-      if (!value) return "Please enter a topic";
-      return;
-    },
-  });
-
-  // Exit if cancelled
-  if (p.isCancel(topic)) {
-    p.cancel("Operation cancelled.");
-    process.exit(0);
-  }
-
-  // Get the number of turns
-  const turnsInput = await p.text({
-    message: "How many turns should each agent have?",
-    placeholder: "3",
-    initialValue: "3",
-    validate(value) {
-      const num = parseInt(value);
-      if (isNaN(num) || num < 1) return "Please enter a positive number";
-      return;
-    },
-  });
-
-  // Exit if cancelled
-  if (p.isCancel(turnsInput)) {
-    p.cancel("Operation cancelled.");
-    process.exit(0);
-  }
-
-  const turns = parseInt(turnsInput as string);
-
-  // Run the debate
-  await runDebate(topic as string, turns);
-}
-
-main().catch((error) => {
-  p.log.error("An error occurred:");
-  console.error(error);
-  process.exit(1);
-});
-```
-
-## Creating a Web Interface for the Debate
-
-For web applications, you can create a simple Next.js component that allows users to start a debate and listen to the agents' responses:
-
-```tsx title="app/components/DebateInterface.tsx"
-"use client";
-
-import { useState, useRef } from "react";
-import { MastraClient } from "@mastra/client-js";
-
-const mastraClient = new MastraClient({
-  baseUrl: process.env.NEXT_PUBLIC_MASTRA_URL || "http://localhost:4111",
-});
-
-export default function DebateInterface() {
-  const [topic, setTopic] = useState("");
-  const [turns, setTurns] = useState(3);
-  const [isDebating, setIsDebating] = useState(false);
-  const [responses, setResponses] = useState<any[]>([]);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  // Function to start the debate
-  const startDebate = async () => {
-    if (!topic) return;
-
-    setIsDebating(true);
-    setResponses([]);
-
-    try {
-      const optimist = mastraClient.getAgent("optimistAgent");
-      const skeptic = mastraClient.getAgent("skepticAgent");
-
-      const newResponses = [];
-      let optimistResponse = "";
-      let skepticResponse = "";
-
-      for (let turn = 1; turn <= turns; turn++) {
-        // Optimist's turn
-        let prompt;
-        if (turn === 1) {
-          prompt = `Discuss this topic: ${topic}. Introduce your perspective on it.`;
-        } else {
-          prompt = `The topic is: ${topic}. Skeptic just said: "${skepticResponse}". Respond to their points.`;
-        }
-
-        const optimistResult = await optimist.generate({
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        optimistResponse = optimistResult.text;
-        newResponses.push({
-          agent: "Optimist",
-          text: optimistResponse,
-        });
-
-        // Update UI after each response
-        setResponses([...newResponses]);
-
-        // Skeptic's turn
-        prompt = `The topic is: ${topic}. Optimist just said: "${optimistResponse}". Respond to their points.`;
-
-        const skepticResult = await skeptic.generate({
-          messages: [{ role: "user", content: prompt }],
-        });
-
-        skepticResponse = skepticResult.text;
-        newResponses.push({
-          agent: "Skeptic",
-          text: skepticResponse,
-        });
-
-        // Update UI after each response
-        setResponses([...newResponses]);
-      }
-    } catch (error) {
-      console.error("Error starting debate:", error);
-    } finally {
-      setIsDebating(false);
-    }
-  };
-
-  // Function to play audio for a specific response
-  const playAudio = async (text: string, agent: string) => {
-    if (isPlaying) return;
-
-    try {
-      setIsPlaying(true);
-      const agentClient = mastraClient.getAgent(
-        agent === "Optimist" ? "optimistAgent" : "skepticAgent",
-      );
-
-      const audioResponse = await agentClient.voice.speak(text);
-
-      if (!audioResponse.body) {
-        throw new Error("No audio stream received");
-      }
-
-      // Convert stream to blob
-      const reader = audioResponse.body.getReader();
-      const chunks = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-      }
-
-      const blob = new Blob(chunks, { type: "audio/mpeg" });
-      const url = URL.createObjectURL(blob);
-
-      if (audioRef.current) {
-        audioRef.current.src = url;
-        audioRef.current.onended = () => {
-          setIsPlaying(false);
-          URL.revokeObjectURL(url);
-        };
-        audioRef.current.play();
-      }
-    } catch (error) {
-      console.error("Error playing audio:", error);
-      setIsPlaying(false);
-    }
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-semibold mb-4">AI Debate with Turn Taking</h1>
-
-      <div className="mb-6">
-        <label className="block mb-2">Debate Topic:</label>
-        <input
-          type="text"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          className="w-full p-2 border rounded"
-          placeholder="e.g., Climate change, AI ethics, Space exploration"
-        />
-      </div>
-
-      <div className="mb-6">
-        <label className="block mb-2">Number of Turns (per agent):</label>
-        <input
-          type="number"
-          value={turns}
-          onChange={(e) => setTurns(parseInt(e.target.value))}
-          min={1}
-          max={10}
-          className="w-full p-2 border rounded"
-        />
-      </div>
-
-      <button
-        onClick={startDebate}
-        disabled={isDebating || !topic}
-        className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-      >
-        {isDebating ? "Debate in Progress..." : "Start Debate"}
-      </button>
-
-      <audio ref={audioRef} className="hidden" />
-
-      {responses.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Debate Transcript</h2>
-
-          <div className="space-y-4">
-            {responses.map((response, index) => (
-              <div
-                key={index}
-                className={`p-4 rounded ${
-                  response.agent === "Optimist" ? "bg-blue-100" : "bg-gray-100"
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <div className="font-semibold">{response.agent}:</div>
-                  <button
-                    onClick={() => playAudio(response.text, response.agent)}
-                    disabled={isPlaying}
-                    className="text-sm px-2 py-1 bg-blue-500 text-white rounded disabled:bg-gray-300"
-                  >
-                    {isPlaying ? "Playing..." : "Play"}
-                  </button>
-                </div>
-                <p className="mt-2">{response.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-This example demonstrates how to create a multi-agent conversation system with turn-taking using Mastra. The agents engage in a debate on a user-chosen topic, with each agent responding to the previous agent's statements. The system also converts each agent's responses to speech, providing an immersive debate experience.
-
-You can view the complete implementation of the AI Debate with Turn Taking on our GitHub repository.
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  href={
-    "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking"
-  }
-/>
-
-
----
-title: "Example: Inngest Workflow | Workflows"
-description: Example of building an inngest workflow with Mastra
----
-
-# Inngest Workflow
-[EN] Source: https://mastra.ai/en/examples/workflows/inngest-workflow
-
-This example demonstrates how to build an Inngest workflow with Mastra.
-
-## Setup
-
-```sh
-npm install @mastra/inngest@beta inngest @mastra/core@beta @mastra/deployer@beta @hono/node-server
-
-docker run --rm -p 8288:8288 \
-  inngest/inngest \
-  inngest dev -u http://host.docker.internal:3000/inngest/api
-```
-
-Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
-
-## Define the Planning Agent
-
-Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
-
-```ts title="agents/planning-agent.ts"
-import { Agent } from "@mastra/core/agent";
-
-// Create a new planning agent that uses the OpenAI model
-const planningAgent = new Agent({
-  id: "planning-agent",
-  name: "planningAgent",
-  model: "openai/gpt-5.1",
-  instructions: `
-        You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
-
-        📅 [Day, Month Date, Year]
-        ═══════════════════════════
-
-        🌡️ WEATHER SUMMARY
-        • Conditions: [brief description]
-        • Temperature: [X°C/Y°F to A°C/B°F]
-        • Precipitation: [X% chance]
-
-        🌅 MORNING ACTIVITIES
-        Outdoor:
-        • [Activity Name] - [Brief description including specific location/route]
-          Best timing: [specific time range]
-          Note: [relevant weather consideration]
-
-        🌞 AFTERNOON ACTIVITIES
-        Outdoor:
-        • [Activity Name] - [Brief description including specific location/route]
-          Best timing: [specific time range]
-          Note: [relevant weather consideration]
-
-        🏠 INDOOR ALTERNATIVES
-        • [Activity Name] - [Brief description including specific venue]
-          Ideal for: [weather condition that would trigger this alternative]
-
-        ⚠️ SPECIAL CONSIDERATIONS
-        • [Any relevant weather warnings, UV index, wind conditions, etc.]
-
-        Guidelines:
-        - Suggest 2-3 time-specific outdoor activities per day
-        - Include 1-2 indoor backup options
-        - For precipitation >50%, lead with indoor activities
-        - All activities must be specific to the location
-        - Include specific venues, trails, or locations
-        - Consider activity intensity based on temperature
-        - Keep descriptions concise but informative
-
-        Maintain this exact formatting for consistency, using the emoji and section headers as shown.
-      `,
-});
-
-export { planningAgent };
-```
-
-## Define the Activity Planner Workflow
-
-Define the activity planner workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
-
-```ts title="workflows/inngest-workflow.ts"
-import { init } from "@mastra/inngest";
-import { Inngest } from "inngest";
-import { z } from "zod";
-
-const { createWorkflow, createStep } = init(
-  new Inngest({
-    id: "mastra",
-    baseUrl: `http://localhost:8288`,
-  }),
-);
-
-// Helper function to convert weather codes to human-readable descriptions
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    71: "Slight snow fall",
-    73: "Moderate snow fall",
-    75: "Heavy snow fall",
-    95: "Thunderstorm",
-  };
-  return conditions[code] || "Unknown";
-}
-
-const forecastSchema = z.object({
-  date: z.string(),
-  maxTemp: z.number(),
-  minTemp: z.number(),
-  precipitationChance: z.number(),
-  condition: z.string(),
-  location: z.string(),
-});
-```
-
-#### Step 1: Fetch weather data for a given city
-
-```ts title="workflows/inngest-workflow.ts"
-const fetchWeather = createStep({
-  id: "fetch-weather",
-  description: "Fetches weather forecast for a given city",
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: forecastSchema,
-  execute: async ({ inputData }) => {
-    if (!inputData) {
-      throw new Error("Trigger data not found");
-    }
-
-    // Get latitude and longitude for the city
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
-    const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
-
-    if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${inputData.city}' not found`);
-    }
-
-    const { latitude, longitude, name } = geocodingData.results[0];
-
-    // Fetch weather data using the coordinates
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
-    const response = await fetch(weatherUrl);
-    const data = (await response.json()) as {
-      current: {
-        time: string;
-        precipitation: number;
-        weathercode: number;
-      };
-      hourly: {
-        precipitation_probability: number[];
-        temperature_2m: number[];
-      };
-    };
-
-    const forecast = {
-      date: new Date().toISOString(),
-      maxTemp: Math.max(...data.hourly.temperature_2m),
-      minTemp: Math.min(...data.hourly.temperature_2m),
-      condition: getWeatherCondition(data.current.weathercode),
-      location: name,
-      precipitationChance: data.hourly.precipitation_probability.reduce(
-        (acc, curr) => Math.max(acc, curr),
-        0,
-      ),
-    };
-
-    return forecast;
-  },
-});
-```
-
-#### Step 2: Suggest activities (indoor or outdoor) based on weather
-
-```ts title="workflows/inngest-workflow.ts"
-const planActivities = createStep({
-  id: "plan-activities",
-  description: "Suggests activities based on weather conditions",
-  inputSchema: forecastSchema,
-  outputSchema: z.object({
-    activities: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    const forecast = inputData;
-
-    if (!forecast) {
-      throw new Error("Forecast data not found");
-    }
-
-    const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
-      ${JSON.stringify(forecast, null, 2)}
-      `;
-
-    const agent = mastra?.getAgent("planningAgent");
-    if (!agent) {
-      throw new Error("Planning agent not found");
-    }
-
-    const response = await agent.stream([
-      {
-        role: "user",
-        content: prompt,
-      },
-    ]);
-
-    let activitiesText = "";
-
-    for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      activitiesText += chunk;
-    }
-
-    return {
-      activities: activitiesText,
-    };
-  },
-});
-```
-
-#### Step 3: Suggest indoor activities only (for rainy weather)
-
-```ts title="workflows/inngest-workflow.ts"
-const planIndoorActivities = createStep({
-  id: "plan-indoor-activities",
-  description: "Suggests indoor activities based on weather conditions",
-  inputSchema: forecastSchema,
-  outputSchema: z.object({
-    activities: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    const forecast = inputData;
-
-    if (!forecast) {
-      throw new Error("Forecast data not found");
-    }
-
-    const prompt = `In case it rains, plan indoor activities for ${forecast.location} on ${forecast.date}`;
-
-    const agent = mastra?.getAgent("planningAgent");
-    if (!agent) {
-      throw new Error("Planning agent not found");
-    }
-
-    const response = await agent.stream([
-      {
-        role: "user",
-        content: prompt,
-      },
-    ]);
-
-    let activitiesText = "";
-
-    for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      activitiesText += chunk;
-    }
-
-    return {
-      activities: activitiesText,
-    };
-  },
-});
-```
-
-## Define the activity planner workflow
-
-```ts title="workflows/inngest-workflow.ts"
-const activityPlanningWorkflow = createWorkflow({
-  id: "activity-planning-workflow-step2-if-else",
-  inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for"),
-  }),
-  outputSchema: z.object({
-    activities: z.string(),
-  }),
-})
-  .then(fetchWeather)
-  .branch([
-    [
-      // If precipitation chance is greater than 50%, suggest indoor activities
-      async ({ inputData }) => {
-        return inputData?.precipitationChance > 50;
-      },
-      planIndoorActivities,
-    ],
-    [
-      // Otherwise, suggest a mix of activities
-      async ({ inputData }) => {
-        return inputData?.precipitationChance <= 50;
-      },
-      planActivities,
-    ],
-  ]);
-
-activityPlanningWorkflow.commit();
-
-export { activityPlanningWorkflow };
-```
-
-## Register Agent and Workflow instances with Mastra class
-
-Register the agents and workflow with the mastra instance. This allows access to the agents within the workflow.
-
-```ts title="index.ts"
-import { Mastra } from "@mastra/core";
-import { serve as inngestServe } from "@mastra/inngest";
-import { PinoLogger } from "@mastra/loggers";
-import { Inngest } from "inngest";
-import { activityPlanningWorkflow } from "./workflows/inngest-workflow";
-import { planningAgent } from "./agents/planning-agent";
-import { realtimeMiddleware } from "@inngest/realtime/middleware";
-
-// Create an Inngest instance for workflow orchestration and event handling
-const inngest = new Inngest({
-  id: "mastra",
-  baseUrl: `http://localhost:8288`, // URL of your local Inngest server
-  isDev: true,
-  middleware: [realtimeMiddleware()], // Enable real-time updates in the Inngest dashboard
-});
-
-// Create and configure the main Mastra instance
-export const mastra = new Mastra({
-  workflows: {
-    activityPlanningWorkflow,
-  },
-  agents: {
-    planningAgent,
-  },
-  server: {
-    host: "0.0.0.0",
-    apiRoutes: [
-      {
-        path: "/api/inngest", // API endpoint for Inngest to send events to
-        method: "ALL",
-        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-      },
-    ],
-  },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-```
-
-## Execute the activity planner workflow
-
-Here, we'll get the activity planner workflow from the mastra instance, then create a run and execute the created run with the required inputData.
-
-```ts title="exec.ts"
-import { mastra } from "./";
-import { serve } from "@hono/node-server";
-import { createHonoServer, getToolExports } from "@mastra/deployer/server";
-import { tools } from "#tools";
-
-const app = await createHonoServer(mastra, {
-  tools: getToolExports(tools),
-});
-
-// Start the server on port 3000 so Inngest can send events to it
-const srv = serve({
-  fetch: app.fetch,
-  port: 3000,
-});
-
-const workflow = mastra.getWorkflow("activityPlanningWorkflow");
-const run = await workflow.createRun();
-
-// Start the workflow with the required input data (city name)
-// This will trigger the workflow steps and stream the result to the console
-const result = await run.start({ inputData: { city: "New York" } });
-console.dir(result, { depth: null });
-
-// Close the server after the workflow run is complete
-srv.close();
-```
-
-After running the workflow, you can view and monitor your workflow runs in real time using the Inngest dashboard at [http://localhost:8288](http://localhost:8288).
-
-## Inngest Flow Control Configuration
-
-Inngest workflows support advanced flow control features including concurrency limits, rate limiting, throttling, debouncing, and priority queuing. These features help manage workflow execution at scale and prevent resource overload.
-
-### Concurrency Control
-
-Control how many workflow instances can run simultaneously:
-
-```ts
-const workflow = createWorkflow({
-  id: "user-processing-workflow",
-  inputSchema: z.object({ userId: z.string() }),
-  outputSchema: z.object({ result: z.string() }),
-  steps: [processUserStep],
-  // Limit to 10 concurrent executions, scoped by user ID
-  concurrency: {
-    limit: 10,
-    key: "event.data.userId", // Per-user concurrency
-  },
-});
-```
-
-### Rate Limiting
-
-Limit the number of workflow executions within a time period:
-
-```ts
-const workflow = createWorkflow({
-  id: "api-sync-workflow",
-  inputSchema: z.object({ endpoint: z.string() }),
-  outputSchema: z.object({ status: z.string() }),
-  steps: [apiSyncStep],
-  // Maximum 1000 executions per hour
-  rateLimit: {
-    period: "1h",
-    limit: 1000,
-  },
-});
-```
-
-### Throttling
-
-Ensure minimum time between workflow executions:
-
-```ts
-const workflow = createWorkflow({
-  id: "email-notification-workflow",
-  inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
-  outputSchema: z.object({ sent: z.boolean() }),
-  steps: [sendEmailStep],
-  // Only one execution per 10 seconds per organization
-  throttle: {
-    period: "10s",
-    limit: 1,
-    key: "event.data.organizationId",
-  },
-});
-```
-
-### Debouncing
-
-Delay execution until no new events arrive within a time window:
-
-```ts
-const workflow = createWorkflow({
-  id: "search-index-workflow",
-  inputSchema: z.object({ documentId: z.string() }),
-  outputSchema: z.object({ indexed: z.boolean() }),
-  steps: [indexDocumentStep],
-  // Wait 5 seconds of no updates before indexing
-  debounce: {
-    period: "5s",
-    key: "event.data.documentId",
-  },
-});
-```
-
-### Priority Queuing
-
-Set execution priority for workflows:
-
-```ts
-const workflow = createWorkflow({
-  id: "order-processing-workflow",
-  inputSchema: z.object({
-    orderId: z.string(),
-    priority: z.number().optional(),
-  }),
-  outputSchema: z.object({ processed: z.boolean() }),
-  steps: [processOrderStep],
-  // Higher priority orders execute first
-  priority: {
-    run: "event.data.priority ?? 50", // Dynamic priority, default 50
-  },
-});
-```
-
-### Combined Flow Control
-
-You can combine multiple flow control features:
-
-```ts
-const workflow = createWorkflow({
-  id: "comprehensive-workflow",
-  inputSchema: z.object({
-    userId: z.string(),
-    organizationId: z.string(),
-    priority: z.number().optional(),
-  }),
-  outputSchema: z.object({ result: z.string() }),
-  steps: [comprehensiveStep],
-  // Multiple flow control features
-  concurrency: {
-    limit: 5,
-    key: "event.data.userId",
-  },
-  rateLimit: {
-    period: "1m",
-    limit: 100,
-  },
-  throttle: {
-    period: "10s",
-    limit: 1,
-    key: "event.data.organizationId",
-  },
-  priority: {
-    run: "event.data.priority ?? 0",
-  },
-});
-```
-
-All flow control features are optional. If not specified, workflows run with Inngest's default behavior. Flow control configuration is validated by Inngest's native implementation, ensuring compatibility and correctness.
-
-For detailed information about flow control options and their behavior, see the [Inngest Flow Control documentation](https://www.inngest.com/docs/guides/flow-control).
 
 
 ---
@@ -34202,7 +32681,7 @@ Create custom gateways for private LLM deployments or specialized provider integ
       logo={<NetlifyLogo />}
     />    <CardGridItem
       title="OpenRouter"
-      description="135 models"
+      description="137 models"
       href="/models/v1/gateways/openrouter"
       logo="https://models.dev/logos/openrouter.svg"
 
@@ -34334,7 +32813,7 @@ description: "Use AI models through OpenRouter."
 # <img src="https://models.dev/logos/openrouter.svg" alt="OpenRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenRouter
 [EN] Source: https://mastra.ai/en/models/gateways/openrouter
 
-OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 135 models through Mastra's model router.
+OpenRouter aggregates models from multiple providers with enhanced features like rate limiting and failover. Access 137 models through Mastra's model router.
 
 Learn more in the [OpenRouter documentation](https://openrouter.ai/models).
 
@@ -34420,6 +32899,7 @@ ANTHROPIC_API_KEY=ant-...
 | `minimax/minimax-01` |
 | `minimax/minimax-m1` |
 | `minimax/minimax-m2` |
+| `minimax/minimax-m2.1` |
 | `mistralai/codestral-2508` |
 | `mistralai/devstral-2512` |
 | `mistralai/devstral-2512:free` |
@@ -34508,6 +32988,7 @@ ANTHROPIC_API_KEY=ant-...
 | `z-ai/glm-4.5v` |
 | `z-ai/glm-4.6` |
 | `z-ai/glm-4.6:exacto` |
+| `z-ai/glm-4.7` |
 
 
 
@@ -34653,7 +33134,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 63+ AI providers and 1466+ models through Mastra's model router."
+description: "Access 63+ AI providers and 1467+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -34666,7 +33147,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1466 models from 63 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1467 models from 63 providers through a single API.
 
 ## Features
 
@@ -38304,7 +36785,7 @@ const agent = new Agent({
 
 ---
 title: "Cloudflare AI Gateway | Models | Mastra"
-description: "Use Cloudflare AI Gateway models with Mastra. 71 models available."
+description: "Use Cloudflare AI Gateway models with Mastra. 64 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -38314,7 +36795,7 @@ description: "Use Cloudflare AI Gateway models with Mastra. 71 models available.
 # <img src="https://models.dev/logos/cloudflare-ai-gateway.svg" alt="Cloudflare AI Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cloudflare AI Gateway
 [EN] Source: https://mastra.ai/en/models/providers/cloudflare-ai-gateway
 
-Access 71 Cloudflare AI Gateway models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_TOKEN` environment variable.
+Access 64 Cloudflare AI Gateway models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_TOKEN` environment variable.
 
 Learn more in the [Cloudflare AI Gateway documentation](https://developers.cloudflare.com/ai-gateway/).
 
@@ -38329,7 +36810,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "cloudflare-ai-gateway/anthropic/claude-3-haiku"
+  model: "cloudflare-ai-gateway/anthropic/claude-3-5-haiku"
 });
 
 // Generate a response
@@ -38353,134 +36834,146 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "cloudflare-ai-gateway/anthropic/claude-3-haiku",
-    "imageInput": false,
+    "model": "cloudflare-ai-gateway/anthropic/claude-3-5-haiku",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
+    "outputCost": 4
+  },
+  {
+    "model": "cloudflare-ai-gateway/anthropic/claude-3-haiku",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
+    "inputCost": 0.25,
     "outputCost": 1.25
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-3-opus",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
     "inputCost": 15,
     "outputCost": 75
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-3-sonnet",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "contextWindow": 200000,
+    "maxOutput": 4096,
     "inputCost": 3,
     "outputCost": 15
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-3.5-haiku",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 0.8,
     "outputCost": 4
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-3.5-sonnet",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 6,
-    "outputCost": 30
+    "contextWindow": 200000,
+    "maxOutput": 8192,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
-    "model": "cloudflare-ai-gateway/anthropic/claude-haiku-4.5",
-    "imageInput": false,
+    "model": "cloudflare-ai-gateway/anthropic/claude-haiku-4-5",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
     "inputCost": 1,
     "outputCost": 5
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-opus-4",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
     "inputCost": 15,
     "outputCost": 75
   },
   {
-    "model": "cloudflare-ai-gateway/anthropic/claude-opus-4.1",
-    "imageInput": false,
+    "model": "cloudflare-ai-gateway/anthropic/claude-opus-4-1",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
     "inputCost": 15,
     "outputCost": 75
   },
   {
-    "model": "cloudflare-ai-gateway/anthropic/claude-opus-4.5",
-    "imageInput": false,
+    "model": "cloudflare-ai-gateway/anthropic/claude-opus-4-5",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
     "inputCost": 5,
     "outputCost": 25
   },
   {
     "model": "cloudflare-ai-gateway/anthropic/claude-sonnet-4",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
   },
   {
-    "model": "cloudflare-ai-gateway/anthropic/claude-sonnet-4.5",
-    "imageInput": false,
+    "model": "cloudflare-ai-gateway/anthropic/claude-sonnet-4-5",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -38569,31 +37062,19 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "cloudflare-ai-gateway/openai/gpt-5.2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
     "model": "cloudflare-ai-gateway/openai/o1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 15,
-    "outputCost": 60
-  },
-  {
-    "model": "cloudflare-ai-gateway/openai/o1-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 1.1,
-    "outputCost": 4.4
-  },
-  {
-    "model": "cloudflare-ai-gateway/openai/o1-preview",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -38651,66 +37132,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 1.1,
     "outputCost": 4.4
-  },
-  {
-    "model": "cloudflare-ai-gateway/replicate/deepseek-ai/deepseek-r1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 10,
-    "outputCost": 10
-  },
-  {
-    "model": "cloudflare-ai-gateway/replicate/meta/meta-llama-3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": 2.75
-  },
-  {
-    "model": "cloudflare-ai-gateway/replicate/meta/meta-llama-3-8b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "cloudflare-ai-gateway/replicate/meta/meta-llama-3.1-405b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": 9.5,
-    "outputCost": 9.5
-  },
-  {
-    "model": "cloudflare-ai-gateway/workers-ai/aura-1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "cloudflare-ai-gateway/workers-ai/aura-2-en",
@@ -39179,30 +37600,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "cloudflare-ai-gateway/workers-ai/whisper",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "cloudflare-ai-gateway/workers-ai/whisper-large-v3-turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 16384,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />
@@ -39217,7 +37614,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://gateway.ai.cloudflare.com/v1/${CLOUDFLARE_ACCOUNT_ID}/${CLOUDFLARE_GATEWAY_ID}/compat/",
-    id: "cloudflare-ai-gateway/anthropic/claude-3-haiku",
+    id: "cloudflare-ai-gateway/anthropic/claude-3-5-haiku",
     apiKey: process.env.CLOUDFLARE_API_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -39235,8 +37632,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cloudflare-ai-gateway/workers-ai/whisper-large-v3-turbo"
-      : "cloudflare-ai-gateway/anthropic/claude-3-haiku";
+      ? "cloudflare-ai-gateway/workers-ai/smart-turn-v2"
+      : "cloudflare-ai-gateway/anthropic/claude-3-5-haiku";
   }
 });
 ```
@@ -43927,7 +42324,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/chutes.svg"
     />    <CardGridItem
       title="Cloudflare AI Gateway"
-      description="71 models"
+      description="64 models"
       href="/models/v1/providers/cloudflare-ai-gateway"
       logo="https://models.dev/logos/cloudflare-ai-gateway.svg"
     />    <CardGridItem
@@ -44052,7 +42449,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/ollama-cloud.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="24 models"
+      description="25 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -44097,7 +42494,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
-      description="24 models"
+      description="25 models"
       href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
@@ -44132,12 +42529,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/xiaomi.svg"
     />    <CardGridItem
       title="Z.AI"
-      description="6 models"
+      description="7 models"
       href="/models/v1/providers/zai"
       logo="https://models.dev/logos/zai.svg"
     />    <CardGridItem
       title="Z.AI Coding Plan"
-      description="6 models"
+      description="7 models"
       href="/models/v1/providers/zai-coding-plan"
       logo="https://models.dev/logos/zai-coding-plan.svg"
     />    <CardGridItem
@@ -44147,12 +42544,12 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/zenmux.svg"
     />    <CardGridItem
       title="Zhipu AI"
-      description="7 models"
+      description="8 models"
       href="/models/v1/providers/zhipuai"
       logo="https://models.dev/logos/zhipuai.svg"
     />    <CardGridItem
       title="Zhipu AI Coding Plan"
-      description="7 models"
+      description="8 models"
       href="/models/v1/providers/zhipuai-coding-plan"
       logo="https://models.dev/logos/zhipuai-coding-plan.svg"
     />
@@ -48318,7 +46715,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 24 models available."
+description: "Use OpenCode Zen models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -48328,7 +46725,7 @@ description: "Use OpenCode Zen models with Mastra. 24 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 24 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 25 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -48509,6 +46906,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "opencode/glm-4.7-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode/gpt-5",
@@ -53176,7 +51585,7 @@ const agent = new Agent({
 
 ---
 title: "Synthetic | Models | Mastra"
-description: "Use Synthetic models with Mastra. 24 models available."
+description: "Use Synthetic models with Mastra. 25 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -53186,7 +51595,7 @@ description: "Use Synthetic models with Mastra. 24 models available."
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 [EN] Source: https://mastra.ai/en/models/providers/synthetic
 
-Access 24 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 25 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -53511,6 +51920,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 0.55,
     "outputCost": 2.19
+  },
+  {
+    "model": "synthetic/hf:zai-org/GLM-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 64000,
+    "inputCost": 0.55,
+    "outputCost": 2.19
   }
 ]}
 />
@@ -53543,7 +51964,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "synthetic/hf:zai-org/GLM-4.6"
+      ? "synthetic/hf:zai-org/GLM-4.7"
       : "synthetic/hf:MiniMaxAI/MiniMax-M2";
   }
 });
@@ -55090,7 +53511,7 @@ const agent = new Agent({
 
 ---
 title: "Z.AI Coding Plan | Models | Mastra"
-description: "Use Z.AI Coding Plan models with Mastra. 6 models available."
+description: "Use Z.AI Coding Plan models with Mastra. 7 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55100,7 +53521,7 @@ description: "Use Z.AI Coding Plan models with Mastra. 6 models available."
 # <img src="https://models.dev/logos/zai-coding-plan.svg" alt="Z.AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zai-coding-plan
 
-Access 6 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 7 Z.AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI Coding Plan documentation](https://docs.z.ai/devpack/overview).
 
@@ -55209,6 +53630,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zai-coding-plan/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -55241,7 +53674,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai-coding-plan/glm-4.6v"
+      ? "zai-coding-plan/glm-4.7"
       : "zai-coding-plan/glm-4.5";
   }
 });
@@ -55252,7 +53685,7 @@ const agent = new Agent({
 
 ---
 title: "Z.AI | Models | Mastra"
-description: "Use Z.AI models with Mastra. 6 models available."
+description: "Use Z.AI models with Mastra. 7 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55262,7 +53695,7 @@ description: "Use Z.AI models with Mastra. 6 models available."
 # <img src="https://models.dev/logos/zai.svg" alt="Z.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Z.AI
 [EN] Source: https://mastra.ai/en/models/providers/zai
 
-Access 6 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 7 Z.AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Z.AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -55371,6 +53804,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.3,
     "outputCost": 0.9
+  },
+  {
+    "model": "zai/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -55403,7 +53848,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zai/glm-4.6v"
+      ? "zai/glm-4.7"
       : "zai/glm-4.5";
   }
 });
@@ -55768,7 +54213,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI Coding Plan | Models | Mastra"
-description: "Use Zhipu AI Coding Plan models with Mastra. 7 models available."
+description: "Use Zhipu AI Coding Plan models with Mastra. 8 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55778,7 +54223,7 @@ description: "Use Zhipu AI Coding Plan models with Mastra. 7 models available."
 # <img src="https://models.dev/logos/zhipuai-coding-plan.svg" alt="Zhipu AI Coding Plan logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI Coding Plan
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai-coding-plan
 
-Access 7 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 8 Zhipu AI Coding Plan models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI Coding Plan documentation](https://docs.bigmodel.cn/cn/coding-plan/overview).
 
@@ -55899,6 +54344,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai-coding-plan/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   }
 ]}
 />
@@ -55931,7 +54388,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai-coding-plan/glm-4.6v-flash"
+      ? "zhipuai-coding-plan/glm-4.7"
       : "zhipuai-coding-plan/glm-4.5";
   }
 });
@@ -55942,7 +54399,7 @@ const agent = new Agent({
 
 ---
 title: "Zhipu AI | Models | Mastra"
-description: "Use Zhipu AI models with Mastra. 7 models available."
+description: "Use Zhipu AI models with Mastra. 8 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -55952,7 +54409,7 @@ description: "Use Zhipu AI models with Mastra. 7 models available."
 # <img src="https://models.dev/logos/zhipuai.svg" alt="Zhipu AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Zhipu AI
 [EN] Source: https://mastra.ai/en/models/providers/zhipuai
 
-Access 7 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
+Access 8 Zhipu AI models through Mastra's model router. Authentication is handled automatically using the `ZHIPU_API_KEY` environment variable.
 
 Learn more in the [Zhipu AI documentation](https://docs.z.ai/guides/overview/pricing).
 
@@ -56073,6 +54530,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "zhipuai/glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   }
 ]}
 />
@@ -56105,7 +54574,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "zhipuai/glm-4.6v-flash"
+      ? "zhipuai/glm-4.7"
       : "zhipuai/glm-4.5";
   }
 });
