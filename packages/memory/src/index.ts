@@ -764,7 +764,14 @@ ${workingMemory}`;
     memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
+    console.info('[Memory.getWorkingMemory] threadId:', threadId, 'resourceId:', resourceId);
+    console.info('[Memory.getWorkingMemory] memoryConfig passed:', JSON.stringify(memoryConfig, null, 2));
+    console.info(
+      '[Memory.getWorkingMemory] merged config.workingMemory:',
+      JSON.stringify(config.workingMemory, null, 2),
+    );
     if (!config.workingMemory?.enabled) {
+      console.info('[Memory.getWorkingMemory] workingMemory not enabled, returning null');
       return null;
     }
 
@@ -772,6 +779,8 @@ ${workingMemory}`;
 
     const scope = config.workingMemory.scope || 'resource';
     let workingMemoryData: string | null = null;
+
+    console.info('[Memory.getWorkingMemory] scope:', scope);
 
     // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
     if (scope === 'resource' && !resourceId) {
@@ -784,6 +793,8 @@ ${workingMemory}`;
     if (scope === 'resource' && resourceId) {
       // Get working memory from resource table
       const resource = await this.storage.getResourceById({ resourceId });
+      console.info('[Memory.getWorkingMemory] resource from storage:', resource);
+      console.info('[Memory.getWorkingMemory] resource.workingMemory:', resource?.workingMemory);
       workingMemoryData = resource?.workingMemory || null;
     } else {
       // Get working memory from thread metadata (default behavior)

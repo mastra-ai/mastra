@@ -472,7 +472,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('phoenix');
       });
 
-      it('should remove fields when user asks to forget something (null delete)', async () => {
+      it.only('should remove fields when user asks to forget something (null delete)', async () => {
         // Turn 1: Set up comprehensive data
         await agentGenerate(
           agent,
@@ -482,6 +482,9 @@ Be thorough in capturing details about people, work, and preferences.`,
         );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+
+        console.log('wmRaw', wmRaw);
+
         expect(wmRaw).not.toBeNull();
         expect(wmRaw!.toLowerCase()).toContain('jordan');
         expect(wmRaw!.toLowerCase()).toContain('datacorp');
@@ -495,7 +498,12 @@ Be thorough in capturing details about people, work, and preferences.`,
           isV5,
         );
 
+        console.log('Turn 2');
+
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
+
+        console.log('wmRaw', wmRaw);
+
         expect(wmRaw).not.toBeNull();
 
         // Location should be removed

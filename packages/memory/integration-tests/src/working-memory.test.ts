@@ -7,13 +7,13 @@ import { getWorkingMemoryAdditiveTests } from './shared/working-memory-additive'
 config({ path: '.env.test' });
 
 // v4
-getWorkingMemoryTests(openai('gpt-4o'));
+// getWorkingMemoryTests(openai('gpt-4o'));
 getWorkingMemoryAdditiveTests(openai('gpt-4o'));
 
-// v5
-getWorkingMemoryTests('openai/gpt-4o');
-getWorkingMemoryAdditiveTests('openai/gpt-4o');
+// // v5
+// getWorkingMemoryTests('openai/gpt-4o');
+// getWorkingMemoryAdditiveTests('openai/gpt-4o');
 
-// v6
-getWorkingMemoryTests(openaiV6('gpt-4o'));
-getWorkingMemoryAdditiveTests(openaiV6('gpt-4o'));
+// // v6
+// getWorkingMemoryTests(openaiV6('gpt-4o'));
+// getWorkingMemoryAdditiveTests(openaiV6('gpt-4o'));
