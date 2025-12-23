@@ -65,7 +65,10 @@ export class InngestWorkflow<
     }
 
     const workflowsStore = await storage.getStore('workflows');
-    return workflowsStore?.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+    if (!workflowsStore) {
+      return { runs: [], total: 0 };
+    }
+    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
@@ -78,7 +81,12 @@ export class InngestWorkflow<
         : null;
     }
     const workflowsStore = await storage.getStore('workflows');
-    const run = (await workflowsStore?.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
+    if (!workflowsStore) {
+      return this.runs.get(runId)
+        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
+    }
+    const run = (await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
 
     return (
       run ??

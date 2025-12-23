@@ -56,8 +56,6 @@ export class MongoDBStore extends MastraStorage {
   constructor(config: MongoDBConfig) {
     super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit });
 
-    this.stores = {} as StorageDomains;
-
     this.#connector = resolveMongoDBConfig(config);
 
     const domainConfig = {

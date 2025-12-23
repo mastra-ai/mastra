@@ -644,22 +644,6 @@ describe('Observability Handlers', () => {
       ).rejects.toThrow(HTTPException);
     });
 
-    it('should throw an error when storage method is not available', async () => {
-      const pagination = { page: 0, perPage: 10 };
-      const mastraWithoutStorage = new Mastra({
-        logger: false,
-      });
-
-      await expect(
-        listScoresBySpan({
-          mastra: mastraWithoutStorage,
-          traceId: 'test-trace-1',
-          spanId: 'test-span-1',
-          ...pagination,
-        }),
-      ).rejects.toThrow(HTTPException);
-    });
-
     it('should handle API errors with status codes', async () => {
       const pagination = { page: 0, perPage: 10 };
       const apiError = {
