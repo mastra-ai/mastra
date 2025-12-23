@@ -1,9 +1,9 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
+import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
-import { ModelRouterEmbeddingModel } from '../llm/model/index.js';
+import { ModelRouterEmbeddingModel } from '../llm/model';
+import type { EmbeddingModelId } from '../llm/model';
 import type { Mastra } from '../mastra';
 import type {
   InputProcessor,
@@ -23,7 +23,7 @@ import type {
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { deepMerge } from '../utils';
-import type { MastraVector } from '../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 
 import type {
   SharedMemoryConfig,
@@ -96,7 +96,8 @@ export abstract class MastraMemory extends MastraBase {
 
   protected _storage?: MastraStorage;
   vector?: MastraVector;
-  embedder?: EmbeddingModel<string> | EmbeddingModelV2<string>;
+  embedder?: MastraEmbeddingModel<string>;
+  embedderOptions?: MastraEmbeddingOptions;
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
   #mastra?: Mastra;
 
@@ -200,8 +201,12 @@ https://mastra.ai/en/docs/memory/overview`,
     this.vector = vector;
   }
 
-  public setEmbedder(embedder: EmbeddingModel<string>) {
-    this.embedder = embedder;
+  public setEmbedder(embedder: EmbeddingModelId | MastraEmbeddingModel<string>) {
+    if (typeof embedder === 'string') {
+      this.embedder = new ModelRouterEmbeddingModel(embedder);
+    } else {
+      this.embedder = embedder;
+    }
   }
 
   /**

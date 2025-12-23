@@ -800,7 +800,6 @@ export type ProviderModelsMap = {
   readonly opencode: readonly [
     'alpha-doubao-seed-code',
     'alpha-gd4',
-    'alpha-glm-4.7',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
@@ -811,6 +810,7 @@ export type ProviderModelsMap = {
     'gemini-3-flash',
     'gemini-3-pro',
     'glm-4.6',
+    'glm-4.7-free',
     'gpt-5',
     'gpt-5-codex',
     'gpt-5-nano',
@@ -883,17 +883,18 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct',
   ];
   readonly 'cloudflare-ai-gateway': readonly [
+    'anthropic/claude-3-5-haiku',
     'anthropic/claude-3-haiku',
     'anthropic/claude-3-opus',
     'anthropic/claude-3-sonnet',
     'anthropic/claude-3.5-haiku',
     'anthropic/claude-3.5-sonnet',
-    'anthropic/claude-haiku-4.5',
+    'anthropic/claude-haiku-4-5',
     'anthropic/claude-opus-4',
-    'anthropic/claude-opus-4.1',
-    'anthropic/claude-opus-4.5',
+    'anthropic/claude-opus-4-1',
+    'anthropic/claude-opus-4-5',
     'anthropic/claude-sonnet-4',
-    'anthropic/claude-sonnet-4.5',
+    'anthropic/claude-sonnet-4-5',
     'openai/gpt-3.5-turbo',
     'openai/gpt-4',
     'openai/gpt-4-turbo',
@@ -901,18 +902,12 @@ export type ProviderModelsMap = {
     'openai/gpt-4o-mini',
     'openai/gpt-5.1',
     'openai/gpt-5.1-codex',
+    'openai/gpt-5.2',
     'openai/o1',
-    'openai/o1-mini',
-    'openai/o1-preview',
     'openai/o3',
     'openai/o3-mini',
     'openai/o3-pro',
     'openai/o4-mini',
-    'replicate/deepseek-ai/deepseek-r1',
-    'replicate/meta/meta-llama-3-70b-instruct',
-    'replicate/meta/meta-llama-3-8b-instruct',
-    'replicate/meta/meta-llama-3.1-405b-instruct',
-    'workers-ai/aura-1',
     'workers-ai/aura-2-en',
     'workers-ai/aura-2-es',
     'workers-ai/bart-large-cnn',
@@ -952,8 +947,6 @@ export type ProviderModelsMap = {
     'workers-ai/qwen3-embedding-0.6b',
     'workers-ai/qwq-32b',
     'workers-ai/smart-turn-v2',
-    'workers-ai/whisper',
-    'workers-ai/whisper-large-v3-turbo',
   ];
   readonly openai: readonly [
     'codex-mini-latest',
@@ -1144,6 +1137,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-4.5v',
     'z-ai/glm-4.6',
     'z-ai/glm-4.6:exacto',
+    'z-ai/glm-4.7',
   ];
   readonly zenmux: readonly [
     'anthropic/claude-haiku-4.5',
@@ -1233,6 +1227,7 @@ export type ProviderModelsMap = {
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.5',
     'hf:zai-org/GLM-4.6',
+    'hf:zai-org/GLM-4.7',
   ];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2',
