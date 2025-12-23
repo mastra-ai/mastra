@@ -16,12 +16,7 @@ import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type { OutputSchema } from '../../../stream/base/schema';
-import type {
-  ChunkType,
-  ExecuteStreamModelManager,
-  ModelManagerModelConfig,
-  TextStartPayload,
-} from '../../../stream/types';
+import type { ChunkType, ExecuteStreamModelManager, ModelManagerModelConfig } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -82,8 +77,14 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       runState.state.isStreaming
     ) {
       if (runState.state.textDeltas.length) {
-        const textStartPayload = chunk.payload as TextStartPayload;
-        const providerMetadata = textStartPayload.providerMetadata ?? runState.state.providerOptions;
+        // Use text-specific providerMetadata captured during text-delta processing.
+        // Do NOT use runState.state.providerOptions here - it may contain reasoning-specific
+        // metadata (like openai.itemId: 'rs_...') that should NOT be applied to text parts.
+        // If we incorrectly apply the reasoning itemId to text parts, the OpenAI provider
+        // will use the reasoning's itemId as the assistant message's id, causing the error:
+        // "reasoning item without required following item"
+        // See: https://github.com/mastra-ai/mastra/issues/11103
+        const providerMetadata = runState.state.textProviderMetadata;
 
         const message: MastraDBMessage = {
           id: messageId,
@@ -106,6 +107,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       runState.setState({
         isStreaming: false,
         textDeltas: [],
+        textProviderMetadata: undefined,
       });
     }
 
@@ -139,8 +141,13 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       case 'text-delta': {
         const textDeltasFromState = runState.state.textDeltas;
         textDeltasFromState.push(chunk.payload.text);
+        // Capture text-specific providerMetadata from the first text-delta that has it.
+        // This is separate from runState.state.providerOptions which may contain reasoning metadata.
+        // See: https://github.com/mastra-ai/mastra/issues/11103
+        const textProviderMetadata = chunk.payload.providerMetadata ?? runState.state.textProviderMetadata;
         runState.setState({
           textDeltas: textDeltasFromState,
+          textProviderMetadata,
           isStreaming: true,
         });
         if (isControllerOpen(controller)) {

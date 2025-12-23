@@ -571,6 +571,73 @@ export function fullStreamTests({
       expect(reasoningPart?.providerMetadata).toEqual({ openai: { itemId: 'rs_test123' } });
     });
 
+    // https://github.com/mastra-ai/mastra/issues/11103
+    it('should NOT apply reasoning providerMetadata to text parts', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const modelWithReasoningAndText = new MockModel({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'reasoning-start',
+              id: 'rs_reasoning123',
+              providerMetadata: { openai: { itemId: 'rs_reasoning123' } },
+            },
+            {
+              type: 'reasoning-delta',
+              id: 'rs_reasoning123',
+              delta: 'I need to think about this...',
+              providerMetadata: { openai: { itemId: 'rs_reasoning123' } },
+            },
+            {
+              type: 'reasoning-end',
+              id: 'rs_reasoning123',
+              providerMetadata: { openai: { itemId: 'rs_reasoning123' } },
+            },
+            // Text follows reasoning - text should NOT get the reasoning itemId
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsageForVersion },
+          ] as any),
+        }),
+      } as any);
+
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        models: [{ maxRetries: 0, id: 'test-model', model: modelWithReasoningAndText }],
+        messageList,
+        ...defaultSettings(),
+      });
+
+      await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
+
+      // Check that reasoning has providerMetadata with itemId
+      const responseMessages = messageList.get.response.db();
+      const reasoningMessage = responseMessages.find(msg => msg.content.parts?.some(p => p.type === 'reasoning'));
+      expect(reasoningMessage).toBeDefined();
+      const reasoningPart = reasoningMessage?.content.parts?.find(p => p.type === 'reasoning');
+      expect(reasoningPart?.providerMetadata).toEqual({ openai: { itemId: 'rs_reasoning123' } });
+
+      // Check that text message does NOT have the reasoning's providerMetadata
+      // This is critical: if text parts incorrectly inherit reasoning's itemId (rs_XXX),
+      // the OpenAI API will reject the message with "reasoning item without required following item"
+      const textMessage = responseMessages.find(msg => msg.content.parts?.some(p => p.type === 'text'));
+      expect(textMessage).toBeDefined();
+      const textPart = textMessage?.content.parts?.find(p => p.type === 'text');
+
+      // Text parts should NOT have providerMetadata with reasoning itemId
+      // The fix ensures we don't apply runState.state.providerOptions (which contains reasoning metadata)
+      // to text parts
+      expect(textPart?.providerMetadata).toBeUndefined();
+    });
+
     it('should send sources', async () => {
       const messageList = createMessageListWithUserMessage();
       const modelWithSourcesLocal = new MockModel({

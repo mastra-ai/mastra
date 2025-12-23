@@ -16,6 +16,9 @@ type State = {
   isReasoning: boolean;
   isStreaming: boolean;
   providerOptions: Record<string, any> | undefined;
+  // Separate text-specific providerMetadata to avoid inheriting reasoning's itemId
+  // See: https://github.com/mastra-ai/mastra/issues/11103
+  textProviderMetadata: Record<string, any> | undefined;
 };
 
 export class AgenticRunState {
@@ -38,6 +41,7 @@ export class AgenticRunState {
       isReasoning: false,
       isStreaming: false,
       providerOptions: undefined,
+      textProviderMetadata: undefined,
       hasToolCallStreaming: false,
       hasErrored: false,
       reasoningDeltas: [],
