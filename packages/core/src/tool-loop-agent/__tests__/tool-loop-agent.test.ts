@@ -996,6 +996,85 @@ describe('ToolLoopAgent to Mastra Agent', () => {
       // toolChoice from prepareStep should be applied
       expect(capturedOptions.toolChoice).toEqual({ type: 'required' });
     });
+
+    it('should allow prepareStep to modify messages', async () => {
+      let capturedPrompt: any = null;
+
+      const mockModel = new MockLanguageModelV3({
+        doGenerate: async options => {
+          capturedPrompt = options.prompt;
+          return {
+            finishReason: 'stop',
+            usage: {
+              inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+              outputTokens: { total: 20, text: 20, reasoning: undefined },
+            },
+            content: [{ type: 'text', text: 'Response' }],
+            warnings: [],
+          };
+        },
+        doStream: async options => {
+          capturedPrompt = options.prompt;
+          return {
+            stream: convertArrayToReadableStreamV3([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: {
+                  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+                  outputTokens: { total: 20, text: 20, reasoning: undefined },
+                },
+              },
+            ]),
+          };
+        },
+      });
+
+      const toolLoopAgent = new ToolLoopAgent({
+        id: 'test-agent',
+        model: mockModel,
+        instructions: 'You are a helpful assistant.',
+        prepareStep: async ({ messages: _originalMessages }) => {
+          // Modify messages by returning new ones
+          // prepareStep receives messages in Mastra format, can return AI SDK ModelMessage format
+          return {
+            messages: [
+              {
+                role: 'user' as const,
+                content: 'MODIFIED: This message was modified by prepareStep',
+              },
+            ],
+          };
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: {
+          testAgent: toolLoopAgent,
+        },
+      });
+
+      const agent = mastra.getAgent('testAgent');
+      await agent.generate('Original user message');
+
+      // The final prompt should have the modified messages
+      expect(capturedPrompt).toBeDefined();
+      const userMessages = capturedPrompt.filter((msg: any) => msg.role === 'user');
+      expect(userMessages.length).toBeGreaterThan(0);
+
+      // Check if any user message contains the modified content
+      const hasModifiedMessage = userMessages.some(
+        (msg: any) =>
+          (typeof msg.content === 'string' && msg.content.includes('MODIFIED')) ||
+          (Array.isArray(msg.content) && msg.content.some((p: any) => p.text?.includes('MODIFIED'))),
+      );
+      expect(hasModifiedMessage).toBe(true);
+    });
   });
 
   describe('stopWhen condition', () => {

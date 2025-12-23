@@ -5,7 +5,7 @@ import type {
   StepResult,
   ToolLoopAgentSettings,
 } from '@internal/ai-v6';
-import { isSupportedLanguageModel } from '../agent';
+import { isSupportedLanguageModel, convertMessages } from '../agent';
 import type { AgentExecutionOptions, AgentInstructions } from '../agent';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
@@ -210,18 +210,20 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
       }
     }
 
-    // TODO: Map messages if prepareStep returns them
-    // This requires converting AI SDK ModelMessage[] to MastraDBMessage[]
-    // if ('messages' in result && result.messages) {
-    //   stepResult.messages = convertAiSdkMessagesToMastra(result.messages);
-    // }
+    // Map messages if prepareStep returns them
+    // Convert AI SDK ModelMessage[] to MastraDBMessage[]
+    if ('messages' in result && result.messages && Array.isArray(result.messages)) {
+      // AI SDK v6 ModelMessage is compatible with MessageListInput at runtime
+      // stepResult.messages = convertMessages(result.messages as any).to('Mastra.V2');
+      stepResult.messages = result.messages as any;
+    }
 
     return stepResult;
   }
 
   private async handlePrepareCall(args: ProcessInputStepArgs) {
     if (this.settings.prepareCall) {
-      const { model, messages, activeTools, providerOptions, modelSettings, tools, messageList } = args;
+      const { model, messages, activeTools, providerOptions, modelSettings, tools } = args;
       // TODO: This should probably happen in processInput, currently calling in processInputStep if stepNumber === 0
 
       // Build the prepareCall input object
@@ -258,6 +260,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
     }
   }
 
+  // TODO: Should map to stopWhen
   private async handleStopWhen(args: ProcessInputStepArgs) {
     const { steps, abort } = args;
     if (this.settings.stopWhen !== undefined) {
