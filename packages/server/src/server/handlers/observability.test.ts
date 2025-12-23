@@ -37,7 +37,6 @@ const createMockMastra = (storage?: Partial<MastraStorage>): Mastra =>
 const createMockObservabilityStore = () => ({
   getTrace: vi.fn(),
   getTracesPaginated: vi.fn(),
-  listScoresBySpan: vi.fn(),
 });
 
 // Mock scores store

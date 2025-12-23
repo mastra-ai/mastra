@@ -652,24 +652,30 @@ export class EventedRun<
     }
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+    if (!workflowsStore) {
+      throw new Error('Cannot resume workflow: workflows store is required');
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
 
-    const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     if (!resumePath) {
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`,
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
       );
     }
 
     console.dir(
-      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
+      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
       { depth: null },
     );
     // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot

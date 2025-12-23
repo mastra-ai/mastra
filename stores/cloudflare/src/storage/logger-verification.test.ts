@@ -64,11 +64,13 @@ describe('Logger Verification - No PII Leakage', () => {
     const threadId = 'test-thread';
 
     // Create resource and thread
-    await store.stores.memory.saveResource({
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+    await memoryStore?.saveResource({
       resource: { id: resourceId, createdAt: new Date(), updatedAt: new Date() },
     });
 
-    await store.stores.memory.saveThread({
+    await memoryStore?.saveThread({
       thread: {
         id: threadId,
         resourceId,
@@ -80,7 +82,7 @@ describe('Logger Verification - No PII Leakage', () => {
 
     // Save message with SENSITIVE content
     const SENSITIVE_DATA = 'SSN: 123-45-6789, Password: secret123';
-    await store.stores.memory.saveMessages({
+    await memoryStore?.saveMessages({
       messages: [
         {
           id: 'msg-1',
@@ -95,7 +97,7 @@ describe('Logger Verification - No PII Leakage', () => {
     });
 
     // Retrieve messages
-    await store.stores.memory.listMessages({ threadId, resourceId });
+    await memoryStore?.listMessages({ threadId, resourceId });
 
     // CRITICAL: Verify NO console.log/info was called
     expect(consoleLogSpy).not.toHaveBeenCalled();
@@ -130,11 +132,14 @@ describe('Logger Verification - No PII Leakage', () => {
     const resourceId = 'test-resource-2';
     const threadId = 'test-thread-2';
 
-    await store.stores.memory.saveResource({
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+
+    await memoryStore?.saveResource({
       resource: { id: resourceId, createdAt: new Date(), updatedAt: new Date() },
     });
 
-    await store.stores.memory.saveThread({
+    await memoryStore?.saveThread({
       thread: {
         id: threadId,
         resourceId,
@@ -146,7 +151,7 @@ describe('Logger Verification - No PII Leakage', () => {
 
     // Save message with SENSITIVE content
     const SENSITIVE_DATA = 'Credit Card: 4532-1234-5678-9010';
-    await store.stores.memory.saveMessages({
+    await memoryStore?.saveMessages({
       messages: [
         {
           id: 'msg-2',

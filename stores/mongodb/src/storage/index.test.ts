@@ -256,7 +256,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB Document Flexibility', () => {
     beforeEach(async () => {
-      await store.stores.memory.dangerouslyClearAll();
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
     });
 
     it('should handle flexible document schemas with complex nested metadata', async () => {
@@ -328,7 +330,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB JSON/JSONB Field Handling', () => {
     beforeEach(async () => {
-      await store.stores.memory.dangerouslyClearAll();
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
     });
 
     it('should handle complex JSON structures in message content', async () => {
@@ -434,7 +438,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB Span Operations with Complex Data', () => {
     beforeEach(async () => {
-      await store.stores.observability!.dangerouslyClearAll();
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+      await observabilityStore?.dangerouslyClearAll();
     });
 
     it('should handle Span creation with MongoDB-specific nested attributes', async () => {

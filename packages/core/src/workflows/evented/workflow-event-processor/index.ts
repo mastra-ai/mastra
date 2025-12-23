@@ -155,6 +155,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
     });
 
+    if (!currentState) {
+      this.mastra.getLogger()?.warn('Canceling workflow without loaded state', { workflowId, runId });
+    }
+
     await this.endWorkflow(
       {
         workflow: undefined as any,
