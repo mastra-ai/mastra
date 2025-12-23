@@ -16,15 +16,15 @@ const createMcpConfig = (editor: Editor, versionTag?: string) => {
         mastra:
           process.platform === `win32`
             ? {
-              command: 'cmd',
-              args: ['/c', 'npx', ...args],
-              type: 'stdio',
-            }
+                command: 'cmd',
+                args: ['/c', 'npx', ...args],
+                type: 'stdio',
+              }
             : {
-              command: 'npx',
-              args,
-              type: 'stdio',
-            },
+                command: 'npx',
+                args,
+                type: 'stdio',
+              },
       },
     };
   }
@@ -36,7 +36,7 @@ const createMcpConfig = (editor: Editor, versionTag?: string) => {
       },
     },
   };
-};
+}
 
 function makeConfig(
   original: { mcpServers?: Record<string, unknown>; servers?: Record<string, unknown> },
