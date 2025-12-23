@@ -107,7 +107,9 @@ describe('MongoDB Spans Schema Compatibility', () => {
     await store.init();
 
     // Step 4: Query via storage API - should work with old documents
-    const trace = await store.getTrace({ traceId: 'old-trace-1' });
+    const observabilityStore = await store.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+    const trace = await observabilityStore?.getTrace({ traceId: 'old-trace-1' });
     expect(trace).not.toBeNull();
     expect(trace!.spans.length).toBe(2);
 
@@ -165,8 +167,11 @@ describe('MongoDB Spans Schema Compatibility', () => {
     // Init store
     await store.init();
 
+    const observabilityStore = await store.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+
     // Update via storage API with new fields
-    await store.updateSpan({
+    await observabilityStore?.updateSpan({
       traceId: 'update-test-trace',
       spanId: 'update-test-span',
       updates: {
@@ -176,7 +181,7 @@ describe('MongoDB Spans Schema Compatibility', () => {
     });
 
     // Query and verify update worked
-    const trace = await store.getTrace({ traceId: 'update-test-trace' });
+    const trace = await observabilityStore?.getTrace({ traceId: 'update-test-trace' });
     expect(trace).not.toBeNull();
     expect(trace!.spans[0]!.output).toEqual({ result: 'completed' });
     expect(trace!.spans[0]!.endedAt).toEqual(new Date('2024-01-01T00:00:05Z'));
@@ -216,7 +221,9 @@ describe('MongoDB Spans Schema Compatibility', () => {
     await store.init();
 
     // Create new-format span via storage API
-    await store.createSpan({
+    const observabilityStore = await store.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+    await observabilityStore?.createSpan({
       span: {
         traceId: 'mixed-test-trace',
         spanId: 'new-format-span',
@@ -236,7 +243,7 @@ describe('MongoDB Spans Schema Compatibility', () => {
     });
 
     // Query trace - should get both old and new format spans
-    const trace = await store.getTrace({ traceId: 'mixed-test-trace' });
+    const trace = await observabilityStore?.getTrace({ traceId: 'mixed-test-trace' });
     expect(trace).not.toBeNull();
     expect(trace!.spans.length).toBe(2);
 
