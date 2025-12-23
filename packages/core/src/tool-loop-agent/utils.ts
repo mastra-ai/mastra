@@ -16,7 +16,11 @@ export interface ToolLoopAgentLike {
 export function isToolLoopAgentLike(obj: any): obj is ToolLoopAgentLike {
   if (!obj) return false;
   if (obj instanceof ToolLoopAgent) return true;
-  return 'version' in obj && (obj.version === 'agent-v1' || obj.version.startsWith('agent-v'));
+  return (
+    'version' in obj &&
+    typeof obj.version === 'string' &&
+    (obj.version === 'agent-v1' || obj.version.startsWith('agent-v'))
+  );
 }
 
 /**
