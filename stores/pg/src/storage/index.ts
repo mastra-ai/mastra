@@ -167,10 +167,6 @@ export class PostgresStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      indexManagement: true,
-      listScoresBySpan: true,
     };
   }
 

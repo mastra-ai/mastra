@@ -108,19 +108,15 @@ export class CompositeStorage extends MastraStorage {
 
   /**
    * Returns the combined supports from all configured domains.
-   * A capability is supported if any of the underlying storages support it.
+   * Uses the default storage's supports if available.
    */
   public get supports(): StorageSupports {
-    // Start with default storage supports if available
+    // Use default storage supports if available
     const defaultSupports = this.#defaultStorage?.supports;
 
     return {
       selectByIncludeResourceScope: defaultSupports?.selectByIncludeResourceScope ?? false,
       resourceWorkingMemory: defaultSupports?.resourceWorkingMemory ?? false,
-      hasColumn: defaultSupports?.hasColumn ?? false,
-      createTable: defaultSupports?.createTable ?? false,
-      indexManagement: defaultSupports?.indexManagement ?? false,
-      listScoresBySpan: defaultSupports?.listScoresBySpan ?? false,
     };
   }
 

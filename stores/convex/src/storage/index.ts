@@ -111,10 +111,6 @@ export class ConvexStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      indexManagement: false,
-      listScoresBySpan: false,
     };
   }
 }

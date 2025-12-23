@@ -129,10 +129,6 @@ export class UpstashStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      indexManagement: false,
-      listScoresBySpan: true,
     };
   }
 

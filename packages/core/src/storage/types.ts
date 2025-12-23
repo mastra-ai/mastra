@@ -24,14 +24,6 @@ export type StorageSupports = {
   selectByIncludeResourceScope: boolean;
   /** Whether the adapter supports per-resource working memory */
   resourceWorkingMemory: boolean;
-  /** Whether the adapter supports checking if a column exists */
-  hasColumn: boolean;
-  /** Whether the adapter supports creating tables dynamically */
-  createTable: boolean;
-  /** Whether the adapter supports index management operations */
-  indexManagement: boolean;
-  /** Whether the adapter supports listing scores by span (method exists but may throw if false) */
-  listScoresBySpan: boolean;
 };
 
 export interface StorageColumn {

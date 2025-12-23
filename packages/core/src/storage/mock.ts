@@ -58,10 +58,6 @@ export class InMemoryStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      indexManagement: false,
-      listScoresBySpan: true,
     };
   }
 

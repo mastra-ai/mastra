@@ -11,7 +11,16 @@ export * from './domains/scores/data';
 export * from './domains/observability/data';
 export * from './domains/agents/data';
 
-export function createTestSuite(storage: MastraStorage) {
+/**
+ * Test-only capabilities that indicate which advanced storage operations are supported.
+ * These are used to conditionally run tests for features that not all storage adapters implement.
+ */
+export type TestCapabilities = {
+  /** Whether the adapter supports listing scores by span (defaults to true) */
+  listScoresBySpan?: boolean;
+};
+
+export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
   describe(storage.constructor.name, () => {
     beforeAll(async () => {
       const start = Date.now();
@@ -53,7 +62,7 @@ export function createTestSuite(storage: MastraStorage) {
     // checking if the storage domain is available
     createWorkflowsTests({ storage });
     createMemoryTest({ storage });
-    createScoresTest({ storage });
+    createScoresTest({ storage, capabilities });
     if (storage.stores?.observability) {
       createObservabilityTests({ storage });
     }

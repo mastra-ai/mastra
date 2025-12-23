@@ -181,10 +181,6 @@ export class DynamoDBStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      indexManagement: false,
-      listScoresBySpan: true,
     };
   }
 

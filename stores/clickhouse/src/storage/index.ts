@@ -183,10 +183,6 @@ export class ClickhouseStore extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      indexManagement: false,
-      listScoresBySpan: true,
     };
   }
 

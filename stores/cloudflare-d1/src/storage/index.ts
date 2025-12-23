@@ -182,10 +182,6 @@ export class D1Store extends MastraStorage {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      indexManagement: false,
-      listScoresBySpan: true,
     };
   }
 

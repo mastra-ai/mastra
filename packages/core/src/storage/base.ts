@@ -116,10 +116,6 @@ export abstract class MastraStorage extends MastraBase {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
-      hasColumn: false,
-      createTable: false,
-      indexManagement: false,
-      listScoresBySpan: false,
     };
   }
 
