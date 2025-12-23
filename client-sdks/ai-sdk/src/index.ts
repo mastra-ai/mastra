@@ -14,9 +14,5 @@ export { toAISdkV5Stream as toAISdkStream } from './convert-streams';
 export { withMastra } from './middleware';
 export type { WithMastraOptions, WithMastraMemoryOptions, WithMastraSemanticRecallOptions } from './middleware';
 
-// ToolLoopAgent wrapper (AI SDK v6+)
-// Re-exported from @mastra/core for convenience
-export { toolLoopAgentToMastraAgent } from '@mastra/core/tool-loop-agent';
-
 // Deprecated exports
 export { toAISdkFormat } from './to-ai-sdk-format';
