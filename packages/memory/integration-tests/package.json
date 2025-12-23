@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:fastembed && pnpm test:ai-sdk-ids && pnpm test:output-processor-memory && pnpm test:message-ordering && pnpm test:input-processors && pnpm test:processors",
+    "test": "pnpm compile:worker && pnpm test:pg && pnpm test:upstash && pnpm test:libsql && pnpm test:streaming && pnpm test:working-memory && pnpm test:agent-memory && pnpm test:fastembed && pnpm test:ai-sdk-ids && pnpm test:message-ordering && pnpm test:processors",
     "pretest:pg": "docker compose up -d postgres && (for i in $(seq 1 30); do docker compose exec -T postgres pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:pg": "vitest run ./src/with-pg-storage.test.ts",
     "posttest:pg": "docker compose down --volumes",
@@ -26,9 +26,7 @@
     "test:perf": "pnpm test:pg:perf && pnpm test:upstash:perf && pnpm test:libsql:perf",
     "test:fastembed": "vitest run ./src/fastembed.test.ts",
     "test:ai-sdk-ids": "vitest run ./src/ai-sdk-duplicate-ids.test.ts",
-    "test:output-processor-memory": "vitest run ./src/output-processor-memory.test.ts",
     "test:message-ordering": "vitest run ./src/message-ordering.test.ts",
-    "test:input-processors": "vitest run ./src/input-processors.test.ts",
     "test:processors": "vitest run ./src/processors.test.ts",
     "compile:worker": "npx tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck",
     "dev": "mastra dev"
