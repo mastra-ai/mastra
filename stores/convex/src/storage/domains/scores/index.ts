@@ -1,9 +1,15 @@
 import crypto from 'node:crypto';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
+import type {
+  ListScoresResponse,
+  SaveScorePayload,
+  ScoreRowData,
+  ScoringEntityType,
+  ScoringSource,
+} from '@mastra/core/evals';
 import { TABLE_SCORERS, ScoresStorage, createStorageErrorId } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
@@ -66,7 +72,7 @@ export class ScoresConvex extends ScoresStorage {
     entityId?: string;
     entityType?: ScoringEntityType;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.listScores({
       filters: { scorerId, entityId, entityType, source },
       pagination,
@@ -79,7 +85,7 @@ export class ScoresConvex extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.listScores({
       filters: { runId },
       pagination,
@@ -94,7 +100,7 @@ export class ScoresConvex extends ScoresStorage {
     entityId: string;
     entityType: ScoringEntityType;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.listScores({
       filters: { entityId, entityType },
       pagination,
@@ -107,7 +113,7 @@ export class ScoresConvex extends ScoresStorage {
   }: {
     filters: Partial<Pick<ScoreRowData, 'scorerId' | 'entityId' | 'entityType' | 'runId' | 'source'>>;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     if (pagination.page < 0) {
       throw new MastraError(
         {

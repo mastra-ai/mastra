@@ -1,23 +1,36 @@
 import type { MastraMessageContentV2, MastraDBMessage } from '../agent';
 import { MastraBase } from '../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '../evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../evals';
 import type { StorageThreadType } from '../memory/types';
-import type { TracingStorageStrategy } from '../observability';
 import type { StepResult, WorkflowRunState } from '../workflows/types';
 
-import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 import type {
-  PaginationInfo,
+  BatchCreateSpansArgs,
+  BatchDeleteTracesArgs,
+  BatchUpdateSpansArgs,
+  GetTraceResponse,
+  UpdateSpanArgs,
+  CreateSpanArgs,
+  GetTraceArgs,
+  WorkflowsStorage,
+  ScoresStorage,
+  MemoryStorage,
+  ObservabilityStorage,
+  AgentsStorage,
+  TracingStorageStrategy,
+  ListTracesResponse,
+  ListTracesArgs,
+  GetSpanArgs,
+  GetSpanResponse,
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+} from './domains';
+import type {
   StorageResourceType,
   StoragePagination,
   WorkflowRun,
   WorkflowRuns,
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  UpdateSpanRecord,
-  CreateSpanRecord,
   StorageListMessagesInput,
   StorageListMessagesOutput,
   StorageListWorkflowRunsInput,
@@ -29,7 +42,9 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
   UpdateWorkflowStateOptions,
+  StorageSupports,
 } from './types';
+import { createStorageErrorId } from './utils';
 
 export type StorageDomains = {
   workflows: WorkflowsStorage;
@@ -118,24 +133,14 @@ export abstract class MastraStorage extends MastraBase {
     this.disableInit = disableInit ?? false;
   }
 
-  public get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    observabilityInstance?: boolean;
-    indexManagement?: boolean;
-    listScoresBySpan?: boolean;
-    agents?: boolean;
-  } {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: false,
       resourceWorkingMemory: false,
       hasColumn: false,
       createTable: false,
       deleteMessages: false,
-      observabilityInstance: false,
+      observability: false,
       indexManagement: false,
       listScoresBySpan: false,
       agents: false,
@@ -367,7 +372,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;
 
-  abstract saveScore(score: ValidatedSaveScorePayload): Promise<{ score: ScoreRowData }>;
+  abstract saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }>;
 
   abstract listScoresByScorerId({
     scorerId,
@@ -381,7 +386,7 @@ export abstract class MastraStorage extends MastraBase {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+  }): Promise<ListScoresResponse>;
 
   abstract listScoresByRunId({
     runId,
@@ -389,7 +394,7 @@ export abstract class MastraStorage extends MastraBase {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+  }): Promise<ListScoresResponse>;
 
   abstract listScoresByEntityId({
     entityId,
@@ -399,7 +404,7 @@ export abstract class MastraStorage extends MastraBase {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+  }): Promise<ListScoresResponse>;
 
   async listScoresBySpan({
     traceId,
@@ -409,7 +414,7 @@ export abstract class MastraStorage extends MastraBase {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,
@@ -437,123 +442,119 @@ export abstract class MastraStorage extends MastraBase {
     if (this.stores?.observability) {
       return this.stores.observability.tracingStrategy;
     }
+    this.#throwObservabilityError('TRACING_STRATEGY');
+  }
+
+  /**
+   * Throws an appropriate error for observability operations.
+   * Distinguishes between "not initialized" (provider supports it) and "not supported" (provider doesn't support it).
+   */
+  #throwObservabilityError(operation: string): never {
+    const storeName = this.name ?? 'UNKNOWN';
+    if (this.supports.observability) {
+      throw new MastraError({
+        id: createStorageErrorId(storeName, 'OBSERVABILITY', 'NOT_INITIALIZED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.SYSTEM,
+        text: `Observability storage is not initialized for ${storeName}`,
+      });
+    }
     throw new MastraError({
-      id: 'MASTRA_STORAGE_TRACING_STRATEGY_NOT_SUPPORTED',
+      id: createStorageErrorId(storeName, operation, 'NOT_SUPPORTED'),
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
+      text: `Observability is not supported by this storage adapter (${storeName})`,
     });
   }
 
   /**
    * Creates a single Span record in the storage provider.
    */
-  async createSpan(span: CreateSpanRecord): Promise<void> {
+  async createSpan(args: CreateSpanArgs): Promise<void> {
     if (this.stores?.observability) {
-      return this.stores.observability.createSpan(span);
+      return await this.stores.observability.createSpan(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_CREATE_AI_SPAN_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('CREATE_SPAN');
   }
 
   /**
    * Updates a single Span with partial data. Primarily used for realtime trace creation.
    */
-  async updateSpan(params: { spanId: string; traceId: string; updates: Partial<UpdateSpanRecord> }): Promise<void> {
+  async updateSpan(args: UpdateSpanArgs): Promise<void> {
     if (this.stores?.observability) {
-      return this.stores.observability.updateSpan(params);
+      return await this.stores.observability.updateSpan(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_UPDATE_AI_SPAN_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('UPDATE_SPAN');
+  }
+
+  /**
+   * Retrieves a single span.
+   */
+  async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
+    if (this.stores?.observability) {
+      return await this.stores.observability.getSpan(args);
+    }
+    this.#throwObservabilityError('GET_SPAN');
+  }
+
+  /**
+   * Retrieves a single root span.
+   */
+  async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
+    if (this.stores?.observability) {
+      return await this.stores.observability.getRootSpan(args);
+    }
+    this.#throwObservabilityError('GET_ROOT_SPAN');
   }
 
   /**
    * Retrieves a single trace with all its associated spans.
    */
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
+  async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
     if (this.stores?.observability) {
-      return this.stores.observability.getTrace(traceId);
+      return await this.stores.observability.getTrace(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_GET_TRACE_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('GET_TRACE');
   }
 
   /**
-   * Retrieves a paginated list of traces with optional filtering.
+   * Retrieves a list of traces with optional filtering.
    */
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     if (this.stores?.observability) {
-      return this.stores.observability.getTracesPaginated(args);
+      return await this.stores.observability.listTraces(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_GET_TRACES_PAGINATED_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('LIST_TRACES');
   }
 
   /**
    * Creates multiple Spans in a single batch.
    */
-  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     if (this.stores?.observability) {
-      return this.stores.observability.batchCreateSpans(args);
+      return await this.stores.observability.batchCreateSpans(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_BATCH_CREATE_AI_SPANS_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('BATCH_CREATE_SPANS');
   }
 
   /**
    * Updates multiple Spans in a single batch.
    */
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     if (this.stores?.observability) {
-      return this.stores.observability.batchUpdateSpans(args);
+      return await this.stores.observability.batchUpdateSpans(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_BATCH_UPDATE_AI_SPANS_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('BATCH_UPDATE_SPANS');
   }
 
   /**
    * Deletes multiple traces and all their associated spans in a single batch operation.
    */
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     if (this.stores?.observability) {
-      return this.stores.observability.batchDeleteTraces(args);
+      return await this.stores.observability.batchDeleteTraces(args);
     }
-    throw new MastraError({
-      id: 'MASTRA_STORAGE_BATCH_DELETE_TRACES_NOT_SUPPORTED',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      text: `tracing is not supported by this storage adapter (${this.constructor.name})`,
-    });
+    this.#throwObservabilityError('BATCH_DELETE_TRACES');
   }
 
   /**

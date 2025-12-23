@@ -1,19 +1,34 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { createStorageErrorId, SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  listTracesArgsSchema,
+  ObservabilityStorage,
+  SPAN_SCHEMA,
+  TABLE_SPANS,
+  TraceStatus,
+} from '@mastra/core/storage';
 import type {
   SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
   PaginationInfo,
-  UpdateSpanRecord,
+  ListTracesArgs,
+  TracingStorageStrategy,
+  BatchUpdateSpansArgs,
+  BatchDeleteTracesArgs,
+  BatchCreateSpansArgs,
+  UpdateSpanArgs,
+  GetTraceArgs,
+  GetTraceResponse,
+  GetSpanArgs,
+  GetSpanResponse,
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  CreateSpanArgs,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
-import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityMSSQL extends ObservabilityStorage {
   public pool: ConnectionPool;
@@ -74,6 +89,32 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         table: TABLE_SPANS,
         columns: ['spanType', 'startedAt DESC'],
       },
+      // Root spans filtered index - every listTraces query filters parentSpanId IS NULL
+      {
+        name: `${schemaPrefix}mastra_ai_spans_root_spans_idx`,
+        table: TABLE_SPANS,
+        columns: ['startedAt DESC'],
+        where: '[parentSpanId] IS NULL',
+      },
+      // Entity identification indexes - common filtering patterns
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityId'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityName'],
+      },
+      // Multi-tenant filtering - organizationId + userId
+      {
+        name: `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+        table: TABLE_SPANS,
+        columns: ['organizationId', 'userId'],
+      },
+      // Note: MSSQL doesn't support GIN indexes for JSONB/array containment queries
+      // Metadata and tags filtering will use full table scans on NVARCHAR(MAX) columns
     ];
   }
 
@@ -117,7 +158,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     await this.db.clearTable({ tableName: TABLE_SPANS });
   }
 
-  public get tracingStrategy(): {
+  public override get tracingStrategy(): {
     preferred: TracingStorageStrategy;
     supported: TracingStorageStrategy[];
   } {
@@ -127,16 +168,19 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     };
   }
 
-  async createSpan(span: CreateSpanRecord): Promise<void> {
+  async createSpan(args: CreateSpanArgs): Promise<void> {
+    const { span } = args;
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
+      const now = new Date().toISOString();
 
       const record = {
         ...span,
         startedAt,
         endedAt,
-        // Note: createdAt/updatedAt will be set by default values
+        createdAt: now,
+        updatedAt: now,
       };
 
       return this.db.insert({ tableName: TABLE_SPANS, record });
@@ -150,7 +194,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
             spanId: span.spanId,
             traceId: span.traceId,
             spanType: span.spanType,
-            spanName: span.name,
+            name: span.name,
           },
         },
         error,
@@ -158,7 +202,8 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
+  async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
+    const { traceId } = args;
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
@@ -170,12 +215,17 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
       const result = await request.query<SpanRecord>(
         `SELECT
-          [traceId], [spanId], [parentSpanId], [name], [scope], [spanType],
-          [attributes], [metadata], [links], [input], [output], [error], [isEvent],
+          [traceId], [spanId], [parentSpanId], [name],
+          [entityType], [entityId], [entityName],
+          [userId], [organizationId], [resourceId],
+          [runId], [sessionId], [threadId], [requestId],
+          [environment], [source], [serviceName], [scope],
+          [spanType], [attributes], [metadata], [tags], [links],
+          [input], [output], [error], [isEvent],
           [startedAt], [endedAt], [createdAt], [updatedAt]
         FROM ${tableName}
         WHERE [traceId] = @traceId
-        ORDER BY [startedAt] DESC`,
+        ORDER BY [startedAt] ASC`,
       );
 
       if (!result.recordset || result.recordset.length === 0) {
@@ -206,15 +256,105 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async updateSpan({
-    spanId,
-    traceId,
-    updates,
-  }: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<UpdateSpanRecord>;
-  }): Promise<void> {
+  async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
+    const { traceId, spanId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.schema),
+      });
+
+      const request = this.pool.request();
+      request.input('traceId', traceId);
+      request.input('spanId', spanId);
+
+      const result = await request.query<SpanRecord>(
+        `SELECT
+          [traceId], [spanId], [parentSpanId], [name],
+          [entityType], [entityId], [entityName],
+          [userId], [organizationId], [resourceId],
+          [runId], [sessionId], [threadId], [requestId],
+          [environment], [source], [serviceName], [scope],
+          [spanType], [attributes], [metadata], [tags], [links],
+          [input], [output], [error], [isEvent],
+          [startedAt], [endedAt], [createdAt], [updatedAt]
+        FROM ${tableName}
+        WHERE [traceId] = @traceId AND [spanId] = @spanId`,
+      );
+
+      if (!result.recordset || result.recordset.length === 0) {
+        return null;
+      }
+
+      return {
+        span: transformFromSqlRow<SpanRecord>({
+          tableName: TABLE_SPANS,
+          sqlRow: result.recordset[0]!,
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId, spanId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.schema),
+      });
+
+      const request = this.pool.request();
+      request.input('traceId', traceId);
+
+      const result = await request.query<SpanRecord>(
+        `SELECT
+          [traceId], [spanId], [parentSpanId], [name],
+          [entityType], [entityId], [entityName],
+          [userId], [organizationId], [resourceId],
+          [runId], [sessionId], [threadId], [requestId],
+          [environment], [source], [serviceName], [scope],
+          [spanType], [attributes], [metadata], [tags], [links],
+          [input], [output], [error], [isEvent],
+          [startedAt], [endedAt], [createdAt], [updatedAt]
+        FROM ${tableName}
+        WHERE [traceId] = @traceId AND [parentSpanId] IS NULL`,
+      );
+
+      if (!result.recordset || result.recordset.length === 0) {
+        return null;
+      }
+
+      return {
+        span: transformFromSqlRow<SpanRecord>({
+          tableName: TABLE_SPANS,
+          sqlRow: result.recordset[0]!,
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_ROOT_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateSpan(args: UpdateSpanArgs): Promise<void> {
+    const { traceId, spanId, updates } = args;
     try {
       const data: Record<string, any> = { ...updates };
       if (data.endedAt instanceof Date) {
@@ -223,7 +363,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       if (data.startedAt instanceof Date) {
         data.startedAt = data.startedAt.toISOString();
       }
-      // Note: updatedAt will be set automatically
+      data.updatedAt = new Date().toISOString();
 
       await this.db.update({
         tableName: TABLE_SPANS,
@@ -246,54 +386,10 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
-    filters,
-    pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const { entityId, entityType, ...actualFilters } = filters || {};
-
-    const filtersWithDateRange: Record<string, any> = {
-      ...actualFilters,
-      ...buildDateRangeFilter(pagination?.dateRange, 'startedAt'),
-      parentSpanId: null, // Only get root spans for traces
-    };
-
-    const whereClause = prepareWhereClause(filtersWithDateRange, SPAN_SCHEMA);
-
-    let actualWhereClause = whereClause.sql;
-    const params = { ...whereClause.params };
-    let currentParamIndex = Object.keys(params).length + 1;
-
-    // Handle entity filtering
-    if (entityId && entityType) {
-      let name = '';
-      if (entityType === 'workflow') {
-        name = `workflow run: '${entityId}'`;
-      } else if (entityType === 'agent') {
-        name = `agent run: '${entityId}'`;
-      } else {
-        const error = new MastraError({
-          id: createStorageErrorId('MSSQL', 'GET_TRACES_PAGINATED', 'INVALID_ENTITY_TYPE'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            entityType,
-          },
-          text: `Cannot filter by entity type: ${entityType}`,
-        });
-        throw error;
-      }
-
-      const entityParam = `p${currentParamIndex++}`;
-      if (actualWhereClause) {
-        actualWhereClause += ` AND [name] = @${entityParam}`;
-      } else {
-        actualWhereClause = ` WHERE [name] = @${entityParam}`;
-      }
-      params[entityParam] = name;
-    }
+  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+    // Parse args through schema to apply defaults
+    const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+    const { page, perPage } = pagination;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
@@ -301,6 +397,195 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     });
 
     try {
+      // Build WHERE clause for filters
+      const conditions: string[] = ['r.[parentSpanId] IS NULL']; // Only root spans
+      const params: Record<string, any> = {};
+      let paramIndex = 1;
+
+      if (filters) {
+        // Date range filters
+        if (filters.startedAt?.start) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[startedAt] >= @${param}`);
+          params[param] = filters.startedAt.start.toISOString();
+        }
+        if (filters.startedAt?.end) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[startedAt] <= @${param}`);
+          params[param] = filters.startedAt.end.toISOString();
+        }
+        if (filters.endedAt?.start) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[endedAt] >= @${param}`);
+          params[param] = filters.endedAt.start.toISOString();
+        }
+        if (filters.endedAt?.end) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[endedAt] <= @${param}`);
+          params[param] = filters.endedAt.end.toISOString();
+        }
+
+        // Span type filter
+        if (filters.spanType !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[spanType] = @${param}`);
+          params[param] = filters.spanType;
+        }
+
+        // Entity filters
+        if (filters.entityType !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[entityType] = @${param}`);
+          params[param] = filters.entityType;
+        }
+        if (filters.entityId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[entityId] = @${param}`);
+          params[param] = filters.entityId;
+        }
+        if (filters.entityName !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[entityName] = @${param}`);
+          params[param] = filters.entityName;
+        }
+
+        // Identity & Tenancy filters
+        if (filters.userId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[userId] = @${param}`);
+          params[param] = filters.userId;
+        }
+        if (filters.organizationId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[organizationId] = @${param}`);
+          params[param] = filters.organizationId;
+        }
+        if (filters.resourceId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[resourceId] = @${param}`);
+          params[param] = filters.resourceId;
+        }
+
+        // Correlation ID filters
+        if (filters.runId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[runId] = @${param}`);
+          params[param] = filters.runId;
+        }
+        if (filters.sessionId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[sessionId] = @${param}`);
+          params[param] = filters.sessionId;
+        }
+        if (filters.threadId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[threadId] = @${param}`);
+          params[param] = filters.threadId;
+        }
+        if (filters.requestId !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[requestId] = @${param}`);
+          params[param] = filters.requestId;
+        }
+
+        // Deployment context filters
+        if (filters.environment !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[environment] = @${param}`);
+          params[param] = filters.environment;
+        }
+        if (filters.source !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[source] = @${param}`);
+          params[param] = filters.source;
+        }
+        if (filters.serviceName !== undefined) {
+          const param = `p${paramIndex++}`;
+          conditions.push(`r.[serviceName] = @${param}`);
+          params[param] = filters.serviceName;
+        }
+
+        // Scope filter (MSSQL uses JSON_VALUE for extraction)
+        if (filters.scope != null) {
+          for (const [key, value] of Object.entries(filters.scope)) {
+            // Validate key to prevent SQL injection in JSON path
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+              throw new MastraError({
+                id: createStorageErrorId('MSSQL', 'LIST_TRACES', 'INVALID_FILTER_KEY'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { key },
+              });
+            }
+            const param = `p${paramIndex++}`;
+            conditions.push(`JSON_VALUE(r.[scope], '$.${key}') = @${param}`);
+            params[param] = typeof value === 'string' ? value : JSON.stringify(value);
+          }
+        }
+
+        // Metadata filter (JSON_VALUE)
+        if (filters.metadata != null) {
+          for (const [key, value] of Object.entries(filters.metadata)) {
+            // Validate key to prevent SQL injection in JSON path
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+              throw new MastraError({
+                id: createStorageErrorId('MSSQL', 'LIST_TRACES', 'INVALID_FILTER_KEY'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                details: { key },
+              });
+            }
+            const param = `p${paramIndex++}`;
+            conditions.push(`JSON_VALUE(r.[metadata], '$.${key}') = @${param}`);
+            params[param] = typeof value === 'string' ? value : JSON.stringify(value);
+          }
+        }
+
+        // Tags filter (all tags must be present - using OPENJSON)
+        if (filters.tags != null && filters.tags.length > 0) {
+          for (const tag of filters.tags) {
+            const param = `p${paramIndex++}`;
+            conditions.push(`EXISTS (SELECT 1 FROM OPENJSON(r.[tags]) WHERE [value] = @${param})`);
+            params[param] = tag;
+          }
+        }
+
+        // Status filter (derived from error and endedAt)
+        if (filters.status !== undefined) {
+          switch (filters.status) {
+            case TraceStatus.ERROR:
+              conditions.push(`r.[error] IS NOT NULL`);
+              break;
+            case TraceStatus.RUNNING:
+              conditions.push(`r.[endedAt] IS NULL AND r.[error] IS NULL`);
+              break;
+            case TraceStatus.SUCCESS:
+              conditions.push(`r.[endedAt] IS NOT NULL AND r.[error] IS NULL`);
+              break;
+          }
+        }
+
+        // hasChildError filter (requires subquery)
+        if (filters.hasChildError !== undefined) {
+          if (filters.hasChildError) {
+            conditions.push(`EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c.[traceId] = r.[traceId] AND c.[error] IS NOT NULL
+            )`);
+          } else {
+            conditions.push(`NOT EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c.[traceId] = r.[traceId] AND c.[error] IS NOT NULL
+            )`);
+          }
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const sortField = orderBy.field;
+      const sortDirection = orderBy.direction;
+
       // Get total count
       const countRequest = this.pool.request();
       Object.entries(params).forEach(([key, value]) => {
@@ -308,12 +593,11 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       });
 
       const countResult = await countRequest.query<{ count: number }>(
-        `SELECT COUNT(*) as count FROM ${tableName}${actualWhereClause}`,
+        `SELECT COUNT(*) as count FROM ${tableName} r ${whereClause}`,
       );
+      const count = countResult.recordset[0]?.count ?? 0;
 
-      const total = countResult.recordset[0]?.count ?? 0;
-
-      if (total === 0) {
+      if (count === 0) {
         return {
           pagination: {
             total: 0,
@@ -325,7 +609,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         };
       }
 
-      // Get paginated results
+      // Get paginated spans
       const dataRequest = this.pool.request();
       Object.entries(params).forEach(([key, value]) => {
         dataRequest.input(key, value);
@@ -333,30 +617,40 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       dataRequest.input('offset', page * perPage);
       dataRequest.input('limit', perPage);
 
-      const dataResult = await dataRequest.query<SpanRecord>(
-        `SELECT * FROM ${tableName}${actualWhereClause} ORDER BY [startedAt] DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
-      );
-
-      const spans = dataResult.recordset.map(row =>
-        transformFromSqlRow<SpanRecord>({
-          tableName: TABLE_SPANS,
-          sqlRow: row,
-        }),
+      const result = await dataRequest.query<SpanRecord>(
+        `SELECT
+          r.[traceId], r.[spanId], r.[parentSpanId], r.[name],
+          r.[entityType], r.[entityId], r.[entityName],
+          r.[userId], r.[organizationId], r.[resourceId],
+          r.[runId], r.[sessionId], r.[threadId], r.[requestId],
+          r.[environment], r.[source], r.[serviceName], r.[scope],
+          r.[spanType], r.[attributes], r.[metadata], r.[tags], r.[links],
+          r.[input], r.[output], r.[error], r.[isEvent],
+          r.[startedAt], r.[endedAt], r.[createdAt], r.[updatedAt]
+        FROM ${tableName} r
+        ${whereClause}
+        ORDER BY r.[${sortField}] ${sortDirection}
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
       );
 
       return {
         pagination: {
-          total,
+          total: count,
           page,
           perPage,
-          hasMore: (page + 1) * perPage < total,
+          hasMore: (page + 1) * perPage < count,
         },
-        spans,
+        spans: result.recordset.map(span =>
+          transformFromSqlRow<SpanRecord>({
+            tableName: TABLE_SPANS,
+            sqlRow: span,
+          }),
+        ),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('MSSQL', 'GET_TRACES_PAGINATED', 'FAILED'),
+          id: createStorageErrorId('MSSQL', 'LIST_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -365,18 +659,21 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     if (!args.records || args.records.length === 0) {
       return;
     }
 
     try {
+      const now = new Date().toISOString();
       await this.db.batchInsert({
         tableName: TABLE_SPANS,
         records: args.records.map(span => ({
           ...span,
           startedAt: span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt,
           endedAt: span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt,
+          createdAt: now,
+          updatedAt: now,
         })),
       });
     } catch (error) {
@@ -394,16 +691,11 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     if (!args.records || args.records.length === 0) {
       return;
     }
+    const now = new Date().toISOString();
 
     try {
       const updates = args.records.map(({ traceId, spanId, updates: data }) => {
@@ -414,6 +706,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
         if (processedData.startedAt instanceof Date) {
           processedData.startedAt = processedData.startedAt.toISOString();
         }
+        processedData.updatedAt = now;
 
         return {
           keys: { spanId, traceId },
@@ -440,7 +733,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     if (!args.traceIds || args.traceIds.length === 0) {
       return;
     }
