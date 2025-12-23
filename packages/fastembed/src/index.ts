@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { customProvider as customProviderV2 } from '@internal/ai-sdk-v5';
-import { customProvider as customProvierLegacy } from '@internal/ai-sdk-v4';
+import { customProvider as customProviderLegacy } from '@internal/ai-sdk-v4';
 import type { EmbeddingModel as EmbeddingModelV3 } from '@internal/ai-v6';
 import { customProvider as customProviderV3 } from '@internal/ai-v6';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
@@ -42,7 +42,7 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
 }
 
 // Legacy v1 provider for backwards compatibility
-const fastEmbedLegacyProvider = customProvierLegacy({
+const fastEmbedLegacyProvider = customProviderLegacy({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
       specificationVersion: 'v1',
