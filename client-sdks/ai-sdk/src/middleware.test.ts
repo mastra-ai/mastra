@@ -7,6 +7,7 @@ import type {
   ProcessOutputResultArgs,
   ProcessOutputStreamArgs,
 } from '@mastra/core/processors';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { generateText, streamText } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
@@ -448,6 +449,7 @@ describe('withMastra middleware', () => {
 
   describe('memory integration with LibSQL (real storage)', () => {
     let storage: LibSQLStore;
+    let memoryStore: MemoryStorage;
     let threadId: string;
     const resourceId = 'test-user';
 
@@ -459,12 +461,14 @@ describe('withMastra middleware', () => {
       });
       await storage.init();
 
+      // Get the memory domain store for the middleware
+      memoryStore = (await storage.getStore('memory'))!;
+
       // Create a unique thread ID for each test
       threadId = `thread-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       // Create the thread
-      const memoryStore = await storage.getStore('memory');
-      await memoryStore!.saveThread({
+      await memoryStore.saveThread({
         thread: {
           id: threadId,
           resourceId,
@@ -482,8 +486,7 @@ describe('withMastra middleware', () => {
 
     it('should retrieve historical messages from storage', async () => {
       // Seed historical messages using real storage
-      const memoryStore = await storage.getStore('memory');
-      await memoryStore!.saveMessages({
+      await memoryStore.saveMessages({
         messages: [
           {
             id: 'hist-msg-1',
@@ -508,7 +511,7 @@ describe('withMastra middleware', () => {
       });
 
       // Verify messages were saved
-      const { messages: storedMessages } = await memoryStore!.listMessages({ threadId });
+      const { messages: storedMessages } = await memoryStore.listMessages({ threadId });
       expect(storedMessages).toHaveLength(2);
 
       // Track messages seen during output processing
@@ -524,7 +527,7 @@ describe('withMastra middleware', () => {
 
       const model = withMastra(createMockModel('Here is the follow-up answer.'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 10,
@@ -555,7 +558,7 @@ describe('withMastra middleware', () => {
     it('should save new messages to storage after response', async () => {
       const model = withMastra(createMockModel('The answer is 42.'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 10,
@@ -568,8 +571,7 @@ describe('withMastra middleware', () => {
       });
 
       // Check that messages were persisted to storage
-      const memoryStore = await storage.getStore('memory');
-      const { messages: storedMessages } = await memoryStore!.listMessages({
+      const { messages: storedMessages } = await memoryStore.listMessages({
         threadId,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
@@ -606,11 +608,10 @@ describe('withMastra middleware', () => {
         });
       }
 
-      const memoryStore = await storage.getStore('memory');
-      await memoryStore!.saveMessages({ messages: historicalMessages });
+      await memoryStore.saveMessages({ messages: historicalMessages });
 
       // Verify all 10 messages were saved
-      const { messages: allMessages } = await memoryStore!.listMessages({ threadId });
+      const { messages: allMessages } = await memoryStore.listMessages({ threadId });
       expect(allMessages).toHaveLength(10);
 
       let receivedMessageCount = 0;
@@ -626,7 +627,7 @@ describe('withMastra middleware', () => {
 
       const model = withMastra(createMockModel('Response'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 3, // Only get last 3 messages
@@ -649,7 +650,7 @@ describe('withMastra middleware', () => {
       // First turn
       const model1 = withMastra(createMockModel('First response'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 10,
@@ -674,7 +675,7 @@ describe('withMastra middleware', () => {
 
       const model2 = withMastra(createMockModel('Second response'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 10,
@@ -697,7 +698,7 @@ describe('withMastra middleware', () => {
       // Turn 1
       const model1 = withMastra(createMockModel('My name is Assistant.'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 10,
@@ -722,7 +723,7 @@ describe('withMastra middleware', () => {
 
       const model2 = withMastra(createMockModel('You asked me my name, and I told you.'), {
         memory: {
-          storage,
+          storage: memoryStore,
           threadId,
           resourceId,
           lastMessages: 10,
