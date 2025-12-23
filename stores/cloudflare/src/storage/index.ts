@@ -8,14 +8,13 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
-import type { StorageSupports } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageDomains, StorageSupports } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageCloudflare } from './domains/memory';
+import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
 import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './types';
-import { ScoresStorageCloudflare } from './domains/scores';
 
 /**
  * Cloudflare KV storage adapter for Mastra.

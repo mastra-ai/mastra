@@ -1,8 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains } from '@mastra/core/storage';
-import type { StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';

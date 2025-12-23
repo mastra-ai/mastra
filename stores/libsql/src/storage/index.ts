@@ -3,7 +3,6 @@ import type { Client } from '@libsql/client';
 import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { AgentsLibSQL } from './domains/agents';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';

@@ -131,8 +131,8 @@ describe('Logger Verification - No PII Leakage', () => {
 
     const memoryStore = await store.getStore('memory');
     // Inject logger
-    (memoryStore as any).logger = mockLogger;
     expect(memoryStore).toBeDefined();
+    (memoryStore as any).logger = mockLogger;
 
     await memoryStore?.saveResource({
       resource: { id: resourceId, createdAt: new Date(), updatedAt: new Date() },

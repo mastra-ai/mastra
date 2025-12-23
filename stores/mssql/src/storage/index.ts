@@ -1,16 +1,17 @@
+import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { MastraDBMessage } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { StorageDomains, CreateIndexOptions, StorageSupports } from '@mastra/core/storage';
-import type { MastraDBMessage } from '@mastra/core/memory';
 
-export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 import sql from 'mssql';
 import { MssqlDB } from './db';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
-import type { MastraMessageContentV2 } from '@mastra/core/agent';
+
+export type MastraDBMessageWithTypedContent = Omit<MastraDBMessage, 'content'> & { content: MastraMessageContentV2 };
 
 /**
  * MSSQL configuration type.
