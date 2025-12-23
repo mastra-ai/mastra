@@ -577,8 +577,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const workflowsStore2 = await this.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore2?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,

@@ -13167,6 +13167,7 @@ describe('Workflow', () => {
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
       const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
       await workflowsStore?.persistWorkflowSnapshot({
@@ -13356,6 +13357,7 @@ describe('Workflow', () => {
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
       const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
       await workflowsStore?.persistWorkflowSnapshot({
@@ -13531,6 +13533,7 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       const workflowsStore = await testStorage.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',

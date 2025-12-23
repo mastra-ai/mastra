@@ -72,12 +72,13 @@ export class CloudflareStore extends MastraStorage {
   }
 
   public get supports() {
-    const supports = super.supports;
-    supports.listScoresBySpan = true;
-    supports.resourceWorkingMemory = true;
-    supports.selectByIncludeResourceScope = true;
-    supports.deleteMessages = true;
-    return supports;
+    return {
+      ...super.supports,
+      listScoresBySpan: true,
+      resourceWorkingMemory: true,
+      selectByIncludeResourceScope: true,
+      deleteMessages: true,
+    };
   }
 
   constructor(config: CloudflareStoreConfig) {

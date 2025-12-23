@@ -109,7 +109,12 @@ export async function runScorerOnTarget({
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
-    throw new Error('Observability storage domain is not available');
+    throw new MastraError({
+      id: 'MASTRA_OBSERVABILITY_STORAGE_NOT_AVAILABLE',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Observability storage domain is not available',
+    });
   }
   const trace = await observabilityStore.getTrace(target.traceId);
 
@@ -161,7 +166,12 @@ export async function runScorerOnTarget({
 async function validateAndSaveScore({ storage, scorerResult }: { storage: MastraStorage; scorerResult: ScorerRun }) {
   const scoresStore = await storage.getStore('scores');
   if (!scoresStore) {
-    throw new Error('Scores storage domain is not available');
+    throw new MastraError({
+      id: 'MASTRA_SCORES_STORAGE_NOT_AVAILABLE',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Scores storage domain is not available',
+    });
   }
   const payloadToSave = saveScorePayloadSchema.parse(scorerResult);
   const result = await scoresStore.saveScore(payloadToSave as SaveScorePayload);
@@ -205,7 +215,12 @@ async function attachScoreToSpan({
 }) {
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
-    throw new Error('Observability storage domain is not available');
+    throw new MastraError({
+      id: 'MASTRA_OBSERVABILITY_STORAGE_NOT_AVAILABLE',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Observability storage domain is not available',
+    });
   }
   const existingLinks = span.links || [];
   const link = {

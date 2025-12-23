@@ -113,6 +113,7 @@ export class InngestRun<
   async getRunOutput(eventId: string, maxWaitMs = 300000) {
     const startTime = Date.now();
     const storage = this.#mastra?.getStorage();
+    const workflowsStore = await storage?.getStore('workflows');
 
     while (Date.now() - startTime < maxWaitMs) {
       let runs;
@@ -136,7 +137,6 @@ export class InngestRun<
 
       // Check failure
       if (runs?.[0]?.status === 'Failed') {
-        const workflowsStore = await storage?.getStore('workflows');
         const snapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
@@ -159,8 +159,7 @@ export class InngestRun<
 
       // Check cancellation
       if (runs?.[0]?.status === 'Cancelled') {
-        const workflowsStore2 = await storage?.getStore('workflows');
-        const snapshot = await workflowsStore2?.loadWorkflowSnapshot({
+        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: this.workflowId,
           runId: this.runId,
         });

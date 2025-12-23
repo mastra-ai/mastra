@@ -638,6 +638,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     activeSteps[step.step.id] = true;
 
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+
     // Run nested workflow
     if (step.step instanceof EventedWorkflow) {
       if (resumeSteps?.length > 1) {
@@ -666,7 +668,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           );
         }
 
-        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.step.id,
           runId: nestedRunId,
@@ -702,9 +703,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
-        const workflowsStore2 = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot =
-          (await workflowsStore2?.loadWorkflowSnapshot({
+          (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: step.step.id,
             runId,
           })) ?? ({ context: {} } as WorkflowRunState);
@@ -999,8 +999,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
+    // Cache workflows store to avoid redundant async calls
+    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+
     if (step.type === 'foreach') {
-      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
       const snapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: workflowId,
         runId,
@@ -1018,8 +1020,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           newResult = { ...prevResult, output: [(prevResult as any).output] } as any;
         }
       }
-      const workflowsStore2 = await this.mastra.getStorage()?.getStore('workflows');
-      const newStepResults = await workflowsStore2?.updateWorkflowResults({
+      const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId: step.step.id,
@@ -1044,8 +1045,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
 
-      const workflowsStore3 = await this.mastra.getStorage()?.getStore('workflows');
-      const newStepResults = await workflowsStore3?.updateWorkflowResults({
+      const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
         stepId: step.step.id,
@@ -1086,8 +1086,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         suspendedPaths[suspendedStep.id] = executionPath;
       }
 
-      const workflowsStore4 = await this.mastra.getStorage()?.getStore('workflows');
-      await workflowsStore4?.updateWorkflowState({
+      await workflowsStore?.updateWorkflowState({
         workflowName: workflowId,
         runId,
         opts: {
