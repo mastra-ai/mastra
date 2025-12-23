@@ -6,7 +6,7 @@ import type {
   TracingStorageStrategy,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
-import type { MastraStorage, CreateSpanRecord, UpdateSpanRecord } from '@mastra/core/storage';
+import type { MastraStorage, CreateSpanRecord, UpdateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
 
@@ -52,33 +52,35 @@ interface UpdateRecord {
 }
 
 /**
- * Resolves the final tracing storage strategy based on config and storage hints
+ * Resolves the final tracing storage strategy based on config and observability store hints
  */
 function resolveTracingStorageStrategy(
   config: DefaultExporterConfig,
-  storage: MastraStorage,
+  observability: ObservabilityStorage,
+  storageName: string,
   logger: IMastraLogger,
 ): TracingStorageStrategy {
   if (config.strategy && config.strategy !== 'auto') {
-    const hints = storage.tracingStrategy;
+    const hints = observability.tracingStrategy;
     if (hints.supported.includes(config.strategy)) {
       return config.strategy;
     }
     // Log warning and fall through to auto-selection
     logger.warn('User-specified tracing strategy not supported by storage adapter, falling back to auto-selection', {
       userStrategy: config.strategy,
-      storageAdapter: storage.constructor.name,
+      storageAdapter: storageName,
       supportedStrategies: hints.supported,
       fallbackStrategy: hints.preferred,
     });
   }
-  return storage.tracingStrategy.preferred;
+  return observability.tracingStrategy.preferred;
 }
 
 export class DefaultExporter extends BaseExporter {
   name = 'mastra-default-observability-exporter';
 
   #storage?: MastraStorage;
+  #observability?: ObservabilityStorage;
   #config: DefaultExporterConfig;
   #resolvedStrategy: TracingStorageStrategy;
   private buffer: BatchBuffer;
@@ -126,29 +128,35 @@ export class DefaultExporter extends BaseExporter {
   /**
    * Initialize the exporter (called after all dependencies are ready)
    */
-  init(options: InitExporterOptions): void {
+  async init(options: InitExporterOptions): Promise<void> {
     this.#storage = options.mastra?.getStorage();
     if (!this.#storage) {
       this.logger.warn('DefaultExporter disabled: Storage not available. Traces will not be persisted.');
       return;
     }
 
-    this.initializeStrategy(this.#storage);
+    this.#observability = await this.#storage.getStore('observability');
+    if (!this.#observability) {
+      this.logger.warn('DefaultExporter disabled: Observability storage not available. Traces will not be persisted.');
+      return;
+    }
+
+    this.initializeStrategy(this.#observability, this.#storage.constructor.name);
   }
 
   /**
-   * Initialize the resolved strategy once storage is available
+   * Initialize the resolved strategy once observability store is available
    */
-  private initializeStrategy(storage: MastraStorage): void {
+  private initializeStrategy(observability: ObservabilityStorage, storageName: string): void {
     if (this.#strategyInitialized) return;
 
-    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#config, storage, this.logger);
+    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#config, observability, storageName, this.logger);
     this.#strategyInitialized = true;
 
     this.logger.debug('tracing storage exporter initialized', {
       strategy: this.#resolvedStrategy,
       source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
-      storageAdapter: storage.constructor.name,
+      storageAdapter: storageName,
       maxBatchSize: this.#config.maxBatchSize,
       maxBatchWaitMs: this.#config.maxBatchWaitMs,
     });
@@ -401,14 +409,14 @@ export class DefaultExporter extends BaseExporter {
   /**
    * Handles realtime strategy - processes each event immediately
    */
-  private async handleRealtimeEvent(event: TracingEvent, storage: MastraStorage): Promise<void> {
+  private async handleRealtimeEvent(event: TracingEvent, observability: ObservabilityStorage): Promise<void> {
     const span = event.exportedSpan;
     const spanKey = this.buildSpanKey(span.traceId, span.id);
 
     // Event spans only have an end event
     if (span.isEvent) {
       if (event.type === TracingEventType.SPAN_ENDED) {
-        await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
+        await observability.createSpan(this.buildCreateRecord(event.exportedSpan));
         // For event spans in realtime, we don't need to track them since they're immediately complete
       } else {
         this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
@@ -416,19 +424,19 @@ export class DefaultExporter extends BaseExporter {
     } else {
       switch (event.type) {
         case TracingEventType.SPAN_STARTED:
-          await storage.createSpan(this.buildCreateRecord(event.exportedSpan));
+          await observability.createSpan(this.buildCreateRecord(event.exportedSpan));
           // Track this span as created persistently
           this.allCreatedSpans.add(spanKey);
           break;
         case TracingEventType.SPAN_UPDATED:
-          await storage.updateSpan({
+          await observability.updateSpan({
             traceId: span.traceId,
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
           });
           break;
         case TracingEventType.SPAN_ENDED:
-          await storage.updateSpan({
+          await observability.updateSpan({
             traceId: span.traceId,
             spanId: span.id,
             updates: this.buildUpdateRecord(span),
@@ -495,8 +503,8 @@ export class DefaultExporter extends BaseExporter {
    * Flushes the current buffer to storage with retry logic
    */
   private async flush(): Promise<void> {
-    if (!this.#storage) {
-      this.logger.debug('Cannot flush traces. Mastra storage is not initialized');
+    if (!this.#observability) {
+      this.logger.debug('Cannot flush traces. Observability storage is not initialized');
       return;
     }
 
@@ -536,7 +544,7 @@ export class DefaultExporter extends BaseExporter {
     this.resetBuffer();
 
     // Attempt to flush with retry logic
-    await this.flushWithRetries(this.#storage, bufferCopy, 0);
+    await this.flushWithRetries(this.#observability, bufferCopy, 0);
 
     const elapsed = Date.now() - startTime;
     this.logger.debug('Batch flushed', {
@@ -551,12 +559,16 @@ export class DefaultExporter extends BaseExporter {
   /**
    * Attempts to flush with exponential backoff retry logic
    */
-  private async flushWithRetries(storage: MastraStorage, buffer: BatchBuffer, attempt: number): Promise<void> {
+  private async flushWithRetries(
+    observability: ObservabilityStorage,
+    buffer: BatchBuffer,
+    attempt: number,
+  ): Promise<void> {
     try {
       if (this.#resolvedStrategy === 'batch-with-updates') {
         // Process creates first (always safe)
         if (buffer.creates.length > 0) {
-          await storage.batchCreateSpans({ records: buffer.creates });
+          await observability.batchCreateSpans({ records: buffer.creates });
         }
 
         // Sort updates by span, then by sequence number
@@ -569,12 +581,12 @@ export class DefaultExporter extends BaseExporter {
             return a.sequenceNumber - b.sequenceNumber;
           });
 
-          await storage.batchUpdateSpans({ records: sortedUpdates });
+          await observability.batchUpdateSpans({ records: sortedUpdates });
         }
       } else if (this.#resolvedStrategy === 'insert-only') {
         // Simple batch insert for insert-only strategy
         if (buffer.insertOnly.length > 0) {
-          await storage.batchCreateSpans({ records: buffer.insertOnly });
+          await observability.batchCreateSpans({ records: buffer.insertOnly });
         }
       }
 
@@ -593,7 +605,7 @@ export class DefaultExporter extends BaseExporter {
         });
 
         await new Promise(resolve => setTimeout(resolve, retryDelay));
-        return this.flushWithRetries(storage, buffer, attempt + 1);
+        return this.flushWithRetries(observability, buffer, attempt + 1);
       } else {
         this.logger.error('Batch flush failed after all retries, dropping batch', {
           finalAttempt: attempt + 1,
@@ -611,20 +623,20 @@ export class DefaultExporter extends BaseExporter {
   }
 
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (!this.#storage) {
-      this.logger.debug('Cannot store traces. Mastra storage is not initialized');
+    if (!this.#observability) {
+      this.logger.debug('Cannot store traces. Observability storage is not initialized');
       return;
     }
 
     // Initialize strategy if not already done (fallback for edge cases)
     if (!this.#strategyInitialized) {
-      this.initializeStrategy(this.#storage);
+      this.initializeStrategy(this.#observability, this.#storage?.constructor.name ?? 'Unknown');
     }
 
     // Clear strategy routing - explicit and readable
     switch (this.#resolvedStrategy) {
       case 'realtime':
-        await this.handleRealtimeEvent(event, this.#storage);
+        await this.handleRealtimeEvent(event, this.#observability);
         break;
       case 'batch-with-updates':
         this.handleBatchWithUpdatesEvent(event);
