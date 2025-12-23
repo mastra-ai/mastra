@@ -264,7 +264,7 @@ export function createToolCallStep<
 
             if (!resumeData.approved) {
               return {
-                result: 'Tool call was not approved by the user',
+                result: `Tool call for ${inputData.toolName} was not approved by the user`,
                 ...inputData,
               };
             }

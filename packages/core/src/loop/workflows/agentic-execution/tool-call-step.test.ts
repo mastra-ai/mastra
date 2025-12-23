@@ -151,7 +151,7 @@ describe('createToolCallStep tool approval workflow', () => {
 
     // Assert: Verify error handling and execution prevention
     expect(result).toEqual({
-      result: 'Tool call was not approved by the user',
+      result: `Tool call for test-tool was not approved by the user`,
       ...inputData,
     });
     expectNoToolExecution();
