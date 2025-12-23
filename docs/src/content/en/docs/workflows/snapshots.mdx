@@ -114,8 +114,9 @@ When a workflow is resumed, Mastra retrieves the persisted snapshot with these s
 
 ```typescript
 const storage = mastra.getStorage();
+const workflowStore = await storage?.getStore('workflows');
 
-const snapshot = await storage!.loadWorkflowSnapshot({
+const snapshot = await workflowStore?.loadWorkflowSnapshot({
   runId: "<run-id>",
   workflowName: "<workflow-id>",
 });

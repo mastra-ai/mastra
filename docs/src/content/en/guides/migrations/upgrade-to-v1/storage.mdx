@@ -80,6 +80,47 @@ npx @mastra/codemod@beta v1/storage-get-messages-paginated .
 
 :::
 
+### Domain-specific storage access via `getStore()`
+
+Storage operations are now accessed through domain-specific stores instead of directly on the storage instance. 
+
+Domains include:
+- **`memory`** - Threads, messages, and resources
+- **`workflows`** - Workflow snapshots
+- **`scores`** - Evaluation scores
+- **`observability`** - Traces and spans
+- **`agents`** - Stored agent data
+
+To migrate, call `getStore()` with the domain name, then call methods on the returned store.
+
+```diff
+  const storage = mastra.getStorage();
+
+  // Memory operations (threads, messages, resources)
+- const thread = await storage.getThread({ threadId: '123' });
+- await storage.saveThread({ thread });
++ const memoryStore = await storage.getStore('memory');
++ const thread = await memoryStore?.getThreadById({ threadId: '123' });
++ await memoryStore?.saveThread({ thread });
+
+  // Workflow operations (snapshots)
+- const snapshot = await storage.loadWorkflowSnapshot({ runId, workflowName });
+- await storage.persistWorkflowSnapshot({ runId, workflowName, snapshot });
++ const workflowStore = await storage.getStore('workflows');
++ const snapshot = await workflowStore?.loadWorkflowSnapshot({ runId, workflowName });
++ await workflowStore?.persistWorkflowSnapshot({ runId, workflowName, snapshot });
+
+  // Observability operations (traces, spans)
+- const traces = await storage.listTraces({ page: 0, perPage: 20 });
++ const observabilityStore = await storage.getStore('observability');
++ const traces = await observabilityStore?.listTraces({ page: 0, perPage: 20 });
+
+  // Score operations (evaluations)
+- const scores = await storage.listScoresByScorerId({ scorerId: 'helpfulness' });
++ const scoresStore = await storage.getStore('scores');
++ const scores = await scoresStore?.listScoresByScorerId({ scorerId: 'helpfulness' });
+```
+
 ### `getThreadsByResourceId` to `listThreadsByResourceId`
 
 The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
