@@ -496,11 +496,7 @@ Be thorough in capturing details about people, work, and preferences.`,
           isV5,
         );
 
-        console.log('Turn 2');
-
         wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
-
-        console.log('wmRaw', wmRaw);
 
         expect(wmRaw).not.toBeNull();
 
