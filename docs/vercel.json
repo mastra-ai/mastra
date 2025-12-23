@@ -596,6 +596,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/server/auth/firebase",
+      "destination": "/reference/auth/firebase",
+      "permanent": true
+    },
+    {
       "source": "/docs/server/auth/:path*",
       "destination": "/docs/auth/:path*",
       "permanent": true
@@ -606,11 +611,6 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment",
-      "destination": "/docs/deployment/overview",
-      "permanent": true
-    },
-    {
       "source": "/docs/rag/graph-rag",
       "destination": "/reference/rag/graph-rag",
       "permanent": true
@@ -618,11 +618,6 @@
     {
       "source": "/docs/server/middleware",
       "destination": "/docs/server-db/middleware",
-      "permanent": true
-    },
-    {
-      "source": "/docs/server/auth/firebase",
-      "destination": "/reference/auth/firebase",
       "permanent": true
     },
     {
