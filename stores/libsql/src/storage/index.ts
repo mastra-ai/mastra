@@ -1,21 +1,18 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import type { MastraMessageContentV2, MastraDBMessage } from '@mastra/core/agent';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraStorage } from '@mastra/core/storage';
 import type {
-  PaginationInfo,
   StoragePagination,
   StorageResourceType,
   WorkflowRun,
   WorkflowRuns,
   StorageDomains,
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  StorageSupports,
 } from '@mastra/core/storage';
 
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
@@ -135,14 +132,15 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  public get supports() {
+  public get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
-      observabilityInstance: true,
+      observability: true,
+      indexManagement: false,
       listScoresBySpan: true,
       agents: true,
     };
@@ -216,7 +214,7 @@ export class LibSQLStore extends MastraStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
   }
 
@@ -226,7 +224,7 @@ export class LibSQLStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -238,7 +236,7 @@ export class LibSQLStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -336,26 +334,6 @@ export class LibSQLStore extends MastraStorage {
     return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
   }
 
-  async createSpan(span: SpanRecord): Promise<void> {
-    return this.stores.observability!.createSpan(span);
-  }
-
-  async updateSpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    return this.stores.observability!.updateSpan(params);
-  }
-
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    return this.stores.observability!.getTrace(traceId);
-  }
-
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    return this.stores.observability!.getTracesPaginated(args);
-  }
-
   async listScoresBySpan({
     traceId,
     spanId,
@@ -364,18 +342,8 @@ export class LibSQLStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
-  }
-
-  async batchCreateSpans(args: { records: SpanRecord[] }): Promise<void> {
-    return this.stores.observability!.batchCreateSpans(args);
-  }
-
-  async batchUpdateSpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
-  }): Promise<void> {
-    return this.stores.observability!.batchUpdateSpans(args);
   }
 }
 

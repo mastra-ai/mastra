@@ -2,12 +2,11 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type {
   TABLE_SCHEMAS,
-  PaginationInfo,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
@@ -16,10 +15,7 @@ import type {
   StorageResourceType,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
-  SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
+  StorageSupports,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { MemoryStorageClickhouse } from './domains/memory';
@@ -176,23 +172,17 @@ export class ClickhouseStore extends MastraStorage {
     };
   }
 
-  get supports(): {
-    selectByIncludeResourceScope: boolean;
-    resourceWorkingMemory: boolean;
-    hasColumn: boolean;
-    createTable: boolean;
-    deleteMessages: boolean;
-    listScoresBySpan: boolean;
-    observabilityInstance: boolean;
-  } {
+  get supports(): StorageSupports {
     return {
       selectByIncludeResourceScope: true,
       resourceWorkingMemory: true,
       hasColumn: true,
       createTable: true,
       deleteMessages: true,
+      observability: true,
+      indexManagement: false,
       listScoresBySpan: true,
-      observabilityInstance: true,
+      agents: false,
     };
   }
 
@@ -382,7 +372,7 @@ export class ClickhouseStore extends MastraStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByRunId({ runId, pagination });
   }
 
@@ -394,7 +384,7 @@ export class ClickhouseStore extends MastraStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByEntityId({ entityId, entityType, pagination });
   }
 
@@ -410,7 +400,7 @@ export class ClickhouseStore extends MastraStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresByScorerId({ scorerId, pagination, entityId, entityType, source });
   }
 
@@ -422,7 +412,7 @@ export class ClickhouseStore extends MastraStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     return this.stores.scores.listScoresBySpan({ traceId, spanId, pagination });
   }
 
@@ -445,97 +435,5 @@ export class ClickhouseStore extends MastraStorage {
         error,
       );
     }
-  }
-
-  // Observability methods
-
-  async createSpan(span: CreateSpanRecord): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.createSpan(span);
-  }
-
-  async updateSpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.updateSpan(params);
-  }
-
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.getTrace(traceId);
-  }
-
-  async getTracesPaginated(args: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.getTracesPaginated(args);
-  }
-
-  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchCreateSpans(args);
-  }
-
-  async batchUpdateSpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<SpanRecord, 'spanId' | 'traceId'>> }[];
-  }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchUpdateSpans(args);
-  }
-
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
-    if (!this.stores.observability) {
-      throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'OBSERVABILITY', 'NOT_INITIALIZED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.SYSTEM,
-        text: 'Observability storage is not initialized',
-      });
-    }
-    return this.stores.observability.batchDeleteTraces(args);
   }
 }

@@ -6,3 +6,4 @@ export * from './operations';
 export * from './workflows';
 export * from './memory';
 export * from './inmemory-db';
+export * from './shared';

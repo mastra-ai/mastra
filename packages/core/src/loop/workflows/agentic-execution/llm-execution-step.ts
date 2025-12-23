@@ -268,10 +268,12 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         messageList.add(message, 'response');
 
-        // Reset reasoning state
+        // Reset reasoning state - clear providerOptions to prevent reasoning metadata
+        // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
           isReasoning: false,
           reasoningDeltas: [],
+          providerOptions: undefined,
         });
 
         if (isControllerOpen(controller)) {

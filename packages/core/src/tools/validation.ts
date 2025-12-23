@@ -1,5 +1,6 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import type { ZodLikeSchema } from '../types/zod-compat';
+import { isZodArray, isZodObject } from '../utils/zod-utils';
 
 export interface ValidationError<T = any> {
   error: true;
@@ -78,13 +79,13 @@ function normalizeNullishInput(schema: ZodLikeSchema, input: unknown): unknown {
     return input;
   }
 
-  // Check if schema is an array type
-  if (schema instanceof z.ZodArray) {
+  // Check if schema is an array type (using typeName to avoid dual-package hazard)
+  if (isZodArray(schema as z.ZodTypeAny)) {
     return [];
   }
 
-  // Check if schema is an object type
-  if (schema instanceof z.ZodObject) {
+  // Check if schema is an object type (using typeName to avoid dual-package hazard)
+  if (isZodObject(schema as z.ZodTypeAny)) {
     return {};
   }
 

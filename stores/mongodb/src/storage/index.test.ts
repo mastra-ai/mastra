@@ -481,10 +481,10 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createSpan(span)).resolves.not.toThrow();
+      await expect(store.createSpan({ span })).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getTrace(traceId);
+      const trace = await store.getTrace({ traceId });
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe(spanId);
@@ -516,7 +516,7 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createSpan(initialSpan);
+      await store.createSpan({ span: initialSpan });
 
       // Update with complex nested data
       const updates = {
@@ -557,7 +557,7 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getTrace(traceId);
+      const trace = await store.getTrace({ traceId });
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });
