@@ -998,7 +998,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           const chunk = messagesForWorkers.slice(i * chunkSize, (i + 1) * chunkSize);
           if (chunk.length === 0) continue;
           const workerPromise = new Promise((resolve, reject) => {
-            const worker = new Worker(path.resolve(__dirname, 'worker/generic-memory-worker.js'), {
+            const worker = new Worker(path.resolve(__dirname, '..', 'worker', 'generic-memory-worker.js'), {
               workerData: {
                 messages: chunk,
                 storageType: workerTestConfig.storageTypeForWorker,
