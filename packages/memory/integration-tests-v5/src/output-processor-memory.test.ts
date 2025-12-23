@@ -176,7 +176,8 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Retrieve messages from storage directly
     const memoryStore = await storage.getStore('memory');
-    const { messages: savedMessages } = await memoryStore!.listMessages({
+    expect(memoryStore).toBeDefined();
+    const { messages: savedMessages } = await memoryStore?.listMessages({
       threadId,
     });
 
@@ -273,7 +274,8 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Retrieve messages from storage directly
     const memoryStore = await storage.getStore('memory');
-    const { messages: savedMessages } = await memoryStore!.listMessages({
+    expect(memoryStore).toBeDefined();
+    const { messages: savedMessages } = await memoryStore?.listMessages({
       threadId,
     });
 
@@ -465,7 +467,8 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Retrieve from storage
     const memoryStore = await storage.getStore('memory');
-    const { messages: savedMessages } = await memoryStore!.listMessages({
+    expect(memoryStore).toBeDefined();
+    const { messages: savedMessages } = await memoryStore?.listMessages({
       threadId,
     });
 
@@ -603,7 +606,8 @@ describe('Output Processor Memory Persistence Integration', () => {
 
     // Simulate page refresh - retrieve messages from storage
     const memoryStoreAfterRefresh = await storage.getStore('memory');
-    const { messages: messagesAfterRefresh } = await memoryStoreAfterRefresh!.listMessages({
+    expect(memoryStoreAfterRefresh).toBeDefined();
+    const { messages: messagesAfterRefresh } = await memoryStoreAfterRefresh?.listMessages({
       threadId,
     });
 

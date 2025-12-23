@@ -5677,6 +5677,7 @@ describe('MastraInngestWorkflow', () => {
       const runId = 'test-run-id';
 
       const workflowsStore = await testStorage.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId,

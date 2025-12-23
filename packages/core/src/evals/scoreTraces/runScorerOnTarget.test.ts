@@ -191,7 +191,7 @@ class TestContext {
         break;
 
       case 'scorer-failure':
-        this.setupSuccessfulScenario(errorDetails?.target || { traceId: 'trace-1' });
+        await this.setupSuccessfulScenario(errorDetails?.target || { traceId: 'trace-1' });
         (this.mockScorer.run as any).mockRejectedValue(errorDetails?.error || new Error('Scorer execution failed'));
         break;
 
@@ -253,19 +253,19 @@ describe('runScorerOnTarget Function', () => {
     describe('Data not found scenarios', () => {
       it('should handle trace not found scenario', async () => {
         const target = { traceId: 'nonexistent-trace' };
-        testContext.setupErrorScenario('trace-not-found');
+        await testContext.setupErrorScenario('trace-not-found');
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
 
       it('should handle span not found scenario (with spanId)', async () => {
         const target = { traceId: 'trace-1', spanId: 'nonexistent-span' };
-        testContext.setupErrorScenario('span-not-found', { traceId: 'trace-1' });
+        await testContext.setupErrorScenario('span-not-found', { traceId: 'trace-1' });
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
 
       it('should handle span not found scenario (no spanId, no root span)', async () => {
         const target = { traceId: 'trace-1' };
-        testContext.setupErrorScenario('no-root-span', { traceId: 'trace-1' });
+        await testContext.setupErrorScenario('no-root-span', { traceId: 'trace-1' });
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
     });
@@ -274,14 +274,14 @@ describe('runScorerOnTarget Function', () => {
       it('should handle scorer execution failures', async () => {
         const target = { traceId: 'trace-1' };
         const scorerError = new Error('Scorer execution failed');
-        testContext.setupErrorScenario('scorer-failure', { target, error: scorerError });
+        await testContext.setupErrorScenario('scorer-failure', { target, error: scorerError });
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
 
       it('should throw if fetching the trace fails', async () => {
         const target = { traceId: 'trace-1' };
         const storageError = new Error('Storage error');
-        testContext.setupErrorScenario('storage-failure', { error: storageError });
+        await testContext.setupErrorScenario('storage-failure', { error: storageError });
         await expect(testContext.runTarget(target)).rejects.toThrow('Storage error');
       });
     });

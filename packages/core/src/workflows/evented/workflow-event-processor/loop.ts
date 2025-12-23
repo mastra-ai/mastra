@@ -199,7 +199,7 @@ export async function processWorkflowForEach(
       runId,
       stepId: step.step.id,
       result: {
-        status: 'succcess',
+        status: 'success',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
@@ -238,7 +238,7 @@ export async function processWorkflowForEach(
     runId,
     stepId: step.step.id,
     result: {
-      status: 'succcess',
+      status: 'success',
       output: (currentResult as any).output,
       startedAt: Date.now(),
       payload: (prevResult as any)?.output,

@@ -12439,6 +12439,7 @@ describe('Workflow', () => {
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
       const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
       await workflowsStore?.persistWorkflowSnapshot({
@@ -12600,6 +12601,7 @@ describe('Workflow', () => {
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
       const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
       await workflowsStore?.persistWorkflowSnapshot({
@@ -12924,6 +12926,7 @@ describe('Workflow', () => {
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
       const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
       await workflowsStore?.persistWorkflowSnapshot({
@@ -13529,7 +13532,7 @@ describe('Workflow', () => {
       const runId = 'test-run-id';
       const workflowsStore = await testStorage.getStore('workflows');
 
-      await workflowsStore!.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId,
         snapshot: {
@@ -14372,7 +14375,8 @@ describe('Workflow', () => {
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
       const workflowsStore = await testStorage.getStore('workflows');
-      const nestedWorkflowSnapshot = await workflowsStore!.loadWorkflowSnapshot({
+      expect(workflowsStore).toBeDefined();
+      const nestedWorkflowSnapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run.runId,
       });
@@ -15019,7 +15023,8 @@ describe('Workflow', () => {
       });
 
       const workflowsStore = await testStorage.getStore('workflows');
-      const simpleNestedWorkflowSnapshot = await workflowsStore!.loadWorkflowSnapshot({
+      expect(workflowsStore).toBeDefined();
+      const simpleNestedWorkflowSnapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: 'simple-nested-workflow',
         runId: run.runId,
       });
