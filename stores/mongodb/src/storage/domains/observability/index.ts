@@ -11,28 +11,81 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_SPANS] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (ObservabilityMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
   }
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }
 
+  /**
+   * Returns default index definitions for the observability domain collections.
+   * These indexes optimize common query patterns for span and trace lookups.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_SPANS, keys: { spanId: 1, traceId: 1 }, options: { unique: true } },
+      { collection: TABLE_SPANS, keys: { traceId: 1 } },
+      { collection: TABLE_SPANS, keys: { parentSpanId: 1 } },
+      { collection: TABLE_SPANS, keys: { startedAt: -1 } },
+      { collection: TABLE_SPANS, keys: { spanType: 1 } },
+      { collection: TABLE_SPANS, keys: { name: 1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
   async init(): Promise<void> {
-    const collection = await this.getCollection(TABLE_SPANS);
-    await collection.createIndex({ spanId: 1, traceId: 1 }, { unique: true });
-    await collection.createIndex({ traceId: 1 });
-    await collection.createIndex({ parentSpanId: 1 });
-    await collection.createIndex({ startedAt: -1 });
-    await collection.createIndex({ spanType: 1 });
-    await collection.createIndex({ name: 1 });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {

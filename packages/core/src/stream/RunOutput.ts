@@ -106,6 +106,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               } else {
                 self.#status = 'failed';
               }
+            } else if (chunk.type === 'workflow-paused') {
+              self.#status = 'paused';
             }
           },
           close() {
@@ -277,6 +279,8 @@ export class WorkflowRunOutput<TResult extends WorkflowResult<any, any, any, any
               } else {
                 self.#status = 'failed';
               }
+            } else if (chunk.type === 'workflow-paused') {
+              self.#status = 'paused';
             }
           },
           close() {

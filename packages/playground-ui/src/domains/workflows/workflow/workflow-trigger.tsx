@@ -47,11 +47,13 @@ export interface WorkflowTriggerProps {
     runId,
     inputData,
     requestContext,
+    perStep,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
     requestContext: Record<string, unknown>;
+    perStep?: boolean;
   }) => Promise<void>;
   observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
@@ -60,12 +62,14 @@ export interface WorkflowTriggerProps {
     runId,
     resumeData,
     requestContext,
+    perStep,
   }: {
     workflowId: string;
     step: string | string[];
     runId: string;
     resumeData: Record<string, unknown>;
     requestContext: Record<string, unknown>;
+    perStep?: boolean;
   }) => Promise<void>;
   streamResult: WorkflowRunStreamResult | null;
   isCancellingWorkflowRun: boolean;

@@ -1,8 +1,10 @@
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
+import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+
 import { MastraMemory } from '@mastra/core/memory';
 import type {
   MastraMessageV1,
@@ -570,11 +572,27 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    const promise = (this.embedder.specificationVersion === `v2` ? embedManyV5 : embedMany)({
+    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
+    const specVersion = this.embedder.specificationVersion;
+
+    switch (specVersion) {
+      case 'v3':
+        embedFn = embedManyV6;
+        break;
+      case 'v2':
+        embedFn = embedManyV5;
+        break;
+      default:
+        embedFn = embedMany;
+        break;
+    }
+
+    const promise = embedFn({
       values: chunks,
       maxRetries: 3,
       // @ts-ignore
       model: this.embedder,
+      ...(this.embedderOptions || {}),
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
