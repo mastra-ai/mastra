@@ -124,14 +124,16 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning
