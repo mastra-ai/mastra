@@ -41,7 +41,9 @@ describe('MongoDB Spans Schema Compatibility', () => {
         .catch(() => {});
       await client.close();
       await store.close();
-    } catch {}
+    } catch (error) {
+      console.warn('Migration test cleanup failed:', error);
+    }
   });
 
   it('should handle old-schema documents and return new fields as null', async () => {

@@ -1,7 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type { PaginationInfo } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
-import type { JsonValue } from '../shared';
 import { ObservabilityStorage } from './base';
 import type {
   BatchCreateSpansArgs,
@@ -394,7 +393,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   /**
    * Deep equality check for JSON values
    */
-  private jsonValueEquals(a: JsonValue | undefined, b: JsonValue | undefined): boolean {
+  private jsonValueEquals(a: unknown, b: unknown): boolean {
     if (a === undefined || b === undefined) {
       return a === b;
     }
@@ -419,11 +418,11 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (Array.isArray(a) || Array.isArray(b)) {
         return false;
       }
-      const aKeys = Object.keys(a);
-      const bKeys = Object.keys(b);
+      const aKeys = Object.keys(a as object);
+      const bKeys = Object.keys(b as object);
       if (aKeys.length !== bKeys.length) return false;
       return aKeys.every(key =>
-        this.jsonValueEquals((a as Record<string, JsonValue>)[key], (b as Record<string, JsonValue>)[key]),
+        this.jsonValueEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
       );
     }
     return a === b;

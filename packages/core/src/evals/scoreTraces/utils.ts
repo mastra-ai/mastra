@@ -149,12 +149,12 @@ function extractInputMessages(agentSpan: SpanRecord): MastraDBMessage[] {
   }
 
   if (Array.isArray(input)) {
-    const messages = input.filter(isSpanMessage) as unknown as SpanMessage[];
+    const messages = input.filter(isSpanMessage) as SpanMessage[];
     return messages.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
 
   if (hasMessagesArray(input)) {
-    const messages = input.messages.filter(isSpanMessage) as unknown as SpanMessage[];
+    const messages = input.messages.filter(isSpanMessage) as SpanMessage[];
     return messages.map(msg => createMastraDBMessage(msg, agentSpan.startedAt));
   }
   return [];

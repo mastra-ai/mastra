@@ -1,27 +1,6 @@
 import { z, ZodSchema } from 'zod';
 import type { ServerRoute } from '@mastra/server/server-adapter';
-
-/**
- * Get the Zod typeName from a schema, compatible with both Zod 3 and Zod 4.
- * Uses string-based typeName instead of instanceof to avoid dual-package hazard.
- */
-function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
-  const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.typeName) {
-    return schemaAny._zod.def.typeName;
-  }
-  // Zod 3 structure
-  return schemaAny._def?.typeName;
-}
-
-/**
- * Get the def object from a Zod schema, compatible with both Zod 3 and Zod 4.
- */
-function getZodDef(schema: z.ZodTypeAny): any {
-  const schemaAny = schema as any;
-  return schemaAny._zod?.def ?? schemaAny._def;
-}
+import { getZodTypeName, getZodDef } from '@mastra/core/utils';
 
 /**
  * Generate context-aware test value based on field name

@@ -8,7 +8,6 @@ import {
   entityNameField,
   entityTypeField,
   environmentField,
-  jsonValueSchema,
   organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
@@ -50,18 +49,16 @@ export const spanIdField = z.string().describe('Unique span identifier within a 
 const spanNameField = z.string().describe('Human-readable span name');
 const parentSpanIdField = z.string().describe('Parent span reference (null = root span)');
 const spanTypeField = z.nativeEnum(SpanType).describe('Span type (e.g., WORKFLOW_RUN, AGENT_RUN, TOOL_CALL, etc.)');
-const attributesField = z
-  .record(jsonValueSchema)
-  .describe('Span-type specific attributes (e.g., model, tokens, tools)');
-const metadataField = z.record(jsonValueSchema).describe('User-defined metadata for custom filtering');
+const attributesField = z.record(z.unknown()).describe('Span-type specific attributes (e.g., model, tokens, tools)');
+const metadataField = z.record(z.unknown()).describe('User-defined metadata for custom filtering');
 const tagsField = z.array(z.string()).describe('Labels for filtering traces (only on the root span)');
 const scopeField = z
-  .record(jsonValueSchema)
+  .record(z.unknown())
   .describe('Arbitrary package/app version info (e.g., {"core": "1.0.0", "memory": "1.0.0", "gitSha": "abcd1234"})');
-const linksField = z.array(jsonValueSchema).describe('References to related spans in other traces');
-const inputField = jsonValueSchema.describe('Input data passed to the span');
-const outputField = jsonValueSchema.describe('Output data returned from the span');
-const errorField = jsonValueSchema.describe('Error info - presence indicates failure (status derived from this)');
+const linksField = z.array(z.unknown()).describe('References to related spans in other traces');
+const inputField = z.unknown().describe('Input data passed to the span');
+const outputField = z.unknown().describe('Output data returned from the span');
+const errorField = z.unknown().describe('Error info - presence indicates failure (status derived from this)');
 const isEventField = z.boolean().describe('Whether this is an event (point-in-time) vs a span (duration)');
 const startedAtField = z.date().describe('When the span started');
 const endedAtField = z.date().describe('When the span ended (null = running, status derived from this)');

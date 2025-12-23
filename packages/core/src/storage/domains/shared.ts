@@ -2,28 +2,6 @@ import { z } from 'zod';
 import { EntityType } from '../../observability';
 
 /**
- * JSON-compatible value types
- */
-export type JsonPrimitive = string | number | boolean | null;
-
-export type JsonValue = JsonPrimitive | Date | JsonValue[] | { [key: string]: JsonValue };
-
-/**
- * Zod schema that matches JsonValue
- */
-export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.date(),
-    z.array(jsonValueSchema),
-    z.record(jsonValueSchema),
-  ]),
-);
-
-/**
  * Common DB fields
  */
 export const createdAtField = z.date().describe('Database record creation time');

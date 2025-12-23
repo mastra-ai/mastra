@@ -61,7 +61,7 @@ export function SpanTabs({
       </Tabs.List>
       <Tabs.Content value="details">
         <Sections>
-          {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} />}
+          {span?.attributes?.usage ? <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} /> : null}
           <KeyValueList data={spanInfo} LinkComponent={Link} />
           <SpanDetails span={span} />
         </Sections>

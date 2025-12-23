@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraDBMessage, StorageThreadType } from '../memory/types';
+import { getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
@@ -316,21 +317,6 @@ export interface UpdateWorkflowStateOptions {
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
-}
-
-/**
- * Get the Zod typeName from a schema, compatible with both Zod 3 and Zod 4.
- * Uses string-based typeName instead of instanceof to avoid dual-package hazard
- * where multiple Zod instances can cause instanceof checks to fail.
- */
-function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
-  const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.typeName) {
-    return schemaAny._zod.def.typeName;
-  }
-  // Zod 3 structure
-  return schemaAny._def?.typeName;
 }
 
 /**
