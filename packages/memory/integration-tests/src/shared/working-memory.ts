@@ -1306,8 +1306,10 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
             },
           });
 
+          const memoryStorage = await storage.getStore('memory');
+
           // Verify it's in the resource table
-          const resource = await storage.getResourceById({ resourceId });
+          const resource = await memoryStorage?.getResourceById({ resourceId });
           expect(resource?.workingMemory).toBe(workingMemoryData);
 
           // The working memory should come from resource, not thread metadata
