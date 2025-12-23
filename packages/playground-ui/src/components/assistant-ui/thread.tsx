@@ -20,15 +20,18 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { BookmarkProvider } from '@/domains/bookmarks/context/bookmark-context';
+import { BookmarkIndicators } from './bookmarks/bookmark-indicators';
 
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
   hasMemory?: boolean;
   hasModelList?: boolean;
+  threadId?: string;
 }
 
-export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadProps) => {
+export const Thread = ({ agentName, agentId, hasMemory, hasModelList, threadId }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -36,29 +39,38 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
     return <AssistantMessage {...props} hasModelList={hasModelList} />;
   };
 
-  return (
+  const content = (
     <ThreadWrapper>
-      <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
-        <ThreadWelcome agentName={agentName} />
+      <div className="relative h-full">
+        <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+          <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
-          <ThreadPrimitive.Messages
-            components={{
-              UserMessage: UserMessage,
-              EditComposer: EditComposer,
-              AssistantMessage: WrappedAssistantMessage,
-            }}
-          />
-        </div>
+          <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
+            <ThreadPrimitive.Messages
+              components={{
+                UserMessage: UserMessage,
+                EditComposer: EditComposer,
+                AssistantMessage: WrappedAssistantMessage,
+              }}
+            />
+          </div>
 
-        <ThreadPrimitive.If empty={false}>
-          <div />
-        </ThreadPrimitive.If>
-      </ThreadPrimitive.Viewport>
+          <ThreadPrimitive.If empty={false}>
+            <div />
+          </ThreadPrimitive.If>
+        </ThreadPrimitive.Viewport>
+        <BookmarkIndicators scrollContainerRef={areaRef} />
+      </div>
 
       <Composer hasMemory={hasMemory} agentId={agentId} />
     </ThreadWrapper>
   );
+
+  if (threadId) {
+    return <BookmarkProvider threadId={threadId}>{content}</BookmarkProvider>;
+  }
+
+  return content;
 };
 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {

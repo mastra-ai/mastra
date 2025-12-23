@@ -1,5 +1,6 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { useState } from 'react';
 
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
@@ -7,6 +8,7 @@ import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { BookmarkButton } from '../bookmarks/bookmark-button';
 
 export interface AssistantMessageProps {
   hasModelList?: boolean;
@@ -51,10 +53,12 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
 };
 
 const AssistantActionBar = () => {
+  const [isBookmarkPopoverOpen, setIsBookmarkPopoverOpen] = useState(false);
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="always"
+      autohide={isBookmarkPopoverOpen ? 'never' : 'always'}
       autohideFloat="single-branch"
       className="flex gap-1 items-center transition-all relative"
     >
@@ -82,11 +86,11 @@ const AssistantActionBar = () => {
           </MessagePrimitive.If>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      {/* <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
-          <RefreshCwIcon />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload> */}
+      <BookmarkButton
+        className="bg-transparent text-icon3 hover:text-icon6"
+        isPopoverOpen={isBookmarkPopoverOpen}
+        onPopoverOpenChange={setIsBookmarkPopoverOpen}
+      />
     </ActionBarPrimitive.Root>
   );
 };
