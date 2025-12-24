@@ -3,6 +3,7 @@ import { Agent } from '../../agent';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
+import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -37,6 +38,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
   private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean;
   private providerOptions?: ProviderOptions;
+  private logger?: IMastraLogger;
 
   constructor(options: StructuredOutputOptions<OUTPUT>) {
     if (!options.schema) {
@@ -61,6 +63,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     this.fallbackValue = options.fallbackValue;
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
+    this.logger = options.logger;
     // Create internal structuring agent
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',
@@ -265,14 +268,14 @@ The input text may be in any format (sentences, bullet points, paragraphs, etc.)
 
     switch (this.errorStrategy) {
       case 'strict':
-        console.error(message);
+        this.logger?.error(message);
         abort(message);
         break;
       case 'warn':
-        console.warn(message);
+        this.logger?.warn(message);
         break;
       case 'fallback':
-        console.info(`${message} (using fallback)`);
+        this.logger?.info(`${message} (using fallback)`);
         break;
     }
   }

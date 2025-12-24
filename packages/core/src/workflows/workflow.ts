@@ -2471,7 +2471,7 @@ export class Run<
   }): Promise<{ runId: string }> {
     // Fire execution in background, don't await completion
     this._start(args).catch(err => {
-      console.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
     });
     return { runId: this.runId };
   }
@@ -2534,7 +2534,7 @@ export class Run<
       try {
         await writer.close();
       } catch (err) {
-        console.error('Error closing stream:', err);
+        this.mastra?.getLogger()?.error('Error closing stream:', err);
       } finally {
         writer.releaseLock();
       }
@@ -2614,7 +2614,7 @@ export class Run<
       try {
         await writer.close();
       } catch (err) {
-        console.error('Error closing stream:', err);
+        this.mastra?.getLogger()?.error('Error closing stream:', err);
       } finally {
         writer.releaseLock();
       }
@@ -2734,7 +2734,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
 
@@ -2904,7 +2904,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
         const executionResultsPromise = self._resume({
@@ -3577,7 +3577,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
         const executionResultsPromise = self._timeTravel({
