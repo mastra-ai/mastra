@@ -71,8 +71,76 @@ export class Run extends BaseResource {
   /**
    * Cancels a specific workflow run by its ID
    * @returns Promise containing a success message
+   * @deprecated Use `cancel()` instead
    */
   cancelRun(): Promise<{ message: string }> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Cancels a workflow run.
+   *
+   * This method aborts any running steps and updates the workflow status to 'canceled' .
+   * It works for both actively running workflows and suspended/waiting workflows.
+   *
+   * ## How cancellation works
+   *
+   * When called, the workflow will:
+   * 1. **Trigger the abort signal** - Uses the standard Web API AbortSignal to notify running steps
+   * 2. **Prevent subsequent steps** - No further steps will be executed
+   *
+   * ## Abort signal behavior
+   *
+   * Steps that check the `abortSignal` parameter can respond to cancellation:
+   * - Steps can listen to the 'abort' event: `abortSignal.addEventListener('abort', callback)`
+   * - Steps can check if already aborted: `if (abortSignal.aborted) { ... }`
+   * - Useful for canceling timeouts, network requests, or long-running operations
+   *
+   * **Note:** Steps must actively check the abort signal to be canceled mid-execution.
+   * Steps that don't check the signal will run to completion, but subsequent steps won't execute.
+   *
+   * @returns Promise that resolves with `{ message: 'Workflow run canceled' }` when cancellation succeeds
+   * @throws {HTTPException} 400 - If workflow ID or run ID is missing
+   * @throws {HTTPException} 404 - If workflow or workflow run is not found
+   *
+   * @example
+   * ```typescript
+   * const run = await workflow.createRun({ runId: 'run-123' });
+   * await run.cancel();
+   * // Returns: { message: 'Workflow run canceled' }
+   * ```
+   *
+   * @example
+   * ```typescript
+   * // Example of a step that responds to cancellation
+   * const step = createStep({
+   *   id: 'long-running-step',
+   *   execute: async ({ inputData, abortSignal, abort }) => {
+   *     const timeout = new Promise((resolve) => {
+   *       const timer = setTimeout(() => resolve('done'), 10000);
+   *
+   *       // Clean up if canceled
+   *       abortSignal.addEventListener('abort', () => {
+   *         clearTimeout(timer);
+   *         resolve('canceled');
+   *       });
+   *     });
+   *
+   *     const result = await timeout;
+   *
+   *     // Check if aborted after async operation
+   *     if (abortSignal.aborted) {
+   *       return abort(); // Stop execution
+   *     }
+   *
+   *     return { result };
+   *   }
+   * });
+   * ```
+   */
+  cancel(): Promise<{ message: string }> {
     return this.request(`/api/workflows/${this.workflowId}/runs/${this.runId}/cancel`, {
       method: 'POST',
     });
