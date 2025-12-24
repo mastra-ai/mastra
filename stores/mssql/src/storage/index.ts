@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
 
 import sql from 'mssql';
 import { MemoryMSSQL } from './domains/memory';
@@ -240,13 +240,6 @@ export class MSSQLStore extends MastraStorage {
     } catch (err) {
       throw err;
     }
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-    };
   }
 
   /**

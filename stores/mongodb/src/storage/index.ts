@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
@@ -32,13 +32,6 @@ export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
 
   stores: StorageDomains;
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-    };
-  }
 
   constructor(config: MongoDBConfig) {
     super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit });

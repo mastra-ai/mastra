@@ -97,29 +97,6 @@ export class Memory extends MastraMemory {
     }
   }
 
-  protected checkStorageFeatureSupport(config: MemoryConfig) {
-    const resourceScope =
-      (typeof config.semanticRecall === 'object' && config.semanticRecall.scope !== 'thread') ||
-      // resource scope is now default
-      config.semanticRecall === true;
-
-    if (resourceScope && !this.storage.supports.selectByIncludeResourceScope) {
-      throw new Error(
-        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
-      );
-    }
-
-    if (
-      config.workingMemory?.enabled &&
-      config.workingMemory.scope === `resource` &&
-      !this.storage.supports.resourceWorkingMemory
-    ) {
-      throw new Error(
-        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support workingMemory: { scope: "resource" } yet and currently only supports per-thread working memory. Supported adapters: LibSQL, PostgreSQL, Upstash.`,
-      );
-    }
-  }
-
   async recall(
     args: StorageListMessagesInput & {
       threadConfig?: MemoryConfig;
@@ -160,8 +137,6 @@ export class Memory extends MastraMemory {
       workingMemoryEnabled: config.workingMemory?.enabled,
       semanticRecallEnabled: Boolean(config.semanticRecall),
     });
-
-    this.checkStorageFeatureSupport(config);
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
     const defaultTopK = DEFAULT_TOP_K;
@@ -280,8 +255,6 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (config.workingMemory?.enabled) {
-      this.checkStorageFeatureSupport(config);
-
       const scope = config.workingMemory.scope || 'resource';
 
       // For resource scope, update the resource's working memory
@@ -370,8 +343,6 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
-    this.checkStorageFeatureSupport(config);
-
     const scope = config.workingMemory.scope || 'resource';
 
     // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
@@ -429,8 +400,6 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
     }
-
-    this.checkStorageFeatureSupport(config);
 
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
@@ -789,8 +758,6 @@ ${workingMemory}`;
     if (!config.workingMemory?.enabled) {
       return null;
     }
-
-    this.checkStorageFeatureSupport(config);
 
     const scope = config.workingMemory.scope || 'resource';
     let workingMemoryData: string | null = null;

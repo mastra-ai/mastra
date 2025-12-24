@@ -11,21 +11,6 @@ export type StoragePagination = {
 
 export type StorageColumnType = 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
 
-/**
- * Describes capabilities supported by a storage adapter.
- * Providers should override the base class getter to indicate their supported features.
- *
- * Note: For checking domain availability (observability, agents), use `storage.stores?.domainName`
- * or `await storage.getStore('domainName')` instead. These `supports` flags are for specific
- * method capabilities that may vary between implementations.
- */
-export type StorageSupports = {
-  /** Whether the adapter supports filtering by resource scope in queries */
-  selectByIncludeResourceScope: boolean;
-  /** Whether the adapter supports per-resource working memory */
-  resourceWorkingMemory: boolean;
-};
-
 export interface StorageColumn {
   type: StorageColumnType;
   primaryKey?: boolean;

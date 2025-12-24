@@ -2,8 +2,6 @@ import { MastraBase } from '../base';
 
 import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 
-import type { StorageSupports } from './types';
-
 export type StorageDomains = {
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
@@ -110,13 +108,6 @@ export abstract class MastraStorage extends MastraBase {
     });
     this.id = id;
     this.disableInit = disableInit ?? false;
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: false,
-      resourceWorkingMemory: false,
-    };
   }
 
   /**

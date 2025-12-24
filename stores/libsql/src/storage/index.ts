@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
@@ -134,13 +134,6 @@ export class LibSQLStore extends MastraStorage {
       memory,
       observability,
       agents,
-    };
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
     };
   }
 }

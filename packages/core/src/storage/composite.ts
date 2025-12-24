@@ -1,5 +1,4 @@
 import { MastraStorage, type StorageDomains } from './base';
-import type { StorageSupports } from './types';
 
 /**
  * Configuration for individual domain overrides in CompositeStorage.
@@ -82,14 +81,10 @@ export interface CompositeStorageConfig {
  * ```
  */
 export class CompositeStorage extends MastraStorage {
-  #defaultStorage?: MastraStorage;
-
   stores: StorageDomains;
 
   constructor(config: CompositeStorageConfig) {
     super({ id: config.id, name: 'CompositeStorage', disableInit: config.disableInit });
-
-    this.#defaultStorage = config.default;
 
     // Compose stores from default and domain overrides
     const defaultStores = config.default?.stores;
@@ -104,20 +99,6 @@ export class CompositeStorage extends MastraStorage {
       observability: domainOverrides.observability ?? defaultStores?.observability,
       agents: domainOverrides.agents ?? defaultStores?.agents,
     } as StorageDomains;
-  }
-
-  /**
-   * Returns the combined supports from all configured domains.
-   * Uses the default storage's supports if available.
-   */
-  public get supports(): StorageSupports {
-    // Use default storage supports if available
-    const defaultSupports = this.#defaultStorage?.supports;
-
-    return {
-      selectByIncludeResourceScope: defaultSupports?.selectByIncludeResourceScope ?? false,
-      resourceWorkingMemory: defaultSupports?.resourceWorkingMemory ?? false,
-    };
   }
 
   /**

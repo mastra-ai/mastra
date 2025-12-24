@@ -1,7 +1,7 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 
 import type { Service } from 'electrodb';
@@ -175,13 +175,6 @@ export class DynamoDBStore extends MastraStorage {
 
     // We're using a single table design with ElectroDB,
     // so we don't need to create multiple tables
-  }
-
-  get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-    };
   }
 
   /**

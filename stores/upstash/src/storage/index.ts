@@ -1,5 +1,5 @@
 import { MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { Redis } from '@upstash/redis';
 import { StoreMemoryUpstash } from './domains/memory';
 import { ScoresUpstash } from './domains/scores';
@@ -122,13 +122,6 @@ export class UpstashStore extends MastraStorage {
       scores,
       workflows,
       memory,
-    };
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
     };
   }
 

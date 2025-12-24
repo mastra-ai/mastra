@@ -1,4 +1,4 @@
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 
 import type { ConvexAdminClientConfig } from './client';
@@ -104,13 +104,6 @@ export class ConvexStore extends MastraStorage {
       memory,
       workflows,
       scores,
-    };
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
     };
   }
 }

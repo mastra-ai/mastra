@@ -8,7 +8,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageCloudflare } from './domains/memory';
 import { ScoresStorageCloudflare } from './domains/scores';
@@ -69,13 +69,6 @@ export class CloudflareStore extends MastraStorage {
     if (!config.apiToken?.trim()) {
       throw new Error('apiToken is required for REST API');
     }
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-    };
   }
 
   constructor(config: CloudflareStoreConfig) {
