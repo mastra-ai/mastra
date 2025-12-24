@@ -1,11 +1,15 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageD1 } from './domains/memory';
 import { ScoresStorageD1 } from './domains/scores';
 import { WorkflowsStorageD1 } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
+export type { D1DomainConfig } from './db';
 
 /**
  * Base configuration options shared across D1 configurations
@@ -175,20 +179,6 @@ export class D1Store extends MastraStorage {
       scores,
       workflows,
       memory,
-    };
-  }
-
-  get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      observability: false,
-      indexManagement: false,
-      listScoresBySpan: true,
-      agents: false,
     };
   }
 

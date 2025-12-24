@@ -2,8 +2,6 @@ import { MastraBase } from '../base';
 
 import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
 
-import type { StorageSupports } from './types';
-
 export type StorageDomains = {
   workflows: WorkflowsStorage;
   scores: ScoresStorage;
@@ -52,32 +50,49 @@ export function calculatePagination(
 }
 
 /**
- * Base class for all Mastra storage adapters.
- *
- * Storage adapters provide persistence for various domains (memory, workflows, scores, observability, agents).
- * All domain-specific operations should be accessed through `getStore()`:
- *
- * @example
- * ```typescript
- * // Access memory domain
- * const memory = await storage.getStore('memory');
- * await memory?.saveThread({ thread });
- *
- * // Access workflows domain
- * const workflows = await storage.getStore('workflows');
- * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
- *
- * // Access observability domain
- * const observability = await storage.getStore('observability');
- * await observability?.createSpan(span);
- * ```
+ * Configuration for individual domain overrides.
+ * Each domain can be sourced from a different storage adapter.
  */
-export abstract class MastraStorage extends MastraBase {
-  protected hasInitialized: null | Promise<boolean> = null;
-  protected shouldCacheInit = true;
+export type MastraStorageDomains = Partial<StorageDomains>;
 
+/**
+ * Configuration options for MastraStorage.
+ *
+ * Can be used in two ways:
+ * 1. By store implementations: `{ id, name, disableInit? }` - stores set `this.stores` directly
+ * 2. For composition: `{ id, default?, domains?, disableInit? }` - compose domains from multiple stores
+ */
+export interface MastraStorageConfig {
+  /**
+   * Unique identifier for this storage instance.
+   */
   id: string;
-  stores?: StorageDomains;
+
+  /**
+   * Name of the storage adapter (used for logging).
+   * Required for store implementations extending MastraStorage.
+   */
+  name?: string;
+
+  /**
+   * Default storage adapter to use for domains not explicitly specified.
+   * If provided, domains from this storage will be used as fallbacks.
+   */
+  default?: MastraStorage;
+
+  /**
+   * Individual domain overrides. Each domain can come from a different storage adapter.
+   * These take precedence over the default storage.
+   *
+   * @example
+   * ```typescript
+   * domains: {
+   *   memory: pgStore.stores?.memory,
+   *   workflows: libsqlStore.stores?.workflows,
+   * }
+   * ```
+   */
+  domains?: MastraStorageDomains;
 
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
@@ -98,32 +113,91 @@ export abstract class MastraStorage extends MastraBase {
    * const storage = new PostgresStore({ ...config, disableInit: true });
    * // No auto-init, tables must already exist
    */
+  disableInit?: boolean;
+}
+
+/**
+ * Base class for all Mastra storage adapters.
+ *
+ * Can be used in two ways:
+ *
+ * 1. **Extended by store implementations** (PostgresStore, LibSQLStore, etc.):
+ *    Store implementations extend this class and set `this.stores` with their domain implementations.
+ *
+ * 2. **Directly instantiated for composition**:
+ *    Compose domains from multiple storage backends using `default` and `domains` options.
+ *
+ * All domain-specific operations should be accessed through `getStore()`:
+ *
+ * @example
+ * ```typescript
+ * // Composition: mix domains from different stores
+ * const storage = new MastraStorage({
+ *   id: 'composite',
+ *   default: pgStore,
+ *   domains: {
+ *     memory: libsqlStore.stores?.memory,
+ *   },
+ * });
+ *
+ * // Access domains
+ * const memory = await storage.getStore('memory');
+ * await memory?.saveThread({ thread });
+ * ```
+ */
+export class MastraStorage extends MastraBase {
+  protected hasInitialized: null | Promise<boolean> = null;
+  protected shouldCacheInit = true;
+
+  id: string;
+  stores?: StorageDomains;
+
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   */
   disableInit: boolean = false;
 
-  constructor({ id, name, disableInit }: { id: string; name: string; disableInit?: boolean }) {
-    if (!id || typeof id !== 'string' || id.trim() === '') {
+  constructor(config: MastraStorageConfig) {
+    const name = config.name ?? 'MastraStorage';
+
+    if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error(`${name}: id must be provided and cannot be empty.`);
     }
+
     super({
       component: 'STORAGE',
       name,
     });
-    this.id = id;
-    this.disableInit = disableInit ?? false;
-  }
 
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: false,
-      resourceWorkingMemory: false,
-      hasColumn: false,
-      createTable: false,
-      deleteMessages: false,
-      observability: false,
-      indexManagement: false,
-      listScoresBySpan: false,
-      agents: false,
-    };
+    this.id = config.id;
+    this.disableInit = config.disableInit ?? false;
+
+    // If composition config is provided (default or domains), compose the stores
+    if (config.default || config.domains) {
+      const defaultStores = config.default?.stores;
+      const domainOverrides = config.domains ?? {};
+
+      // Validate that at least one storage source is provided
+      const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
+      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
+
+      if (!hasDefaultDomains && !hasOverrideDomains) {
+        throw new Error(
+          'MastraStorage requires at least one storage source. Provide either a default storage with domains or domain overrides.',
+        );
+      }
+
+      // Build the composed stores object
+      // Domain overrides take precedence over default storage
+      this.stores = {
+        memory: domainOverrides.memory ?? defaultStores?.memory,
+        workflows: domainOverrides.workflows ?? defaultStores?.workflows,
+        scores: domainOverrides.scores ?? defaultStores?.scores,
+        observability: domainOverrides.observability ?? defaultStores?.observability,
+        agents: domainOverrides.agents ?? defaultStores?.agents,
+      } as StorageDomains;
+    }
+    // Otherwise, subclasses set stores themselves
   }
 
   /**

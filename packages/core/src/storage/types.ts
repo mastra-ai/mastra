@@ -11,31 +11,6 @@ export type StoragePagination = {
 
 export type StorageColumnType = 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
 
-/**
- * Describes capabilities supported by a storage adapter.
- * Providers should override the base class getter to indicate their supported features.
- */
-export type StorageSupports = {
-  /** Whether the adapter supports filtering by resource scope in queries */
-  selectByIncludeResourceScope: boolean;
-  /** Whether the adapter supports per-resource working memory */
-  resourceWorkingMemory: boolean;
-  /** Whether the adapter supports checking if a column exists */
-  hasColumn: boolean;
-  /** Whether the adapter supports creating tables dynamically */
-  createTable: boolean;
-  /** Whether the adapter supports deleting individual messages */
-  deleteMessages: boolean;
-  /** Whether the adapter supports observability (tracing/spans) */
-  observability: boolean;
-  /** Whether the adapter supports index management operations */
-  indexManagement: boolean;
-  /** Whether the adapter supports listing scores by span */
-  listScoresBySpan: boolean;
-  /** Whether the adapter supports agent persistence */
-  agents: boolean;
-};
-
 export interface StorageColumn {
   type: StorageColumnType;
   primaryKey?: boolean;

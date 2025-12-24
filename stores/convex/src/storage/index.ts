@@ -1,4 +1,4 @@
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 
 import type { ConvexAdminClientConfig } from './client';
@@ -6,6 +6,10 @@ import { ConvexAdminClient } from './client';
 import { MemoryConvex } from './domains/memory';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryConvex, ScoresConvex, WorkflowsConvex };
+export type { ConvexDomainConfig } from './db';
 
 /**
  * Convex configuration type.
@@ -104,20 +108,6 @@ export class ConvexStore extends MastraStorage {
       memory,
       workflows,
       scores,
-    };
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      deleteMessages: true,
-      observability: false,
-      indexManagement: false,
-      listScoresBySpan: false,
-      agents: false,
     };
   }
 }

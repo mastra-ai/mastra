@@ -2471,7 +2471,7 @@ export class Run<
   }): Promise<{ runId: string }> {
     // Fire execution in background, don't await completion
     this._start(args).catch(err => {
-      console.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
     });
     return { runId: this.runId };
   }
@@ -2534,7 +2534,7 @@ export class Run<
       try {
         await writer.close();
       } catch (err) {
-        console.error('Error closing stream:', err);
+        this.mastra?.getLogger()?.error('Error closing stream:', err);
       } finally {
         writer.releaseLock();
       }
@@ -2614,7 +2614,7 @@ export class Run<
       try {
         await writer.close();
       } catch (err) {
-        console.error('Error closing stream:', err);
+        this.mastra?.getLogger()?.error('Error closing stream:', err);
       } finally {
         writer.releaseLock();
       }
@@ -2734,7 +2734,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
 
@@ -2904,7 +2904,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
         const executionResultsPromise = self._resume({
@@ -2961,19 +2961,32 @@ export class Run<
     const nestedWatchCb = (event: Event) => {
       if (event.runId === this.runId) {
         const { event: nestedEvent, workflowId } = event.data as {
-          event: { type: string; payload: { id: string } & Record<string, unknown> };
+          event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
           workflowId: string;
         };
-        void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-          type: 'watch',
-          runId: this.runId,
-          data: {
-            ...nestedEvent,
-            ...(nestedEvent.payload?.id
-              ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
-              : {}),
-          },
-        });
+
+        // Data chunks from writer.custom() should bubble up directly without modification
+        // These are events with type starting with 'data-' and have a 'data' property
+        if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
+          // Bubble up custom data events directly to preserve their structure
+          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+            type: 'watch',
+            runId: this.runId,
+            data: nestedEvent,
+          });
+        } else {
+          // Regular workflow events get prefixed with nested workflow ID
+          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+            type: 'watch',
+            runId: this.runId,
+            data: {
+              ...nestedEvent,
+              ...(nestedEvent.payload?.id
+                ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
+                : {}),
+            },
+          });
+        }
       }
     };
 
@@ -3564,7 +3577,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
         const executionResultsPromise = self._timeTravel({

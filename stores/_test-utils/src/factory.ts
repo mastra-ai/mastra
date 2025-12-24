@@ -11,7 +11,17 @@ export * from './domains/scores/data';
 export * from './domains/observability/data';
 export * from './domains/agents/data';
 
-export function createTestSuite(storage: MastraStorage) {
+/**
+ * Test-specific feature flags for conditionally enabling test scenarios.
+ * Unlike storage domain availability (checked via storage.stores), these flags
+ * control whether specific operations within a domain are tested.
+ */
+export type TestCapabilities = {
+  /** Whether the adapter supports listing scores by span (defaults to true) */
+  listScoresBySpan?: boolean;
+};
+
+export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
   describe(storage.constructor.name, () => {
     beforeAll(async () => {
       const start = Date.now();
@@ -42,7 +52,7 @@ export function createTestSuite(storage: MastraStorage) {
       if (observabilityStorage) {
         clearList.push(observabilityStorage.dangerouslyClearAll());
       }
-      if (agentsStorage && storage.supports.agents) {
+      if (agentsStorage) {
         clearList.push(agentsStorage.dangerouslyClearAll());
       }
       // Clear all domain data after tests
@@ -53,10 +63,8 @@ export function createTestSuite(storage: MastraStorage) {
     // checking if the storage domain is available
     createWorkflowsTests({ storage });
     createMemoryTest({ storage });
-    createScoresTest({ storage });
-    if (storage.supports.observability) {
-      createObservabilityTests({ storage });
-    }
+    createScoresTest({ storage, capabilities });
+    createObservabilityTests({ storage });
     createAgentsTests({ storage });
   });
 }

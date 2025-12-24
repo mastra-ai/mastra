@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
@@ -9,6 +9,16 @@ import { ObservabilityMongoDB } from './domains/observability';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
+
+// Export domain classes for direct use with MastraStorage composition
+export {
+  MongoDBAgentsStorage,
+  MemoryStorageMongoDB,
+  ObservabilityMongoDB,
+  ScoresStorageMongoDB,
+  WorkflowsStorageMongoDB,
+};
+export type { MongoDBDomainConfig } from './db';
 
 /**
  * MongoDB storage adapter for Mastra.
@@ -32,20 +42,6 @@ export class MongoDBStore extends MastraStorage {
   #connector: MongoDBConnector;
 
   stores: StorageDomains;
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      deleteMessages: true,
-      observability: true,
-      indexManagement: false,
-      listScoresBySpan: true,
-      agents: true,
-    };
-  }
 
   constructor(config: MongoDBConfig) {
     super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit });

@@ -44,7 +44,7 @@ if (!deploymentUrl || !adminKey) {
     ...(storageFunction ? { storageFunction } : {}),
   });
 
-  createTestSuite(store);
+  createTestSuite(store, { listScoresBySpan: false });
 
   // Pre-configured client acceptance tests
   createClientAcceptanceTests({

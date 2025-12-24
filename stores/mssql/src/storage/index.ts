@@ -1,12 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, CreateIndexOptions, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
 
 import sql from 'mssql';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryMSSQL, ObservabilityMSSQL, ScoresMSSQL, WorkflowsMSSQL };
+export type { MssqlDomainConfig } from './db';
 
 /**
  * MSSQL configuration type.
@@ -240,20 +244,6 @@ export class MSSQLStore extends MastraStorage {
     } catch (err) {
       throw err;
     }
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      observability: true,
-      indexManagement: true,
-      listScoresBySpan: true,
-      agents: false,
-    };
   }
 
   /**
