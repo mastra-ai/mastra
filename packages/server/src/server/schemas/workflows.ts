@@ -84,11 +84,6 @@ export const workflowRunsResponseSchema = z.object({
 });
 
 /**
- * Schema for single workflow run response
- */
-export const workflowRunResponseSchema = workflowRunSchema;
-
-/**
  * Schema for query parameters when listing workflow runs
  * Supports both page/perPage and limit/offset for backwards compatibility
  * If page/perPage provided, use directly; otherwise convert from limit/offset

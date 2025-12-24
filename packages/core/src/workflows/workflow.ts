@@ -22,7 +22,7 @@ import { ProcessorRunner } from '../processors';
 import type { Processor } from '../processors';
 import { ProcessorStepSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
-import type { StorageListWorkflowRunsInput, WorkflowRun } from '../storage';
+import type { StorageListWorkflowRunsInput } from '../storage';
 import type { OutputSchema } from '../stream/base/schema';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType } from '../stream/types';
@@ -1878,32 +1878,6 @@ export class Workflow<
     }
   }
 
-  async getWorkflowRunById(runId: string) {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow runs from storage. Mastra storage is not initialized');
-      //returning in memory run if no storage is initialized
-      return this.#runs.get(runId)
-        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
-    }
-
-    const workflowsStore = await storage.getStore('workflows');
-    if (!workflowsStore) {
-      this.logger.debug('Cannot get workflow runs. Workflows storage domain is not available');
-      return this.#runs.get(runId)
-        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
-    }
-
-    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
-
-    return (
-      run ??
-      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
-    );
-  }
-
   async deleteWorkflowRunById(runId: string) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
@@ -2093,7 +2067,7 @@ export class Workflow<
    * @param options.fields - Specific fields to return (for performance optimization)
    * @returns The workflow run result with metadata and processed execution state, or null if not found
    */
-  async getWorkflowRun(
+  async getWorkflowRunById(
     runId: string,
     options: {
       withNestedWorkflows?: boolean;
