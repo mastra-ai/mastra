@@ -991,7 +991,7 @@ export class MessageList {
     );
   }
 
-  private static mastraDBMessageToAIV4UIMessage(m: MastraDBMessage): UIMessageWithMetadata {
+  static mastraDBMessageToAIV4UIMessage(m: MastraDBMessage): UIMessageWithMetadata {
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]

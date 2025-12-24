@@ -145,6 +145,7 @@ describe('DefaultExporter', () => {
 
   describe('Batching functionality', () => {
     let mockStorage: any;
+    let mockObservabilityStore: any;
     let timers: any[];
 
     beforeEach(() => {
@@ -165,7 +166,8 @@ describe('DefaultExporter', () => {
         if (index !== -1) timers.splice(index, 1);
       }) as any);
 
-      mockStorage = {
+      // Create mock observability store (returned by getStore('observability'))
+      mockObservabilityStore = {
         tracingStrategy: {
           preferred: 'batch-with-updates',
           supported: ['realtime', 'batch-with-updates', 'insert-only'],
@@ -174,6 +176,16 @@ describe('DefaultExporter', () => {
         batchUpdateSpans: vi.fn().mockResolvedValue(undefined),
         createSpan: vi.fn().mockResolvedValue(undefined),
         updateSpan: vi.fn().mockResolvedValue(undefined),
+      };
+
+      // Create mock storage with getStore method
+      mockStorage = {
+        getStore: vi.fn().mockImplementation((domain: string) => {
+          if (domain === 'observability') {
+            return Promise.resolve(mockObservabilityStore);
+          }
+          return Promise.resolve(null);
+        }),
         constructor: { name: 'MockStorage' },
       };
 
@@ -187,7 +199,7 @@ describe('DefaultExporter', () => {
     describe('Strategy resolution', () => {
       it('should auto-select storage preferred strategy', async () => {
         const exporter = new DefaultExporter({ logger: mockLogger });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
           'tracing storage exporter initialized',
@@ -201,7 +213,7 @@ describe('DefaultExporter', () => {
 
       it('should use user-specified strategy when supported', async () => {
         const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.debug).toHaveBeenCalledWith(
           'tracing storage exporter initialized',
@@ -213,10 +225,10 @@ describe('DefaultExporter', () => {
       });
 
       it('should fallback to storage preferred when user strategy not supported', async () => {
-        mockStorage.tracingStrategy.supported = ['batch-with-updates'];
+        mockObservabilityStore.tracingStrategy.supported = ['batch-with-updates'];
 
         const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'User-specified tracing strategy not supported by storage adapter, falling back to auto-selection',
@@ -227,14 +239,14 @@ describe('DefaultExporter', () => {
         );
       });
 
-      it('should log error if storage not available during init()', () => {
+      it('should log error if storage not available during init()', async () => {
         const mockMastraWithoutStorage = {
           getStorage: vi.fn().mockReturnValue(null),
         } as any;
 
         const exporter = new DefaultExporter({ logger: mockLogger });
         // Should not throw, but log error instead
-        expect(() => exporter.init({ mastra: mockMastraWithoutStorage })).not.toThrow();
+        await expect(exporter.init({ mastra: mockMastraWithoutStorage })).resolves.not.toThrow();
 
         expect(mockLogger.warn).toHaveBeenCalledWith(
           'DefaultExporter disabled: Storage not available. Traces will not be persisted.',
@@ -245,12 +257,12 @@ describe('DefaultExporter', () => {
     describe('Realtime strategy', () => {
       it('should process events immediately', async () => {
         const exporter = new DefaultExporter({ strategy: 'realtime', logger: mockLogger });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
         const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
 
         await exporter.exportTracingEvent(mockEvent);
 
-        expect(mockStorage.createSpan).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.createSpan).toHaveBeenCalledWith({
           span: expect.objectContaining({
             traceId: 'trace-1',
             spanId: 'span-1',
@@ -266,14 +278,14 @@ describe('DefaultExporter', () => {
           maxBatchSize: 2,
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         const event1 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
         const event2 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-2');
 
         await exporter.exportTracingEvent(event1);
         // First event should schedule timer but not flush yet
-        expect(mockStorage.batchCreateSpans).not.toHaveBeenCalled();
+        expect(mockObservabilityStore.batchCreateSpans).not.toHaveBeenCalled();
 
         await exporter.exportTracingEvent(event2);
 
@@ -281,7 +293,7 @@ describe('DefaultExporter', () => {
         await new Promise(resolve => setImmediate(resolve));
 
         // Should flush when batch size reached
-        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({ spanId: 'span-1' }),
             expect.objectContaining({ spanId: 'span-2' }),
@@ -295,7 +307,7 @@ describe('DefaultExporter', () => {
           maxBatchSize: 10,
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Add span create first
         const createEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -311,7 +323,7 @@ describe('DefaultExporter', () => {
         // Manually trigger flush
         await (exporter as any).flush();
 
-        expect(mockStorage.batchUpdateSpans).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({
               spanId: 'span-1',
@@ -330,7 +342,7 @@ describe('DefaultExporter', () => {
           strategy: 'batch-with-updates',
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Send update without create first
         const updateEvent = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
@@ -352,7 +364,7 @@ describe('DefaultExporter', () => {
           maxBatchSize: 1, // Set to 1 to trigger immediate flush
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Event-type spans only emit SPAN_ENDED (no SPAN_STARTED)
         const eventSpan = createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'event-1', true);
@@ -362,7 +374,7 @@ describe('DefaultExporter', () => {
         await new Promise(resolve => setImmediate(resolve));
 
         // Should create the span record (not treat as out-of-order)
-        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({
               spanId: 'event-1',
@@ -386,7 +398,7 @@ describe('DefaultExporter', () => {
           maxBatchSize: 1, // Set to 1 to trigger immediate flush
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         const startEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
         const updateEvent = createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1');
@@ -397,13 +409,13 @@ describe('DefaultExporter', () => {
         await exporter.exportTracingEvent(endEvent);
 
         // Only the end event should trigger a batch
-        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([expect.objectContaining({ spanId: 'span-1' })]),
         });
 
         // Should have been called only once (for the end event)
-        expect(mockStorage.batchCreateSpans).toHaveBeenCalledTimes(1);
-        expect(mockStorage.batchUpdateSpans).not.toHaveBeenCalled();
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+        expect(mockObservabilityStore.batchUpdateSpans).not.toHaveBeenCalled();
       });
     });
 
@@ -414,7 +426,7 @@ describe('DefaultExporter', () => {
           maxBatchWaitMs: 1000,
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
         await exporter.exportTracingEvent(mockEvent);
@@ -431,7 +443,7 @@ describe('DefaultExporter', () => {
           maxBatchWaitMs: 1000,
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // First event should schedule timer
         const mockEvent1 = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -463,10 +475,12 @@ describe('DefaultExporter', () => {
           retryDelayMs: 100,
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Mock storage failure then success
-        mockStorage.batchCreateSpans.mockRejectedValueOnce(new Error('Storage error')).mockResolvedValueOnce(undefined);
+        mockObservabilityStore.batchCreateSpans
+          .mockRejectedValueOnce(new Error('Storage error'))
+          .mockResolvedValueOnce(undefined);
 
         const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
         await exporter.exportTracingEvent(mockEvent);
@@ -498,10 +512,10 @@ describe('DefaultExporter', () => {
           retryDelayMs: 1, // Very short delay for fast test
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Mock persistent storage failure
-        mockStorage.batchCreateSpans.mockRejectedValue(new Error('Persistent error'));
+        mockObservabilityStore.batchCreateSpans.mockRejectedValue(new Error('Persistent error'));
 
         const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
         await exporter.exportTracingEvent(mockEvent);
@@ -532,7 +546,7 @@ describe('DefaultExporter', () => {
           maxBatchSize: 10, // Ensure single event doesn't trigger auto-flush
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         const mockEvent = createMockEvent(TracingEventType.SPAN_STARTED);
         await exporter.exportTracingEvent(mockEvent);
@@ -547,7 +561,7 @@ describe('DefaultExporter', () => {
 
         expect(mockLogger.info).toHaveBeenCalledWith('Flushing remaining events on shutdown', { remainingEvents: 1 });
 
-        expect(mockStorage.batchCreateSpans).toHaveBeenCalled();
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalled();
       });
     });
 
@@ -559,7 +573,7 @@ describe('DefaultExporter', () => {
           maxBatchSize: 10,
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Send span start and end events
         const span1Start = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
@@ -606,7 +620,7 @@ describe('DefaultExporter', () => {
           maxBatchSize: 10, // High enough to not trigger size-based flush
           logger: mockLogger,
         });
-        exporter.init({ mastra: mockMastra });
+        await exporter.init({ mastra: mockMastra });
 
         // Simulate workflow with nested spans like the example
         const workflowStartEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'workflow-1');
@@ -624,7 +638,7 @@ describe('DefaultExporter', () => {
         await flushTimer.fn();
 
         // Verify the creates were flushed
-        expect(mockStorage.batchCreateSpans).toHaveBeenCalledWith({
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
           records: expect.arrayContaining([
             expect.objectContaining({ spanId: 'workflow-1' }),
             expect.objectContaining({ spanId: 'step-1' }),
@@ -632,8 +646,8 @@ describe('DefaultExporter', () => {
         });
 
         // Clear the mock calls to make assertions clearer
-        mockStorage.batchCreateSpans.mockClear();
-        mockStorage.batchUpdateSpans.mockClear();
+        mockObservabilityStore.batchCreateSpans.mockClear();
+        mockObservabilityStore.batchUpdateSpans.mockClear();
         mockLogger.warn.mockClear();
 
         // Now send update and end events after the buffer has been cleared
@@ -668,8 +682,8 @@ describe('DefaultExporter', () => {
         expect(mockLogger.error).not.toHaveBeenCalled();
 
         // All update and end events should be properly stored
-        expect(mockStorage.batchUpdateSpans).toHaveBeenCalled();
-        const updateCalls = mockStorage.batchUpdateSpans.mock.calls;
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalled();
+        const updateCalls = mockObservabilityStore.batchUpdateSpans.mock.calls;
         const allUpdates = updateCalls.flatMap((call: any) => call[0].records);
 
         // Find all updates for each span (there can be multiple per span)

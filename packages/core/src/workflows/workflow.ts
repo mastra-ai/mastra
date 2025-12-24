@@ -726,6 +726,7 @@ export function createStep<
                 toolCalls: toolCalls as any,
                 text,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
+                steps: steps ?? [],
               });
 
               // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)

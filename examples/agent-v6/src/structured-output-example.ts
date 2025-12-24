@@ -1,5 +1,8 @@
 import z from 'zod';
-import { weatherAgent } from './mastra/agents';
+import { mastra } from './mastra/index';
+// import { weatherAgent } from './mastra/agents';
+
+const weatherAgent = mastra.getAgent('weatherToolLoopAgent');
 
 const result = await weatherAgent.generate('weather in new york', {
   structuredOutput: {
