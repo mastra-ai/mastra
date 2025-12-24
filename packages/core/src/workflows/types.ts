@@ -296,9 +296,23 @@ export interface WorkflowState {
     }
   >;
   result?: Record<string, any>;
-  error?: SerializedError;
   payload?: Record<string, any>;
+  error?: SerializedError;
 }
+
+/**
+ * Valid field names for filtering WorkflowState responses.
+ * Use with getWorkflowRunById to reduce payload size.
+ */
+export type WorkflowStateField =
+  | 'status'
+  | 'result'
+  | 'error'
+  | 'payload'
+  | 'steps'
+  | 'metadata'
+  | 'activeStepsPath'
+  | 'serializedStepGraph';
 
 export interface WorkflowRunState {
   // Core state info

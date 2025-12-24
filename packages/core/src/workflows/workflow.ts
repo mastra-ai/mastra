@@ -57,6 +57,7 @@ import type {
   WorkflowRunState,
   WorkflowRunStatus,
   WorkflowState,
+  WorkflowStateField,
   WorkflowStreamEvent,
   ToolStep,
   StepParams,
@@ -1965,18 +1966,9 @@ export class Workflow<
     runId: string,
     options: {
       withNestedWorkflows?: boolean;
-      fields?: (
-        | 'status'
-        | 'result'
-        | 'error'
-        | 'payload'
-        | 'steps'
-        | 'metadata'
-        | 'activeStepsPath'
-        | 'serializedStepGraph'
-      )[];
+      fields?: WorkflowStateField[];
     } = {},
-  ): Promise<WorkflowState | null> {
+  ): Promise<Partial<WorkflowState> | null> {
     const { withNestedWorkflows = true, fields } = options;
 
     const storage = this.#mastra?.getStorage();

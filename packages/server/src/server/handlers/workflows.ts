@@ -1,5 +1,5 @@
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import type { WorkflowInfo, ChunkType, StreamEvent } from '@mastra/core/workflows';
+import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import { streamResponseSchema } from '../schemas/agents';
@@ -220,18 +220,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       }
 
       // Parse fields parameter (comma-separated string)
-      const fieldList = fields
-        ? (fields.split(',').map((f: string) => f.trim()) as (
-            | 'status'
-            | 'result'
-            | 'error'
-            | 'payload'
-            | 'steps'
-            | 'metadata'
-            | 'activeStepsPath'
-            | 'serializedStepGraph'
-          )[])
-        : undefined;
+      const fieldList = fields ? (fields.split(',').map((f: string) => f.trim()) as WorkflowStateField[]) : undefined;
 
       const run = await workflow.getWorkflowRunById(runId, {
         withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
@@ -458,18 +447,7 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
       }
 
       // Parse fields parameter (comma-separated string)
-      const fieldList = fields
-        ? (fields.split(',').map((f: string) => f.trim()) as (
-            | 'status'
-            | 'result'
-            | 'error'
-            | 'payload'
-            | 'steps'
-            | 'metadata'
-            | 'activeStepsPath'
-            | 'serializedStepGraph'
-          )[])
-        : undefined;
+      const fieldList = fields ? (fields.split(',').map((f: string) => f.trim()) as WorkflowStateField[]) : undefined;
 
       const run = await workflow.getWorkflowRunById(runId, {
         withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
