@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest';
 import { join } from 'node:path';
-import type { CoreMessage } from '@internal/ai-sdk-v4';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { MessageList } from '../../agent/message-list';
 import { SkillsProcessor } from './skills';
 
 const FIXTURES_PATH = join(__dirname, '__fixtures__', 'skills');
@@ -45,10 +45,12 @@ describe('SkillsProcessor', () => {
     });
 
     it('should render XML format correctly', async () => {
+      const messageList = new MessageList();
+
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -58,10 +60,11 @@ describe('SkillsProcessor', () => {
         retryCount: 0,
       });
 
-      expect(result.systemMessages).toBeDefined();
-      expect(result.systemMessages?.length).toBeGreaterThan(0);
+      expect(result.messageList).toBeDefined();
+      const systemMessages = result.messageList.getAllSystemMessages();
+      expect(systemMessages.length).toBeGreaterThan(0);
 
-      const skillsMessage = result.systemMessages?.find(
+      const skillsMessage = systemMessages.find(
         msg => typeof msg.content === 'string' && msg.content.includes('available_skills'),
       );
       expect(skillsMessage).toBeDefined();
@@ -77,10 +80,11 @@ describe('SkillsProcessor', () => {
         format: 'json',
       });
 
+      const messageList = new MessageList();
       const result = await jsonProcessor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -90,7 +94,8 @@ describe('SkillsProcessor', () => {
         retryCount: 0,
       });
 
-      const skillsMessage = result.systemMessages?.find(
+      const systemMessages = result.messageList.getAllSystemMessages();
+      const skillsMessage = systemMessages.find(
         msg => typeof msg.content === 'string' && msg.content.includes('Available Skills'),
       );
       expect(skillsMessage).toBeDefined();
@@ -105,10 +110,11 @@ describe('SkillsProcessor', () => {
         format: 'markdown',
       });
 
+      const messageList = new MessageList();
       const result = await mdProcessor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -118,7 +124,8 @@ describe('SkillsProcessor', () => {
         retryCount: 0,
       });
 
-      const skillsMessage = result.systemMessages?.find(
+      const systemMessages = result.messageList.getAllSystemMessages();
+      const skillsMessage = systemMessages.find(
         msg => typeof msg.content === 'string' && msg.content.includes('Available Skills'),
       );
       expect(skillsMessage).toBeDefined();
@@ -138,10 +145,12 @@ describe('SkillsProcessor', () => {
     });
 
     it('should provide skill-activate tool', async () => {
+      const messageList = new MessageList();
+
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -157,10 +166,12 @@ describe('SkillsProcessor', () => {
     });
 
     it('should provide skill-read-reference tool', async () => {
+      const messageList = new MessageList();
+
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -176,10 +187,12 @@ describe('SkillsProcessor', () => {
     });
 
     it('should activate a skill successfully', async () => {
+      const messageList = new MessageList();
+
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -200,10 +213,12 @@ describe('SkillsProcessor', () => {
     });
 
     it('should fail to activate non-existent skill', async () => {
+      const messageList = new MessageList();
+
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -222,11 +237,13 @@ describe('SkillsProcessor', () => {
     });
 
     it('should inject activated skill instructions', async () => {
+      const messageList1 = new MessageList();
+
       // First activate a skill
       const result1 = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList: messageList1,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -240,10 +257,11 @@ describe('SkillsProcessor', () => {
       await activateTool.execute({ name: 'pdf-processing' });
 
       // Next step should include activated skills
+      const messageList2 = new MessageList();
       const result2 = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList: messageList2,
         stepNumber: 1,
         steps: [],
         model: {} as any,
@@ -253,7 +271,8 @@ describe('SkillsProcessor', () => {
         retryCount: 0,
       });
 
-      const activatedMessage = result2.systemMessages?.find(
+      const systemMessages = result2.messageList.getAllSystemMessages();
+      const activatedMessage = systemMessages.find(
         msg => typeof msg.content === 'string' && msg.content.includes('activated_skills'),
       );
       expect(activatedMessage).toBeDefined();
@@ -261,11 +280,13 @@ describe('SkillsProcessor', () => {
     });
 
     it('should read reference files from activated skill', async () => {
+      const messageList = new MessageList();
+
       // First activate a skill
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -297,10 +318,11 @@ describe('SkillsProcessor', () => {
         skillsPaths: FIXTURES_PATH,
       });
 
+      const messageList = new MessageList();
       const result = await freshProcessor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -332,10 +354,11 @@ describe('SkillsProcessor', () => {
         format: 'xml',
       });
 
+      const messageList = new MessageList();
       const result = await processor.processInputStep({
         systemMessages: [],
         messages: [],
-        messageList: {} as any,
+        messageList,
         stepNumber: 0,
         steps: [],
         model: {} as any,
@@ -345,7 +368,8 @@ describe('SkillsProcessor', () => {
         retryCount: 0,
       });
 
-      const skillsMessage = result.systemMessages?.find(
+      const systemMessages = result.messageList.getAllSystemMessages();
+      const skillsMessage = systemMessages.find(
         msg => typeof msg.content === 'string' && msg.content.includes('available_skills'),
       );
       expect(skillsMessage?.content).toContain('</available_skills>');

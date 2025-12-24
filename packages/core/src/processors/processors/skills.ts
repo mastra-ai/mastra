@@ -263,6 +263,7 @@ export class SkillsProcessor implements Processor {
       }
     }
 
+    // eslint-disable-next-line no-console
     console.log(`[SkillsProcessor] Discovered ${this.skillsMetadata.size} skills`);
   }
 
@@ -493,14 +494,12 @@ ${skillInstructions}`;
   /**
    * Process input step - inject available skills and provide skill tools
    */
-  async processInputStep({ systemMessages, tools }: ProcessInputStepArgs) {
-    const newSystemMessages = [...systemMessages];
-
+  async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
     // 1. Inject available skills metadata (if any skills discovered)
     if (this.skillsMetadata.size > 0) {
       const availableSkillsMessage = this.formatAvailableSkills();
       if (availableSkillsMessage) {
-        newSystemMessages.push({
+        messageList.addSystem({
           role: 'system',
           content: availableSkillsMessage,
         });
@@ -511,7 +510,7 @@ ${skillInstructions}`;
     if (this.activatedSkills.size > 0) {
       const activatedSkillsMessage = this.formatActivatedSkills();
       if (activatedSkillsMessage) {
-        newSystemMessages.push({
+        messageList.addSystem({
           role: 'system',
           content: activatedSkillsMessage,
         });
@@ -525,7 +524,7 @@ ${skillInstructions}`;
     };
 
     return {
-      systemMessages: newSystemMessages,
+      messageList,
       tools: {
         ...tools,
         ...skillTools,
