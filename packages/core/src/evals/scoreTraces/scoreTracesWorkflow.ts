@@ -6,7 +6,7 @@ import type { TracingContext } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
-import type { SaveScorePayload, ScoreRowData } from '../types';
+import type { ScoreRowData } from '../types';
 import { saveScorePayloadSchema } from '../types';
 import { transformTraceToScorerInputAndOutput } from './utils';
 
@@ -173,7 +173,7 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
     });
   }
   const payloadToSave = saveScorePayloadSchema.parse(scorerResult);
-  const result = await scoresStore.saveScore(payloadToSave as SaveScorePayload);
+  const result = await scoresStore.saveScore(payloadToSave);
   return result.score;
 }
 

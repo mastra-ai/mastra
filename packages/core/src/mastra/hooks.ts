@@ -1,7 +1,7 @@
 import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
-import type { SaveScorePayload, ScoringHookInput } from '../evals/types';
+import type { ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
 import type { MastraStorage } from '../storage';
 
@@ -125,7 +125,7 @@ export async function validateAndSaveScore(storage: MastraStorage, payload: unkn
     });
   }
   const payloadToSave = saveScorePayloadSchema.parse(payload);
-  await scoresStore.saveScore(payloadToSave as SaveScorePayload);
+  await scoresStore.saveScore(payloadToSave);
 }
 
 async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {

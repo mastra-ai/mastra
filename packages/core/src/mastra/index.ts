@@ -764,25 +764,13 @@ export class Mastra<
       throw error;
     }
 
-    if (!storage.supports.agents) {
-      const error = new MastraError({
-        id: 'MASTRA_GET_STORED_AGENT_NOT_SUPPORTED',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Storage does not support agents',
-        details: { status: 400 },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
     const agentsStore = await storage.getStore('agents');
     if (!agentsStore) {
       const error = new MastraError({
         id: 'MASTRA_GET_STORED_AGENT_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Agents storage domain is not available',
+        text: 'Agents storage is not available',
         details: { status: 400 },
       });
       this.#logger?.trackException(error);
@@ -892,25 +880,13 @@ export class Mastra<
       throw error;
     }
 
-    if (!storage.supports.agents) {
-      const error = new MastraError({
-        id: 'MASTRA_LIST_STORED_AGENTS_NOT_SUPPORTED',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Storage does not support agents',
-        details: { status: 400 },
-      });
-      this.#logger?.trackException(error);
-      throw error;
-    }
-
     const agentsStore = await storage.getStore('agents');
     if (!agentsStore) {
       const error = new MastraError({
         id: 'MASTRA_LIST_STORED_AGENTS_NOT_SUPPORTED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Agents storage domain is not available',
+        text: 'Agents storage is not available',
         details: { status: 400 },
       });
       this.#logger?.trackException(error);

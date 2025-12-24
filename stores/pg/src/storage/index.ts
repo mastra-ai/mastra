@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import {
   validateConfig,
@@ -16,6 +16,10 @@ import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export type { PgDomainConfig } from './db';
 
 /**
  * PostgreSQL storage adapter for Mastra.
@@ -161,20 +165,6 @@ export class PostgresStore extends MastraStorage {
 
   public get pgp() {
     return this.#pgp;
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      observability: true,
-      indexManagement: true,
-      listScoresBySpan: true,
-      agents: true,
-    };
   }
 
   /**

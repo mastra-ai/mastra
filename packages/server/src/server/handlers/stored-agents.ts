@@ -35,16 +35,12 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
-      }
-
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(400, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       const result = await agentsStore.listAgents({
@@ -77,16 +73,12 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
-      }
-
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(400, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       const agent = await agentsStore.getAgentById({ id: storedAgentId });
@@ -135,16 +127,12 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
-      }
-
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(400, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       // Check if agent with this ID already exists
@@ -216,16 +204,12 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
-      }
-
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(400, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       // Check if agent exists
@@ -278,16 +262,12 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
-      }
-
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
       const agentsStore = await storage.getStore('agents');
       if (!agentsStore) {
-        throw new HTTPException(400, { message: 'Agents storage domain is not available' });
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       // Check if agent exists

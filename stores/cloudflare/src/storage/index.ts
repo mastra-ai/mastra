@@ -8,12 +8,16 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCORERS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageCloudflare } from './domains/memory';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageCloudflare, ScoresStorageCloudflare, WorkflowsStorageCloudflare };
+export type { CloudflareDomainConfig } from './types';
 import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './types';
 
 /**
@@ -69,20 +73,6 @@ export class CloudflareStore extends MastraStorage {
     if (!config.apiToken?.trim()) {
       throw new Error('apiToken is required for REST API');
     }
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      deleteMessages: true,
-      observability: false,
-      indexManagement: false,
-      listScoresBySpan: true,
-      agents: false,
-    };
   }
 
   constructor(config: CloudflareStoreConfig) {

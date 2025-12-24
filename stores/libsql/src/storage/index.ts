@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { MastraStorage } from '@mastra/core/storage';
 
 import { AgentsLibSQL } from './domains/agents';
@@ -8,6 +8,10 @@ import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
 import { ScoresLibSQL } from './domains/scores';
 import { WorkflowsLibSQL } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { AgentsLibSQL, MemoryLibSQL, ObservabilityLibSQL, ScoresLibSQL, WorkflowsLibSQL };
+export type { LibSQLDomainConfig } from './db';
 
 /**
  * Base configuration options shared across LibSQL configurations
@@ -134,20 +138,6 @@ export class LibSQLStore extends MastraStorage {
       memory,
       observability,
       agents,
-    };
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      observability: true,
-      indexManagement: false,
-      listScoresBySpan: true,
-      agents: true,
     };
   }
 }
