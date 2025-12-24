@@ -9,6 +9,7 @@ import { WorkflowsStorageD1 } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export { MemoryStorageD1, ScoresStorageD1, WorkflowsStorageD1 };
+export type { D1DomainConfig } from './db';
 
 /**
  * Base configuration options shared across D1 configurations

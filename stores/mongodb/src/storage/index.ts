@@ -18,6 +18,7 @@ export {
   ScoresStorageMongoDB,
   WorkflowsStorageMongoDB,
 };
+export type { MongoDBDomainConfig } from './db';
 
 /**
  * MongoDB storage adapter for Mastra.

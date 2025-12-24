@@ -10,6 +10,7 @@ import { WorkflowsMSSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export { MemoryMSSQL, ObservabilityMSSQL, ScoresMSSQL, WorkflowsMSSQL };
+export type { MssqlDomainConfig } from './db';
 
 /**
  * MSSQL configuration type.

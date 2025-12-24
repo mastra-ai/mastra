@@ -7,6 +7,7 @@ import { WorkflowsUpstash } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
 export { StoreMemoryUpstash, ScoresUpstash, WorkflowsUpstash };
+export type { UpstashDomainConfig } from './db';
 
 /**
  * Upstash configuration type.
