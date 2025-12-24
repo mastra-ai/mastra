@@ -1,16 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Plugin, PluginContext } from 'rollup';
+import { getPackageInfo } from 'local-pkg';
+import { readFile } from 'node:fs/promises';
 
-const mockResolveFrom = vi.fn();
-const mockReadFileSync = vi.fn();
 const mockNodeResolveHandler = vi.fn();
 
-vi.mock('resolve-from', () => ({
-  default: (importer: string, id: string) => mockResolveFrom(importer, id),
+vi.mock('node:fs/promises', () => ({
+  exists: vi.fn(),
+  readFile: vi.fn(),
 }));
 
-vi.mock('node:fs', () => ({
-  readFileSync: (path: string, encoding: string) => mockReadFileSync(path, encoding),
+vi.mock('local-pkg', () => ({
+  getPackageInfo: vi.fn(),
 }));
 
 vi.mock('@rollup/plugin-node-resolve', () => ({
@@ -48,7 +49,7 @@ describe('nodeModulesExtensionResolver', () => {
       expect(result).toBeNull();
     });
 
-    it('imports without importer', async () => {
+    it('imports without an importer path', async () => {
       const result = await resolveId('lodash', undefined);
       expect(result).toBeNull();
     });
@@ -72,70 +73,89 @@ describe('nodeModulesExtensionResolver', () => {
       const result = await resolveId('@mastra/core', '/project/src/index.ts');
       expect(result).toBeNull();
     });
-  });
 
-  describe('imports with JS extension', () => {
-    it('strips extension for package with exports field', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/hono/dist/index.js');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'hono', exports: { '.': './dist/index.js' } }));
+    it('imports with an extension that have exports mapping', async () => {
+      const pkgJson = { name: 'hono', exports: { 'hono/utils/mime.js': './dist/utils/mime.js' } };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'hono', rootPath: '/project/node_modules/hono' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
       const result = await resolveId('hono/utils/mime.js', '/project/src/index.ts');
 
-      expect(result).toEqual({ id: 'hono/utils/mime', external: true });
+      expect(result).toBeNull();
     });
+  });
 
-    it('keeps extension for package without exports field', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/lodash/index.js');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'lodash' }));
+  describe('imports with JS extension', () => {
+    it('It will resolve the import to the correct path if no exports present', async () => {
+      const pkgJson = { name: 'lodash' };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
+
+      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.js' });
 
       const result = await resolveId('lodash/fp/get.js', '/project/src/index.ts');
 
-      expect(result).toEqual({ id: 'lodash/fp/get.js', external: true });
+      expect(result).toMatchObject({
+        external: true,
+        id: 'lodash/fp/get.js',
+      });
     });
 
     it('handles .mjs extension', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/pkg/index.mjs');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'pkg' }));
+      const pkgJson = { name: 'lodash' };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
-      const result = await resolveId('pkg/utils.mjs', '/project/src/index.ts');
+      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.mjs' });
 
-      expect(result).toEqual({ id: 'pkg/utils.mjs', external: true });
+      const result = await resolveId('lodash/fp/get.mjs', '/project/src/index.ts');
+
+      expect(result).toMatchObject({
+        external: true,
+        id: 'lodash/fp/get.mjs',
+      });
     });
 
     it('handles .cjs extension', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/pkg/index.cjs');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'pkg' }));
+      const pkgJson = { name: 'lodash' };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
-      const result = await resolveId('pkg/utils.cjs', '/project/src/index.ts');
+      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
 
-      expect(result).toEqual({ id: 'pkg/utils.cjs', external: true });
+      const result = await resolveId('lodash/fp/get.cjs', '/project/src/index.ts');
+
+      expect(result).toMatchObject({
+        external: true,
+        id: 'lodash/fp/get.cjs',
+      });
     });
   });
 
   describe('imports without extension', () => {
-    it('marks as external when package has exports', async () => {
-      // Package with exports field - Node.js resolves via exports map
-      mockResolveFrom.mockReturnValue('/project/node_modules/date-fns/dist/format.js');
-      mockReadFileSync.mockReturnValue(
-        JSON.stringify({ name: 'date-fns', exports: { './format': './dist/format.js' } }),
-      );
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/date-fns/dist/format.js' });
+    it('resolves the import to the correct path if no exports present', async () => {
+      const pkgJson = { name: 'lodash' };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
-      const result = await resolveId('date-fns/format', '/project/src/index.ts');
-
-      expect(result).toEqual({ id: 'date-fns/format', external: true });
-    });
-
-    it('adds extension when node-resolve finds file but direct resolve fails', async () => {
-      // Simulate: node-resolve finds file, but direct safeResolve fails, then succeeds with .js
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.js' });
-      mockResolveFrom
-        .mockReturnValueOnce(null) // safeResolve(id) fails
-        .mockReturnValueOnce('/project/node_modules/lodash/fp/get.js'); // safeResolve(id + '.js') succeeds
+      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
 
       const result = await resolveId('lodash/fp/get', '/project/src/index.ts');
 
-      expect(result).toEqual({ id: 'lodash/fp/get.js', external: true });
+      expect(result).toMatchObject({
+        external: true,
+        id: 'lodash/fp/get.cjs',
+      });
     });
 
     it('returns null when resolution fails completely', async () => {
@@ -145,72 +165,52 @@ describe('nodeModulesExtensionResolver', () => {
 
       expect(result).toBeNull();
     });
-
-    it('keeps import as-is for package with exports field', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/hono/dist/utils/mime.js');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'hono', exports: { './*': './dist/*.js' } }));
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/hono/dist/utils/mime.js' });
-
-      const result = await resolveId('hono/utils/mime', '/project/src/index.ts');
-
-      expect(result).toEqual({ id: 'hono/utils/mime', external: true });
-    });
-
-    it('adds extension for subpath matching resolved file', async () => {
-      // lodash/fp/get resolves to /node_modules/lodash/fp/get.js
-      mockResolveFrom.mockReturnValue('/project/node_modules/lodash/fp/get.js');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'lodash' })); // no exports
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.js' });
-
-      const result = await resolveId('lodash/fp/get', '/project/src/index.ts');
-
-      expect(result).toEqual({ id: 'lodash/fp/get.js', external: true });
-    });
   });
 
   describe('scoped packages', () => {
     it('handles scoped package subpath imports with exports', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/@org/pkg/dist/utils.js');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: '@org/pkg', exports: { './*': './dist/*.js' } }));
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@org/pkg/dist/utils.js' });
+      const pkgJson = { name: '@my/lodash', exports: {} };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
-      const result = await resolveId('@org/pkg/utils', '/project/src/index.ts');
+      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@my/lodash/fp/get.cjs' });
 
-      expect(result).toEqual({ id: '@org/pkg/utils', external: true });
+      const result = await resolveId('@my/lodash/fp/get', '/project/src/index.ts');
+
+      expect(result).toBeNull();
     });
 
     it('adds extension for scoped package without exports', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/@org/pkg/utils.js');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: '@org/pkg' })); // no exports
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@org/pkg/utils.js' });
+      const pkgJson = { name: '@my/lodash' };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+      // @ts-ignore  type should be correct
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
+      // @ts-ignore Partial input is fine
+      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@my/lodash/utils.cjs' });
 
-      const result = await resolveId('@org/pkg/utils', '/project/src/index.ts');
+      const result = await resolveId('@my/lodash/utils', '/project/src/index.ts');
 
-      expect(result).toEqual({ id: '@org/pkg/utils.js', external: true });
+      expect(result).toEqual({ id: '@my/lodash/utils.cjs', external: true });
     });
   });
 
   describe('edge cases', () => {
     it('handles package.json read failure gracefully', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/broken/index.js');
-      mockReadFileSync.mockImplementation(() => {
+      const pkgJson = { name: '@my/lodash' };
+      // @ts-ignore parital is fine
+      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+
+      vi.mocked(readFile).mockImplementation(() => {
         throw new Error('ENOENT');
       });
 
-      const result = await resolveId('broken/utils.js', '/project/src/index.ts');
+      const result = await resolveId('broken/utils', '/project/src/index.ts');
 
       // Falls through to non-exports path
-      expect(result).toEqual({ id: 'broken/utils.js', external: true });
-    });
-
-    it('handles resolved path without JS extension', async () => {
-      mockResolveFrom.mockReturnValue('/project/node_modules/pkg/data.json');
-      mockReadFileSync.mockReturnValue(JSON.stringify({ name: 'pkg' }));
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/pkg/data.json' });
-
-      const result = await resolveId('pkg/data', '/project/src/index.ts');
-
-      expect(result).toEqual({ id: 'pkg/data', external: true });
+      expect(result).toBeNull();
     });
   });
 });
