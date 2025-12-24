@@ -2073,12 +2073,8 @@ describe('Tracing Integration Tests', () => {
   });
 
   it('should have MODEL_STEP span startTime close to MODEL_GENERATION startTime, not endTime (issue #11271)', async () => {
-    // This test reproduces the bug where MODEL_STEP spans have incorrect startTime
-    // because the span is created when the step-start chunk arrives (late in the stream)
-    // rather than when the model API call actually started.
-    //
-    // Expected: MODEL_STEP startTime should be close to MODEL_GENERATION startTime
-    // Bug: MODEL_STEP startTime is close to MODEL_GENERATION endTime
+    // This test verifies that MODEL_STEP spans have correct startTime.
+    // The span should start when the model API call begins, not when the response starts streaming.
 
     const SIMULATED_MODEL_DELAY_MS = 100; // Simulate model processing time before first token
 
@@ -2158,24 +2154,10 @@ describe('Tracing Integration Tests', () => {
       startOffset: `${stepStartOffset}ms from generation start`,
     });
 
-    // BUG ASSERTION: The MODEL_STEP span startTime should be close to the MODEL_GENERATION startTime.
-    // Currently, due to the bug, the MODEL_STEP span starts late (close to when the first chunk arrives).
-    //
-    // This test is expected to FAIL until the bug is fixed.
-    // When the bug is fixed:
-    // - stepStartOffset should be small (close to 0ms)
-    // - stepStart should NOT be close to generationEnd
-    //
-    // With the bug:
-    // - stepStartOffset is close to SIMULATED_MODEL_DELAY_MS
-    // - stepStart is close to generationEnd
-
     // The step should start close to when the generation started (within 50ms tolerance)
-    // This assertion will FAIL with the current bug
     expect(stepStartOffset).toBeLessThan(50);
 
     // The step should NOT start close to when the generation ended
-    // This is a secondary check that should also fail with the bug
     const stepStartToGenerationEnd = generationEnd - stepStart;
     expect(stepStartToGenerationEnd).toBeGreaterThan(50);
 
