@@ -490,6 +490,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      // Start the MODEL_STEP span at the beginning of LLM execution
+      modelSpanTracker?.startStep();
+
       let modelResult;
       let warnings: any;
       let request: any;
