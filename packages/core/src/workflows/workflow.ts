@@ -2961,19 +2961,32 @@ export class Run<
     const nestedWatchCb = (event: Event) => {
       if (event.runId === this.runId) {
         const { event: nestedEvent, workflowId } = event.data as {
-          event: { type: string; payload: { id: string } & Record<string, unknown> };
+          event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
           workflowId: string;
         };
-        void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-          type: 'watch',
-          runId: this.runId,
-          data: {
-            ...nestedEvent,
-            ...(nestedEvent.payload?.id
-              ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
-              : {}),
-          },
-        });
+
+        // Data chunks from writer.custom() should bubble up directly without modification
+        // These are events with type starting with 'data-' and have a 'data' property
+        if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
+          // Bubble up custom data events directly to preserve their structure
+          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+            type: 'watch',
+            runId: this.runId,
+            data: nestedEvent,
+          });
+        } else {
+          // Regular workflow events get prefixed with nested workflow ID
+          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+            type: 'watch',
+            runId: this.runId,
+            data: {
+              ...nestedEvent,
+              ...(nestedEvent.payload?.id
+                ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
+                : {}),
+            },
+          });
+        }
       }
     };
 
