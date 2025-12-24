@@ -4,17 +4,19 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSpan, createChildSpan, SpanType, EntityType, DEFAULT_BASE_DATE } from './data';
 
 export function createObservabilityTests({ storage }: { storage: MastraStorage }) {
+  // Skip tests if storage doesn't have observability domain
+  const describeObservability = storage.stores?.observability ? describe : describe.skip;
+
   let observabilityStorage: ObservabilityStorage;
 
-  beforeAll(async () => {
-    const store = await storage.getStore('observability');
-    if (!store) {
-      throw new Error('Observability storage not found');
-    }
-    observabilityStorage = store;
-  });
-
-  describe('Observability Storage', () => {
+  describeObservability('Observability Storage', () => {
+    beforeAll(async () => {
+      const store = await storage.getStore('observability');
+      if (!store) {
+        throw new Error('Observability storage not found');
+      }
+      observabilityStorage = store;
+    });
     beforeEach(async () => {
       await observabilityStorage.dangerouslyClearAll();
     });

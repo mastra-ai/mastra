@@ -63,9 +63,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createWorkflowsTests({ storage });
     createMemoryTest({ storage });
     createScoresTest({ storage, capabilities });
-    if (storage.stores?.observability) {
-      createObservabilityTests({ storage });
-    }
+    createObservabilityTests({ storage });
     createAgentsTests({ storage });
   });
 }

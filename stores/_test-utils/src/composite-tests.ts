@@ -57,7 +57,7 @@ export function createMastraStorageTests(config: CompositeTestConfig = {}) {
 
       afterAll(async () => {
         const memory = await composite.getStore('memory');
-        if (memory) await memory.dangerouslyClearAll();
+        if (memory) await memory.dangerouslyClearAll().catch(() => {});
       });
 
       it('should use default storage for all domains', async () => {
@@ -119,8 +119,7 @@ export function createMastraStorageTests(config: CompositeTestConfig = {}) {
       afterAll(async () => {
         const memory = await composite.getStore('memory');
         const workflows = await composite.getStore('workflows');
-        if (memory) await memory.dangerouslyClearAll();
-        if (workflows) await workflows.dangerouslyClearAll();
+        await Promise.allSettled([memory?.dangerouslyClearAll(), workflows?.dangerouslyClearAll()]);
       });
 
       it('should use overridden domain instead of default', async () => {
@@ -218,9 +217,11 @@ export function createMastraStorageTests(config: CompositeTestConfig = {}) {
         const memory = await composite.getStore('memory');
         const workflows = await composite.getStore('workflows');
         const scores = await composite.getStore('scores');
-        if (memory) await memory.dangerouslyClearAll();
-        if (workflows) await workflows.dangerouslyClearAll();
-        if (scores) await scores.dangerouslyClearAll();
+        await Promise.allSettled([
+          memory?.dangerouslyClearAll(),
+          workflows?.dangerouslyClearAll(),
+          scores?.dangerouslyClearAll(),
+        ]);
       });
 
       it('should work with explicitly specified domains only', async () => {
@@ -341,7 +342,7 @@ export function createMastraStorageTests(config: CompositeTestConfig = {}) {
     });
 
     describe('disableInit option', () => {
-      it('should respect disableInit option', async () => {
+      it('should not auto-initialize when disableInit is true', async () => {
         const defaultStore = createDefault();
         await defaultStore.init();
 
@@ -351,9 +352,41 @@ export function createMastraStorageTests(config: CompositeTestConfig = {}) {
           disableInit: true,
         });
 
-        // Should not throw even without init
+        // disableInit should be set on the composite
+        expect(composite.disableInit).toBe(true);
+
+        // getStore should still work since domains come from already-init'd default
         const memory = await composite.getStore('memory');
         expect(memory).toBeDefined();
+      });
+
+      it('should allow manual init when disableInit is true', async () => {
+        const defaultStore = createDefault();
+        await defaultStore.init();
+
+        const composite = new MastraStorage({
+          id: 'composite-manual-init',
+          default: defaultStore,
+          disableInit: true,
+        });
+
+        // Should be able to call init() manually without error
+        await composite.init();
+
+        const memory = await composite.getStore('memory');
+        expect(memory).toBeDefined();
+      });
+
+      it('should default disableInit to false', async () => {
+        const defaultStore = createDefault();
+        await defaultStore.init();
+
+        const composite = new MastraStorage({
+          id: 'composite-default-init',
+          default: defaultStore,
+        });
+
+        expect(composite.disableInit).toBe(false);
       });
     });
   });

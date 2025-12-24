@@ -177,6 +177,16 @@ export class MastraStorage extends MastraBase {
       const defaultStores = config.default?.stores;
       const domainOverrides = config.domains ?? {};
 
+      // Validate that at least one storage source is provided
+      const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
+      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
+
+      if (!hasDefaultDomains && !hasOverrideDomains) {
+        throw new Error(
+          'MastraStorage requires at least one storage source. Provide either a default storage with domains or domain overrides.',
+        );
+      }
+
       // Build the composed stores object
       // Domain overrides take precedence over default storage
       this.stores = {
