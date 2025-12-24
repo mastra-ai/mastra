@@ -6,17 +6,17 @@
  * Events are handled as zero-duration RunTrees with matching start/end times.
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
-import { BaseExporter } from '@mastra/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
+import type { BaseTraceData, TrackingExporterConfig } from '@mastra/observability';
+import { TrackingExporter } from '@mastra/observability';
 import type { ClientConfig, RunTreeConfig } from 'langsmith';
 import { Client, RunTree } from 'langsmith';
 import type { KVMap } from 'langsmith/schemas';
 import { formatUsageMetrics } from './metrics';
 
-export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfig {
+export interface LangSmithExporterConfig extends ClientConfig, TrackingExporterConfig {
   /** LangSmith client instance */
   client?: Client;
   /**
@@ -27,10 +27,9 @@ export interface LangSmithExporterConfig extends ClientConfig, BaseExporterConfi
   projectName?: string;
 }
 
-type SpanData = {
-  spans: Map<string, RunTree>; // Maps span.id to LangSmith RunTrees
-  activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
-};
+interface LangSmithTraceData extends BaseTraceData {
+  spans: Map<string, RunTree>;
+}
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'chain';
@@ -53,10 +52,8 @@ function isKVMap(value: unknown): value is KVMap {
   return value != null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date);
 }
 
-export class LangSmithExporter extends BaseExporter {
+export class LangSmithExporter extends TrackingExporter<LangSmithTraceData, LangSmithExporterConfig> {
   name = 'langsmith';
-  private traceMap = new Map<string, SpanData>();
-  private config: LangSmithExporterConfig;
   private client: Client;
 
   constructor(config: LangSmithExporterConfig) {
@@ -66,64 +63,24 @@ export class LangSmithExporter extends BaseExporter {
 
     if (!config.apiKey) {
       this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
-      this.config = null as any;
       this.client = null as any;
       return;
     }
 
     this.client = config.client ?? new Client(config);
-    this.config = config;
   }
 
-  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (event.exportedSpan.isEvent) {
-      await this.handleEventSpan(event.exportedSpan);
-      return;
-    }
+  // ==================== TrackingExporter Implementation ====================
 
-    switch (event.type) {
-      case 'span_started':
-        await this.handleSpanStarted(event.exportedSpan);
-        break;
-      case 'span_updated':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, false);
-        break;
-      case 'span_ended':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, true);
-        break;
-    }
+  protected createTraceData(_span: AnyExportedSpan): LangSmithTraceData {
+    return {
+      activeSpanIds: new Set(),
+      spans: new Map(),
+    };
   }
 
-  private initializeRootSpan(span: AnyExportedSpan) {
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(span.traceId)) {
-      this.logger.debug('LangSmith exporter: Reusing existing trace from local map', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-      });
-      return;
-    }
-
-    this.traceMap.set(span.traceId, { spans: new Map(), activeIds: new Set() });
-  }
-
-  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
+  protected async handleSpanStarted(span: AnyExportedSpan, traceData: LangSmithTraceData): Promise<void> {
     this.logger.debug('LangSmith exporter: handleSpanStarted', span.id, span.name);
-    if (span.isRootSpan) {
-      this.initializeRootSpan(span);
-    }
-
-    const method = 'handleSpanStarted';
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    // Refcount: track active non-event spans (including root)
-    if (!span.isEvent) {
-      spanData.activeIds.add(span.id);
-    }
 
     const payload = {
       name: span.name,
@@ -131,7 +88,7 @@ export class LangSmithExporter extends BaseExporter {
       ...this.buildRunTreePayload(span),
     };
 
-    const langsmithParent = this.getLangSmithParent({ spanData, span, method });
+    const langsmithParent = this.getLangSmithParent(traceData, span, 'handleSpanStarted');
     let langsmithRunTree: RunTree;
     if (!langsmithParent) {
       langsmithRunTree = new RunTree(payload);
@@ -139,30 +96,62 @@ export class LangSmithExporter extends BaseExporter {
       langsmithRunTree = langsmithParent.createChild(payload);
     }
 
-    spanData.spans.set(span.id, langsmithRunTree);
+    traceData.spans.set(span.id, langsmithRunTree);
 
     await langsmithRunTree.postRun();
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
-    this.logger.debug('LangSmith exporter: handleSpanUpdateOrEnd', span.id, span.name, 'isEnd:', isEnd);
-    const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
+  protected async handleSpanUpdated(span: AnyExportedSpan, traceData: LangSmithTraceData): Promise<void> {
+    this.logger.debug('LangSmith exporter: handleSpanUpdated', span.id, span.name);
 
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    const langsmithRunTree = spanData.spans.get(span.id);
+    const langsmithRunTree = traceData.spans.get(span.id);
     if (!langsmithRunTree) {
-      this.logger.warn('LangSmith exporter: No LangSmith span found for span update/end', {
+      this.logger.warn('LangSmith exporter: No LangSmith span found for span update', {
         traceId: span.traceId,
         spanId: span.id,
         spanName: span.name,
         spanType: span.type,
-        isRootSpan: span.isRootSpan,
-        parentSpanId: span.parentSpanId,
-        method,
+      });
+      return;
+    }
+
+    const updatePayload = this.buildRunTreePayload(span);
+    langsmithRunTree.metadata = {
+      ...langsmithRunTree.metadata,
+      ...updatePayload.metadata,
+    };
+    if (updatePayload.inputs != null) {
+      langsmithRunTree.inputs = updatePayload.inputs;
+    }
+    if (updatePayload.outputs != null) {
+      langsmithRunTree.outputs = updatePayload.outputs;
+    }
+    if (updatePayload.error != null) {
+      langsmithRunTree.error = updatePayload.error;
+    }
+
+    // Add new_token event for TTFT tracking on MODEL_GENERATION spans
+    if (span.type === SpanType.MODEL_GENERATION) {
+      const modelAttr = (span.attributes ?? {}) as ModelGenerationAttributes;
+      if (modelAttr.completionStartTime !== undefined) {
+        langsmithRunTree.addEvent({
+          name: 'new_token',
+          time: modelAttr.completionStartTime.toISOString(),
+        });
+      }
+    }
+  }
+
+  protected async handleSpanEnded(span: AnyExportedSpan, traceData: LangSmithTraceData): Promise<void> {
+    this.logger.debug('LangSmith exporter: handleSpanEnded', span.id, span.name);
+
+    const langsmithRunTree = traceData.spans.get(span.id);
+    if (!langsmithRunTree) {
+      this.logger.warn('LangSmith exporter: No LangSmith span found for span end', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
       });
       return;
     }
@@ -193,45 +182,19 @@ export class LangSmithExporter extends BaseExporter {
       }
     }
 
-    if (isEnd) {
-      // End the span with the correct endTime (convert milliseconds to seconds)
-      if (span.endTime) {
-        await langsmithRunTree.end({ endTime: span.endTime.getTime() / 1000 });
-      } else {
-        await langsmithRunTree.end();
-      }
-      await langsmithRunTree.patchRun();
-
-      // Refcount: mark this span as ended
-      if (!span.isEvent) {
-        spanData.activeIds.delete(span.id);
-      }
-
-      // If no more active spans remain for this trace, clean up the trace entry
-      if (spanData.activeIds.size === 0) {
-        this.traceMap.delete(span.traceId);
-      }
+    // End the span with the correct endTime (convert milliseconds to seconds)
+    if (span.endTime) {
+      await langsmithRunTree.end({ endTime: span.endTime.getTime() / 1000 });
+    } else {
+      await langsmithRunTree.end();
     }
+    await langsmithRunTree.patchRun();
   }
 
-  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
-    if (span.isRootSpan) {
-      this.logger.debug('LangSmith exporter: Creating logger for event', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-        method: 'handleEventSpan',
-      });
-      this.initializeRootSpan(span);
-    }
+  protected async handleEventSpan(span: AnyExportedSpan, traceData: LangSmithTraceData): Promise<void> {
+    this.logger.debug('LangSmith exporter: handleEventSpan', span.id, span.name);
 
-    const method = 'handleEventSpan';
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    const langsmithParent = this.getLangSmithParent({ spanData, span, method });
+    const langsmithParent = this.getLangSmithParent(traceData, span, 'handleEventSpan');
     const payload = {
       ...this.buildRunTreePayload(span),
       name: span.name,
@@ -252,40 +215,31 @@ export class LangSmithExporter extends BaseExporter {
     await langsmithRunTree.patchRun();
   }
 
-  private getSpanData(options: { span: AnyExportedSpan; method: string }): SpanData | undefined {
-    const { span, method } = options;
-    if (this.traceMap.has(span.traceId)) {
-      return this.traceMap.get(span.traceId);
+  protected async cleanupTraceData(traceData: LangSmithTraceData, _traceId: string): Promise<void> {
+    // End all active spans
+    for (const [_spanId, runTree] of traceData.spans) {
+      await runTree.end();
+      await runTree.patchRun();
     }
-
-    this.logger.warn('LangSmith exporter: No span data found for span', {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
-    });
   }
 
-  private getLangSmithParent(options: {
-    spanData: SpanData;
-    span: AnyExportedSpan;
-    method: string;
-  }): RunTree | undefined {
-    const { spanData, span, method } = options;
+  // ==================== Helper Methods ====================
 
+  private getLangSmithParent(
+    traceData: LangSmithTraceData,
+    span: AnyExportedSpan,
+    method: string,
+  ): RunTree | undefined {
     const parentId = span.parentSpanId;
     if (!parentId) {
       return undefined;
     }
 
-    if (spanData.spans.has(parentId)) {
-      return spanData.spans.get(parentId);
+    if (traceData.spans.has(parentId)) {
+      return traceData.spans.get(parentId);
     }
 
-    if (parentId && !spanData.spans.has(parentId)) {
+    if (parentId && !traceData.spans.has(parentId)) {
       // This means the parent exists but isn't tracked as a LangSmith span,
       // which happens when the parent is the root span
       return undefined;
@@ -300,6 +254,8 @@ export class LangSmithExporter extends BaseExporter {
       parentSpanId: span.parentSpanId,
       method,
     });
+
+    return undefined;
   }
 
   private buildRunTreePayload(span: AnyExportedSpan): Partial<RunTreeConfig> {
@@ -312,8 +268,8 @@ export class LangSmithExporter extends BaseExporter {
     };
 
     // Add project name if configured
-    if (this.config.projectName) {
-      payload.project_name = this.config.projectName;
+    if (this.exporterConfig.projectName) {
+      payload.project_name = this.exporterConfig.projectName;
     }
 
     // Add tags for root spans
@@ -338,14 +294,14 @@ export class LangSmithExporter extends BaseExporter {
       // See: https://docs.langchain.com/langsmith/log-llm-trace
       if (modelAttr.model !== undefined) {
         // Note - this should map to a model name recognized by LangSmith
-        // eg “gpt-4o-mini”, “claude-3-opus-20240307”, etc.
+        // eg "gpt-4o-mini", "claude-3-opus-20240307", etc.
         payload.metadata.ls_model_name = modelAttr.model;
       }
 
       // Provider goes to metadata (if provided by attributes)
       if (modelAttr.provider !== undefined) {
         // Note - this should map to a provider name recognized by
-        // LangSmith eg “openai”, “anthropic”, etc.
+        // LangSmith eg "openai", "anthropic", etc.
         payload.metadata.ls_provider = modelAttr.provider;
       }
 
@@ -381,18 +337,9 @@ export class LangSmithExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.config) {
+    if (!this.exporterConfig) {
       return;
     }
-
-    // End all active spans
-    for (const [_traceId, spanData] of this.traceMap) {
-      for (const [_spanId, runTree] of spanData.spans) {
-        await runTree.end();
-        await runTree.patchRun();
-      }
-    }
-    this.traceMap.clear();
     await super.shutdown();
   }
 }

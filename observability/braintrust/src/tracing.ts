@@ -6,18 +6,18 @@
  * Events are handled as zero-duration spans with matching start/end times.
  */
 
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type { AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
-import { BaseExporter } from '@mastra/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
+import type { BaseTraceData, TrackingExporterConfig } from '@mastra/observability';
+import { TrackingExporter } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { formatUsageMetrics } from './metrics';
 
 const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
 
-export interface BraintrustExporterConfig extends BaseExporterConfig {
+export interface BraintrustExporterConfig extends TrackingExporterConfig {
   /**
    * Optional Braintrust logger instance.
    * When provided, enables integration with Braintrust contexts such as:
@@ -37,12 +37,11 @@ export interface BraintrustExporterConfig extends BaseExporterConfig {
   tuningParameters?: Record<string, any>;
 }
 
-type SpanData = {
-  logger: Logger<true> | Span; // Braintrust logger (for root spans) or external span
-  spans: Map<string, Span>; // Maps span.id to Braintrust span
-  activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
-  isExternal: boolean; // True if logger is an external span from logger.traced() or Eval()
-};
+interface BraintrustTraceData extends BaseTraceData {
+  logger: Logger<true> | Span;
+  spans: Map<string, Span>;
+  isExternal: boolean;
+}
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'task';
@@ -61,10 +60,8 @@ function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' 
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter extends BaseExporter {
+export class BraintrustExporter extends TrackingExporter<BraintrustTraceData, BraintrustExporterConfig> {
   name = 'braintrust';
-  private traceMap = new Map<string, SpanData>();
-  private config: BraintrustExporterConfig;
 
   // Flags and logger for context-aware mode
   private useProvidedLogger: boolean;
@@ -77,62 +74,77 @@ export class BraintrustExporter extends BaseExporter {
       // Use provided logger - enables Braintrust context integration
       this.useProvidedLogger = true;
       this.providedLogger = config.braintrustLogger;
-      this.config = config;
     } else {
       // Validate apiKey for creating loggers per trace
       if (!config.apiKey) {
         this.setDisabled(`Missing required credentials (apiKey: ${!!config.apiKey})`);
-        this.config = null as any;
         this.useProvidedLogger = false;
         return;
       }
       this.useProvidedLogger = false;
-      this.config = config;
     }
   }
 
-  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (event.exportedSpan.isEvent) {
-      await this.handleEventSpan(event.exportedSpan);
-      return;
-    }
+  // ==================== TrackingExporter Implementation ====================
 
-    switch (event.type) {
-      case 'span_started':
-        await this.handleSpanStarted(event.exportedSpan);
-        break;
-      case 'span_updated':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, false);
-        break;
-      case 'span_ended':
-        await this.handleSpanUpdateOrEnd(event.exportedSpan, true);
-        break;
+  protected async createTraceData(span: AnyExportedSpan): Promise<BraintrustTraceData> {
+    if (this.useProvidedLogger) {
+      return this.createTraceDataWithContext(span);
+    } else {
+      return this.createTraceDataPerTrace(span);
     }
   }
 
-  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
-    if (span.isRootSpan) {
-      if (this.useProvidedLogger) {
-        // Use provided logger, detect external Braintrust spans
-        await this.initLoggerOrUseContext(span);
-      } else {
-        // Create new logger per trace
-        await this.initLoggerPerTrace(span);
-      }
-    }
+  private async createTraceDataPerTrace(_span: AnyExportedSpan): Promise<BraintrustTraceData> {
+    try {
+      const loggerInstance = await initLogger({
+        projectName: this.exporterConfig.projectName ?? 'mastra-tracing',
+        apiKey: this.exporterConfig.apiKey,
+        appUrl: this.exporterConfig.endpoint,
+        ...this.exporterConfig.tuningParameters,
+      });
 
-    const method = 'handleSpanStarted';
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
+      return {
+        activeSpanIds: new Set(),
+        logger: loggerInstance,
+        spans: new Map(),
+        isExternal: false,
+      };
+    } catch (err) {
+      this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err });
+      this.setDisabled('Failed to initialize Braintrust logger');
+      throw err;
     }
+  }
 
-    // Refcount: track active non-event spans (including root)
-    if (!span.isEvent) {
-      spanData.activeIds.add(span.id);
+  private async createTraceDataWithContext(_span: AnyExportedSpan): Promise<BraintrustTraceData> {
+    // Try to find a Braintrust span to attach to:
+    // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
+    // 2. Fall back to the configured logger
+    const braintrustSpan = currentSpan();
+
+    // Check if it's a valid span (not the NOOP_SPAN)
+    if (braintrustSpan && braintrustSpan.id) {
+      // External span detected - attach Mastra traces to it
+      return {
+        activeSpanIds: new Set(),
+        logger: braintrustSpan,
+        spans: new Map(),
+        isExternal: true,
+      };
+    } else {
+      // No external span - use provided logger
+      return {
+        activeSpanIds: new Set(),
+        logger: this.providedLogger!,
+        spans: new Map(),
+        isExternal: false,
+      };
     }
+  }
 
-    const braintrustParent = this.getBraintrustParent({ spanData, span, method });
+  protected async handleSpanStarted(span: AnyExportedSpan, traceData: BraintrustTraceData): Promise<void> {
+    const braintrustParent = this.getBraintrustParent(traceData, span, 'handleSpanStarted');
     if (!braintrustParent) {
       return;
     }
@@ -155,79 +167,48 @@ export class BraintrustExporter extends BaseExporter {
       ...(span.isRootSpan && span.tags?.length ? { tags: span.tags } : {}),
     });
 
-    spanData.spans.set(span.id, braintrustSpan);
+    traceData.spans.set(span.id, braintrustSpan);
   }
 
-  private async handleSpanUpdateOrEnd(span: AnyExportedSpan, isEnd: boolean): Promise<void> {
-    const method = isEnd ? 'handleSpanEnd' : 'handleSpanUpdate';
-
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    const braintrustSpan = spanData.spans.get(span.id);
+  protected async handleSpanUpdated(span: AnyExportedSpan, traceData: BraintrustTraceData): Promise<void> {
+    const braintrustSpan = traceData.spans.get(span.id);
     if (!braintrustSpan) {
-      this.logger.warn('Braintrust exporter: No Braintrust span found for span update/end', {
+      this.logger.warn('Braintrust exporter: No Braintrust span found for span update', {
         traceId: span.traceId,
         spanId: span.id,
         spanName: span.name,
         spanType: span.type,
-        isRootSpan: span.isRootSpan,
-        parentSpanId: span.parentSpanId,
-        method,
+      });
+      return;
+    }
+
+    braintrustSpan.log(this.buildSpanPayload(span));
+  }
+
+  protected async handleSpanEnded(span: AnyExportedSpan, traceData: BraintrustTraceData): Promise<void> {
+    const braintrustSpan = traceData.spans.get(span.id);
+    if (!braintrustSpan) {
+      this.logger.warn('Braintrust exporter: No Braintrust span found for span end', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
       });
       return;
     }
 
     braintrustSpan.log(this.buildSpanPayload(span));
 
-    if (isEnd) {
-      // End the span with the correct endTime (convert milliseconds to seconds)
-      if (span.endTime) {
-        braintrustSpan.end({ endTime: span.endTime.getTime() / 1000 });
-      } else {
-        braintrustSpan.end();
-      }
-
-      // Refcount: mark this span as ended
-      if (!span.isEvent) {
-        spanData.activeIds.delete(span.id);
-      }
-
-      // If no more active spans remain for this trace, clean up the trace entry
-      // Don't clean up if using external spans (they're managed by Braintrust)
-      if (spanData.activeIds.size === 0 && !spanData.isExternal) {
-        this.traceMap.delete(span.traceId);
-      }
+    // End the span with the correct endTime (convert milliseconds to seconds)
+    if (span.endTime) {
+      braintrustSpan.end({ endTime: span.endTime.getTime() / 1000 });
+    } else {
+      braintrustSpan.end();
     }
   }
 
-  private async handleEventSpan(span: AnyExportedSpan): Promise<void> {
-    if (span.isRootSpan) {
-      this.logger.debug('Braintrust exporter: Creating logger for event', {
-        traceId: span.traceId,
-        spanId: span.id,
-        spanName: span.name,
-        method: 'handleEventSpan',
-      });
-
-      if (this.useProvidedLogger) {
-        // Use provided logger, detect external Braintrust spans
-        await this.initLoggerOrUseContext(span);
-      } else {
-        // Create new logger per trace
-        await this.initLoggerPerTrace(span);
-      }
-    }
-
-    const method = 'handleEventSpan';
-    const spanData = this.getSpanData({ span, method });
-    if (!spanData) {
-      return;
-    }
-
-    const braintrustParent = this.getBraintrustParent({ spanData, span, method });
+  protected async handleEventSpan(span: AnyExportedSpan, traceData: BraintrustTraceData): Promise<void> {
+    const braintrustParent = this.getBraintrustParent(traceData, span, 'handleEventSpan');
     if (!braintrustParent) {
       return;
     }
@@ -246,116 +227,59 @@ export class BraintrustExporter extends BaseExporter {
     braintrustSpan.end({ endTime: span.startTime.getTime() / 1000 });
   }
 
-  private initTraceMap(params: { traceId: string; isExternal: boolean; logger: Logger<true> | Span }): void {
-    const { traceId, isExternal, logger } = params;
-
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(traceId)) {
-      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId });
-      return;
-    }
-
-    this.traceMap.set(traceId, {
-      logger,
-      spans: new Map(),
-      activeIds: new Set(),
-      isExternal,
-    });
-  }
-
   /**
-   * Creates a new logger per trace using config credentials
+   * Override markSpanEnded to handle external spans specially.
+   * Don't clean up if using external spans (they're managed by Braintrust).
    */
-  private async initLoggerPerTrace(span: AnyExportedSpan): Promise<void> {
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(span.traceId)) {
-      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
-      return;
+  protected async markSpanEnded(traceId: string, traceData: BraintrustTraceData, spanId: string): Promise<boolean> {
+    traceData.activeSpanIds.delete(spanId);
+
+    // Don't clean up if using external spans
+    if (traceData.isExternal) {
+      return false;
     }
 
-    try {
-      const loggerInstance = await initLogger({
-        projectName: this.config.projectName ?? 'mastra-tracing',
-        apiKey: this.config.apiKey,
-        appUrl: this.config.endpoint,
-        ...this.config.tuningParameters,
-      });
-
-      this.initTraceMap({ logger: loggerInstance, isExternal: false, traceId: span.traceId });
-    } catch (err) {
-      this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err, traceId: span.traceId });
-      this.setDisabled('Failed to initialize Braintrust logger');
+    // Clean up trace if no more active spans
+    if (traceData.activeSpanIds.size === 0) {
+      await this.removeTrace(traceId, traceData);
+      return true;
     }
+
+    return false;
   }
 
-  /**
-   * Uses provided logger and detects external Braintrust spans.
-   * If a Braintrust span is detected (from logger.traced() or Eval()), attaches to it.
-   * Otherwise, uses the provided logger instance.
-   */
-  private async initLoggerOrUseContext(span: AnyExportedSpan): Promise<void> {
-    // Check if trace already exists - reuse existing trace data
-    if (this.traceMap.has(span.traceId)) {
-      this.logger.debug('Braintrust exporter: Reusing existing trace from local map', { traceId: span.traceId });
-      return;
+  protected async cleanupTraceData(traceData: BraintrustTraceData, _traceId: string): Promise<void> {
+    // End all active spans
+    for (const [_spanId, span] of traceData.spans) {
+      span.end();
     }
-
-    // Try to find a Braintrust span to attach to:
-    // 1. Auto-detect from Braintrust's current span (logger.traced(), Eval(), etc.)
-    // 2. Fall back to the configured logger
-    const braintrustSpan = currentSpan();
-
-    // Check if it's a valid span (not the NOOP_SPAN)
-    if (braintrustSpan && braintrustSpan.id) {
-      // External span detected - attach Mastra traces to it
-      this.initTraceMap({ logger: braintrustSpan, isExternal: true, traceId: span.traceId });
-    } else {
-      // No external span - use provided logger
-      this.initTraceMap({ logger: this.providedLogger!, isExternal: false, traceId: span.traceId });
-    }
+    // Loggers don't have an explicit shutdown method
   }
 
-  private getSpanData(options: { span: AnyExportedSpan; method: string }): SpanData | undefined {
-    const { span, method } = options;
-    if (this.traceMap.has(span.traceId)) {
-      return this.traceMap.get(span.traceId);
-    }
+  // ==================== Helper Methods ====================
 
-    this.logger.warn('Braintrust exporter: No span data found for span', {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
-    });
-  }
-
-  private getBraintrustParent(options: {
-    spanData: SpanData;
-    span: AnyExportedSpan;
-    method: string;
-  }): Logger<true> | Span | undefined {
-    const { spanData, span, method } = options;
-
+  private getBraintrustParent(
+    traceData: BraintrustTraceData,
+    span: AnyExportedSpan,
+    method: string,
+  ): Logger<true> | Span | undefined {
     const parentId = span.parentSpanId;
     if (!parentId) {
-      return spanData.logger;
+      return traceData.logger;
     }
 
-    if (spanData.spans.has(parentId)) {
-      return spanData.spans.get(parentId);
+    if (traceData.spans.has(parentId)) {
+      return traceData.spans.get(parentId);
     }
 
     // If the parent exists but is the root span (not represented as a Braintrust
     // span because we use the logger as the root), attach to the logger so the
     // span is not orphaned. We need to check if parentSpanId exists but the
     // parent span is not in our spans map (indicating it's the root span).
-    if (parentId && !spanData.spans.has(parentId)) {
+    if (parentId && !traceData.spans.has(parentId)) {
       // This means the parent exists but isn't tracked as a Braintrust span,
       // which happens when the parent is the root span (we use logger as root)
-      return spanData.logger;
+      return traceData.logger;
     }
 
     this.logger.warn('Braintrust exporter: No parent data found for span', {
@@ -367,6 +291,8 @@ export class BraintrustExporter extends BaseExporter {
       parentSpanId: span.parentSpanId,
       method,
     });
+
+    return undefined;
   }
 
   /**
@@ -473,18 +399,9 @@ export class BraintrustExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.config) {
+    if (!this.exporterConfig) {
       return;
     }
-
-    // End all active spans
-    for (const [_traceId, spanData] of this.traceMap) {
-      for (const [_spanId, span] of spanData.spans) {
-        span.end();
-      }
-      // Loggers don't have an explicit shutdown method
-    }
-    this.traceMap.clear();
     await super.shutdown();
   }
 }

@@ -8,15 +8,11 @@ import type {
   ObservabilityStorage,
   TracingStorageStrategy,
 } from '@mastra/core/storage';
-import type { BaseExporterConfig } from './base';
-import { BaseExporter } from './base';
+import type { BufferedExporterConfig } from './buffered';
+import { BufferedExporter } from './buffered';
 
-interface DefaultExporterConfig extends BaseExporterConfig {
-  maxBatchSize?: number; // Default: 1000 spans
-  maxBufferSize?: number; // Default: 10000 spans
-  maxBatchWaitMs?: number; // Default: 5000ms
-  maxRetries?: number; // Default: 4
-  retryDelayMs?: number; // Default: 500ms (base delay for exponential backoff)
+interface DefaultExporterConfig extends BufferedExporterConfig {
+  maxBufferSize?: number; // Default: 10000 spans (overflow threshold)
 
   // Strategy selection (optional)
   strategy?: TracingStorageStrategy | 'auto';
@@ -39,10 +35,6 @@ interface BatchBuffer {
 
   // Metrics
   outOfOrderCount: number;
-
-  // Metadata
-  firstEventTime?: Date;
-  totalSize: number;
 }
 
 interface UpdateRecord {
@@ -87,39 +79,43 @@ function getObjectOrNull(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
-export class DefaultExporter extends BaseExporter {
+export class DefaultExporter extends BufferedExporter<BatchBuffer, BatchBuffer> {
   name = 'mastra-default-observability-exporter';
 
   #storage?: MastraStorage;
   #observability?: ObservabilityStorage;
-  #config: DefaultExporterConfig;
+  #userConfig: DefaultExporterConfig;
   #resolvedStrategy: TracingStorageStrategy;
+  #maxBufferSize: number;
+
   private buffer: BatchBuffer;
-  #flushTimer: NodeJS.Timeout | null = null;
 
   // Track all spans that have been created, persists across flushes
   private allCreatedSpans: Set<string> = new Set();
 
+  #strategyInitialized = false;
+
   constructor(config: DefaultExporterConfig = {}) {
-    super(config);
-
-    if (config === undefined) {
-      config = {};
-    }
-
-    // Set default configuration
-    this.#config = {
+    super({
       ...config,
       maxBatchSize: config.maxBatchSize ?? 1000,
-      maxBufferSize: config.maxBufferSize ?? 10000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 4,
       retryDelayMs: config.retryDelayMs ?? 500,
-      strategy: config.strategy ?? 'auto',
-    };
+    });
+
+    this.#userConfig = config;
+    this.#maxBufferSize = config.maxBufferSize ?? 10000;
 
     // Initialize buffer
-    this.buffer = {
+    this.buffer = this.createEmptyBuffer();
+
+    // Resolve strategy - we'll do this lazily on first export since we need storage
+    this.#resolvedStrategy = 'batch-with-updates'; // temporary default
+  }
+
+  private createEmptyBuffer(): BatchBuffer {
+    return {
       creates: [],
       updates: [],
       insertOnly: [],
@@ -127,14 +123,8 @@ export class DefaultExporter extends BaseExporter {
       spanSequences: new Map(),
       completedSpans: new Set(),
       outOfOrderCount: 0,
-      totalSize: 0,
     };
-
-    // Resolve strategy - we'll do this lazily on first export since we need storage
-    this.#resolvedStrategy = 'batch-with-updates'; // temporary default
   }
-
-  #strategyInitialized = false;
 
   /**
    * Initialize the exporter (called after all dependencies are ready)
@@ -161,57 +151,50 @@ export class DefaultExporter extends BaseExporter {
   private initializeStrategy(observability: ObservabilityStorage, storageName: string): void {
     if (this.#strategyInitialized) return;
 
-    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#config, observability, storageName, this.logger);
+    this.#resolvedStrategy = resolveTracingStorageStrategy(this.#userConfig, observability, storageName, this.logger);
     this.#strategyInitialized = true;
 
     this.logger.debug('tracing storage exporter initialized', {
       strategy: this.#resolvedStrategy,
-      source: this.#config.strategy !== 'auto' ? 'user' : 'auto',
+      source: this.#userConfig.strategy !== 'auto' ? 'user' : 'auto',
       storageAdapter: storageName,
-      maxBatchSize: this.#config.maxBatchSize,
-      maxBatchWaitMs: this.#config.maxBatchWaitMs,
+      maxBatchSize: this.maxBatchSize,
+      maxBatchWaitMs: this.maxBatchWaitMs,
     });
   }
 
-  /**
-   * Builds a unique span key for tracking
-   */
-  private buildSpanKey(traceId: string, spanId: string): string {
-    return `${traceId}:${spanId}`;
-  }
+  // ==================== BufferedExporter Implementation ====================
 
   /**
-   * Gets the next sequence number for a span
+   * Override _exportTracingEvent to handle realtime strategy specially.
+   * Realtime strategy doesn't buffer - it processes events immediately.
    */
-  private getNextSequence(spanKey: string): number {
-    const current = this.buffer.spanSequences.get(spanKey) || 0;
-    const next = current + 1;
-    this.buffer.spanSequences.set(spanKey, next);
-    return next;
-  }
-
-  /**
-   * Handles out-of-order span updates by logging and skipping
-   */
-  private handleOutOfOrderUpdate(event: TracingEvent): void {
-    this.logger.warn('Out-of-order span update detected - skipping event', {
-      spanId: event.exportedSpan.id,
-      traceId: event.exportedSpan.traceId,
-      spanName: event.exportedSpan.name,
-      eventType: event.type,
-    });
-  }
-
-  /**
-   * Adds an event to the appropriate buffer based on strategy
-   */
-  private addToBuffer(event: TracingEvent): void {
-    const spanKey = this.buildSpanKey(event.exportedSpan.traceId, event.exportedSpan.id);
-
-    // Set first event time if buffer is empty
-    if (this.buffer.totalSize === 0) {
-      this.buffer.firstEventTime = new Date();
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    if (!this.#observability) {
+      this.logger.debug('Cannot store traces. Observability storage is not initialized');
+      return;
     }
+
+    // Initialize strategy if not already done (fallback for edge cases)
+    if (!this.#strategyInitialized) {
+      this.initializeStrategy(this.#observability, this.#storage?.constructor.name ?? 'Unknown');
+    }
+
+    // Realtime strategy handles events immediately without buffering
+    if (this.#resolvedStrategy === 'realtime') {
+      await this.handleRealtimeEvent(event, this.#observability);
+      return;
+    }
+
+    // For batch strategies, use the parent's buffering logic
+    await super._exportTracingEvent(event);
+  }
+
+  /**
+   * Process an event and add it to the buffer.
+   */
+  protected processEvent(event: TracingEvent): boolean {
+    const spanKey = this.buildSpanKey(event.exportedSpan.traceId, event.exportedSpan.id);
 
     switch (event.type) {
       case TracingEventType.SPAN_STARTED:
@@ -281,69 +264,175 @@ export class DefaultExporter extends BaseExporter {
         break;
     }
 
-    // Update total size
-    this.buffer.totalSize = this.buffer.creates.length + this.buffer.updates.length + this.buffer.insertOnly.length;
+    // Update buffer size tracking
+    this.updateBufferSize(this.getBufferSize());
+    return true;
   }
 
   /**
-   * Checks if buffer should be flushed based on size or time triggers
+   * Get the current buffer size.
    */
-  private shouldFlush(): boolean {
+  protected getBufferSize(): number {
+    return this.buffer.creates.length + this.buffer.updates.length + this.buffer.insertOnly.length;
+  }
+
+  /**
+   * Extract and reset the buffer.
+   */
+  protected extractAndResetBuffer(): BatchBuffer {
+    const bufferCopy: BatchBuffer = {
+      creates: [...this.buffer.creates],
+      updates: [...this.buffer.updates],
+      insertOnly: [...this.buffer.insertOnly],
+      seenSpans: new Set(this.buffer.seenSpans),
+      spanSequences: new Map(this.buffer.spanSequences),
+      completedSpans: new Set(this.buffer.completedSpans),
+      outOfOrderCount: this.buffer.outOfOrderCount,
+    };
+
+    // Reset buffer
+    this.buffer = this.createEmptyBuffer();
+
+    return bufferCopy;
+  }
+
+  /**
+   * Called after buffer is reset - clean up completed spans from persistent tracking.
+   */
+  protected onBufferReset(): void {
+    // Note: completedSpans cleanup is handled after successful flush in sendBatch
+    super.onBufferReset();
+  }
+
+  /**
+   * Check if buffer should be flushed - includes overflow check.
+   */
+  protected shouldFlush(): boolean {
     // Emergency flush - buffer overflow
-    if (this.buffer.totalSize >= this.#config.maxBufferSize!) {
+    if (this.getBufferSize() >= this.#maxBufferSize) {
       return true;
     }
+    return super.shouldFlush();
+  }
 
-    // Size-based flush
-    if (this.buffer.totalSize >= this.#config.maxBatchSize!) {
-      return true;
+  /**
+   * Send the batch to storage.
+   */
+  protected async sendBatch(buffer: BatchBuffer): Promise<void> {
+    if (!this.#observability) {
+      return;
     }
 
-    // Time-based flush
-    if (this.buffer.firstEventTime && this.buffer.totalSize > 0) {
-      const elapsed = Date.now() - this.buffer.firstEventTime.getTime();
-      if (elapsed >= this.#config.maxBatchWaitMs!) {
-        return true;
+    if (this.#resolvedStrategy === 'batch-with-updates') {
+      // Process creates first (always safe)
+      if (buffer.creates.length > 0) {
+        await this.#observability.batchCreateSpans({ records: buffer.creates });
+      }
+
+      // Sort updates by span, then by sequence number
+      if (buffer.updates.length > 0) {
+        const sortedUpdates = buffer.updates.sort((a, b) => {
+          const spanCompare = this.buildSpanKey(a.traceId, a.spanId).localeCompare(
+            this.buildSpanKey(b.traceId, b.spanId),
+          );
+          if (spanCompare !== 0) return spanCompare;
+          return a.sequenceNumber - b.sequenceNumber;
+        });
+
+        await this.#observability.batchUpdateSpans({ records: sortedUpdates });
+      }
+    } else if (this.#resolvedStrategy === 'insert-only') {
+      // Simple batch insert for insert-only strategy
+      if (buffer.insertOnly.length > 0) {
+        await this.#observability.batchCreateSpans({ records: buffer.insertOnly });
       }
     }
 
-    return false;
-  }
-
-  /**
-   * Resets the buffer after successful flush
-   */
-  private resetBuffer(completedSpansToCleanup: Set<string> = new Set()): void {
-    this.buffer.creates = [];
-    this.buffer.updates = [];
-    this.buffer.insertOnly = [];
-    this.buffer.seenSpans.clear();
-    this.buffer.spanSequences.clear();
-    this.buffer.completedSpans.clear();
-    this.buffer.outOfOrderCount = 0;
-    this.buffer.firstEventTime = undefined;
-    this.buffer.totalSize = 0;
-
-    // Clean up completed spans from persistent tracking
-    for (const spanKey of completedSpansToCleanup) {
+    // Clean up completed spans from persistent tracking after successful flush
+    for (const spanKey of buffer.completedSpans) {
       this.allCreatedSpans.delete(spanKey);
     }
+
+    if (buffer.outOfOrderCount > 0) {
+      this.logger.debug('Batch flushed with out-of-order events', {
+        outOfOrderCount: buffer.outOfOrderCount,
+      });
+    }
+  }
+
+  // ==================== Helper Methods ====================
+
+  /**
+   * Builds a unique span key for tracking
+   */
+  private buildSpanKey(traceId: string, spanId: string): string {
+    return `${traceId}:${spanId}`;
   }
 
   /**
-   * Schedules a flush using setTimeout
+   * Gets the next sequence number for a span
    */
-  private scheduleFlush(): void {
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
+  private getNextSequence(spanKey: string): number {
+    const current = this.buffer.spanSequences.get(spanKey) || 0;
+    const next = current + 1;
+    this.buffer.spanSequences.set(spanKey, next);
+    return next;
+  }
+
+  /**
+   * Handles out-of-order span updates by logging and skipping
+   */
+  private handleOutOfOrderUpdate(event: TracingEvent): void {
+    this.logger.warn('Out-of-order span update detected - skipping event', {
+      spanId: event.exportedSpan.id,
+      traceId: event.exportedSpan.traceId,
+      spanName: event.exportedSpan.name,
+      eventType: event.type,
+    });
+  }
+
+  /**
+   * Handles realtime strategy - processes each event immediately
+   */
+  private async handleRealtimeEvent(event: TracingEvent, observability: ObservabilityStorage): Promise<void> {
+    const span = event.exportedSpan;
+    const spanKey = this.buildSpanKey(span.traceId, span.id);
+
+    // Event spans only have an end event
+    if (span.isEvent) {
+      if (event.type === TracingEventType.SPAN_ENDED) {
+        await observability.createSpan({ span: this.buildCreateRecord(event.exportedSpan) });
+        // For event spans in realtime, we don't need to track them since they're immediately complete
+      } else {
+        this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
+      }
+    } else {
+      switch (event.type) {
+        case TracingEventType.SPAN_STARTED:
+          await observability.createSpan({ span: this.buildCreateRecord(event.exportedSpan) });
+          // Track this span as created persistently
+          this.allCreatedSpans.add(spanKey);
+          break;
+        case TracingEventType.SPAN_UPDATED:
+          await observability.updateSpan({
+            traceId: span.traceId,
+            spanId: span.id,
+            updates: this.buildUpdateRecord(span),
+          });
+          break;
+        case TracingEventType.SPAN_ENDED:
+          await observability.updateSpan({
+            traceId: span.traceId,
+            spanId: span.id,
+            updates: this.buildUpdateRecord(span),
+          });
+          // Clean up immediately for realtime strategy
+          this.allCreatedSpans.delete(spanKey);
+          break;
+        default:
+          this.logger.warn(`Tracing event type not implemented for span spans: ${(event as any).type}`);
+      }
     }
-    this.#flushTimer = setTimeout(() => {
-      this.flush().catch(error => {
-        this.logger.error('Scheduled flush failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    }, this.#config.maxBatchWaitMs);
   }
 
   /**
@@ -445,268 +534,15 @@ export class DefaultExporter extends BaseExporter {
     };
   }
 
-  /**
-   * Handles realtime strategy - processes each event immediately
-   */
-  private async handleRealtimeEvent(event: TracingEvent, observability: ObservabilityStorage): Promise<void> {
-    const span = event.exportedSpan;
-    const spanKey = this.buildSpanKey(span.traceId, span.id);
-
-    // Event spans only have an end event
-    if (span.isEvent) {
-      if (event.type === TracingEventType.SPAN_ENDED) {
-        await observability.createSpan({ span: this.buildCreateRecord(event.exportedSpan) });
-        // For event spans in realtime, we don't need to track them since they're immediately complete
-      } else {
-        this.logger.warn(`Tracing event type not implemented for event spans: ${event.type}`);
-      }
-    } else {
-      switch (event.type) {
-        case TracingEventType.SPAN_STARTED:
-          await observability.createSpan({ span: this.buildCreateRecord(event.exportedSpan) });
-          // Track this span as created persistently
-          this.allCreatedSpans.add(spanKey);
-          break;
-        case TracingEventType.SPAN_UPDATED:
-          await observability.updateSpan({
-            traceId: span.traceId,
-            spanId: span.id,
-            updates: this.buildUpdateRecord(span),
-          });
-          break;
-        case TracingEventType.SPAN_ENDED:
-          await observability.updateSpan({
-            traceId: span.traceId,
-            spanId: span.id,
-            updates: this.buildUpdateRecord(span),
-          });
-          // Clean up immediately for realtime strategy
-          this.allCreatedSpans.delete(spanKey);
-          break;
-        default:
-          this.logger.warn(`Tracing event type not implemented for span spans: ${(event as any).type}`);
-      }
-    }
-  }
-
-  /**
-   * Handles batch-with-updates strategy - buffers events and processes in batches
-   */
-  private handleBatchWithUpdatesEvent(event: TracingEvent): void {
-    this.addToBuffer(event);
-
-    if (this.shouldFlush()) {
-      // Immediate flush for size/emergency triggers
-      this.flush().catch(error => {
-        this.logger.error('Batch flush failed', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-    } else if (this.buffer.totalSize === 1) {
-      // Schedule flush for the first event in buffer
-      this.scheduleFlush();
-    }
-  }
-
-  /**
-   * Handles insert-only strategy - only processes SPAN_ENDED events in batches
-   */
-  private handleInsertOnlyEvent(event: TracingEvent): void {
-    // Only process SPAN_ENDED events for insert-only strategy
-    if (event.type === TracingEventType.SPAN_ENDED) {
-      this.addToBuffer(event);
-
-      if (this.shouldFlush()) {
-        // Immediate flush for size/emergency triggers
-        this.flush().catch(error => {
-          this.logger.error('Batch flush failed', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      } else if (this.buffer.totalSize === 1) {
-        // Schedule flush for the first event in buffer
-        this.scheduleFlush();
-      }
-    }
-    // Ignore SPAN_STARTED and SPAN_UPDATED events
-  }
-
-  /**
-   * Calculates retry delay using exponential backoff
-   */
-  private calculateRetryDelay(attempt: number): number {
-    return this.#config.retryDelayMs! * Math.pow(2, attempt);
-  }
-
-  /**
-   * Flushes the current buffer to storage with retry logic
-   */
-  private async flush(): Promise<void> {
-    if (!this.#observability) {
-      this.logger.debug('Cannot flush traces. Observability storage is not initialized');
-      return;
-    }
-
-    // Clear timer since we're flushing
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
-      this.#flushTimer = null;
-    }
-
-    if (this.buffer.totalSize === 0) {
-      return; // Nothing to flush
-    }
-
-    const startTime = Date.now();
-    const flushReason =
-      this.buffer.totalSize >= this.#config.maxBufferSize!
-        ? 'overflow'
-        : this.buffer.totalSize >= this.#config.maxBatchSize!
-          ? 'size'
-          : 'time';
-
-    // Create a copy of the buffer to work with
-    const bufferCopy: BatchBuffer = {
-      creates: [...this.buffer.creates],
-      updates: [...this.buffer.updates],
-      insertOnly: [...this.buffer.insertOnly],
-      seenSpans: new Set(this.buffer.seenSpans),
-      spanSequences: new Map(this.buffer.spanSequences),
-      completedSpans: new Set(this.buffer.completedSpans),
-      outOfOrderCount: this.buffer.outOfOrderCount,
-      firstEventTime: this.buffer.firstEventTime,
-      totalSize: this.buffer.totalSize,
-    };
-
-    // Reset buffer immediately to prevent blocking new events
-    // Note: We don't clean up completed spans yet - we'll do that after successful flush
-    this.resetBuffer();
-
-    // Attempt to flush with retry logic
-    await this.flushWithRetries(this.#observability, bufferCopy, 0);
-
-    const elapsed = Date.now() - startTime;
-    this.logger.debug('Batch flushed', {
-      strategy: this.#resolvedStrategy,
-      batchSize: bufferCopy.totalSize,
-      flushReason,
-      durationMs: elapsed,
-      outOfOrderCount: bufferCopy.outOfOrderCount > 0 ? bufferCopy.outOfOrderCount : undefined,
-    });
-  }
-
-  /**
-   * Attempts to flush with exponential backoff retry logic
-   */
-  private async flushWithRetries(
-    observability: ObservabilityStorage,
-    buffer: BatchBuffer,
-    attempt: number,
-  ): Promise<void> {
-    try {
-      if (this.#resolvedStrategy === 'batch-with-updates') {
-        // Process creates first (always safe)
-        if (buffer.creates.length > 0) {
-          await observability.batchCreateSpans({ records: buffer.creates });
-        }
-
-        // Sort updates by span, then by sequence number
-        if (buffer.updates.length > 0) {
-          const sortedUpdates = buffer.updates.sort((a, b) => {
-            const spanCompare = this.buildSpanKey(a.traceId, a.spanId).localeCompare(
-              this.buildSpanKey(b.traceId, b.spanId),
-            );
-            if (spanCompare !== 0) return spanCompare;
-            return a.sequenceNumber - b.sequenceNumber;
-          });
-
-          await observability.batchUpdateSpans({ records: sortedUpdates });
-        }
-      } else if (this.#resolvedStrategy === 'insert-only') {
-        // Simple batch insert for insert-only strategy
-        if (buffer.insertOnly.length > 0) {
-          await observability.batchCreateSpans({ records: buffer.insertOnly });
-        }
-      }
-
-      // Success! Clean up completed spans from persistent tracking
-      for (const spanKey of buffer.completedSpans) {
-        this.allCreatedSpans.delete(spanKey);
-      }
-    } catch (error) {
-      if (attempt < this.#config.maxRetries!) {
-        const retryDelay = this.calculateRetryDelay(attempt);
-        this.logger.warn('Batch flush failed, retrying', {
-          attempt: attempt + 1,
-          maxRetries: this.#config.maxRetries,
-          nextRetryInMs: retryDelay,
-          error: error instanceof Error ? error.message : String(error),
-        });
-
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        return this.flushWithRetries(observability, buffer, attempt + 1);
-      } else {
-        this.logger.error('Batch flush failed after all retries, dropping batch', {
-          finalAttempt: attempt + 1,
-          maxRetries: this.#config.maxRetries,
-          droppedBatchSize: buffer.totalSize,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Even on failure, we should clean up completed spans to avoid memory leak
-        // These spans will be lost but at least we prevent memory issues
-        for (const spanKey of buffer.completedSpans) {
-          this.allCreatedSpans.delete(spanKey);
-        }
-      }
-    }
-  }
-
-  async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (!this.#observability) {
-      this.logger.debug('Cannot store traces. Observability storage is not initialized');
-      return;
-    }
-
-    // Initialize strategy if not already done (fallback for edge cases)
-    if (!this.#strategyInitialized) {
-      this.initializeStrategy(this.#observability, this.#storage?.constructor.name ?? 'Unknown');
-    }
-
-    // Clear strategy routing - explicit and readable
-    switch (this.#resolvedStrategy) {
-      case 'realtime':
-        await this.handleRealtimeEvent(event, this.#observability);
-        break;
-      case 'batch-with-updates':
-        this.handleBatchWithUpdatesEvent(event);
-        break;
-      case 'insert-only':
-        this.handleInsertOnlyEvent(event);
-        break;
-    }
-  }
-
   async shutdown(): Promise<void> {
-    // Clear any pending timer
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
-      this.#flushTimer = null;
-    }
-
     // Flush any remaining events
-    if (this.buffer.totalSize > 0) {
+    if (this.getBufferSize() > 0) {
       this.logger.info('Flushing remaining events on shutdown', {
-        remainingEvents: this.buffer.totalSize,
+        remainingEvents: this.getBufferSize(),
       });
-      try {
-        await this.flush();
-      } catch (error) {
-        this.logger.error('Failed to flush remaining events during shutdown', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
     }
 
+    await super.shutdown();
     this.logger.info('DefaultExporter shutdown complete');
   }
 }
