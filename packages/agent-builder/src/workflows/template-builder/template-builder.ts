@@ -976,7 +976,7 @@ const intelligentMergeStep = createStep({
         outputSchema: z.object({
           success: z.boolean(),
           message: z.string(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async input => {
           try {
@@ -995,11 +995,11 @@ const intelligentMergeStep = createStep({
               success: true,
               message: `Successfully copied file from ${sourcePath} to ${destinationPath}`,
             };
-          } catch (error) {
+          } catch (err) {
             return {
               success: false,
-              message: `Failed to copy file: ${error instanceof Error ? error.message : String(error)}`,
-              error: error instanceof Error ? error.message : String(error),
+              message: `Failed to copy file: ${err instanceof Error ? err.message : String(err)}`,
+              errorMessage: err instanceof Error ? err.message : String(err),
             };
           }
         },
