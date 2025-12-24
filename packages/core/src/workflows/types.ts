@@ -287,6 +287,45 @@ export interface WorkflowState {
   error?: SerializedError;
 }
 
+/**
+ * Unified workflow run result that combines metadata with processed execution state.
+ * This is the return type for getWorkflowRun() which unifies getWorkflowRunById and getWorkflowRunExecutionResult.
+ */
+export interface WorkflowRunResult {
+  // Metadata
+  runId: string;
+  workflowName: string;
+  resourceId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Execution State
+  status: WorkflowRunStatus;
+  result?: Record<string, any>;
+  error?: SerializedError;
+  payload?: Record<string, any>;
+
+  // Step Information (processed)
+  steps: Record<
+    string,
+    {
+      status: WorkflowRunStatus;
+      output?: Record<string, any>;
+      payload?: Record<string, any>;
+      resumePayload?: Record<string, any>;
+      error?: SerializedError;
+      startedAt: number;
+      endedAt: number;
+      suspendedAt?: number;
+      resumedAt?: number;
+    }
+  >;
+
+  // Optional detailed fields (can be excluded for performance)
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: SerializedStepFlowEntry[];
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;

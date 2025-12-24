@@ -230,6 +230,69 @@ export const workflowExecutionResultSchema = z.object({
 });
 
 /**
+ * Schema for query parameters when getting a unified workflow run result
+ */
+export const workflowRunResultQuerySchema = z.object({
+  fields: z
+    .string()
+    .optional()
+    .refine(
+      value => {
+        if (!value) return true;
+        const validFields = new Set([
+          'status',
+          'result',
+          'error',
+          'payload',
+          'steps',
+          'metadata',
+          'activeStepsPath',
+          'serializedStepGraph',
+        ]);
+        const requestedFields = value.split(',').map(f => f.trim());
+        return requestedFields.every(field => validFields.has(field));
+      },
+      {
+        message:
+          'Invalid field name. Available fields: status, result, error, payload, steps, metadata, activeStepsPath, serializedStepGraph',
+      },
+    )
+    .describe(
+      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, metadata, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
+    ),
+  withNestedWorkflows: z
+    .enum(['true', 'false'])
+    .optional()
+    .describe(
+      'Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.',
+    ),
+});
+
+/**
+ * Schema for unified workflow run result response
+ * Combines metadata and processed execution state
+ */
+export const workflowRunResultSchema = z.object({
+  // Metadata - always present
+  runId: z.string(),
+  workflowName: z.string(),
+  resourceId: z.string().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+
+  // Execution state
+  status: workflowRunStatusSchema,
+  result: z.unknown().optional(),
+  error: z.unknown().optional(),
+  payload: z.unknown().optional(),
+  steps: z.record(z.string(), z.any()),
+
+  // Optional detailed fields
+  activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
+  serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
+});
+
+/**
  * Response schema for workflow control operations
  */
 export const workflowControlResponseSchema = messageResponseSchema;

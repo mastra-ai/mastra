@@ -61,6 +61,7 @@ import type {
   ToolStep,
   StepParams,
   OutputWriter,
+  WorkflowRunResult,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
@@ -2081,6 +2082,164 @@ export class Workflow<
       ...defaultResult,
       steps: fullSteps as any,
     };
+  }
+
+  /**
+   * Get a workflow run by ID with processed execution state and metadata.
+   *
+   * @param runId - The unique identifier of the workflow run
+   * @param options - Configuration options for the result
+   * @param options.withNestedWorkflows - Whether to include nested workflow steps (default: true)
+   * @param options.fields - Specific fields to return (for performance optimization)
+   * @returns The workflow run result with metadata and processed execution state, or null if not found
+   */
+  async getWorkflowRun(
+    runId: string,
+    options: {
+      withNestedWorkflows?: boolean;
+      fields?: (
+        | 'status'
+        | 'result'
+        | 'error'
+        | 'payload'
+        | 'steps'
+        | 'metadata'
+        | 'activeStepsPath'
+        | 'serializedStepGraph'
+      )[];
+    } = {},
+  ): Promise<WorkflowRunResult | null> {
+    const { withNestedWorkflows = true, fields } = options;
+
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run. Mastra storage is not initialized');
+      // Try in-memory fallback
+      const inMemoryRun = this.#runs.get(runId);
+      if (!inMemoryRun) return null;
+
+      // For in-memory runs, we have limited data
+      return {
+        runId,
+        workflowName: this.id,
+        resourceId: undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        status: (inMemoryRun as any).status ?? 'pending',
+        result: (inMemoryRun as any).result,
+        error: (inMemoryRun as any).error,
+        payload: (inMemoryRun as any).context?.input,
+        steps: {},
+      };
+    }
+
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      this.logger.debug('Cannot get workflow run. Workflows storage domain is not available');
+      // Fallback to in-memory runs (same as getWorkflowRunById)
+      const inMemoryRun = this.#runs.get(runId);
+      if (!inMemoryRun) return null;
+
+      return {
+        runId,
+        workflowName: this.id,
+        resourceId: undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        status: (inMemoryRun as any).status ?? 'pending',
+        result: (inMemoryRun as any).result,
+        error: (inMemoryRun as any).error,
+        payload: (inMemoryRun as any).context?.input,
+        steps: {},
+      };
+    }
+
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
+    if (!run) {
+      // Fallback to in-memory runs (same as getWorkflowRunById)
+      const inMemoryRun = this.#runs.get(runId);
+      if (!inMemoryRun) return null;
+
+      return {
+        runId,
+        workflowName: this.id,
+        resourceId: undefined,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        status: (inMemoryRun as any).status ?? 'pending',
+        result: (inMemoryRun as any).result,
+        error: (inMemoryRun as any).error,
+        payload: (inMemoryRun as any).context?.input,
+        steps: {},
+      };
+    }
+
+    // Parse snapshot if it's a string
+    let snapshot: WorkflowRunState | string = run.snapshot;
+    if (typeof snapshot === 'string') {
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot parse workflow run snapshot. Snapshot is not valid JSON', e);
+        return null;
+      }
+    }
+
+    const snapshotState = snapshot as WorkflowRunState;
+
+    // Build the result based on requested fields
+    const includeAllFields = !fields || fields.length === 0;
+    const fieldsSet = new Set(fields ?? []);
+    const includeMetadata = includeAllFields || fieldsSet.has('metadata');
+
+    // Get steps if needed
+    let steps: Record<string, any> = {};
+    if (includeAllFields || fieldsSet.has('steps')) {
+      if (withNestedWorkflows) {
+        steps = await this.getWorkflowRunSteps({ runId, workflowId: this.id });
+      } else {
+        const { input, ...stepsOnly } = snapshotState.context || {};
+        steps = stepsOnly;
+      }
+    }
+
+    const result: WorkflowRunResult = {
+      // Metadata - always include these core fields
+      runId: run.runId,
+      workflowName: run.workflowName,
+      resourceId: run.resourceId,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt,
+
+      // Execution state
+      status: snapshotState.status,
+      result: includeAllFields || fieldsSet.has('result') ? snapshotState.result : undefined,
+      error: includeAllFields || fieldsSet.has('error') ? snapshotState.error : undefined,
+      payload: includeAllFields || fieldsSet.has('payload') ? snapshotState.context?.input : undefined,
+      steps,
+
+      // Optional detailed fields
+      activeStepsPath: includeAllFields || fieldsSet.has('activeStepsPath') ? snapshotState.activeStepsPath : undefined,
+      serializedStepGraph:
+        includeAllFields || fieldsSet.has('serializedStepGraph') ? snapshotState.serializedStepGraph : undefined,
+    };
+
+    // Clean up undefined values if field filtering is active
+    if (fields && fields.length > 0) {
+      // Remove metadata fields if not requested
+      if (!includeMetadata) {
+        // Keep runId and workflowName as they're always needed for identification
+      }
+
+      // Remove undefined optional fields
+      if (result.result === undefined) delete result.result;
+      if (result.error === undefined) delete result.error;
+      if (result.payload === undefined) delete result.payload;
+      if (result.activeStepsPath === undefined) delete result.activeStepsPath;
+      if (result.serializedStepGraph === undefined) delete result.serializedStepGraph;
+    }
+
+    return result;
   }
 }
 
