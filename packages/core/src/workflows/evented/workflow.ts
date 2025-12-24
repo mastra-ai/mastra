@@ -463,7 +463,7 @@ export class EventedRun<
           },
         })
         .catch(err => {
-          console.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
         });
     };
     this.abortController.signal.addEventListener('abort', abortHandler, { once: true });

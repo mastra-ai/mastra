@@ -1420,7 +1420,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     try {
       await ack?.();
     } catch (e) {
-      console.error('Error acking event', e);
+      this.mastra.getLogger()?.error('Error acking event', e);
     }
   }
 }

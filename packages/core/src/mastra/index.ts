@@ -431,7 +431,7 @@ export class Mastra<
       try {
         await workflowEventProcessor.process(event, cb);
       } catch (e) {
-        console.error('Error processing event', e);
+        this.getLogger()?.error('Error processing event', e);
       }
     };
     if (this.#events.workflows) {

@@ -373,7 +373,6 @@ export class AISDKV5OutputStream<OUTPUT extends OutputSchema = undefined> {
   async getFullOutput() {
     await this.consumeStream({
       onError: (error: any) => {
-        console.error(error);
         throw error;
       },
     });
