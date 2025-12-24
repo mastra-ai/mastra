@@ -40,6 +40,8 @@ const weatherTool = createTool({
 const server = new MCPServer({
   name: "My Custom Server",
   version: "1.0.0",
+  description: "A server that provides weather data and agent capabilities",
+  instructions: "Use the available tools to help users with weather information and data processing tasks.",
   tools: { weatherTool },
   agents: { myAgent }, // this agent will become tool "ask_myAgent"
   workflows: {
@@ -100,6 +102,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       type: "string",
       isOptional: true,
       description: "Optional description of what the MCP server does.",
+    },
+    {
+      name: "instructions",
+      type: "string",
+      isOptional: true,
+      description:
+        "Optional instructions describing how to use the server and its features.",
     },
     {
       name: "repository",
