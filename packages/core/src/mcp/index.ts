@@ -36,6 +36,8 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   private _id: TId;
   /** A description of what the MCP server does. */
   public readonly description?: string;
+  /** Optional instructions describing how to use the server and its features. */
+  public readonly instructions?: string;
   /** Repository information for the server's source code. */
   public readonly repository?: Repository;
   /** The release date of this server version (ISO 8601 string). */
@@ -181,6 +183,7 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
     }
 
     this.description = config.description;
+    this.instructions = config.instructions;
     this.repository = config.repository;
     this.releaseDate = config.releaseDate || new Date().toISOString();
     this.isLatest = config.isLatest === undefined ? true : config.isLatest;
