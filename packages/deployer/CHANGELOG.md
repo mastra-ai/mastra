@@ -1,5 +1,31 @@
 # @mastra/deployer
 
+## 1.0.0-beta.15
+
+### Patch Changes
+
+- Add --studio flag to bundle playground UI with mastra build ([#11327](https://github.com/mastra-ai/mastra/pull/11327))
+
+  Enables bundling the studio/playground UI into the build output so it can be served from the deployed server.
+
+  ```bash
+  mastra build --studio
+  ```
+
+- Fixes `mastra build` failing with `BABEL_TRANSFORM_ERROR` when using spread operator in Mastra config. The Babel plugins now correctly skip `SpreadElement` nodes when searching for config properties. ([#11309](https://github.com/mastra-ai/mastra/pull/11309))
+
+  Also fixes npm package aliases (like `"ai-v5": "npm:ai@5.0.93"`) not being resolved correctly when writing the output package.json - now uses the actual package name from the resolved package.json instead of the alias.
+
+- Fixed bundling issues for packages without an `exports` field in their package.json. ([#11310](https://github.com/mastra-ai/mastra/pull/11310))
+
+  Previously, the deployer could produce incorrect import paths for older npm packages that don't use the modern exports map (like lodash). This caused runtime errors when deploying to production environments.
+
+  The fix ensures these packages now resolve correctly, while packages with proper exports maps continue to work as expected.
+
+- Updated dependencies [[`33a4d2e`](https://github.com/mastra-ai/mastra/commit/33a4d2e4ed8af51f69256232f00c34d6b6b51d48), [`4aaa844`](https://github.com/mastra-ai/mastra/commit/4aaa844a4f19d054490f43638a990cc57bda8d2f), [`4a1a6cb`](https://github.com/mastra-ai/mastra/commit/4a1a6cb3facad54b2bb6780b00ce91d6de1edc08), [`31d13d5`](https://github.com/mastra-ai/mastra/commit/31d13d5fdc2e2380e2e3ee3ec9fb29d2a00f265d), [`4c62166`](https://github.com/mastra-ai/mastra/commit/4c621669f4a29b1f443eca3ba70b814afa286266), [`7bcbf10`](https://github.com/mastra-ai/mastra/commit/7bcbf10133516e03df964b941f9a34e9e4ab4177), [`4353600`](https://github.com/mastra-ai/mastra/commit/43536005a65988a8eede236f69122e7f5a284ba2), [`6986fb0`](https://github.com/mastra-ai/mastra/commit/6986fb064f5db6ecc24aa655e1d26529087b43b3), [`053e979`](https://github.com/mastra-ai/mastra/commit/053e9793b28e970086b0507f7f3b76ea32c1e838), [`e26dc9c`](https://github.com/mastra-ai/mastra/commit/e26dc9c3ccfec54ae3dc3e2b2589f741f9ae60a6), [`55edf73`](https://github.com/mastra-ai/mastra/commit/55edf7302149d6c964fbb7908b43babfc2b52145), [`27c0009`](https://github.com/mastra-ai/mastra/commit/27c0009777a6073d7631b0eb7b481d94e165b5ca), [`dee388d`](https://github.com/mastra-ai/mastra/commit/dee388dde02f2e63c53385ae69252a47ab6825cc), [`3f3fc30`](https://github.com/mastra-ai/mastra/commit/3f3fc3096f24c4a26cffeecfe73085928f72aa63), [`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`632fdb8`](https://github.com/mastra-ai/mastra/commit/632fdb8b3cd9ff6f90399256d526db439fc1758b), [`10c2735`](https://github.com/mastra-ai/mastra/commit/10c27355edfdad1ee2b826b897df74125eb81fb8), [`1924cf0`](https://github.com/mastra-ai/mastra/commit/1924cf06816e5e4d4d5333065ec0f4bb02a97799), [`b339816`](https://github.com/mastra-ai/mastra/commit/b339816df0984d0243d944ac2655d6ba5f809cde), [`9d57c7e`](https://github.com/mastra-ai/mastra/commit/9d57c7ecc0b095a47d78508c6fc29127a92edeee)]:
+  - @mastra/core@1.0.0-beta.15
+  - @mastra/server@1.0.0-beta.15
+
 ## 1.0.0-beta.14
 
 ### Minor Changes

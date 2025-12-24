@@ -31,7 +31,10 @@ export function attachmentsToParts(attachments: Attachment[]): ContentPart[] {
 
     switch (url.protocol) {
       case 'http:':
-      case 'https:': {
+      case 'https:':
+      // Cloud storage protocols supported by AI providers (e.g., Vertex AI for gs://, Bedrock for s3://)
+      case 'gs:':
+      case 's3:': {
         if (attachment.contentType?.startsWith('image/')) {
           parts.push({ type: 'image', image: url.toString(), mimeType: attachment.contentType });
         } else {
