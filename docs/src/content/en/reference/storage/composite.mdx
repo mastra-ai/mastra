@@ -1,0 +1,237 @@
+---
+title: "Reference: Composite Storage | Storage"
+description: Documentation for combining multiple storage backends in Mastra.
+---
+
+# Composite Storage
+
+CompositeStorage combines storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but an in-memory store for observability.
+
+## Installation
+
+CompositeStorage is included in `@mastra/core`:
+
+```bash
+npm install @mastra/core@beta
+```
+
+You'll also need to install the storage adapters you want to compose:
+
+```bash
+npm install @mastra/pg@beta @mastra/libsql@beta
+```
+
+## Usage
+
+### With a default storage
+
+Use `default` to specify a fallback storage, then override specific domains:
+
+```typescript
+import { CompositeStorage } from "@mastra/core/storage";
+import { PostgresStore } from "@mastra/pg";
+import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+const pgStore = new PostgresStore({
+  id: "pg",
+  connectionString: process.env.DATABASE_URL,
+});
+
+const libsqlStore = new LibSQLStore({
+  id: "libsql",
+  url: "file:./local.db",
+});
+
+const mastra = new Mastra({
+  storage: new CompositeStorage({
+    id: "composite",
+    // Use PostgreSQL for most domains
+    default: pgStore,
+    // But use LibSQL for memory
+    domains: {
+      memory: libsqlStore.stores?.memory,
+    },
+  }),
+});
+```
+
+### Without a default storage
+
+Specify each domain individually when you don't want a fallback:
+
+```typescript
+import { CompositeStorage } from "@mastra/core/storage";
+import { PostgresStore } from "@mastra/pg";
+import { LibSQLStore } from "@mastra/libsql";
+
+const pgStore = new PostgresStore({
+  id: "pg",
+  connectionString: process.env.DATABASE_URL,
+});
+
+const libsqlStore = new LibSQLStore({
+  id: "libsql",
+  url: "file:./local.db",
+});
+
+const storage = new CompositeStorage({
+  id: "composite",
+  domains: {
+    memory: pgStore.stores?.memory,
+    workflows: pgStore.stores?.workflows,
+    scores: libsqlStore.stores?.scores,
+    // observability and agents will be undefined
+  },
+});
+```
+
+## Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this storage instance.",
+      isOptional: false,
+    },
+    {
+      name: "default",
+      type: "MastraStorage",
+      description:
+        "Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
+      isOptional: true,
+    },
+    {
+      name: "domains",
+      type: "object",
+      description:
+        "Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.",
+      isOptional: true,
+    },
+    {
+      name: "domains.memory",
+      type: "MemoryStorage",
+      description: "Storage for threads, messages, and resources.",
+      isOptional: true,
+    },
+    {
+      name: "domains.workflows",
+      type: "WorkflowsStorage",
+      description: "Storage for workflow snapshots.",
+      isOptional: true,
+    },
+    {
+      name: "domains.scores",
+      type: "ScoresStorage",
+      description: "Storage for evaluation scores.",
+      isOptional: true,
+    },
+    {
+      name: "domains.observability",
+      type: "ObservabilityStorage",
+      description: "Storage for traces and spans.",
+      isOptional: true,
+    },
+    {
+      name: "domains.agents",
+      type: "AgentsStorage",
+      description: "Storage for stored agent configurations.",
+      isOptional: true,
+    },
+    {
+      name: "disableInit",
+      type: "boolean",
+      description:
+        "When true, automatic initialization is disabled. You must call init() explicitly.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Initialization
+
+CompositeStorage initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
+
+```typescript
+import { CompositeStorage } from "@mastra/core/storage";
+import { PostgresStore } from "@mastra/pg";
+import { Mastra } from "@mastra/core";
+
+const pgStore = new PostgresStore({
+  id: "pg",
+  connectionString: process.env.DATABASE_URL,
+});
+
+const storage = new CompositeStorage({
+  id: "composite",
+  default: pgStore,
+});
+
+const mastra = new Mastra({
+  storage, // init() called automatically
+});
+```
+
+If using storage directly, call `init()` explicitly:
+
+```typescript
+const storage = new CompositeStorage({
+  id: "composite",
+  default: pgStore,
+});
+
+await storage.init();
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore("memory");
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+## Use Cases
+
+### Separate databases for different workloads
+
+Use a local database for development while keeping production data in a managed service:
+
+```typescript
+const storage = new CompositeStorage({
+  id: "composite",
+  default: new PostgresStore({
+    id: "pg",
+    connectionString: process.env.DATABASE_URL,
+  }),
+  domains: {
+    // Use local SQLite for development
+    memory:
+      process.env.NODE_ENV === "development"
+        ? new LibSQLStore({ id: "dev", url: "file:./dev.db" }).stores?.memory
+        : undefined,
+  },
+});
+```
+
+### Specialized storage for observability
+
+Use a time-series database for traces while keeping other data in PostgreSQL:
+
+```typescript
+const pgStore = new PostgresStore({
+  id: "pg",
+  connectionString: process.env.DATABASE_URL,
+});
+
+const clickhouseStore = new ClickhouseStore({
+  id: "clickhouse",
+  url: process.env.CLICKHOUSE_URL,
+});
+
+const storage = new CompositeStorage({
+  id: "composite",
+  default: pgStore,
+  domains: {
+    observability: clickhouseStore.stores?.observability,
+  },
+});
+```

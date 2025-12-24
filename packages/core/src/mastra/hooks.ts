@@ -1,7 +1,7 @@
 import pMap from 'p-map';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
-import type { SaveScorePayload, ScoringHookInput } from '../evals/types';
+import type { ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
 import type { MastraStorage } from '../storage';
 

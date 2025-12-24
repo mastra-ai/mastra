@@ -7,6 +7,43 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 
 Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
 
+## Added
+
+### CompositeStorage for mixing storage backends
+
+`CompositeStorage` combines storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+
+```typescript
+import { CompositeStorage } from "@mastra/core/storage";
+import { PostgresStore } from "@mastra/pg";
+import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+const pgStore = new PostgresStore({
+  id: "pg",
+  connectionString: process.env.DATABASE_URL,
+});
+
+const libsqlStore = new LibSQLStore({
+  id: "libsql",
+  url: "file:./local.db",
+});
+
+const mastra = new Mastra({
+  storage: new CompositeStorage({
+    id: "composite",
+    // Use PostgreSQL for most domains
+    default: pgStore,
+    // But use LibSQL for memory
+    domains: {
+      memory: libsqlStore.stores?.memory,
+    },
+  }),
+});
+```
+
+See the [CompositeStorage reference](/reference/storage/composite) for more details.
+
 ## Changed
 
 ### Required `id` property for storage instances

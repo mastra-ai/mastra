@@ -1,4 +1,5 @@
-import { MastraStorage, type StorageDomains } from './base';
+import { MastraStorage } from './base';
+import type { StorageDomains } from './base';
 
 /**
  * Configuration for individual domain overrides in CompositeStorage.
