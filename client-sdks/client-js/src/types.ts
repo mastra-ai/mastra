@@ -180,7 +180,7 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
-export type GetWorkflowRunByIdResponse = WorkflowRun;
+export type GetWorkflowRunByIdResponse = WorkflowState;
 
 export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
 
