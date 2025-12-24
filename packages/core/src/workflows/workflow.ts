@@ -1968,7 +1968,7 @@ export class Workflow<
       withNestedWorkflows?: boolean;
       fields?: WorkflowStateField[];
     } = {},
-  ): Promise<Partial<WorkflowState> | null> {
+  ): Promise<WorkflowState | null> {
     const { withNestedWorkflows = true, fields } = options;
 
     const storage = this.#mastra?.getStorage();
