@@ -277,10 +277,9 @@ export interface WorkflowState {
 
   // Execution State
   status: WorkflowRunStatus;
-  result?: Record<string, any>;
-  error?: SerializedError;
-  payload?: Record<string, any>;
-
+  // Optional detailed fields (can be excluded for performance)
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: SerializedStepFlowEntry[];
   // Step Information (processed)
   steps: Record<
     string,
@@ -296,10 +295,9 @@ export interface WorkflowState {
       resumedAt?: number;
     }
   >;
-
-  // Optional detailed fields (can be excluded for performance)
-  activeStepsPath?: Record<string, number[]>;
-  serializedStepGraph?: SerializedStepFlowEntry[];
+  result?: Record<string, any>;
+  error?: SerializedError;
+  payload?: Record<string, any>;
 }
 
 export interface WorkflowRunState {

@@ -4002,7 +4002,7 @@ describe('Workflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(run.runId);
+      const executionResult = await workflow.getWorkflowRunById(run.runId);
 
       expect(executionResult?.status).toBe('paused');
       expect(executionResult?.steps).toEqual({
@@ -4119,7 +4119,7 @@ describe('Workflow', () => {
 
       // Poll until workflow completes
       while (true) {
-        const currentResult = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+        const currentResult = await testParallelWorkflow.getWorkflowRunById(run.runId);
 
         if (!currentResult) {
           allStepsPresentThroughout = false;
@@ -4191,7 +4191,7 @@ describe('Workflow', () => {
       await workflowPromise;
 
       // Get final workflow execution result
-      const result = await testParallelWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const result = await testParallelWorkflow.getWorkflowRunById(run.runId);
 
       // Verify all parallel steps went through running state
       expect(foundAllRunning).toBe(true);
@@ -6189,7 +6189,7 @@ describe('Workflow', () => {
       for await (const data of stream) {
         if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
           setTimeout(async () => {
-            const currentExecResult = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+            const currentExecResult = await incrementWorkflow.getWorkflowRunById(run.runId);
             expect(currentExecResult?.status).toBe('running');
             expect(currentExecResult?.steps['final']?.status).toBe('running');
           }, 500);
@@ -6257,7 +6257,7 @@ describe('Workflow', () => {
 
       const run = await incrementWorkflow.createRun();
       await run.start({ inputData: { value: 0 } });
-      const result = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const result = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(result?.status).toBe('success');
       expect(result?.steps).toMatchObject({
         'nested-increment-workflow': {
@@ -9164,7 +9164,7 @@ describe('Workflow', () => {
         expect(errMessage).toBe('Invalid resume data: \n- value: Required');
       }
 
-      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(wflowRun?.status).toBe('suspended');
 
       const resumeResult = await run.resume({
@@ -10176,7 +10176,7 @@ describe('Workflow', () => {
         expect(errMessage).toBe('Invalid resume data: \n- value: Invalid input: expected number, received undefined');
       }
 
-      const wflowRun = await incrementWorkflow.getWorkflowRunExecutionResult(run.runId);
+      const wflowRun = await incrementWorkflow.getWorkflowRunById(run.runId);
       expect(wflowRun?.status).toBe('suspended');
 
       const resumeResult = await run.resume({
@@ -20320,7 +20320,7 @@ describe('Workflow', () => {
       // Poll for completion
       let result;
       for (let i = 0; i < 10; i++) {
-        result = await workflow.getWorkflowRunExecutionResult(runId);
+        result = await workflow.getWorkflowRunById(runId);
         if (result?.status === 'success') break;
         await new Promise(resolve => setTimeout(resolve, 100));
       }

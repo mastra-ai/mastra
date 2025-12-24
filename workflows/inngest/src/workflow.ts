@@ -71,29 +71,6 @@ export class InngestWorkflow<
     return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
-  async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
-    const storage = this.#mastra?.getStorage();
-    if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
-      //returning in memory run if no storage is initialized
-      return this.runs.get(runId)
-        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
-    }
-    const workflowsStore = await storage.getStore('workflows');
-    if (!workflowsStore) {
-      return this.runs.get(runId)
-        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
-        : null;
-    }
-    const run = (await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
-
-    return (
-      run ??
-      (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
-    );
-  }
-
   __registerMastra(mastra: Mastra) {
     super.__registerMastra(mastra);
     this.#mastra = mastra;
@@ -152,7 +129,7 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+    const workflowSnapshotInStorage = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 

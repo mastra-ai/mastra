@@ -472,8 +472,8 @@ async function mockWorkflowRun(workflow: Workflow) {
     updatedAt: new Date(),
   } as any);
 
-  // Mock getWorkflowRunExecutionResult for execution-result routes
-  vi.spyOn(workflow, 'getWorkflowRunExecutionResult').mockResolvedValue({
+  // Mock getWorkflowRunById for execution-result routes
+  vi.spyOn(workflow, 'getWorkflowRunById').mockResolvedValue({
     results: { step1: { output: 'test-output' } },
     status: 'success',
   } as any);
