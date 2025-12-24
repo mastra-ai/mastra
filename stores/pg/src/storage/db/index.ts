@@ -512,6 +512,31 @@ export class PgDB extends MastraBase {
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
           await this.client.none(alterSql);
           this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+
+          // For timestamp columns, also add the timezone-aware version
+          // This matches the behavior in alterTable()
+          if (sqlType === 'TIMESTAMP') {
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${columnName}Z' to ${fullTableName}`);
+          }
+        }
+      }
+
+      // Also add timezone columns for any existing timestamp columns that don't have them yet
+      // This handles the case where timestamp columns existed but their *Z counterparts don't
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        if (columnDef.type === 'timestamp') {
+          const tzColumnName = `${columnName}Z`;
+          const tzColumnExists = await this.hasColumn(TABLE_SPANS, tzColumnName);
+          if (!tzColumnExists) {
+            const parsedTzColumnName = parseSqlIdentifier(tzColumnName, 'column name');
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedTzColumnName}" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${tzColumnName}' to ${fullTableName}`);
+          }
         }
       }
 
