@@ -798,7 +798,8 @@
         "deepseek-ai/DeepSeek-V3.2",
         "moonshotai/Kimi-K2-Instruct-0905",
         "moonshotai/Kimi-K2-Thinking",
-        "zai-org/GLM-4.6"
+        "zai-org/GLM-4.6",
+        "zai-org/GLM-4.7"
       ],
       "docUrl": "https://docs.baseten.co/development/model-apis/overview",
       "gateway": "models.dev"
@@ -1576,7 +1577,8 @@
         "moonshotai/Kimi-K2-Thinking",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
-        "zai-org/GLM-4.5"
+        "zai-org/GLM-4.5",
+        "zai-org/glm-4.7"
       ],
       "docUrl": "https://deepinfra.com/models",
       "gateway": "models.dev"
@@ -2616,7 +2618,8 @@
       "deepseek-ai/DeepSeek-V3.2",
       "moonshotai/Kimi-K2-Instruct-0905",
       "moonshotai/Kimi-K2-Thinking",
-      "zai-org/GLM-4.6"
+      "zai-org/GLM-4.6",
+      "zai-org/GLM-4.7"
     ],
     "siliconflow": [
       "baidu-ernie-4.5-300b-a47b",
@@ -3241,7 +3244,8 @@
       "moonshotai/Kimi-K2-Thinking",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
-      "zai-org/GLM-4.5"
+      "zai-org/GLM-4.5",
+      "zai-org/glm-4.7"
     ],
     "zhipuai": [
       "glm-4.5",

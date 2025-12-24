@@ -614,6 +614,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Instruct-0905',
     'moonshotai/Kimi-K2-Thinking',
     'zai-org/GLM-4.6',
+    'zai-org/GLM-4.7',
   ];
   readonly siliconflow: readonly [
     'baidu-ernie-4.5-300b-a47b',
@@ -1239,6 +1240,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.5',
+    'zai-org/glm-4.7',
   ];
   readonly zhipuai: readonly [
     'glm-4.5',
