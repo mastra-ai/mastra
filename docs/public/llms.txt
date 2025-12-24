@@ -165,7 +165,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 63+ AI providers and 1467+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 63+ AI providers and 1471+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -174,14 +174,14 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Anthropic | Models | Mastra](https://mastra.ai/en/models/providers/anthropic): Use Anthropic models with Mastra. 21 models available.
 - [Azure](https://mastra.ai/en/models/providers/azure): Use Azure models via the AI SDK.
 - [Bailing | Models | Mastra](https://mastra.ai/en/models/providers/bailing): Use Bailing models with Mastra. 2 models available.
-- [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 5 models available.
+- [Baseten | Models | Mastra](https://mastra.ai/en/models/providers/baseten): Use Baseten models with Mastra. 6 models available.
 - [Cerebras | Models | Mastra](https://mastra.ai/en/models/providers/cerebras): Use Cerebras models with Mastra. 3 models available.
 - [Chutes | Models | Mastra](https://mastra.ai/en/models/providers/chutes): Use Chutes models with Mastra. 56 models available.
 - [Cloudflare AI Gateway | Models | Mastra](https://mastra.ai/en/models/providers/cloudflare-ai-gateway): Use Cloudflare AI Gateway models with Mastra. 64 models available.
 - [Cloudflare Workers AI](https://mastra.ai/en/models/providers/cloudflare-workers-ai): Use Cloudflare Workers AI models via the AI SDK.
 - [Cohere](https://mastra.ai/en/models/providers/cohere): Use Cohere models via the AI SDK.
 - [Cortecs | Models | Mastra](https://mastra.ai/en/models/providers/cortecs): Use Cortecs models with Mastra. 16 models available.
-- [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 8 models available.
+- [Deep Infra | Models | Mastra](https://mastra.ai/en/models/providers/deepinfra): Use Deep Infra models with Mastra. 9 models available.
 - [DeepSeek | Models | Mastra](https://mastra.ai/en/models/providers/deepseek): Use DeepSeek models with Mastra. 2 models available.
 - [FastRouter | Models | Mastra](https://mastra.ai/en/models/providers/fastrouter): Use FastRouter models with Mastra. 14 models available.
 - [Fireworks AI | Models | Mastra](https://mastra.ai/en/models/providers/fireworks-ai): Use Fireworks AI models with Mastra. 12 models available.
@@ -201,8 +201,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Llama | Models | Mastra](https://mastra.ai/en/models/providers/llama): Use Llama models with Mastra. 7 models available.
 - [LMStudio | Models | Mastra](https://mastra.ai/en/models/providers/lmstudio): Use LMStudio models with Mastra. 3 models available.
 - [LucidQuery AI | Models | Mastra](https://mastra.ai/en/models/providers/lucidquery): Use LucidQuery AI models with Mastra. 2 models available.
-- [MiniMax (China) | Models | Mastra](https://mastra.ai/en/models/providers/minimax-cn): Use MiniMax (China) models with Mastra. 1 model available.
-- [MiniMax | Models | Mastra](https://mastra.ai/en/models/providers/minimax): Use MiniMax models with Mastra. 1 model available.
+- [MiniMax (China) | Models | Mastra](https://mastra.ai/en/models/providers/minimax-cn): Use MiniMax (China) models with Mastra. 2 models available.
+- [MiniMax | Models | Mastra](https://mastra.ai/en/models/providers/minimax): Use MiniMax models with Mastra. 2 models available.
 - [Mistral | Models | Mastra](https://mastra.ai/en/models/providers/mistral): Use Mistral models with Mastra. 26 models available.
 - [ModelScope | Models | Mastra](https://mastra.ai/en/models/providers/modelscope): Use ModelScope models with Mastra. 7 models available.
 - [Moonshot AI (China) | Models | Mastra](https://mastra.ai/en/models/providers/moonshotai-cn): Use Moonshot AI (China) models with Mastra. 5 models available.
@@ -213,7 +213,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Ollama Cloud | Models | Mastra](https://mastra.ai/en/models/providers/ollama-cloud): Use Ollama Cloud models with Mastra. 12 models available.
 - [Ollama](https://mastra.ai/en/models/providers/ollama): Use Ollama models via the AI SDK.
 - [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 39 models available.
-- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 25 models available.
+- [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 24 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
 - [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 108 models available.
@@ -225,7 +225,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Synthetic | Models | Mastra](https://mastra.ai/en/models/providers/synthetic): Use Synthetic models with Mastra. 25 models available.
 - [Together AI | Models | Mastra](https://mastra.ai/en/models/providers/togetherai): Use Together AI models with Mastra. 10 models available.
 - [Upstage | Models | Mastra](https://mastra.ai/en/models/providers/upstage): Use Upstage models with Mastra. 2 models available.
-- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 21 models available.
+- [Venice AI | Models | Mastra](https://mastra.ai/en/models/providers/venice): Use Venice AI models with Mastra. 22 models available.
 - [Vultr | Models | Mastra](https://mastra.ai/en/models/providers/vultr): Use Vultr models with Mastra. 5 models available.
 - [Weights & Biases | Models | Mastra](https://mastra.ai/en/models/providers/wandb): Use Weights & Biases models with Mastra. 10 models available.
 - [xAI | Models | Mastra](https://mastra.ai/en/models/providers/xai): Use xAI models with Mastra. 22 models available.

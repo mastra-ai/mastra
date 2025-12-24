@@ -109,11 +109,13 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
 
       // Only call stopWhen if we're continuing (not on the final step)
       if (rest.stopWhen && typedInputData.stepResult?.isContinued && accumulatedSteps.length > 0) {
+        // Cast steps to any for v5/v6 StopCondition compatibility
+        // v5 and v6 StepResult types have minor differences (e.g., rawFinishReason, finishReason format)
+        // but are compatible at runtime for stop condition evaluation
+        const steps = accumulatedSteps as any;
         const conditions = await Promise.all(
           (Array.isArray(rest.stopWhen) ? rest.stopWhen : [rest.stopWhen]).map(condition => {
-            return condition({
-              steps: accumulatedSteps,
-            });
+            return condition({ steps });
           }),
         );
 

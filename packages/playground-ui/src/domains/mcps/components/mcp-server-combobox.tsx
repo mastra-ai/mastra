@@ -14,8 +14,6 @@ export interface MCPServerComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  contentClassName?: string;
 }
 
 export function MCPServerCombobox({
@@ -26,8 +24,6 @@ export function MCPServerCombobox({
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,
-  buttonClassName = 'h-8',
-  contentClassName,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();
   const { navigate, paths } = useLinkComponent();
@@ -62,8 +58,7 @@ export function MCPServerCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      buttonClassName={buttonClassName}
-      contentClassName={contentClassName}
+      variant="ghost"
     />
   );
 }

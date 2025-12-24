@@ -490,6 +490,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      // Start the MODEL_STEP span at the beginning of LLM execution
+      modelSpanTracker?.startStep();
+
       let modelResult;
       let warnings: any;
       let request: any;
@@ -902,6 +905,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           const currentRetryCount = inputData.processorRetryCount || 0;
 
           await processorRunner.runProcessOutputStep({
+            steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
             messageList,
             stepNumber,

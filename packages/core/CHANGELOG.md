@@ -1,5 +1,312 @@
 # @mastra/core
 
+## 1.0.0-beta.15
+
+### Minor Changes
+
+- Introduce StorageDomain base class for composite storage support ([#11249](https://github.com/mastra-ai/mastra/pull/11249))
+
+  Storage adapters now use a domain-based architecture where each domain (memory, workflows, scores, observability, agents) extends a `StorageDomain` base class with `init()` and `dangerouslyClearAll()` methods.
+
+  **Key changes:**
+  - Add `StorageDomain` abstract base class that all domain storage classes extend
+  - Add `InMemoryDB` class for shared state across in-memory domain implementations
+  - All storage domains now implement `dangerouslyClearAll()` for test cleanup
+  - Remove `operations` from public `StorageDomains` type (now internal to each adapter)
+  - Add flexible client/config patterns - domains accept either an existing database client or config to create one internally
+
+  **Why this matters:**
+
+  This enables composite storage where you can use different database adapters per domain:
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { PostgresStore } from '@mastra/pg';
+  import { ClickhouseStore } from '@mastra/clickhouse';
+
+  // Use Postgres for most domains but Clickhouse for observability
+  const mastra = new Mastra({
+    storage: new PostgresStore({
+      connectionString: 'postgres://...',
+    }),
+    // Future: override specific domains
+    // observability: new ClickhouseStore({ ... }).getStore('observability'),
+  });
+  ```
+
+  **Standalone domain usage:**
+
+  Domains can now be used independently with flexible configuration:
+
+  ```typescript
+  import { MemoryLibSQL } from '@mastra/libsql/memory';
+
+  // Option 1: Pass config to create client internally
+  const memory = new MemoryLibSQL({
+    url: 'file:./local.db',
+  });
+
+  // Option 2: Pass existing client for shared connections
+  import { createClient } from '@libsql/client';
+  const client = createClient({ url: 'file:./local.db' });
+  const memory = new MemoryLibSQL({ client });
+  ```
+
+  **Breaking changes:**
+  - `StorageDomains` type no longer includes `operations` - access via `getStore()` instead
+  - Domain base classes now require implementing `dangerouslyClearAll()` method
+
+- Refactor storage architecture to use domain-specific stores via `getStore()` pattern ([#11361](https://github.com/mastra-ai/mastra/pull/11361))
+
+  ### Summary
+
+  This release introduces a new storage architecture that replaces passthrough methods on `MastraStorage` with domain-specific storage interfaces accessed via `getStore()`. This change reduces code duplication across storage adapters and provides a cleaner, more modular API.
+
+  ### Migration Guide
+
+  All direct method calls on storage instances should be updated to use `getStore()`:
+
+  ```typescript
+  // Before
+  const thread = await storage.getThreadById({ threadId });
+  await storage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+  await storage.createSpan(span);
+
+  // After
+  const memory = await storage.getStore('memory');
+  const thread = await memory?.getThreadById({ threadId });
+
+  const workflows = await storage.getStore('workflows');
+  await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+  const observability = await storage.getStore('observability');
+  await observability?.createSpan(span);
+  ```
+
+  ### Available Domains
+  - **`memory`**: Thread and message operations (`getThreadById`, `saveThread`, `saveMessages`, etc.)
+  - **`workflows`**: Workflow state persistence (`persistWorkflowSnapshot`, `loadWorkflowSnapshot`, `getWorkflowRunById`, etc.)
+  - **`scores`**: Evaluation scores (`saveScore`, `listScoresByScorerId`, etc.)
+  - **`observability`**: Tracing and spans (`createSpan`, `updateSpan`, `getTrace`, etc.)
+  - **`agents`**: Stored agent configurations (`createAgent`, `getAgentById`, `listAgents`, etc.)
+
+  ### Breaking Changes
+  - Passthrough methods have been removed from `MastraStorage` base class
+  - All storage adapters now require accessing domains via `getStore()`
+  - The `stores` property on storage instances is now the canonical way to access domain storage
+
+  ### Internal Changes
+  - Each storage adapter now initializes domain-specific stores in its constructor
+  - Domain stores share database connections and handle their own table initialization
+
+- Add support for AI SDK v6 ToolLoopAgent in Mastra ([#11254](https://github.com/mastra-ai/mastra/pull/11254))
+
+  You can now pass an AI SDK v6 `ToolLoopAgent` directly to Mastra's agents configuration. The agent will be automatically converted to a Mastra Agent while preserving all ToolLoopAgent lifecycle hooks:
+  - `prepareCall` - Called once at the start of generate/stream
+  - `prepareStep` - Called before each step in the agentic loop
+  - `stopWhen` - Custom stop conditions for the loop
+
+  Example:
+
+  ```typescript
+  import { ToolLoopAgent } from 'ai';
+  import { Mastra } from '@mastra/core/mastra';
+
+  const toolLoopAgent = new ToolLoopAgent({
+    model: openai('gpt-4o'),
+    instructions: 'You are a helpful assistant.',
+    tools: { weather: weatherTool },
+    prepareStep: async ({ stepNumber }) => {
+      if (stepNumber === 0) {
+        return { toolChoice: 'required' };
+      }
+    },
+  });
+
+  const mastra = new Mastra({
+    agents: { toolLoopAgent },
+  });
+
+  // Use like any other Mastra agent
+  const agent = mastra.getAgent('toolLoopAgent');
+  const result = await agent.generate('What is the weather?');
+  ```
+
+- Unified observability schema with entity-based span identification ([#11132](https://github.com/mastra-ai/mastra/pull/11132))
+
+  ## What changed
+
+  Spans now use a unified identification model with `entityId`, `entityType`, and `entityName` instead of separate `agentId`, `toolId`, `workflowId` fields.
+
+  **Before:**
+
+  ```typescript
+  // Old span structure
+  span.agentId; // 'my-agent'
+  span.toolId; // undefined
+  span.workflowId; // undefined
+  ```
+
+  **After:**
+
+  ```typescript
+  // New span structure
+  span.entityType; // EntityType.AGENT
+  span.entityId; // 'my-agent'
+  span.entityName; // 'My Agent'
+  ```
+
+  ## New `listTraces()` API
+
+  Query traces with filtering, pagination, and sorting:
+
+  ```typescript
+  const { spans, pagination } = await storage.listTraces({
+    filters: {
+      entityType: EntityType.AGENT,
+      entityId: 'my-agent',
+      userId: 'user-123',
+      environment: 'production',
+      status: TraceStatus.SUCCESS,
+      startedAt: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
+    },
+    pagination: { page: 0, perPage: 50 },
+    orderBy: { field: 'startedAt', direction: 'DESC' },
+  });
+  ```
+
+  **Available filters:** date ranges (`startedAt`, `endedAt`), entity (`entityType`, `entityId`, `entityName`), identity (`userId`, `organizationId`), correlation IDs (`runId`, `sessionId`, `threadId`), deployment (`environment`, `source`, `serviceName`), `tags`, `metadata`, and `status`.
+
+  ## New retrieval methods
+  - `getSpan({ traceId, spanId })` - Get a single span
+  - `getRootSpan({ traceId })` - Get the root span of a trace
+  - `getTrace({ traceId })` - Get all spans for a trace
+
+  ## Backward compatibility
+
+  The legacy `getTraces()` method continues to work. When you pass `name: "agent run: my-agent"`, it automatically transforms to `entityId: "my-agent", entityType: AGENT`.
+
+  ## Migration
+
+  **Automatic:** SQL-based stores (PostgreSQL, LibSQL, MSSQL) automatically add new columns to existing `spans` tables on initialization. Existing data is preserved with new columns set to `NULL`.
+
+  **No action required:** Your existing code continues to work. Adopt the new fields and `listTraces()` API at your convenience.
+
+### Patch Changes
+
+- When calling `abort()` inside a `processInputStep` processor, the TripWire was being caught by the model retry logic instead of emitting a tripwire chunk to the stream. ([#11343](https://github.com/mastra-ai/mastra/pull/11343))
+
+  Before this fix, processors using `processInputStep` with abort would see errors like:
+
+  ```
+  Error executing model gpt-4o-mini, attempt 1==== TripWire [Error]: Potentially harmful content detected
+  ```
+
+  Now the TripWire is properly handled - it emits a tripwire chunk and signals the abort correctly,
+
+- Consolidate memory integration tests and fix working memory filtering in MessageHistory processor ([#11367](https://github.com/mastra-ai/mastra/pull/11367))
+
+  Moved `extractWorkingMemoryTags`, `removeWorkingMemoryTags`, and `extractWorkingMemoryContent` utilities from `@mastra/memory` to `@mastra/core/memory` so they can be used by the `MessageHistory` processor.
+
+  Updated `MessageHistory.filterMessagesForPersistence()` to properly filter out `updateWorkingMemory` tool invocations and strip working memory tags from text content, fixing an issue where working memory tool call arguments were polluting saved message history for v5+ models.
+
+  Also consolidated integration tests for agent-memory, working-memory, and pg-storage into shared test functions that can run against multiple model versions (v4, v5, v6).
+
+- Add support for AI SDK's `needsApproval` in tools. ([#11388](https://github.com/mastra-ai/mastra/pull/11388))
+
+  **AI SDK tools with static approval:**
+
+  ```typescript
+  import { tool } from 'ai';
+  import { z } from 'zod';
+
+  const weatherTool = tool({
+    description: 'Get weather information',
+    inputSchema: z.object({ city: z.string() }),
+    needsApproval: true,
+    execute: async ({ city }) => {
+      return { weather: 'sunny', temp: 72 };
+    },
+  });
+  ```
+
+  **AI SDK tools with dynamic approval:**
+
+  ```typescript
+  const paymentTool = tool({
+    description: 'Process payment',
+    inputSchema: z.object({ amount: z.number() }),
+    needsApproval: async ({ amount }) => amount > 1000,
+    execute: async ({ amount }) => {
+      return { success: true, amount };
+    },
+  });
+  ```
+
+  **Mastra tools continue to work with `requireApproval`:**
+
+  ```typescript
+  import { createTool } from '@mastra/core';
+
+  const deleteTool = createTool({
+    id: 'delete-file',
+    description: 'Delete a file',
+    requireApproval: true,
+    inputSchema: z.object({ path: z.string() }),
+    execute: async ({ path }) => {
+      return { deleted: true };
+    },
+  });
+  ```
+
+- Fix stopWhen type to accept AI SDK v6 StopCondition functions like `stepCountIs()` ([#11402](https://github.com/mastra-ai/mastra/pull/11402))
+
+- Fix missing `title` field in Convex threads table schema ([#11356](https://github.com/mastra-ai/mastra/pull/11356))
+
+  The Convex schema was hardcoded and out of sync with the core `TABLE_SCHEMAS`, causing errors when creating threads:
+
+  ```
+  Error: Failed to insert or update a document in table "mastra_threads"
+  because it does not match the schema: Object contains extra field `title`
+  that is not in the validator.
+  ```
+
+  Now the Convex schema dynamically builds from `TABLE_SCHEMAS` via a new `@mastra/core/storage/constants` export path that doesn't pull in Node.js dependencies (safe for Convex's sandboxed schema evaluation).
+
+  ```typescript
+  // Users can now import schema tables without Node.js dependency issues
+  import { mastraThreadsTable, mastraMessagesTable } from '@mastra/convex/schema';
+
+  export default defineSchema({
+    mastra_threads: mastraThreadsTable,
+    mastra_messages: mastraMessagesTable,
+  });
+  ```
+
+  Fixes #11319
+
+- Added support for AI SDK v6 embedding models (specification version v3) in memory and vector modules. Fixed TypeScript error where `ModelRouterEmbeddingModel` was trying to implement a union type instead of `EmbeddingModelV2` directly. ([#11362](https://github.com/mastra-ai/mastra/pull/11362))
+
+- fix: support gs:// and s3:// cloud storage URLs in attachmentsToParts ([#11398](https://github.com/mastra-ai/mastra/pull/11398))
+
+- Add validation to detect when a function is passed as a tool instead of a tool object. Previously, passing a tool factory function (e.g., `tools: { myTool }` instead of `tools: { myTool: myTool() }`) would silently fail - the LLM would request tool calls but nothing would execute. Now throws a clear error with guidance on how to fix it. ([#11288](https://github.com/mastra-ai/mastra/pull/11288))
+
+- Fix reasoning providerMetadata leaking into text parts when using memory with OpenAI reasoning models. The runState.providerOptions is now cleared after reasoning-end to prevent text parts from inheriting the reasoning's itemId. ([#11380](https://github.com/mastra-ai/mastra/pull/11380))
+
+- Upgrade AI SDK v6 from beta to stable (6.0.1) and fix finishReason breaking change. ([#11351](https://github.com/mastra-ai/mastra/pull/11351))
+
+  AI SDK v6 stable changed finishReason from a string to an object with `unified` and `raw` properties. Added `normalizeFinishReason()` helper to handle both v5 (string) and v6 (object) formats at the stream transform layer
+
+- Improve autoResumeSuspendedTools instruction for tool approval ([#11338](https://github.com/mastra-ai/mastra/pull/11338))
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
+- Add `perStep` option to workflow run methods, allowing a workflow to run just a step instead of all the workflow steps ([#11276](https://github.com/mastra-ai/mastra/pull/11276))
+
+- Fix workflow throwing error when using .map after .foreach ([#11352](https://github.com/mastra-ai/mastra/pull/11352))
+
+- Bump @ai-sdk/openai from 3.0.0-beta.102 to 3.0.1 ([#11377](https://github.com/mastra-ai/mastra/pull/11377))
+
 ## 1.0.0-beta.14
 
 ### Minor Changes
