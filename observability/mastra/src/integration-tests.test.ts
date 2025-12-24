@@ -2142,7 +2142,7 @@ describe('Tracing Integration Tests', () => {
     const generationStart = generationSpan.startTime.getTime();
     const generationEnd = generationSpan.endTime!.getTime();
     const stepStart = stepSpan.startTime.getTime();
-    const stepEnd = stepSpan.endTime!.getTime();
+    const _stepEnd = stepSpan.endTime!.getTime();
 
     const generationDuration = generationEnd - generationStart;
     const stepStartOffset = stepStart - generationStart;
