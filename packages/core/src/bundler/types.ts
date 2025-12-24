@@ -15,4 +15,6 @@ export type BundlerConfig = {
    * Automatically includes workspace packages.
    */
   transpilePackages?: string[];
+
+  [key: symbol]: boolean | undefined;
 };
