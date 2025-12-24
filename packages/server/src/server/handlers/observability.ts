@@ -32,6 +32,8 @@ const legacyQueryParamsSchema = z.object({
   dateRange: dateRangeSchema.optional(),
   // Old: name matched span names like "agent run: 'myAgent'"
   name: z.string().optional(),
+  // entityType needs preprocessing to handle legacy 'workflow' value
+  entityType: z.preprocess(val => (val === 'workflow' ? 'workflow_run' : val), z.string().optional()),
 });
 
 /**
@@ -44,7 +46,7 @@ const legacyQueryParamsSchema = z.object({
 function transformLegacyParams(params: Record<string, unknown>): Record<string, unknown> {
   const result = { ...params };
 
-  // Transform old entityType='workflow' -> 'workflow_run' (before Zod validation)
+  // Transform old entityType='workflow' -> 'workflow_run' (the Zod validation would have already transformed this)
   if (result.entityType === 'workflow') {
     result.entityType = 'workflow_run';
   }
