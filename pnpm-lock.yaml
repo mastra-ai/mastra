@@ -350,7 +350,7 @@ importers:
         version: 4.0.12(vitest@4.0.12)
       ai:
         specifier: ^5.0.60
-        version: 5.0.76(zod@3.25.76)
+        version: 5.0.101(zod@3.25.76)
       eslint:
         specifier: ^9.37.0
         version: 9.38.0(jiti@2.6.1)
