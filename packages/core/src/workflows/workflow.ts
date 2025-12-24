@@ -61,7 +61,6 @@ import type {
   ToolStep,
   StepParams,
   OutputWriter,
-  WorkflowRunResult,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
 
@@ -2082,7 +2081,7 @@ export class Workflow<
         | 'serializedStepGraph'
       )[];
     } = {},
-  ): Promise<WorkflowRunResult | null> {
+  ): Promise<WorkflowState | null> {
     const { withNestedWorkflows = true, fields } = options;
 
     const storage = this.#mastra?.getStorage();
@@ -2177,7 +2176,7 @@ export class Workflow<
       }
     }
 
-    const result: WorkflowRunResult = {
+    const result: WorkflowState = {
       // Metadata - always include these core fields
       runId: run.runId,
       workflowName: run.workflowName,

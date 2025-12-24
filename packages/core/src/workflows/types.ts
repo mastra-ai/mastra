@@ -264,34 +264,10 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         : never
     : never;
 
-export interface WorkflowState {
-  status: WorkflowRunStatus;
-  activeStepsPath: Record<string, number[]>;
-  serializedStepGraph: SerializedStepFlowEntry[];
-  steps: Record<
-    string,
-    {
-      status: WorkflowRunStatus;
-      output?: Record<string, any>;
-      payload?: Record<string, any>;
-      resumePayload?: Record<string, any>;
-      error?: SerializedError;
-      startedAt: number;
-      endedAt: number;
-      suspendedAt?: number;
-      resumedAt?: number;
-    }
-  >;
-  result?: Record<string, any>;
-  payload?: Record<string, any>;
-  error?: SerializedError;
-}
-
 /**
- * Unified workflow run result that combines metadata with processed execution state.
- * This is the return type for getWorkflowRun() which unifies getWorkflowRunById and getWorkflowRunExecutionResult.
+ * Unified workflow state that combines metadata with processed execution state.
  */
-export interface WorkflowRunResult {
+export interface WorkflowState {
   // Metadata
   runId: string;
   workflowName: string;

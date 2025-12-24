@@ -15,7 +15,6 @@ import {
   startAsyncWorkflowBodySchema,
   streamWorkflowBodySchema,
   workflowControlResponseSchema,
-  workflowExecutionResultQuerySchema,
   workflowExecutionResultSchema,
   workflowIdPathParams,
   workflowInfoSchema,
@@ -436,11 +435,11 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   path: '/api/workflows/:workflowId/runs/:runId/execution-result',
   responseType: 'json',
   pathParamSchema: workflowRunPathParams,
-  queryParamSchema: workflowExecutionResultQuerySchema,
-  responseSchema: workflowExecutionResultSchema,
+  queryParamSchema: workflowRunResultQuerySchema,
+  responseSchema: workflowRunResultSchema,
   summary: 'Get workflow execution result',
   description:
-    'Returns the final execution result of a completed workflow run. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result)',
+    'Returns the execution result of a workflow run including metadata and step states. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result)',
   tags: ['Workflows'],
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
     try {
@@ -459,18 +458,29 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
       }
 
       // Parse fields parameter (comma-separated string)
-      const fieldList = fields ? fields.split(',').map((f: string) => f.trim()) : undefined;
+      const fieldList = fields
+        ? (fields.split(',').map((f: string) => f.trim()) as (
+            | 'status'
+            | 'result'
+            | 'error'
+            | 'payload'
+            | 'steps'
+            | 'metadata'
+            | 'activeStepsPath'
+            | 'serializedStepGraph'
+          )[])
+        : undefined;
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(runId, {
+      const run = await workflow.getWorkflowRunById(runId, {
         withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
         fields: fieldList,
       });
 
-      if (!executionResult) {
-        throw new HTTPException(404, { message: 'Workflow run execution result not found' });
+      if (!run) {
+        throw new HTTPException(404, { message: 'Workflow run not found' });
       }
 
-      return executionResult;
+      return run;
     } catch (error) {
       return handleError(error, 'Error getting workflow run execution result');
     }
