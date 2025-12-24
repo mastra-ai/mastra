@@ -226,6 +226,8 @@ export interface MCPServerConfig {
   id?: string;
   /** Optional description of the MCP server. */
   description?: string;
+  /** Optional instructions describing how to use the server and its features. */
+  instructions?: string;
   /** Optional repository information for the server's source code. */
   repository?: Repository;
   /**
