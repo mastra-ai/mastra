@@ -1,5 +1,6 @@
 ---
 "@mastra/core": patch
+"@mastra/agent-builder": patch
 ---
 
 Fixed inline type narrowing for `tool.execute()` return type when using `outputSchema`.
@@ -9,6 +10,8 @@ Fixed inline type narrowing for `tool.execute()` return type when using `outputS
 **Solution:**
 - Added `{ error?: never }` to the success type, enabling proper discriminated union narrowing
 - Simplified `createTool` generics so `inputData` is correctly typed based on `inputSchema`
+
+**Note:** Tool output schemas should not use `error` as a field name since it's reserved for ValidationError discrimination. Use `errorMessage` or similar instead.
 
 **Usage:**
 ```typescript
