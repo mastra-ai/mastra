@@ -10,6 +10,15 @@ import { ScoresStorageMongoDB } from './domains/scores';
 import { WorkflowsStorageMongoDB } from './domains/workflows';
 import type { MongoDBConfig } from './types';
 
+// Export domain classes for direct use with MastraStorage composition
+export {
+  MongoDBAgentsStorage,
+  MemoryStorageMongoDB,
+  ObservabilityMongoDB,
+  ScoresStorageMongoDB,
+  WorkflowsStorageMongoDB,
+};
+
 /**
  * MongoDB storage adapter for Mastra.
  *

@@ -14,6 +14,9 @@ import { MemoryStorageCloudflare } from './domains/memory';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import { isWorkersConfig } from './types';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageCloudflare, ScoresStorageCloudflare, WorkflowsStorageCloudflare };
 import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConfig } from './types';
 
 /**

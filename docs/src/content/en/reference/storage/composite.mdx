@@ -1,15 +1,15 @@
 ---
-title: "Reference: Composite Storage | Storage"
+title: "Reference: Storage Composition | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
 ---
 
-# Composite Storage
+# Storage Composition
 
-CompositeStorage combines storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but an in-memory store for observability.
+MastraStorage can compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but an in-memory store for observability.
 
 ## Installation
 
-CompositeStorage is included in `@mastra/core`:
+MastraStorage is included in `@mastra/core`:
 
 ```bash
 npm install @mastra/core@beta
@@ -23,14 +23,36 @@ npm install @mastra/pg@beta @mastra/libsql@beta
 
 ## Usage
 
+### Basic composition
+
+Import domain classes directly from each store package and compose them:
+
+```typescript
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+const mastra = new Mastra({
+  storage: new MastraStorage({
+    id: "composite",
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    },
+  }),
+});
+```
+
 ### With a default storage
 
 Use `default` to specify a fallback storage, then override specific domains:
 
 ```typescript
-import { CompositeStorage } from "@mastra/core/storage";
+import { MastraStorage } from "@mastra/core/storage";
 import { PostgresStore } from "@mastra/pg";
-import { LibSQLStore } from "@mastra/libsql";
+import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
 const pgStore = new PostgresStore({
@@ -38,51 +60,14 @@ const pgStore = new PostgresStore({
   connectionString: process.env.DATABASE_URL,
 });
 
-const libsqlStore = new LibSQLStore({
-  id: "libsql",
-  url: "file:./local.db",
-});
-
 const mastra = new Mastra({
-  storage: new CompositeStorage({
+  storage: new MastraStorage({
     id: "composite",
-    // Use PostgreSQL for most domains
     default: pgStore,
-    // But use LibSQL for memory
     domains: {
-      memory: libsqlStore.stores?.memory,
+      memory: new MemoryLibSQL({ url: "file:./local.db" }),
     },
   }),
-});
-```
-
-### Without a default storage
-
-Specify each domain individually when you don't want a fallback:
-
-```typescript
-import { CompositeStorage } from "@mastra/core/storage";
-import { PostgresStore } from "@mastra/pg";
-import { LibSQLStore } from "@mastra/libsql";
-
-const pgStore = new PostgresStore({
-  id: "pg",
-  connectionString: process.env.DATABASE_URL,
-});
-
-const libsqlStore = new LibSQLStore({
-  id: "libsql",
-  url: "file:./local.db",
-});
-
-const storage = new CompositeStorage({
-  id: "composite",
-  domains: {
-    memory: pgStore.stores?.memory,
-    workflows: pgStore.stores?.workflows,
-    scores: libsqlStore.stores?.scores,
-    // observability and agents will be undefined
-  },
 });
 ```
 
@@ -152,21 +137,20 @@ const storage = new CompositeStorage({
 
 ## Initialization
 
-CompositeStorage initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
+MastraStorage initializes each configured domain independently. When passed to the Mastra class, `init()` is called automatically:
 
 ```typescript
-import { CompositeStorage } from "@mastra/core/storage";
-import { PostgresStore } from "@mastra/pg";
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { Mastra } from "@mastra/core";
 
-const pgStore = new PostgresStore({
-  id: "pg",
-  connectionString: process.env.DATABASE_URL,
-});
-
-const storage = new CompositeStorage({
+const storage = new MastraStorage({
   id: "composite",
-  default: pgStore,
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+  },
 });
 
 const mastra = new Mastra({
@@ -177,9 +161,11 @@ const mastra = new Mastra({
 If using storage directly, call `init()` explicitly:
 
 ```typescript
-const storage = new CompositeStorage({
+const storage = new MastraStorage({
   id: "composite",
-  default: pgStore,
+  domains: {
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+  },
 });
 
 await storage.init();
@@ -196,18 +182,20 @@ const thread = await memoryStore?.getThreadById({ threadId: "..." });
 Use a local database for development while keeping production data in a managed service:
 
 ```typescript
-const storage = new CompositeStorage({
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
+
+const storage = new MastraStorage({
   id: "composite",
-  default: new PostgresStore({
-    id: "pg",
-    connectionString: process.env.DATABASE_URL,
-  }),
   domains: {
-    // Use local SQLite for development
+    // Use local SQLite for development, PostgreSQL for production
     memory:
       process.env.NODE_ENV === "development"
-        ? new LibSQLStore({ id: "dev", url: "file:./dev.db" }).stores?.memory
-        : undefined,
+        ? new MemoryLibSQL({ url: "file:./dev.db" })
+        : new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
   },
 });
 ```
@@ -217,21 +205,19 @@ const storage = new CompositeStorage({
 Use a time-series database for traces while keeping other data in PostgreSQL:
 
 ```typescript
-const pgStore = new PostgresStore({
-  id: "pg",
-  connectionString: process.env.DATABASE_URL,
-});
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { ObservabilityStorageClickhouse } from "@mastra/clickhouse";
 
-const clickhouseStore = new ClickhouseStore({
-  id: "clickhouse",
-  url: process.env.CLICKHOUSE_URL,
-});
-
-const storage = new CompositeStorage({
+const storage = new MastraStorage({
   id: "composite",
-  default: pgStore,
   domains: {
-    observability: clickhouseStore.stores?.observability,
+    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    observability: new ObservabilityStorageClickhouse({
+      url: process.env.CLICKHOUSE_URL,
+    }),
   },
 });
 ```

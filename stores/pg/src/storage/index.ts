@@ -17,6 +17,10 @@ import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
+// Export domain classes for direct use with MastraStorage composition
+export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
+export type { PgDomainConfig } from './db';
+
 /**
  * PostgreSQL storage adapter for Mastra.
  *

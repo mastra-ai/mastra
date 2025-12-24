@@ -8,6 +8,9 @@ import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
 
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageClickhouse, ObservabilityStorageClickhouse, ScoresStorageClickhouse, WorkflowsStorageClickhouse };
+
 type IntervalUnit =
   | 'NANOSECOND'
   | 'MICROSECOND'

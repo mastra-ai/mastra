@@ -9,40 +9,30 @@ Storage APIs have been standardized with consistent pagination and naming patter
 
 ## Added
 
-### CompositeStorage for mixing storage backends
+### Storage composition in MastraStorage
 
-`CompositeStorage` combines storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+`MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
 ```typescript
-import { CompositeStorage } from "@mastra/core/storage";
-import { PostgresStore } from "@mastra/pg";
-import { LibSQLStore } from "@mastra/libsql";
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
-const pgStore = new PostgresStore({
-  id: "pg",
-  connectionString: process.env.DATABASE_URL,
-});
-
-const libsqlStore = new LibSQLStore({
-  id: "libsql",
-  url: "file:./local.db",
-});
-
+// Compose domains from different stores
 const mastra = new Mastra({
-  storage: new CompositeStorage({
+  storage: new MastraStorage({
     id: "composite",
-    // Use PostgreSQL for most domains
-    default: pgStore,
-    // But use LibSQL for memory
     domains: {
-      memory: libsqlStore.stores?.memory,
+      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
     },
   }),
 });
 ```
 
-See the [CompositeStorage reference](/reference/storage/composite) for more details.
+See the [Storage Composition reference](/reference/storage/composite) for more details.
 
 ## Changed
 

@@ -10,6 +10,9 @@ import { MemoryStorageDynamoDB } from './domains/memory';
 import { ScoresStorageDynamoDB } from './domains/scores';
 import { WorkflowStorageDynamoDB } from './domains/workflows';
 
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageDynamoDB, ScoresStorageDynamoDB, WorkflowStorageDynamoDB };
+
 /**
  * DynamoDB configuration type.
  *

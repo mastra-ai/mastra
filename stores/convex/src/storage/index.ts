@@ -7,6 +7,9 @@ import { MemoryConvex } from './domains/memory';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryConvex, ScoresConvex, WorkflowsConvex };
+
 /**
  * Convex configuration type.
  *

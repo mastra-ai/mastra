@@ -1233,12 +1233,6 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
         expect(retrievedDefault).toBe(workingMemoryData);
       });
 
-      it('should verify storage adapter support for resource working memory', async () => {
-        // This test would require a mock storage adapter that doesn't support resource working memory
-        // For now, we'll just verify that LibSQL supports it
-        expect(storage.supports.resourceWorkingMemory).toBe(true);
-      });
-
       it('should initialize working memory when creating new threads for existing resources', async () => {
         // Create first thread and set working memory
         const thread1 = await memory.saveThread({

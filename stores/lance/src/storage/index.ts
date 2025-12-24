@@ -7,6 +7,9 @@ import { StoreMemoryLance } from './domains/memory';
 import { StoreScoresLance } from './domains/scores';
 import { StoreWorkflowsLance } from './domains/workflows';
 
+// Export domain classes for direct use with MastraStorage composition
+export { StoreMemoryLance, StoreScoresLance, StoreWorkflowsLance };
+
 export interface LanceStorageOptions {
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
