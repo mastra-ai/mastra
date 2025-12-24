@@ -186,21 +186,29 @@ export class PosthogExporter extends TrackingExporter<PosthogTraceData, PosthogE
 
     // For root spans, only send $ai_trace (not $ai_span) to avoid duplicate entries
     // For non-root spans, send $ai_span or $ai_generation as normal
-    if (span.isRootSpan) {
-      this.captureTraceEvent(span, distinctId, endTime);
-    } else {
-      const eventName = this.mapToPostHogEvent(span.type);
+    try {
+      if (span.isRootSpan) {
+        this.captureTraceEvent(span, distinctId, endTime);
+      } else {
+        const eventName = this.mapToPostHogEvent(span.type);
 
-      // Check if parent is the root span - if so, use traceId as parent_id
-      // since we don't create an $ai_span for root spans
-      const parentIsRootSpan = this.isParentRootSpan(span, traceData);
-      const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
+        // Check if parent is the root span - if so, use traceId as parent_id
+        // since we don't create an $ai_span for root spans
+        const parentIsRootSpan = this.isParentRootSpan(span, traceData);
+        const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
 
-      this.client.capture({
-        distinctId,
-        event: eventName,
-        properties,
-        timestamp: new Date(endTime),
+        this.client.capture({
+          distinctId,
+          event: eventName,
+          properties,
+          timestamp: new Date(endTime),
+        });
+      }
+    } catch (error) {
+      this.logger.error('PosthogExporter: Failed to capture span event', {
+        spanId: span.id,
+        traceId: span.traceId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -213,12 +221,20 @@ export class PosthogExporter extends TrackingExporter<PosthogTraceData, PosthogE
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0);
 
-    this.client.capture({
-      distinctId,
-      event: eventName,
-      properties,
-      timestamp: span.endTime ? new Date(span.endTime) : new Date(),
-    });
+    try {
+      this.client.capture({
+        distinctId,
+        event: eventName,
+        properties,
+        timestamp: span.endTime ? new Date(span.endTime) : new Date(),
+      });
+    } catch (error) {
+      this.logger.error('PosthogExporter: Failed to capture event span', {
+        spanId: span.id,
+        traceId: span.traceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   protected async cleanupTraceData(_traceData: PosthogTraceData, _traceId: string): Promise<void> {

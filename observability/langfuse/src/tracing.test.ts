@@ -810,7 +810,7 @@ describe('LangfuseExporter', () => {
       // Verify trace was created and span is tracked as active
       expect((exporter as any).traceMap.has('root-span-id')).toBe(true);
       const traceData = (exporter as any).traceMap.get('root-span-id');
-      expect(traceData.activeSpans.has('root-span-id')).toBe(true);
+      expect(traceData.activeSpanIds.has('root-span-id')).toBe(true);
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
@@ -1116,10 +1116,10 @@ describe('LangfuseExporter', () => {
       // Verify trace is still in map because step-2 hasn't ended yet
       expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
       const traceData = (exporter as any).traceMap.get('workflow-1');
-      // step-2 should still be in activeSpans
-      expect(traceData.activeSpans.has('step-2')).toBe(true);
-      expect(traceData.activeSpans.has('step-1')).toBe(false); // step-1 already ended
-      expect(traceData.activeSpans.has('workflow-1')).toBe(false); // workflow ended
+      // step-2 should still be in activeSpanIds
+      expect(traceData.activeSpanIds.has('step-2')).toBe(true);
+      expect(traceData.activeSpanIds.has('step-1')).toBe(false); // step-1 already ended
+      expect(traceData.activeSpanIds.has('workflow-1')).toBe(false); // workflow ended
 
       // Now end step-2 (the last active span) AFTER the root ended
       step2Span.endTime = new Date();

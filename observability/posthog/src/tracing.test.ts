@@ -103,6 +103,7 @@ describe('PosthogExporter', () => {
       endTime: Date.now() + 100,
       attributes: {},
       metadata: {},
+      isRootSpan: true,
     };
 
     it('should cache span on start', async () => {
@@ -136,14 +137,14 @@ describe('PosthogExporter', () => {
       });
 
       expect(mockCapture).toHaveBeenCalledTimes(1);
+      // Root spans emit $ai_trace, not $ai_span
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
-          event: '$ai_span',
+          event: '$ai_trace',
           distinctId: 'anonymous',
           properties: expect.objectContaining({
             $ai_trace_id: mockSpan.traceId,
-            $ai_span_id: mockSpan.id,
-            $ai_latency: expect.closeTo(0.1, 1), // ~0.1s
+            $ai_span_name: mockSpan.name,
           }),
         }),
       );
@@ -197,6 +198,7 @@ describe('PosthogExporter', () => {
           startTime: Date.now(),
           endTime: Date.now() + 100,
           attributes: {},
+          isRootSpan: true,
         },
         metadata: { userId: 'user-123' },
       };
@@ -229,6 +231,7 @@ describe('PosthogExporter', () => {
         endTime: Date.now() + 100,
         attributes: {},
         metadata: {},
+        isRootSpan: true,
       };
 
       await exporter.exportTracingEvent({
@@ -262,6 +265,7 @@ describe('PosthogExporter', () => {
           traceId: 't1',
           startTime: Date.now(),
           type: SpanType.GENERIC,
+          isRootSpan: true,
         } as any,
       });
 
@@ -282,7 +286,7 @@ describe('PosthogExporter', () => {
     it('should map MODEL_GENERATION to $ai_generation (non-root)', async () => {
       // Use non-root span since root spans only send $ai_trace
       const generation = createSpan({ type: SpanType.MODEL_GENERATION, parentSpanId: 'parent-1' });
-      await exportSpanLifecycle(exporter, generation);
+      await exportChildSpanWithParent(exporter, generation);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_generation' }));
     });
@@ -291,7 +295,7 @@ describe('PosthogExporter', () => {
       // MODEL_STEP now goes through span properties path (not generation)
       // Use non-root span since root spans only send $ai_trace
       const step = createSpan({ type: SpanType.MODEL_STEP, parentSpanId: 'parent-1' });
-      await exportSpanLifecycle(exporter, step);
+      await exportChildSpanWithParent(exporter, step);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_span' }));
     });
@@ -310,7 +314,7 @@ describe('PosthogExporter', () => {
         parentSpanId: 'parent-1',
         attributes: { chunkType: 'text', sequenceNumber: 5 },
       });
-      await exportSpanLifecycle(exporter, chunk);
+      await exportChildSpanWithParent(exporter, chunk);
 
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -326,7 +330,7 @@ describe('PosthogExporter', () => {
     it('should map TOOL_CALL and other types to $ai_span', async () => {
       // Use non-root span since root spans only send $ai_trace
       const toolSpan = createSpan({ type: SpanType.TOOL_CALL, parentSpanId: 'parent-1' });
-      await exportSpanLifecycle(exporter, toolSpan);
+      await exportChildSpanWithParent(exporter, toolSpan);
 
       expect(mockCapture).toHaveBeenCalledWith(expect.objectContaining({ event: '$ai_span' }));
     });
@@ -352,7 +356,7 @@ describe('PosthogExporter', () => {
         },
       });
 
-      await exportSpanLifecycle(exporter, generation);
+      await exportChildSpanWithParent(exporter, generation);
 
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -374,19 +378,14 @@ describe('PosthogExporter', () => {
         attributes: { model: 'gpt-3.5-turbo' },
       });
 
-      await exportSpanLifecycle(exporter, generation);
+      await exportChildSpanWithParent(exporter, generation);
 
-      expect(mockCapture).toHaveBeenCalledWith(
-        expect.objectContaining({
-          properties: expect.objectContaining({
-            $ai_model: 'gpt-3.5-turbo',
-            $ai_provider: 'unknown-provider', // Updated expectation
-          }),
-        }),
-      );
-
-      const props = mockCapture.mock.calls[0][0].properties;
-      expect(props).not.toHaveProperty('$ai_input_tokens');
+      // Find the $ai_generation call (skip the $ai_trace call from root span)
+      const genCall = mockCapture.mock.calls.find((c: any) => c[0].event === '$ai_generation');
+      expect(genCall).toBeDefined();
+      expect(genCall![0].properties.$ai_model).toBe('gpt-3.5-turbo');
+      expect(genCall![0].properties.$ai_provider).toBe('unknown-provider');
+      expect(genCall![0].properties).not.toHaveProperty('$ai_input_tokens');
     });
   });
 
@@ -400,23 +399,37 @@ describe('PosthogExporter', () => {
         id: 'parent',
         traceId: 't1',
         type: SpanType.AGENT_RUN,
+        isRootSpan: true,
       });
       const child = createSpan({
         id: 'child',
         traceId: 't1',
         parentSpanId: 'parent',
         type: SpanType.TOOL_CALL,
+        isRootSpan: false,
       });
 
-      await exportSpanLifecycle(exporter, parent);
+      // Start parent, then export child lifecycle, then end parent
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: parent as any,
+      });
       await exportSpanLifecycle(exporter, child);
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: parent as any,
+      });
 
-      // Child should have parent_id
+      // Child should have parent_id (child ends first, parent ends second)
+      // Call 1 is child ($ai_span), Call 2 is parent ($ai_trace)
+      // Note: When parent is root span, $ai_parent_id points to traceId (not parentSpanId)
+      // since root spans don't emit $ai_span events
       expect(mockCapture).toHaveBeenNthCalledWith(
-        2,
+        1,
         expect.objectContaining({
+          event: '$ai_span',
           properties: expect.objectContaining({
-            $ai_parent_id: 'parent',
+            $ai_parent_id: 't1', // Uses traceId when parent is root span
             $ai_trace_id: 't1',
           }),
         }),
@@ -424,7 +437,7 @@ describe('PosthogExporter', () => {
     });
 
     it('should omit $ai_parent_id for root spans', async () => {
-      const root = createSpan({ parentSpanId: undefined });
+      const root = createSpan({ parentSpanId: undefined, isRootSpan: true });
       await exportSpanLifecycle(exporter, root);
 
       const props = mockCapture.mock.calls[0][0].properties;
@@ -458,6 +471,7 @@ describe('PosthogExporter', () => {
         type: SpanType.TOOL_CALL,
         input: { param: 'value' },
         output: { result: 'data' },
+        isRootSpan: true,
       });
 
       await exportSpanLifecycle(exporter, toolSpan);
@@ -483,6 +497,7 @@ describe('PosthogExporter', () => {
       const errorSpan = createSpan({
         type: SpanType.TOOL_CALL,
         parentSpanId: 'parent-1',
+        isRootSpan: false,
         errorInfo: {
           message: 'Tool execution failed',
           id: 'TOOL_ERROR',
@@ -490,7 +505,7 @@ describe('PosthogExporter', () => {
         },
       });
 
-      await exportSpanLifecycle(exporter, errorSpan);
+      await exportChildSpanWithParent(exporter, errorSpan);
 
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -542,7 +557,7 @@ describe('PosthogExporter', () => {
           throw new Error('Network error');
         });
 
-      const span = createSpan({ type: SpanType.GENERIC });
+      const span = createSpan({ type: SpanType.GENERIC, isRootSpan: true });
 
       await expect(exportSpanLifecycle(exporter, span)).resolves.not.toThrow();
 
@@ -561,6 +576,7 @@ describe('PosthogExporter', () => {
         id: 'event-1',
         type: SpanType.GENERIC,
         isEvent: true,
+        isRootSpan: true,
         output: { feedback: 'Great!' },
       });
 
@@ -584,6 +600,7 @@ describe('PosthogExporter', () => {
         id: 'event-1',
         type: SpanType.GENERIC,
         isEvent: true,
+        isRootSpan: true,
       });
 
       // Start (should capture)
@@ -602,7 +619,7 @@ describe('PosthogExporter', () => {
     });
 
     it('should not cache event spans', async () => {
-      const eventSpan = createSpan({ isEvent: true });
+      const eventSpan = createSpan({ isEvent: true, isRootSpan: true });
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -631,9 +648,11 @@ describe('PosthogExporter', () => {
         input: 'Hello, world!',
       });
 
-      await exportSpanLifecycle(exporter, generation);
+      await exportChildSpanWithParent(exporter, generation);
 
-      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      // Find the $ai_generation call (skip the $ai_trace call from root span)
+      const genCall = mockCapture.mock.calls.find((c: any) => c[0].event === '$ai_generation');
+      const capturedInput = genCall?.[0].properties.$ai_input;
       expect(capturedInput).toEqual([
         {
           role: 'user',
@@ -650,9 +669,11 @@ describe('PosthogExporter', () => {
         output: 'This is the response.',
       });
 
-      await exportSpanLifecycle(exporter, generation);
+      await exportChildSpanWithParent(exporter, generation);
 
-      const capturedOutput = mockCapture.mock.calls[0][0].properties.$ai_output_choices;
+      // Find the $ai_generation call (skip the $ai_trace call from root span)
+      const genCall = mockCapture.mock.calls.find((c: any) => c[0].event === '$ai_generation');
+      const capturedOutput = genCall?.[0].properties.$ai_output_choices;
       expect(capturedOutput).toEqual([
         {
           role: 'assistant',
@@ -669,9 +690,11 @@ describe('PosthogExporter', () => {
         input: [{ role: 'user', content: 'What is 2+2?' }],
       });
 
-      await exportSpanLifecycle(exporter, generation);
+      await exportChildSpanWithParent(exporter, generation);
 
-      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      // Find the $ai_generation call (skip the $ai_trace call from root span)
+      const genCall = mockCapture.mock.calls.find((c: any) => c[0].event === '$ai_generation');
+      const capturedInput = genCall?.[0].properties.$ai_input;
       expect(capturedInput).toEqual([
         {
           role: 'user',
@@ -692,12 +715,14 @@ describe('PosthogExporter', () => {
         id: 'root',
         traceId: 't1',
         type: SpanType.AGENT_RUN,
+        isRootSpan: true,
       });
       const child = createSpan({
         id: 'child',
         traceId: 't1',
         parentSpanId: 'root',
         type: SpanType.TOOL_CALL,
+        isRootSpan: false,
       });
 
       // Start both
@@ -738,10 +763,12 @@ describe('PosthogExporter', () => {
       const trace1 = createSpan({
         traceId: 't1',
         metadata: { userId: 'user-1' },
+        isRootSpan: true,
       });
       const trace2 = createSpan({
         traceId: 't2',
         metadata: { userId: 'user-2' },
+        isRootSpan: true,
       });
 
       await exportSpanLifecycle(exporter, trace1);
@@ -855,7 +882,7 @@ describe('PosthogExporter', () => {
         },
       });
 
-      await exportSpanLifecycle(exporter, nonRootGeneration);
+      await exportChildSpanWithParent(exporter, nonRootGeneration);
 
       expect(mockCapture).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -924,8 +951,11 @@ describe('PosthogExporter', () => {
         tags: ['root-tag'],
       });
 
-      // Start and end root span
-      await exportSpanLifecycle(exporter, rootSpan);
+      // Start root span first
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan as any,
+      });
 
       // Clear mock to check child span call
       mockCapture.mockClear();
@@ -947,6 +977,12 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledTimes(1);
       const props = mockCapture.mock.calls[0][0].properties;
       expect(props).not.toHaveProperty('should-not-appear');
+
+      // End root span
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: rootSpan as any,
+      });
     });
   });
 });
@@ -987,5 +1023,34 @@ async function exportSpanLifecycle(exporter: PosthogExporter, span: any): Promis
   await exporter.exportTracingEvent({
     type: TracingEventType.SPAN_ENDED,
     exportedSpan: span,
+  });
+}
+
+/**
+ * Helper to export a child span with its parent root span first
+ * This ensures the trace exists before the child span is processed
+ */
+async function exportChildSpanWithParent(exporter: PosthogExporter, childSpan: any): Promise<void> {
+  const rootSpan = createSpan({
+    id: childSpan.parentSpanId || 'parent-1',
+    traceId: childSpan.traceId,
+    type: SpanType.AGENT_RUN,
+    name: 'parent-span',
+    isRootSpan: true,
+  });
+
+  // Start root span first
+  await exporter.exportTracingEvent({
+    type: TracingEventType.SPAN_STARTED,
+    exportedSpan: rootSpan as any,
+  });
+
+  // Then export child span lifecycle
+  await exportSpanLifecycle(exporter, childSpan);
+
+  // End root span
+  await exporter.exportTracingEvent({
+    type: TracingEventType.SPAN_ENDED,
+    exportedSpan: rootSpan as any,
   });
 }

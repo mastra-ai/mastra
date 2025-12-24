@@ -317,10 +317,10 @@ describe('BraintrustExporter', () => {
       expect(traceData.spans.has('child-span-2')).toBe(true);
 
       // All four spans should be active
-      expect(traceData.activeIds.has('root-span-1')).toBe(true);
-      expect(traceData.activeIds.has('child-span-1')).toBe(true);
-      expect(traceData.activeIds.has('root-span-2')).toBe(true);
-      expect(traceData.activeIds.has('child-span-2')).toBe(true);
+      expect(traceData.activeSpanIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeSpanIds.has('child-span-1')).toBe(true);
+      expect(traceData.activeSpanIds.has('root-span-2')).toBe(true);
+      expect(traceData.activeSpanIds.has('child-span-2')).toBe(true);
     });
   });
 

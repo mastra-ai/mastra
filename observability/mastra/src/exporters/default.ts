@@ -156,7 +156,7 @@ export class DefaultExporter extends BufferedExporter<BatchBuffer, BatchBuffer> 
 
     this.logger.debug('tracing storage exporter initialized', {
       strategy: this.#resolvedStrategy,
-      source: this.#userConfig.strategy !== 'auto' ? 'user' : 'auto',
+      source: this.#userConfig.strategy && this.#userConfig.strategy !== 'auto' ? 'user' : 'auto',
       storageAdapter: storageName,
       maxBatchSize: this.maxBatchSize,
       maxBatchWaitMs: this.maxBatchWaitMs,

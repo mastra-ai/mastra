@@ -58,11 +58,11 @@ export abstract class BufferedExporter<TRecord, TBuffer = TRecord[]> extends Bas
     totalSize: 0,
   };
 
-  // Timer for scheduled flushes
-  #flushTimer: NodeJS.Timeout | null = null;
+  // Timer for scheduled flushes (protected for testing)
+  protected flushTimer: NodeJS.Timeout | null = null;
 
   // Flag to prevent concurrent flushes
-  #flushing = false;
+  private flushing = false;
 
   constructor(config: BufferedExporterConfig = {}) {
     super(config);
@@ -160,10 +160,10 @@ export abstract class BufferedExporter<TRecord, TBuffer = TRecord[]> extends Bas
    * Automatically manages timer - calling multiple times resets the timer.
    */
   protected scheduleFlush(): void {
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
     }
-    this.#flushTimer = setTimeout(() => {
+    this.flushTimer = setTimeout(() => {
       this.flush().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
@@ -176,9 +176,9 @@ export abstract class BufferedExporter<TRecord, TBuffer = TRecord[]> extends Bas
    * Cancel any scheduled flush.
    */
   protected cancelScheduledFlush(): void {
-    if (this.#flushTimer) {
-      clearTimeout(this.#flushTimer);
-      this.#flushTimer = null;
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
     }
   }
 
@@ -194,7 +194,7 @@ export abstract class BufferedExporter<TRecord, TBuffer = TRecord[]> extends Bas
    */
   async flush(): Promise<void> {
     // Prevent concurrent flushes
-    if (this.#flushing) {
+    if (this.flushing) {
       return;
     }
 
@@ -206,7 +206,7 @@ export abstract class BufferedExporter<TRecord, TBuffer = TRecord[]> extends Bas
       return; // Nothing to flush
     }
 
-    this.#flushing = true;
+    this.flushing = true;
     const startTime = Date.now();
     const flushReason = this.shouldFlushBySize() ? 'size' : 'time';
 
@@ -224,7 +224,7 @@ export abstract class BufferedExporter<TRecord, TBuffer = TRecord[]> extends Bas
         durationMs: elapsed,
       });
     } finally {
-      this.#flushing = false;
+      this.flushing = false;
     }
   }
 

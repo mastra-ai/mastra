@@ -290,8 +290,8 @@ describe('LangSmithExporter', () => {
       expect(traceData.spans.has('root-span-2')).toBe(true);
 
       // Both root spans should be active
-      expect(traceData.activeIds.has('root-span-1')).toBe(true);
-      expect(traceData.activeIds.has('root-span-2')).toBe(true);
+      expect(traceData.activeSpanIds.has('root-span-1')).toBe(true);
+      expect(traceData.activeSpanIds.has('root-span-2')).toBe(true);
 
       // Only one trace entry should exist (not two separate ones)
       expect((exporter as any).traceMap.size).toBe(1);

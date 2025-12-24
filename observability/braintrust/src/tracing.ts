@@ -249,9 +249,13 @@ export class BraintrustExporter extends TrackingExporter<BraintrustTraceData, Br
   }
 
   protected async cleanupTraceData(traceData: BraintrustTraceData, _traceId: string): Promise<void> {
-    // End all active spans
-    for (const [_spanId, span] of traceData.spans) {
-      span.end();
+    // Only end spans that haven't been ended yet (still in activeSpanIds)
+    // This handles shutdown scenarios where spans may not have received SPAN_ENDED events
+    for (const spanId of traceData.activeSpanIds) {
+      const span = traceData.spans.get(spanId);
+      if (span) {
+        span.end();
+      }
     }
     // Loggers don't have an explicit shutdown method
   }

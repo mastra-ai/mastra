@@ -68,12 +68,13 @@ describe('CloudExporter', () => {
         exportedSpan: mockSpan,
       };
 
-      // Mock the internal buffer to verify span was added
-      const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
+      // Mock the internal processEvent to verify span was processed
+      const processEventSpy = vi.spyOn(exporter as any, 'processEvent');
 
       await exporter.exportTracingEvent(spanEndedEvent);
 
-      expect(addToBufferSpy).toHaveBeenCalledWith(spanEndedEvent);
+      expect(processEventSpy).toHaveBeenCalledWith(spanEndedEvent);
+      expect(processEventSpy).toHaveReturnedWith(true); // Returns true when event is processed
     });
 
     it('should ignore SPAN_STARTED events', async () => {
@@ -82,11 +83,12 @@ describe('CloudExporter', () => {
         exportedSpan: mockSpan,
       };
 
-      const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
+      const processEventSpy = vi.spyOn(exporter as any, 'processEvent');
 
       await exporter.exportTracingEvent(spanStartedEvent);
 
-      expect(addToBufferSpy).not.toHaveBeenCalled();
+      expect(processEventSpy).toHaveBeenCalledWith(spanStartedEvent);
+      expect(processEventSpy).toHaveReturnedWith(false); // Returns false when event is skipped
     });
 
     it('should ignore SPAN_UPDATED events', async () => {
@@ -95,11 +97,12 @@ describe('CloudExporter', () => {
         exportedSpan: mockSpan,
       };
 
-      const addToBufferSpy = vi.spyOn(exporter as any, 'addToBuffer');
+      const processEventSpy = vi.spyOn(exporter as any, 'processEvent');
 
       await exporter.exportTracingEvent(spanUpdatedEvent);
 
-      expect(addToBufferSpy).not.toHaveBeenCalled();
+      expect(processEventSpy).toHaveBeenCalledWith(spanUpdatedEvent);
+      expect(processEventSpy).toHaveReturnedWith(false); // Returns false when event is skipped
     });
 
     it('should only increment buffer size for SPAN_ENDED events', async () => {
@@ -113,10 +116,11 @@ describe('CloudExporter', () => {
         await exporter.exportTracingEvent(event);
       }
 
-      // Access private buffer to check size
+      // Access private buffer and bufferState to check size
       const buffer = (exporter as any).buffer;
-      expect(buffer.totalSize).toBe(1); // Only SPAN_ENDED should be counted
-      expect(buffer.spans).toHaveLength(1);
+      const bufferState = (exporter as any).bufferState;
+      expect(bufferState.totalSize).toBe(1); // Only SPAN_ENDED should be counted
+      expect(buffer).toHaveLength(1);
     });
   });
 
@@ -133,10 +137,11 @@ describe('CloudExporter', () => {
 
     it('should initialize buffer with empty state', () => {
       const buffer = (exporter as any).buffer;
+      const bufferState = (exporter as any).bufferState;
 
-      expect(buffer.spans).toEqual([]);
-      expect(buffer.totalSize).toBe(0);
-      expect(buffer.firstEventTime).toBeUndefined();
+      expect(buffer).toEqual([]);
+      expect(bufferState.totalSize).toBe(0);
+      expect(bufferState.firstEventTime).toBeUndefined();
     });
 
     it('should set firstEventTime when adding first span to empty buffer', async () => {
@@ -147,12 +152,12 @@ describe('CloudExporter', () => {
         exportedSpan: mockSpan,
       });
 
-      const buffer = (exporter as any).buffer;
+      const bufferState = (exporter as any).bufferState;
       const afterTime = Date.now();
 
-      expect(buffer.firstEventTime).toBeInstanceOf(Date);
-      expect(buffer.firstEventTime.getTime()).toBeGreaterThanOrEqual(beforeTime);
-      expect(buffer.firstEventTime.getTime()).toBeLessThanOrEqual(afterTime);
+      expect(bufferState.firstEventTime).toBeInstanceOf(Date);
+      expect(bufferState.firstEventTime.getTime()).toBeGreaterThanOrEqual(beforeTime);
+      expect(bufferState.firstEventTime.getTime()).toBeLessThanOrEqual(afterTime);
     });
 
     it('should not update firstEventTime when adding subsequent spans', async () => {
@@ -162,8 +167,8 @@ describe('CloudExporter', () => {
         exportedSpan: mockSpan,
       });
 
-      const buffer = (exporter as any).buffer;
-      const firstTime = buffer.firstEventTime;
+      const bufferState = (exporter as any).bufferState;
+      const firstTime = bufferState.firstEventTime;
 
       // Wait a bit to ensure time difference
       await new Promise(resolve => setTimeout(resolve, 10));
@@ -176,27 +181,27 @@ describe('CloudExporter', () => {
       });
 
       // firstEventTime should not have changed
-      expect(buffer.firstEventTime).toBe(firstTime);
-      expect(buffer.totalSize).toBe(2);
+      expect(bufferState.firstEventTime).toBe(firstTime);
+      expect(bufferState.totalSize).toBe(2);
     });
 
     it('should increment totalSize correctly', async () => {
-      const buffer = (exporter as any).buffer;
+      const bufferState = (exporter as any).bufferState;
 
-      expect(buffer.totalSize).toBe(0);
+      expect(bufferState.totalSize).toBe(0);
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
-      expect(buffer.totalSize).toBe(1);
+      expect(bufferState.totalSize).toBe(1);
 
       const secondSpan = { ...mockSpan, id: 'span-456' };
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: secondSpan,
       });
-      expect(buffer.totalSize).toBe(2);
+      expect(bufferState.totalSize).toBe(2);
     });
 
     it('should add spans with correct structure to buffer', async () => {
@@ -206,7 +211,7 @@ describe('CloudExporter', () => {
       });
 
       const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
+      const spanRecord = buffer[0];
 
       expect(spanRecord).toMatchObject({
         traceId: mockSpan.traceId,
@@ -228,18 +233,21 @@ describe('CloudExporter', () => {
 
     it('should reset buffer correctly', () => {
       const buffer = (exporter as any).buffer;
-      const resetBuffer = (exporter as any).resetBuffer.bind(exporter);
+      const bufferState = (exporter as any).bufferState;
 
       // Simulate buffer with data
-      buffer.spans = [{ id: 'test' }];
-      buffer.totalSize = 1;
-      buffer.firstEventTime = new Date();
+      buffer.push({ id: 'test' });
+      bufferState.totalSize = 1;
+      bufferState.firstEventTime = new Date();
 
-      resetBuffer();
+      // Use the exporter's methods to reset
+      const extractedBuffer = (exporter as any).extractAndResetBuffer();
+      (exporter as any).onBufferReset();
 
-      expect(buffer.spans).toEqual([]);
-      expect(buffer.totalSize).toBe(0);
-      expect(buffer.firstEventTime).toBeUndefined();
+      expect(extractedBuffer).toEqual([{ id: 'test' }]);
+      expect((exporter as any).buffer).toEqual([]);
+      expect(bufferState.totalSize).toBe(0);
+      expect(bufferState.firstEventTime).toBeUndefined();
     });
 
     it('should handle parent span references', async () => {
@@ -260,7 +268,7 @@ describe('CloudExporter', () => {
       });
 
       const buffer = (exporter as any).buffer;
-      const spanRecord = buffer.spans[0];
+      const spanRecord = buffer[0];
 
       expect(spanRecord.parentSpanId).toBe('parent-span');
     });
@@ -342,10 +350,12 @@ describe('CloudExporter', () => {
     it('should detect time-based flush condition', () => {
       const shouldFlush = (exporter as any).shouldFlush.bind(exporter);
       const buffer = (exporter as any).buffer;
+      const bufferState = (exporter as any).bufferState;
 
       // Set up buffer with old firstEventTime
-      buffer.totalSize = 1;
-      buffer.firstEventTime = new Date(Date.now() - 6000); // 6 seconds ago (older than 5s default)
+      buffer.push({ id: 'test' });
+      bufferState.totalSize = 1;
+      bufferState.firstEventTime = new Date(Date.now() - 6000); // 6 seconds ago (older than 5s default)
 
       expect(shouldFlush()).toBe(true);
     });
@@ -353,20 +363,22 @@ describe('CloudExporter', () => {
     it('should not trigger time-based flush for recent events', () => {
       const shouldFlush = (exporter as any).shouldFlush.bind(exporter);
       const buffer = (exporter as any).buffer;
+      const bufferState = (exporter as any).bufferState;
 
       // Set up buffer with recent firstEventTime
-      buffer.totalSize = 1;
-      buffer.firstEventTime = new Date(Date.now() - 1000); // 1 second ago
+      buffer.push({ id: 'test' });
+      bufferState.totalSize = 1;
+      bufferState.firstEventTime = new Date(Date.now() - 1000); // 1 second ago
 
       expect(shouldFlush()).toBe(false);
     });
 
     it('should not trigger flush for empty buffer', () => {
       const shouldFlush = (exporter as any).shouldFlush.bind(exporter);
-      const buffer = (exporter as any).buffer;
+      const bufferState = (exporter as any).bufferState;
 
-      buffer.totalSize = 0;
-      buffer.firstEventTime = new Date(Date.now() - 10000); // Old time but empty buffer
+      bufferState.totalSize = 0;
+      bufferState.firstEventTime = new Date(Date.now() - 10000); // Old time but empty buffer
 
       expect(shouldFlush()).toBe(false);
     });
@@ -764,7 +776,7 @@ describe('CloudExporter', () => {
       await (retryExporter as any).flush();
 
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Batch upload failed after all retries, dropping batch',
+        'Batch flush failed after all retries, dropping batch',
         expect.any(Object),
       );
     });
@@ -786,9 +798,9 @@ describe('CloudExporter', () => {
       // Wait for async error handling
       await vi.runAllTimersAsync();
 
-      // Should log the batch upload failure, not scheduled flush failure
+      // Should log the batch flush failure, not scheduled flush failure
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Batch upload failed after all retries, dropping batch',
+        'Batch flush failed after all retries, dropping batch',
         expect.any(Object),
       );
     });
@@ -848,8 +860,8 @@ describe('CloudExporter', () => {
         exportedSpan: { ...mockSpan, id: 'span-456' },
       });
 
-      const buffer = (exporter as any).buffer;
-      expect(buffer.totalSize).toBe(2);
+      const bufferState = (exporter as any).bufferState;
+      expect(bufferState.totalSize).toBe(2);
 
       await exporter.shutdown();
 
@@ -864,8 +876,8 @@ describe('CloudExporter', () => {
       const flushSpy = vi.spyOn(exporter as any, 'flush');
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
-      const buffer = (exporter as any).buffer;
-      expect(buffer.totalSize).toBe(0);
+      const bufferState = (exporter as any).bufferState;
+      expect(bufferState.totalSize).toBe(0);
 
       await exporter.shutdown();
 

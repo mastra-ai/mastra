@@ -36,15 +36,21 @@ export class CloudExporter extends BufferedExporter<MastraCloudSpanRecord> {
   private accessToken: string;
   private endpoint: string;
   private buffer: MastraCloudSpanRecord[] = [];
+  private cloudMaxRetries: number;
 
   constructor(config: CloudExporterConfig = {}) {
+    // Set base class maxRetries to 0 to disable base retry logic
+    // CloudExporter handles retries via fetchWithRetry instead
     super({
       ...config,
       maxBatchSize: config.maxBatchSize ?? 1000,
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
-      maxRetries: config.maxRetries ?? 3,
+      maxRetries: 0, // Disable base class retry - we use fetchWithRetry
       logLevel: config.logLevel ?? LogLevel.INFO,
     });
+
+    // Store maxRetries for use with fetchWithRetry
+    this.cloudMaxRetries = config.maxRetries ?? 3;
 
     const accessToken = config.accessToken ?? process.env.MASTRA_CLOUD_ACCESS_TOKEN;
     if (!accessToken) {
@@ -90,7 +96,7 @@ export class CloudExporter extends BufferedExporter<MastraCloudSpanRecord> {
     };
 
     try {
-      await fetchWithRetry(this.endpoint, options, this.maxRetries);
+      await fetchWithRetry(this.endpoint, options, this.cloudMaxRetries);
     } catch (error) {
       const mastraError = new MastraError(
         {

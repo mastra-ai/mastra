@@ -246,8 +246,13 @@ export abstract class TrackingExporter<
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     const span = event.exportedSpan;
 
-    // Handle event-type spans separately (they only emit once)
+    // Handle event-type spans separately (only on SPAN_STARTED to avoid double counting)
     if (span.isEvent) {
+      // Only process event spans on their start event
+      if (event.type !== 'span_started') {
+        return;
+      }
+
       // Initialize trace if this is a root event span
       if (span.isRootSpan) {
         await this.initTrace(span);

@@ -216,10 +216,14 @@ export class LangSmithExporter extends TrackingExporter<LangSmithTraceData, Lang
   }
 
   protected async cleanupTraceData(traceData: LangSmithTraceData, _traceId: string): Promise<void> {
-    // End all active spans
-    for (const [_spanId, runTree] of traceData.spans) {
-      await runTree.end();
-      await runTree.patchRun();
+    // Only end spans that haven't been ended yet (still in activeSpanIds)
+    // This handles shutdown scenarios where spans may not have received SPAN_ENDED events
+    for (const spanId of traceData.activeSpanIds) {
+      const runTree = traceData.spans.get(spanId);
+      if (runTree) {
+        await runTree.end();
+        await runTree.patchRun();
+      }
     }
   }
 
