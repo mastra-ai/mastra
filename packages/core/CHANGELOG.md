@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.24.10-alpha.1
+
+### Patch Changes
+
+- Fix MODEL_STEP span startTime appearing later than expected ([#11413](https://github.com/mastra-ai/mastra/pull/11413))
+
 ## 0.24.10-alpha.0
 
 ### Patch Changes
