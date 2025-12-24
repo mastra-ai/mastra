@@ -40,9 +40,8 @@ export function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
   }
 
   // Zod 4 structure: _def.type = "string", "optional", etc. (lowercase, no prefix)
-  // Also check _zod.def.type for Zod 4
-  const zod4Type = schemaAny._zod?.def?.type ?? schemaAny._def?.type;
-  if (typeof zod4Type === 'string') {
+  const zod4Type = schemaAny._def?.type;
+  if (typeof zod4Type === 'string' && zod4Type) {
     // Normalize to Zod 3 format: "string" -> "ZodString", "optional" -> "ZodOptional"
     return 'Zod' + zod4Type.charAt(0).toUpperCase() + zod4Type.slice(1);
   }
