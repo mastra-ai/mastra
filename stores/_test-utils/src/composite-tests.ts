@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { CompositeStorage, InMemoryStore } from '@mastra/core/storage';
-import type { MastraStorage } from '@mastra/core/storage';
+import { MastraStorage, InMemoryStore } from '@mastra/core/storage';
 
 /**
- * Configuration for CompositeStorage tests
+ * Configuration for MastraStorage composition tests
  */
 export interface CompositeTestConfig {
   /**
@@ -25,7 +24,7 @@ export interface CompositeTestConfig {
 }
 
 /**
- * Creates tests that verify CompositeStorage behavior.
+ * Creates tests that verify MastraStorage behavior.
  *
  * Tests include:
  * - Domain precedence (overrides take priority over default)
@@ -34,8 +33,8 @@ export interface CompositeTestConfig {
  * - Various composition patterns
  *
  */
-export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
-  const testName = config.testNameSuffix ? `CompositeStorage (${config.testNameSuffix})` : 'CompositeStorage';
+export function createMastraStorageTests(config: CompositeTestConfig = {}) {
+  const testName = config.testNameSuffix ? `MastraStorage (${config.testNameSuffix})` : 'MastraStorage';
 
   const createDefault = config.createDefaultStorage ?? (() => new InMemoryStore({ id: 'default' }));
   const createAlternate = config.createAlternateStorage ?? (() => new InMemoryStore({ id: 'alternate' }));
@@ -43,13 +42,13 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
   describe(testName, () => {
     describe('Basic Composition', () => {
       let defaultStore: MastraStorage;
-      let composite: CompositeStorage;
+      let composite: MastraStorage;
 
       beforeAll(async () => {
         defaultStore = createDefault();
         await defaultStore.init();
 
-        composite = new CompositeStorage({
+        composite = new MastraStorage({
           id: 'composite-basic',
           default: defaultStore,
         });
@@ -98,7 +97,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
     describe('Domain Overrides', () => {
       let defaultStore: MastraStorage;
       let alternateStore: MastraStorage;
-      let composite: CompositeStorage;
+      let composite: MastraStorage;
 
       beforeAll(async () => {
         defaultStore = createDefault();
@@ -107,7 +106,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
         await Promise.all([defaultStore.init(), alternateStore.init()]);
 
         // Use memory from alternate, everything else from default
-        composite = new CompositeStorage({
+        composite = new MastraStorage({
           id: 'composite-overrides',
           default: defaultStore,
           domains: {
@@ -195,7 +194,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
     describe('No Default Storage', () => {
       let store1: MastraStorage;
       let store2: MastraStorage;
-      let composite: CompositeStorage;
+      let composite: MastraStorage;
 
       beforeAll(async () => {
         store1 = createDefault();
@@ -204,7 +203,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
         await Promise.all([store1.init(), store2.init()]);
 
         // Compose without default - explicitly specify each domain
-        composite = new CompositeStorage({
+        composite = new MastraStorage({
           id: 'composite-no-default',
           domains: {
             memory: store1.stores?.memory,
@@ -291,7 +290,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
         const defaultStore = createDefault();
         await defaultStore.init();
 
-        const composite = new CompositeStorage({
+        const composite = new MastraStorage({
           id: 'composite-empty-overrides',
           default: defaultStore,
           domains: {},
@@ -306,7 +305,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
         const defaultStore = createDefault();
         await defaultStore.init();
 
-        const composite = new CompositeStorage({
+        const composite = new MastraStorage({
           id: 'composite-undefined-domain',
           default: defaultStore,
           domains: {
@@ -324,7 +323,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
         const store = createDefault();
         await store.init();
 
-        const composite = new CompositeStorage({
+        const composite = new MastraStorage({
           id: 'composite-domains-only',
           domains: {
             memory: store.stores?.memory,
@@ -346,7 +345,7 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
         const defaultStore = createDefault();
         await defaultStore.init();
 
-        const composite = new CompositeStorage({
+        const composite = new MastraStorage({
           id: 'composite-disable-init',
           default: defaultStore,
           disableInit: true,
@@ -361,9 +360,9 @@ export function createCompositeStorageTests(config: CompositeTestConfig = {}) {
 }
 
 /**
- * Run CompositeStorage tests using InMemoryStore.
+ * Run MastraStorage composition tests using InMemoryStore.
  * This is the default test that runs without any external dependencies.
  */
-export function createInMemoryCompositeTests() {
-  createCompositeStorageTests();
+export function createMastraStorageCompositionTests() {
+  createMastraStorageTests();
 }
