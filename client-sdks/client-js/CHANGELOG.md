@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.0.0-beta.16
+
+### Patch Changes
+
+- Add `cancel()` method as an alias for `cancelRun()` in the Run class. The new method provides a more concise API while maintaining backward compatibility. Includes comprehensive documentation about abort signals and how steps can respond to cancellation. ([#11417](https://github.com/mastra-ai/mastra/pull/11417))
+
+- Updated dependencies [[`3d93a15`](https://github.com/mastra-ai/mastra/commit/3d93a15796b158c617461c8b98bede476ebb43e2), [`efe406a`](https://github.com/mastra-ai/mastra/commit/efe406a1353c24993280ebc2ed61dd9f65b84b26), [`119e5c6`](https://github.com/mastra-ai/mastra/commit/119e5c65008f3e5cfca954eefc2eb85e3bf40da4), [`74e504a`](https://github.com/mastra-ai/mastra/commit/74e504a3b584eafd2f198001c6a113bbec589fd3), [`e33fdbd`](https://github.com/mastra-ai/mastra/commit/e33fdbd07b33920d81e823122331b0c0bee0bb59), [`929f69c`](https://github.com/mastra-ai/mastra/commit/929f69c3436fa20dd0f0e2f7ebe8270bd82a1529), [`8a73529`](https://github.com/mastra-ai/mastra/commit/8a73529ca01187f604b1f3019d0a725ac63ae55f)]:
+  - @mastra/core@1.0.0-beta.16
+
 ## 1.0.0-beta.15
 
 ### Minor Changes
