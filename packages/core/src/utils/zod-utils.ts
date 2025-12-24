@@ -22,17 +22,32 @@ export function isZodType(value: unknown): value is z.ZodType {
  * Get the Zod typeName from a schema, compatible with both Zod 3 and Zod 4.
  * Uses string-based typeName instead of instanceof to avoid dual-package hazard
  * where multiple Zod instances can cause instanceof checks to fail.
+ *
+ * Zod 3 uses `_def.typeName` with values like "ZodString", "ZodOptional", etc.
+ * Zod 4 uses `_def.type` with lowercase values like "string", "optional", etc.
+ *
+ * This function normalizes to Zod 3 format (e.g., "ZodString") for compatibility.
+ *
  * @param schema - The Zod schema to get the type name from
- * @returns The Zod type name string or undefined
+ * @returns The Zod type name string (e.g., "ZodString", "ZodOptional") or undefined
  */
 export function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
   const schemaAny = schema as any;
-  // Zod 4 structure
-  if (schemaAny._zod?.def?.typeName) {
-    return schemaAny._zod.def.typeName;
+
+  // Zod 3 structure: _def.typeName = "ZodString", "ZodOptional", etc.
+  if (schemaAny._def?.typeName) {
+    return schemaAny._def.typeName;
   }
-  // Zod 3 structure
-  return schemaAny._def?.typeName;
+
+  // Zod 4 structure: _def.type = "string", "optional", etc. (lowercase, no prefix)
+  // Also check _zod.def.type for Zod 4
+  const zod4Type = schemaAny._zod?.def?.type ?? schemaAny._def?.type;
+  if (typeof zod4Type === 'string') {
+    // Normalize to Zod 3 format: "string" -> "ZodString", "optional" -> "ZodOptional"
+    return 'Zod' + zod4Type.charAt(0).toUpperCase() + zod4Type.slice(1);
+  }
+
+  return undefined;
 }
 
 /**
