@@ -450,6 +450,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   messageId,
   runId,
   modelStreamSpan,
+  modelSpanTracker,
   telemetry_settings,
   tools,
   toolChoice,
@@ -472,6 +473,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      // Start the MODEL_STEP span at the beginning of LLM execution
+      modelSpanTracker?.startStep();
+
       let modelResult;
       let warnings: any;
       let request: any;
