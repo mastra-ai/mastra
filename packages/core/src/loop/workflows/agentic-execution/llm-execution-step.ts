@@ -490,6 +490,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      // Start the MODEL_STEP span at the beginning of LLM execution
+      // This ensures the span's startTime accurately reflects when the step began,
+      // not when the model response started streaming (which could be delayed).
+      // The step-start chunk will update the span with request/warnings data later.
+      modelSpanTracker?.startStep();
+
       let modelResult;
       let warnings: any;
       let request: any;

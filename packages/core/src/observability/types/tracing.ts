@@ -5,7 +5,7 @@ import type { MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata } from '../../stream/types';
+import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 
 // ============================================================================
@@ -578,6 +578,12 @@ export interface IModelSpanTracker {
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
+  /**
+   * Start a new Model execution step.
+   * This should be called at the beginning of LLM execution to capture accurate startTime.
+   * The step-start chunk payload can be passed later via updateStep() if needed.
+   */
+  startStep(payload?: StepStartPayload): void;
 }
 
 /**
