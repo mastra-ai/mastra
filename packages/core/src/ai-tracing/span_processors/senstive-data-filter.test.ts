@@ -234,6 +234,102 @@ describe('AI Tracing', () => {
         expect(attributes?.['results'][1]['value']).toBe(42);
       });
 
+      it('should redact structured data in JSON strings', () => {
+        const processor = new SensitiveDataFilter({
+          sensitiveFields: ['fullName', 'email'],
+        });
+
+        // Test case that reproduces GitHub issue #9846
+        // Where tool outputs get serialized as JSON strings in MODEL_STEP spans
+        const mockSpan = {
+          id: 'model-step-span',
+          name: 'model step',
+          type: AISpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-9846',
+          trace: { traceId: 'trace-9846' } as any,
+          attributes: {},
+          input: {
+            messages: [
+              {
+                role: 'user',
+                content: 'get user info for 32ddf',
+              },
+              {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  { id: 'call1', type: 'function', function: { name: 'getUserInfo', arguments: '{"id":"32ddf"}' } },
+                ],
+              },
+              {
+                role: 'tool',
+                tool_call_id: 'call1',
+                content: JSON.stringify({
+                  fullName: 'John Doe',
+                  email: 'john@email.com',
+                  id: '32ddf',
+                }),
+              },
+            ],
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const input = filtered!.input as any;
+
+        // The tool message content should have structured data redacted
+        const toolMessage = input?.messages[2];
+        const parsedContent = JSON.parse(toolMessage.content);
+
+        // Sensitive fields should be redacted even when in JSON strings
+        expect(parsedContent.fullName).toBe('[REDACTED]');
+        expect(parsedContent.email).toBe('[REDACTED]');
+
+        // Non-sensitive fields should remain
+        expect(parsedContent.id).toBe('32ddf');
+      });
+
+      it('should handle invalid JSON strings gracefully', () => {
+        const processor = new SensitiveDataFilter({
+          sensitiveFields: ['email'],
+        });
+
+        const mockSpan = {
+          id: 'model-step-span',
+          name: 'model step',
+          type: AISpanType.MODEL_STEP,
+          startTime: new Date(),
+          traceId: 'trace-9846',
+          trace: { traceId: 'trace-9846' } as any,
+          attributes: {},
+          input: {
+            messages: [
+              {
+                role: 'tool',
+                content: '{ email": "test@test.com" }',
+              },
+            ],
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const input = filtered!.input as any;
+
+        // Invalid JSON should pass through unchanged
+        expect(input.messages[0].content).toBe('{ email": "test@test.com" }');
+      });
+
       it('should handle circular references', () => {
         const processor = new SensitiveDataFilter();
 
