@@ -96,20 +96,20 @@ export class Run extends BaseResource {
    * Steps that check the `abortSignal` parameter can respond to cancellation:
    * - Steps can listen to the 'abort' event: `abortSignal.addEventListener('abort', callback)`
    * - Steps can check if already aborted: `if (abortSignal.aborted) { ... }`
-   * - Useful for cancelling timeouts, network requests, or long-running operations
+   * - Useful for canceling timeouts, network requests, or long-running operations
    *
-   * **Note:** Steps must actively check the abort signal to be cancelled mid-execution.
+   * **Note:** Steps must actively check the abort signal to be canceled mid-execution.
    * Steps that don't check the signal will run to completion, but subsequent steps won't execute.
    *
-   * @returns Promise that resolves with `{ message: 'Workflow run cancelled' }` when cancellation succeeds
+   * @returns Promise that resolves with `{ message: 'Workflow run canceled' }` when cancellation succeeds
    * @throws {HTTPException} 400 - If workflow ID or run ID is missing
    * @throws {HTTPException} 404 - If workflow or workflow run is not found
    *
    * @example
    * ```typescript
-   * const run = workflow.createRun('run-123');
+   * const run = await workflow.createRun({ runId: 'run-123' });
    * await run.cancel();
-   * // Returns: { message: 'Workflow run cancelled' }
+   * // Returns: { message: 'Workflow run canceled' }
    * ```
    *
    * @example
@@ -121,10 +121,10 @@ export class Run extends BaseResource {
    *     const timeout = new Promise((resolve) => {
    *       const timer = setTimeout(() => resolve('done'), 10000);
    *
-   *       // Clean up if cancelled
+   *       // Clean up if canceled
    *       abortSignal.addEventListener('abort', () => {
    *         clearTimeout(timer);
-   *         resolve('cancelled');
+   *         resolve('canceled');
    *       });
    *     });
    *

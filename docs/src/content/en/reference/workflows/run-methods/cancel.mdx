@@ -15,7 +15,7 @@ This method aborts any running steps and updates the workflow status to 'cancele
 const run = await workflow.createRun();
 
 await run.cancel();
-// Returns: { message: 'Workflow run cancelled' }
+// Returns: { message: 'Workflow run canceled' }
 ```
 
 ## Parameters
@@ -39,7 +39,7 @@ await run.cancel();
       name: "result",
       type: "Promise<{ message: string }>",
       description:
-        "A promise that resolves with { message: 'Workflow run cancelled' } when cancellation succeeds",
+        "A promise that resolves with { message: 'Workflow run canceled' } when cancellation succeeds",
     },
   ]}
 />
@@ -57,7 +57,7 @@ Steps that check the `abortSignal` parameter can respond to cancellation:
 - Steps can check if already aborted: `if (abortSignal.aborted) { ... }`
 - Useful for cancelling timeouts, network requests, or long-running operations
 
-**Note:** Steps must actively check the abort signal to be cancelled mid-execution. Steps that don't check the signal will run to completion, but subsequent steps won't execute.
+**Note:** Steps must actively check the abort signal to be canceled mid-execution. Steps that don't check the signal will run to completion, but subsequent steps won't execute.
 
 ## Extended usage examples
 
@@ -82,10 +82,10 @@ const step = createStep({
     const timeout = new Promise((resolve) => {
       const timer = setTimeout(() => resolve('done'), 10000);
       
-      // Clean up if cancelled
+      // Clean up if canceled
       abortSignal.addEventListener('abort', () => {
         clearTimeout(timer);
-        resolve('cancelled');
+        resolve('canceled');
       });
     });
     
