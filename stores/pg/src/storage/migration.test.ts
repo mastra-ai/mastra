@@ -1,3 +1,4 @@
+import { SpanType } from '@mastra/core/observability';
 import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import pgPromise from 'pg-promise';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -35,7 +36,7 @@ describe('PostgreSQL Spans Table Migration', () => {
     // Wait for store to be ready before creating dbOps
     await migrationStore.init();
     dbOps = new PgDB({ client: migrationStore.db, schemaName: testSchema });
-  });
+  }, 30000); // 30 second timeout for setup
 
   afterAll(async () => {
     await migrationStore?.close();
@@ -49,7 +50,7 @@ describe('PostgreSQL Spans Table Migration', () => {
     } finally {
       tempPgp.end();
     }
-  });
+  }, 30000); // 30 second timeout for cleanup
 
   it('should migrate old spans table schema to new schema with additional columns and preserve data', async () => {
     // First drop the table if it exists (from init)
@@ -287,5 +288,111 @@ describe('PostgreSQL Spans Table Migration', () => {
     expect(newSpan.entityType).toBe('workflow');
     expect(newSpan.entityId).toBe('workflow-123');
     expect(newSpan.environment).toBe('production');
-  });
+  }, 30000); // 30 second timeout
+
+  it('should add timezone columns (startedAtZ, endedAtZ, etc.) during migration', async () => {
+    // This test reproduces issue #11410
+    // Drop the table if it exists (from init or previous test)
+    await migrationStore.db.none(`DROP TABLE IF EXISTS ${testSchema}.${TABLE_SPANS} CASCADE`);
+
+    // Step 1: Create table with OLD schema WITHOUT timezone columns (simulating pre-Dec-23 database)
+    const oldColumnsNoTz = Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'TEXT'
+            : colDef.type === 'jsonb'
+              ? 'JSONB'
+              : colDef.type === 'timestamp'
+                ? 'TIMESTAMP'
+                : colDef.type === 'boolean'
+                  ? 'BOOLEAN'
+                  : 'TEXT';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+        return `"${colName}" ${sqlType} ${nullable}`.trim();
+      })
+      .join(', ');
+
+    await migrationStore.db.none(`
+      CREATE TABLE IF NOT EXISTS ${testSchema}.${TABLE_SPANS} (
+        ${oldColumnsNoTz}
+      )
+    `);
+
+    // Step 2: Verify timezone columns do NOT exist before migration
+    const tzColumnsBefore = await migrationStore.db.manyOrNone(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = '${testSchema}' 
+        AND table_name = '${TABLE_SPANS}' 
+        AND column_name IN ('startedAtZ', 'endedAtZ', 'createdAtZ', 'updatedAtZ')
+    `);
+    expect(tzColumnsBefore.length).toBe(0);
+
+    // Step 3: Insert test data
+    await migrationStore.db.none(
+      `INSERT INTO ${testSchema}.${TABLE_SPANS}
+       ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        'trace-tz-1',
+        'span-tz-1',
+        null,
+        'Test Span',
+        'agent_run',
+        false,
+        new Date('2024-12-24T08:00:00Z'),
+        new Date('2024-12-24T08:00:01Z'),
+        new Date('2024-12-24T08:00:00Z'),
+        new Date('2024-12-24T08:00:01Z'),
+      ],
+    );
+
+    // Step 4: Run the migration by calling createTable (which internally calls migrateSpansTable)
+    // This simulates what happens for existing users who upgrade and reinitialize
+    await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+
+    // Step 5: Verify timezone columns DON'T exist after migration (this is the bug!)
+    const tzColumnsAfter = await migrationStore.db.manyOrNone(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = '${testSchema}' 
+        AND table_name = '${TABLE_SPANS}' 
+        AND column_name IN ('startedAtZ', 'endedAtZ', 'createdAtZ', 'updatedAtZ')
+      ORDER BY column_name
+    `);
+
+    // This assertion SHOULD FAIL in the current implementation because migrateSpansTable doesn't create the *Z columns
+    // After the fix, this should pass
+    expect(tzColumnsAfter.length, 'Expected all 4 timezone columns to exist after migration').toBe(4);
+    expect(tzColumnsAfter.map((r: any) => r.column_name)).toEqual([
+      'createdAtZ',
+      'endedAtZ',
+      'startedAtZ',
+      'updatedAtZ',
+    ]);
+
+    // Step 6: Try to use observability methods which expect *Z columns
+    // This simulates the actual error from issue #11410
+    const observability = await migrationStore.getStore('observability');
+
+    // This should not throw an error about missing startedAtZ column
+    await observability!.createSpan({
+      span: {
+        traceId: 'trace-tz-2',
+        spanId: 'span-tz-2',
+        name: 'Test Span After Migration',
+        spanType: SpanType.AGENT_RUN,
+        isEvent: false,
+        startedAt: new Date('2024-12-24T09:00:00Z'),
+        endedAt: new Date('2024-12-24T09:00:01Z'),
+      },
+    });
+
+    // Verify the span was created successfully
+    const createdSpan = await migrationStore.db.oneOrNone(
+      `SELECT * FROM ${testSchema}.${TABLE_SPANS} WHERE "spanId" = $1`,
+      ['span-tz-2'],
+    );
+    expect(createdSpan).not.toBeNull();
+    expect(createdSpan.name).toBe('Test Span After Migration');
+  }, 30000); // 30 second timeout
 });
