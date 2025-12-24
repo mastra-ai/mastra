@@ -557,6 +557,11 @@ const sidebars = {
         { type: "doc", id: "storage/mssql", label: "MSSQL Storage" },
         { type: "doc", id: "storage/postgresql", label: "PostgreSQL Storage" },
         { type: "doc", id: "storage/upstash", label: "Upstash Storage" },
+        {
+          type: "doc",
+          id: "storage/composite",
+          label: "Storage Composition",
+        },
       ],
     },
     {

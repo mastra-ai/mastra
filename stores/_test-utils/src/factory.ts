@@ -12,8 +12,9 @@ export * from './domains/observability/data';
 export * from './domains/agents/data';
 
 /**
- * Test-only capabilities that indicate which advanced storage operations are supported.
- * These are used to conditionally run tests for features that not all storage adapters implement.
+ * Test-specific feature flags for conditionally enabling test scenarios.
+ * Unlike storage domain availability (checked via storage.stores), these flags
+ * control whether specific operations within a domain are tested.
  */
 export type TestCapabilities = {
   /** Whether the adapter supports listing scores by span (defaults to true) */
