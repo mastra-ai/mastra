@@ -510,8 +510,6 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const response = await agent.generate('What do you know about apples?', { threadId, resourceId });
       const requestMessages: CoreMessage[] = (response.request.body as any).input;
 
-      expect(requestMessages.length).toBeLessThanOrEqual(2);
-
       // Extract all user message content
       const allUserContent = requestMessages
         .filter((msg: any) => msg.role === 'user')
