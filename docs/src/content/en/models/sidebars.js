@@ -173,6 +173,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/friendli",
+          label: "Friendli",
+        },
+        {
+          type: "doc",
           id: "providers/github-models",
           label: "GitHub Models",
         },
