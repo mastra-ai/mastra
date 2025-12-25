@@ -380,7 +380,7 @@ ${skillInstructions}`;
     return createTool({
       id: 'skill-activate',
       description:
-        "Activate a skill to load its full instructions and make it available for use. Use this when you need access to a skill. Don't as for permission when you need this in context, just do it.",
+        "Activate a skill to load its full instructions. You should activate skills proactively when they are relevant to the user's request without asking for permission first.",
       inputSchema: z.object({
         name: z.string().describe('The name of the skill to activate'),
       }),
@@ -503,15 +503,19 @@ ${skillInstructions}`;
     // 1. Inject available skills metadata (if any skills discovered)
     if (this.skillsMetadata.size > 0) {
       const availableSkillsMessage = this.formatAvailableSkills();
-
-      // eslint-disable-next-line no-console
-      console.log('availableSkillsMessage', availableSkillsMessage);
       if (availableSkillsMessage) {
         messageList.addSystem({
           role: 'system',
           content: availableSkillsMessage,
         });
       }
+
+      // Add instruction to activate skills proactively
+      messageList.addSystem({
+        role: 'system',
+        content:
+          'When a user asks about a topic covered by an available skill, activate that skill immediately using the skill-activate tool. Do not ask for permission - just activate the skill and use its instructions to answer the question.',
+      });
     }
 
     // 2. Inject activated skills instructions (if any activated)
