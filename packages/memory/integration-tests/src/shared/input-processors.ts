@@ -464,6 +464,73 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
       const userMessages = requestMessages.filter((msg: any) => msg.role === 'user');
       expect(userMessages.length).toBeLessThanOrEqual(2);
     });
+
+    it('should only fetch semantically matched messages, not all thread messages', async () => {
+      const dbFile = 'file::memory:?cache=shared';
+      const storage = new LibSQLStore({
+        id: `semantic-perpage-storage-${version}-${randomUUID()}`,
+        url: dbFile,
+      });
+      const vector = new LibSQLVector({
+        connectionUrl: dbFile,
+        id: `semantic-perpage-vector-${version}-${randomUUID()}`,
+      });
+
+      await storage.init();
+
+      const memory = new Memory({
+        storage,
+        vector,
+        embedder: fastembed,
+        options: {
+          semanticRecall: { topK: 1, scope: 'thread', messageRange: 0 },
+          lastMessages: 1,
+        },
+      });
+
+      const mockModel = createMockModel(config);
+      const agent = new Agent({
+        id: `semantic-perpage-test-${version}-${randomUUID()}`,
+        name: 'Semantic PerPage Test',
+        instructions: 'You are a helpful assistant',
+        model: mockModel,
+        memory,
+      });
+
+      const resourceId = `perpage-resource-${version}-${randomUUID()}`;
+      const threadId = `perpage-thread-${version}-${randomUUID()}`;
+
+      // Create 4 messages with distinct topics
+      await agent.generate('I really love apples, they are my favorite fruit', { threadId, resourceId });
+      await agent.generate('Cats are wonderful pets and companions', { threadId, resourceId });
+      await agent.generate('Programming in JavaScript is fun', { threadId, resourceId });
+      await agent.generate('Mountains are great for hiking and skiing', { threadId, resourceId });
+
+      // Query about apples - semantic recall should find only the apple message
+      const response = await agent.generate('What do you know about apples?', { threadId, resourceId });
+      const requestMessages: CoreMessage[] = (response.request.body as any).input;
+
+      expect(requestMessages.length).toBeLessThanOrEqual(2);
+
+      // Extract all user message content
+      const allUserContent = requestMessages
+        .filter((msg: any) => msg.role === 'user')
+        .map((msg: any) => {
+          if (typeof msg.content === 'string') return msg.content;
+          if (Array.isArray(msg.content)) return msg.content.map((part: any) => part.text || '').join(' ');
+          return '';
+        })
+        .join(' ')
+        .toLowerCase();
+
+      expect(allUserContent).toContain('apple');
+
+      // With lastMessages: 0 and topK: 1, only the semantically matched message
+      // should appear. Other messages should NOT be fetched.
+      expect(allUserContent).not.toContain('cat');
+      expect(allUserContent).not.toContain('javascript');
+      expect(allUserContent).not.toContain('mountain');
+    });
   });
 
   describe(`Input Processor Verification - Combined Processors (${version})`, () => {
