@@ -472,7 +472,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run execution result not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
     });
 
     it('should get workflow run execution result successfully', async () => {
@@ -486,12 +486,14 @@ describe('vNext Workflow Handlers', () => {
         runId: 'test-run',
       } as any);
 
-      expect(result).toEqual({
-        activeStepsPath: {},
-        error: undefined,
+      // Now returns unified WorkflowState with metadata
+      expect(result).toMatchObject({
+        runId: 'test-run',
+        workflowName: 'test-workflow',
         status: 'success',
         result: { result: 'success' },
         payload: {},
+        activeStepsPath: {},
         steps: {
           'test-step': {
             status: 'success',
@@ -501,8 +503,10 @@ describe('vNext Workflow Handlers', () => {
             payload: {},
           },
         },
-        serializedStepGraph: mockWorkflow.serializedStepGraph,
+        serializedStepGraph: expect.arrayContaining([expect.objectContaining({ type: 'step' })]),
       });
+      expect(result.createdAt).toBeInstanceOf(Date);
+      expect(result.updatedAt).toBeInstanceOf(Date);
     });
 
     it('should get workflow run execution result with field filtering (status only)', async () => {
@@ -517,12 +521,17 @@ describe('vNext Workflow Handlers', () => {
         fields: 'status',
       } as any);
 
-      // Should only return status field
-      expect(result).toEqual({
-        status: 'success',
-      });
-      expect(result.steps).toBeUndefined();
+      // Returns status plus always-included metadata and steps
+      expect(result.status).toBe('success');
+      // Metadata is always included
+      expect(result.runId).toBe('test-run-fields');
+      expect(result.workflowName).toBe('test-workflow');
+      // Steps is always included
+      expect(result.steps).toBeDefined();
+      // Other execution fields should not be present
       expect(result.result).toBeUndefined();
+      expect(result.payload).toBeUndefined();
+      expect(result.activeStepsPath).toBeUndefined();
     });
 
     it('should get workflow run execution result with multiple fields', async () => {
@@ -537,13 +546,17 @@ describe('vNext Workflow Handlers', () => {
         fields: 'status,result,error',
       } as any);
 
-      // Should only return requested fields
-      expect(result).toEqual({
-        status: 'success',
-        result: { result: 'success' },
-        error: undefined,
-      });
-      expect(result.steps).toBeUndefined();
+      // Returns requested fields plus always-included metadata and steps
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual({ result: 'success' });
+      // error is undefined when no error
+      expect(result.error).toBeUndefined();
+      // Metadata is always included
+      expect(result.runId).toBe('test-run-multi-fields');
+      expect(result.workflowName).toBe('test-workflow');
+      // Steps is always included
+      expect(result.steps).toBeDefined();
+      // Other execution fields should not be present
       expect(result.payload).toBeUndefined();
       expect(result.activeStepsPath).toBeUndefined();
     });

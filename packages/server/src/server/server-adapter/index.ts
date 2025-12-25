@@ -38,6 +38,21 @@ export interface StreamOptions {
 }
 
 /**
+ * Query parameter values parsed from HTTP requests.
+ * Supports both single values and arrays (for repeated query params like ?tag=a&tag=b).
+ */
+export type QueryParamValue = string | string[];
+
+/**
+ * Parsed request parameters returned by getParams().
+ */
+export interface ParsedRequestParams {
+  urlParams: Record<string, string>;
+  queryParams: Record<string, QueryParamValue>;
+  body: unknown;
+}
+
+/**
  * Abstract base class for server adapters that handle HTTP requests.
  *
  * This class extends `MastraServerBase` to inherit app storage functionality
@@ -118,10 +133,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 
   abstract stream(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
-  abstract getParams(
-    route: ServerRoute,
-    request: TRequest,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }>;
+  abstract getParams(route: ServerRoute, request: TRequest): Promise<ParsedRequestParams>;
   abstract sendResponse(route: ServerRoute, response: TResponse, result: unknown): Promise<unknown>;
   abstract registerRoute(app: TApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void>;
   abstract registerContextMiddleware(): void;
