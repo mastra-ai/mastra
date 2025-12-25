@@ -608,6 +608,155 @@ describe('OpenAISchemaCompatLayer - Default Values', () => {
       },
     });
   });
+
+  it('should handle boolean defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      enabled: z.boolean().default(false),
+      active: z.boolean().default(true),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', enabled: null, active: null });
+    expect(result).toEqual({ name: 'John', enabled: false, active: true });
+  });
+
+  it('should handle array defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      tags: z.array(z.string()).default([]),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', tags: null });
+    expect(result).toEqual({ name: 'John', tags: [] });
+  });
+
+  it('should handle object defaults', () => {
+    const schema = z.object({
+      name: z.string(),
+      config: z
+        .object({
+          theme: z.string(),
+          size: z.number(),
+        })
+        .default({ theme: 'dark', size: 12 }),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ name: 'John', config: null });
+    expect(result).toEqual({ name: 'John', config: { theme: 'dark', size: 12 } });
+  });
+
+  it('should preserve 0 value and not replace with default', () => {
+    const schema = z.object({
+      score: z.number().default(100),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ score: 0 });
+    expect(result).toEqual({ score: 0 });
+  });
+
+  it('should preserve false value and not replace with default', () => {
+    const schema = z.object({
+      enabled: z.boolean().default(true),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ enabled: false });
+    expect(result).toEqual({ enabled: false });
+  });
+
+  it('should preserve empty string value and not replace with default', () => {
+    const schema = z.object({
+      bio: z.string().default('No bio provided'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({ bio: '' });
+    expect(result).toEqual({ bio: '' });
+  });
+
+  it('should handle default in arrays of objects', () => {
+    const schema = z.object({
+      items: z.array(
+        z.object({
+          name: z.string(),
+          quantity: z.number().default(1),
+        }),
+      ),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      items: [
+        { name: 'Apple', quantity: null },
+        { name: 'Banana', quantity: 5 },
+      ],
+    });
+
+    expect(result).toEqual({
+      items: [
+        { name: 'Apple', quantity: 1 },
+        { name: 'Banana', quantity: 5 },
+      ],
+    });
+  });
+
+  it('should handle default with nullable inner type', () => {
+    const schema = z.object({
+      name: z.string(),
+      deletedAt: z.string().nullable().default(null),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // When null is passed, should get the default (which is null)
+    const result = processed.parse({ name: 'John', deletedAt: null });
+    expect(result).toEqual({ name: 'John', deletedAt: null });
+  });
+
+  it('should handle mix of default, optional, and nullable in same schema', () => {
+    const schema = z.object({
+      required: z.string(),
+      optional: z.string().optional(),
+      nullable: z.string().nullable(),
+      withDefault: z.string().default('default'),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    const result = processed.parse({
+      required: 'value',
+      optional: null,
+      nullable: null,
+      withDefault: null,
+    });
+
+    expect(result).toEqual({
+      required: 'value',
+      optional: undefined,
+      nullable: null,
+      withDefault: 'default',
+    });
+  });
 });
 
 describe('OpenAISchemaCompatLayer - shouldApply', () => {
