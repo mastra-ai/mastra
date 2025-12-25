@@ -24,7 +24,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode/alpha-doubao-seed-code"
+  model: "opencode/alpha-gd4"
 });
 
 // Generate a response
@@ -48,18 +48,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "opencode/alpha-doubao-seed-code",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 32000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode/alpha-gd4",
     "imageInput": false,
     "audioInput": false,
@@ -70,6 +58,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.5,
     "outputCost": 2
+  },
+  {
+    "model": "opencode/alpha-glm-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
+    "inputCost": 0.6,
+    "outputCost": 2.2
   },
   {
     "model": "opencode/big-pickle",
@@ -348,7 +348,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/v1",
-    id: "opencode/alpha-doubao-seed-code",
+    id: "opencode/alpha-gd4",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -367,7 +367,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode/qwen3-coder"
-      : "opencode/alpha-doubao-seed-code";
+      : "opencode/alpha-gd4";
   }
 });
 ```

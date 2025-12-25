@@ -841,8 +841,8 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly opencode: readonly [
-    'alpha-doubao-seed-code',
     'alpha-gd4',
+    'alpha-glm-4.7',
     'big-pickle',
     'claude-3-5-haiku',
     'claude-haiku-4-5',
