@@ -1,5 +1,12 @@
 # @mastra/server
 
+## 1.0.0-beta.17
+
+### Patch Changes
+
+- Updated dependencies [[`b5dc973`](https://github.com/mastra-ai/mastra/commit/b5dc9733a5158850298dfb103acb3babdba8a318)]:
+  - @mastra/core@1.0.0-beta.17
+
 ## 1.0.0-beta.16
 
 ### Patch Changes
