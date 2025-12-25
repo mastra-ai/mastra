@@ -1,5 +1,18 @@
 # @mastra/core
 
+## 1.0.0-beta.17
+
+### Patch Changes
+
+- Fix Zod 4 compatibility for storage schema detection ([#11431](https://github.com/mastra-ai/mastra/pull/11431))
+
+  If you're using Zod 4, `buildStorageSchema` was failing to detect nullable and optional fields correctly. This caused `NOT NULL constraint failed` errors when storing observability spans and other data.
+
+  This fix enables proper schema detection for Zod 4 users, ensuring nullable fields like `parentSpanId` are correctly identified and don't cause database constraint violations.
+
+- Updated dependencies [[`af56599`](https://github.com/mastra-ai/mastra/commit/af56599d73244ae3bf0d7bcade656410f8ded37b)]:
+  - @mastra/schema-compat@1.0.0-beta.4
+
 ## 1.0.0-beta.16
 
 ### Minor Changes
