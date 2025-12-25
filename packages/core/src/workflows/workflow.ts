@@ -1954,6 +1954,25 @@ export class Workflow<
   }
 
   /**
+   * Converts an in-memory Run to a WorkflowState for API responses.
+   * Used as a fallback when storage is not available.
+   */
+  #getInMemoryRunAsWorkflowState(runId: string): WorkflowState | null {
+    const inMemoryRun = this.#runs.get(runId);
+    if (!inMemoryRun) return null;
+
+    return {
+      ...inMemoryRun,
+      runId,
+      workflowName: this.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: inMemoryRun.workflowRunStatus,
+      steps: {},
+    };
+  }
+
+  /**
    * Get a workflow run by ID with processed execution state and metadata.
    *
    * @param runId - The unique identifier of the workflow run
@@ -1974,64 +1993,18 @@ export class Workflow<
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run. Mastra storage is not initialized');
-      // Try in-memory fallback
-      const inMemoryRun = this.#runs.get(runId);
-      if (!inMemoryRun) return null;
-
-      // For in-memory runs, we have limited data
-      return {
-        runId,
-        workflowName: this.id,
-        resourceId: (inMemoryRun as any).resourceId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        status: (inMemoryRun as any).status ?? 'pending',
-        result: (inMemoryRun as any).result,
-        error: (inMemoryRun as any).error,
-        payload: (inMemoryRun as any).context?.input,
-        steps: {},
-      };
+      return this.#getInMemoryRunAsWorkflowState(runId);
     }
 
     const workflowsStore = await storage.getStore('workflows');
     if (!workflowsStore) {
       this.logger.debug('Cannot get workflow run. Workflows storage domain is not available');
-      // Fallback to in-memory runs (same as getWorkflowRunById)
-      const inMemoryRun = this.#runs.get(runId);
-      if (!inMemoryRun) return null;
-
-      return {
-        runId,
-        workflowName: this.id,
-        resourceId: (inMemoryRun as any).resourceId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        status: (inMemoryRun as any).status ?? 'pending',
-        result: (inMemoryRun as any).result,
-        error: (inMemoryRun as any).error,
-        payload: (inMemoryRun as any).context?.input,
-        steps: {},
-      };
+      return this.#getInMemoryRunAsWorkflowState(runId);
     }
 
     const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
     if (!run) {
-      // Fallback to in-memory runs (same as getWorkflowRunById)
-      const inMemoryRun = this.#runs.get(runId);
-      if (!inMemoryRun) return null;
-
-      return {
-        runId,
-        workflowName: this.id,
-        resourceId: (inMemoryRun as any).resourceId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        status: (inMemoryRun as any).status ?? 'pending',
-        result: (inMemoryRun as any).result,
-        error: (inMemoryRun as any).error,
-        payload: (inMemoryRun as any).context?.input,
-        steps: {},
-      };
+      return this.#getInMemoryRunAsWorkflowState(runId);
     }
 
     // Parse snapshot if it's a string
