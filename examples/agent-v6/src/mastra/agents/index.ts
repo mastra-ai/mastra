@@ -3,6 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { stepCountIs, ToolLoopAgent } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { weatherInfo, weatherTool } from '../tools';
+import { SkillsProcessor } from '@mastra/core/processors';
 
 const memory = new Memory();
 
@@ -12,9 +13,7 @@ export const weatherAgent = new Agent({
   instructions: `Your goal is to provide weather information for cities when requested`,
   description: `An agent that can help you get weather information for a given city`,
   model: openai('gpt-4o-mini'),
-  defaultOptions: {
-    stopWhen: stepCountIs(1),
-  },
+  inputProcessors: [new SkillsProcessor()],
   tools: {
     weatherInfo,
   },

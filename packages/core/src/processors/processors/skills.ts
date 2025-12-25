@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import path, { join } from 'node:path';
 import matter from 'gray-matter';
 import z from 'zod';
 import type { ProcessInputStepArgs, Processor } from '..';
@@ -48,8 +48,8 @@ export interface Skill extends SkillMetadata {
  * Configuration options for SkillsProcessor
  */
 export interface SkillsProcessorOptions {
-  /** Path or paths to directories containing skills */
-  skillsPaths: string | string[];
+  /** Path or paths to directories containing skills (default: ./skills) */
+  skillsPaths?: string | string[];
   /** Format for skill injection (default: 'xml') */
   format?: SkillFormat;
   /** Allow script execution (default: false) */
@@ -199,10 +199,14 @@ export class SkillsProcessor implements Processor {
   private format: SkillFormat;
   private validateSkills: boolean;
 
-  constructor(opts: SkillsProcessorOptions) {
-    this.skillsPaths = Array.isArray(opts.skillsPaths) ? opts.skillsPaths : [opts.skillsPaths];
-    this.format = opts.format ?? 'xml';
-    this.validateSkills = opts.validateSkills ?? true;
+  constructor(opts?: SkillsProcessorOptions) {
+    if (opts?.skillsPaths === undefined) {
+      this.skillsPaths = [path.resolve(process.cwd(), '../../skills')];
+    } else {
+      this.skillsPaths = Array.isArray(opts.skillsPaths) ? opts.skillsPaths : [opts.skillsPaths];
+    }
+    this.format = opts?.format ?? 'xml';
+    this.validateSkills = opts?.validateSkills ?? true;
 
     // Discover skills at construction time
     this.discoverSkills();
@@ -375,7 +379,8 @@ ${skillInstructions}`;
   private createSkillActivateTool() {
     return createTool({
       id: 'skill-activate',
-      description: 'Activate a skill to load its full instructions and make it available for use',
+      description:
+        "Activate a skill to load its full instructions and make it available for use. Use this when you need access to a skill. Don't as for permission when you need this in context, just do it.",
       inputSchema: z.object({
         name: z.string().describe('The name of the skill to activate'),
       }),
@@ -498,6 +503,9 @@ ${skillInstructions}`;
     // 1. Inject available skills metadata (if any skills discovered)
     if (this.skillsMetadata.size > 0) {
       const availableSkillsMessage = this.formatAvailableSkills();
+
+      // eslint-disable-next-line no-console
+      console.log('availableSkillsMessage', availableSkillsMessage);
       if (availableSkillsMessage) {
         messageList.addSystem({
           role: 'system',
@@ -518,10 +526,13 @@ ${skillInstructions}`;
     }
 
     // 3. Add skill tools
-    const skillTools: Record<string, any> = {
+    let skillTools: Record<string, any> = {
       'skill-activate': this.createSkillActivateTool(),
-      'skill-read-reference': this.createSkillReadReferenceTool(),
     };
+
+    if (this.activatedSkills.size > 0) {
+      skillTools['skill-read-reference'] = this.createSkillReadReferenceTool();
+    }
 
     return {
       messageList,
