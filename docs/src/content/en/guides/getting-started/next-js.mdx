@@ -242,6 +242,8 @@ Create `src/app/chat/page.tsx`:
 import '@/app/globals.css';
 import { useEffect, useState } from 'react';
 import { DefaultChatTransport, ToolUIPart } from 'ai';
+import { Button } from '@/components/ui/button';
+import { Send } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
 
 import {
@@ -348,6 +350,14 @@ function Chat() {
               placeholder="Type your message..."
               disabled={status !== 'ready'}
             />
+            <Button
+                type="submit"
+                size="icon"
+                disabled={!input.trim() || status !== 'ready'}
+                aria-label="Send message"
+              >
+              <Send className="h-4 w-4" />
+            </Button>
           </PromptInputBody>
         </PromptInput>
       </div>
