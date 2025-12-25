@@ -1982,7 +1982,7 @@ export class Workflow<
       return {
         runId,
         workflowName: this.id,
-        resourceId: undefined,
+        resourceId: (inMemoryRun as any).resourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         status: (inMemoryRun as any).status ?? 'pending',
@@ -2003,7 +2003,7 @@ export class Workflow<
       return {
         runId,
         workflowName: this.id,
-        resourceId: undefined,
+        resourceId: (inMemoryRun as any).resourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         status: (inMemoryRun as any).status ?? 'pending',
@@ -2023,7 +2023,7 @@ export class Workflow<
       return {
         runId,
         workflowName: this.id,
-        resourceId: undefined,
+        resourceId: (inMemoryRun as any).resourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
         status: (inMemoryRun as any).status ?? 'pending',
