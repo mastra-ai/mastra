@@ -1058,8 +1058,8 @@
       "apiKeyHeader": "Authorization",
       "name": "OpenCode Zen",
       "models": [
-        "alpha-doubao-seed-code",
         "alpha-gd4",
+        "alpha-glm-4.7",
         "big-pickle",
         "claude-3-5-haiku",
         "claude-haiku-4-5",
@@ -2890,8 +2890,8 @@
       "zai-org/GLM-4.6"
     ],
     "opencode": [
-      "alpha-doubao-seed-code",
       "alpha-gd4",
+      "alpha-glm-4.7",
       "big-pickle",
       "claude-3-5-haiku",
       "claude-haiku-4-5",

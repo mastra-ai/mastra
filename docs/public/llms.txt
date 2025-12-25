@@ -393,6 +393,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Server Routes | Server](https://mastra.ai/en/reference/server/routes): API reference for HTTP routes registered by Mastra server adapters.
 - [Reference: Cloudflare D1 Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare-d1): Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
 - [Reference: Cloudflare Storage | Storage](https://mastra.ai/en/reference/storage/cloudflare): Documentation for the Cloudflare KV storage implementation in Mastra.
+- [Reference: Storage Composition | Storage](https://mastra.ai/en/reference/storage/composite): Documentation for combining multiple storage backends in Mastra.
 - [Reference: Convex Storage | Storage](https://mastra.ai/en/reference/storage/convex): Documentation for the Convex storage implementation in Mastra.
 - [Reference: DynamoDB Storage | Storage](https://mastra.ai/en/reference/storage/dynamodb): Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB.
 - [Reference: LanceDB Storage | Storage](https://mastra.ai/en/reference/storage/lance): Documentation for the LanceDB storage implementation in Mastra.
