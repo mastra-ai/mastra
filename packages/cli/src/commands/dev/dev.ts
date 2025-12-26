@@ -397,7 +397,7 @@ export async function dev({
   }
 
   // Extract mastra packages from the project's package.json
-  const mastraPackages = await getMastraPackages(rootDir);
+  const mastraPackages = getMastraPackages(rootDir);
 
   const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions, mastraPackages };
 

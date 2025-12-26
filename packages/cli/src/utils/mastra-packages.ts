@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { getPackageInfo } from 'local-pkg';
+import { join, normalize } from 'node:path';
+import { getPackageInfoSync } from 'local-pkg';
 
 interface PackageJson {
   dependencies?: Record<string, string>;
@@ -12,19 +12,40 @@ export interface MastraPackageInfo {
   version: string;
 }
 
-async function getResolvedVersion(packageName: string, specifiedVersion: string, rootDir: string): Promise<string> {
+function getResolvedVersion(packageName: string, specifiedVersion: string, rootDir: string): string {
   try {
-    // Pass the rootDir as the paths option so local-pkg resolves from the user's project,
-    // not from the CLI's own directory
-    const packageInfo = await getPackageInfo(packageName, { paths: [rootDir] });
-    return packageInfo?.version ?? specifiedVersion;
+    // Pass the node_modules path to ensure local-pkg starts resolution from
+    // the user's project's node_modules directory
+    const nodeModulesPath = join(rootDir, 'node_modules');
+    const packageInfo = getPackageInfoSync(packageName, { paths: [nodeModulesPath] });
+
+    if (packageInfo?.version) {
+      // Verify the resolved package is actually from the user's project,
+      // not from a parent directory (e.g., the CLI's own dependencies)
+      const resolvedPath = normalize(packageInfo.rootPath);
+      const expectedPrefix = normalize(rootDir);
+
+      if (resolvedPath.startsWith(expectedPrefix)) {
+        return packageInfo.version;
+      }
+    }
   } catch {
-    // Fall back to the specified version if we can't resolve the installed version
+    // Fall through to fallback
+  }
+
+  // Fallback: read directly from the user's node_modules
+  try {
+    const packageJsonPath = join(rootDir, 'node_modules', packageName, 'package.json');
+    const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(packageJsonContent);
+    return packageJson.version ?? specifiedVersion;
+  } catch {
+    // Fall back to the specified version from package.json
     return specifiedVersion;
   }
 }
 
-export async function getMastraPackages(rootDir: string): Promise<MastraPackageInfo[]> {
+export function getMastraPackages(rootDir: string): MastraPackageInfo[] {
   try {
     const packageJsonPath = join(rootDir, 'package.json');
     const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
@@ -39,12 +60,10 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
       ([name]) => name.startsWith('@mastra/') || name === 'mastra',
     );
 
-    const packages = await Promise.all(
-      mastraDeps.map(async ([name, specifiedVersion]) => ({
-        name,
-        version: await getResolvedVersion(name, specifiedVersion, rootDir),
-      })),
-    );
+    const packages = mastraDeps.map(([name, specifiedVersion]) => ({
+      name,
+      version: getResolvedVersion(name, specifiedVersion, rootDir),
+    }));
 
     return packages;
   } catch {
