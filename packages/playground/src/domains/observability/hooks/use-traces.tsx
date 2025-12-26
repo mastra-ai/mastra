@@ -13,15 +13,21 @@ const fetchTracesFn = async ({
   page: number;
   perPage: number;
 }) => {
-  const res = await client.getTraces({
-    pagination: {
-      page,
-      perPage,
-    },
-    filters,
-  });
-
-  return res.spans || [];
+  console.log('[useTraces] Fetching traces with:', { page, perPage, filters });
+  try {
+    const res = await client.getTraces({
+      pagination: {
+        page,
+        perPage,
+      },
+      filters,
+    });
+    console.log('[useTraces] Response:', { spans: res.spans?.length, res });
+    return res.spans || [];
+  } catch (error) {
+    console.error('[useTraces] Error fetching traces:', error);
+    throw error;
+  }
 };
 
 export interface TracesFilters {

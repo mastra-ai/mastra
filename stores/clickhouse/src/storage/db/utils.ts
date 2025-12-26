@@ -8,6 +8,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   safelyParseJSON,
   TABLE_SPANS,
+  TABLE_TRAINING_JOBS,
+  TABLE_TRAINED_MODELS,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -20,6 +22,8 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   // TODO: verify this is the correct engine for Spans when implementing clickhouse storage
   [TABLE_SPANS]: `ReplacingMergeTree()`,
   mastra_agents: `ReplacingMergeTree()`,
+  [TABLE_TRAINING_JOBS]: `ReplacingMergeTree()`,
+  [TABLE_TRAINED_MODELS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

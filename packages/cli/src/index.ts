@@ -14,6 +14,7 @@ import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { trainAgent, trainStatus, trainList, trainCancel } from './commands/train';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { studio } from './commands/studio';
 import { parseComponents, parseLlmProvider, parseMcp } from './commands/utils';
@@ -164,6 +165,47 @@ scorersCommand
   .action(addScorer);
 
 scorersCommand.command('list').description('List available scorer templates').action(listScorers);
+
+// Training commands
+const trainCommand = program.command('train').description('Train and fine-tune agents');
+
+trainCommand
+  .command('agent <agent-name>')
+  .description('Start a training job for an agent')
+  .option('-m, --method <method>', 'Training method: sft, dpo, or rft (default: sft)', 'sft')
+  .option('-s, --source <source>', 'Data source: traces or dataset (default: traces)', 'traces')
+  .option('--since <date>', 'Start date for trace filtering (ISO format)')
+  .option('--until <date>', 'End date for trace filtering (ISO format)')
+  .option('-l, --limit <number>', 'Maximum number of traces to use', parseInt)
+  .option('--min-score <number>', 'Minimum composite score for inclusion', parseFloat)
+  .option('--max-examples <number>', 'Maximum training examples', parseInt)
+  .option('--holdout-ratio <number>', 'Validation holdout ratio (0-1)', parseFloat)
+  .option('--base-model <model>', 'Base model to fine-tune (default: gpt-4o-mini-2024-07-18)')
+  .option('--epochs <number>', 'Number of training epochs', parseInt)
+  .option('-k, --api-key <key>', 'OpenAI API key (or set OPENAI_API_KEY)')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .action(trainAgent);
+
+trainCommand
+  .command('status <job-id>')
+  .description('Get status of a training job')
+  .option('-w, --watch', 'Watch for status changes')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .action((jobId, options) => trainStatus({ jobId, ...options }));
+
+trainCommand
+  .command('list')
+  .description('List training jobs')
+  .option('-a, --agent <name>', 'Filter by agent name')
+  .option('-s, --status <status>', 'Filter by status')
+  .option('-l, --limit <number>', 'Maximum number of jobs to list', parseInt)
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .action(trainList);
+
+trainCommand.command('cancel <job-id>').description('Cancel a training job').action(trainCancel);
 
 program.parse(process.argv);
 

@@ -17,6 +17,7 @@ import { STORED_AGENTS_ROUTES } from './stored-agents';
 import type { MastraStreamReturn } from './stream-types';
 import { SYSTEM_ROUTES } from './system';
 import { TOOLS_ROUTES } from './tools';
+import { TRAINING_ROUTES } from './training';
 import { VECTORS_ROUTES } from './vectors';
 import { WORKFLOWS_ROUTES } from './workflows';
 
@@ -101,6 +102,7 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...MCP_ROUTES,
   ...STORED_AGENTS_ROUTES,
   ...SYSTEM_ROUTES,
+  ...TRAINING_ROUTES,
 ];
 
 // Export route builder and OpenAPI utilities

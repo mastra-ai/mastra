@@ -77,6 +77,15 @@ export default function Observability() {
         : undefined,
   });
 
+  // DEBUG: Log traces data
+  console.log('[Observability] traces:', {
+    count: traces.length,
+    isLoading: isTracesLoading,
+    isError: isTracesError,
+    error: TracesError,
+    selectedEntity: selectedEntityOption,
+  });
+
   useEffect(() => {
     if (traceId) {
       setSelectedTraceId(traceId);

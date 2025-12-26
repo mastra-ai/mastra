@@ -9,6 +9,7 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  GraduationCapIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -71,6 +72,11 @@ const mainNavigation: NavSection[] = [
         name: 'Observability',
         url: '/observability',
         icon: <EyeIcon />,
+      },
+      {
+        name: 'Training',
+        url: '/training',
+        icon: <GraduationCapIcon />,
       },
     ],
   },

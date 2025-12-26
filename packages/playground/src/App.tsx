@@ -47,6 +47,7 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import Training from './pages/training';
 import { MastraReactProvider } from '@mastra/react';
 import { StudioSettingsPage } from './pages/settings';
 
@@ -67,6 +68,8 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  trainingLink: () => `/training`,
+  trainingJobLink: (jobId: string) => `/training/jobs/${jobId}`,
 };
 
 const LinkComponentWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -139,6 +142,16 @@ function App() {
                 }
               >
                 <Route path="/observability" element={<Observability />} />
+              </Route>
+              <Route
+                element={
+                  <Layout>
+                    <Outlet />
+                  </Layout>
+                }
+              >
+                <Route path="/training" element={<Training />} />
+                <Route path="/training/jobs/:jobId" element={<Training />} />
               </Route>
               <Route
                 element={

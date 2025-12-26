@@ -1,6 +1,13 @@
 import { MastraBase } from '../base';
 
-import type { AgentsStorage, ScoresStorage, WorkflowsStorage, MemoryStorage, ObservabilityStorage } from './domains';
+import type {
+  AgentsStorage,
+  ScoresStorage,
+  WorkflowsStorage,
+  MemoryStorage,
+  ObservabilityStorage,
+  TrainerStorage,
+} from './domains';
 
 export type StorageDomains = {
   workflows: WorkflowsStorage;
@@ -8,6 +15,7 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  trainer?: TrainerStorage;
 };
 
 /**
@@ -195,6 +203,7 @@ export class MastraStorage extends MastraBase {
         scores: domainOverrides.scores ?? defaultStores?.scores,
         observability: domainOverrides.observability ?? defaultStores?.observability,
         agents: domainOverrides.agents ?? defaultStores?.agents,
+        trainer: domainOverrides.trainer ?? defaultStores?.trainer,
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -249,6 +258,10 @@ export class MastraStorage extends MastraBase {
 
     if (this.stores?.agents) {
       initTasks.push(this.stores.agents.init());
+    }
+
+    if (this.stores?.trainer) {
+      initTasks.push(this.stores.trainer.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);

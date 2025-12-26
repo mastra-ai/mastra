@@ -10,6 +10,8 @@ export const TABLE_RESOURCES = 'mastra_resources';
 export const TABLE_SCORERS = 'mastra_scorers';
 export const TABLE_SPANS = 'mastra_ai_spans';
 export const TABLE_AGENTS = 'mastra_agents';
+export const TABLE_TRAINING_JOBS = 'mastra_training_jobs';
+export const TABLE_TRAINED_MODELS = 'mastra_trained_models';
 
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -19,7 +21,9 @@ export type TABLE_NAMES =
   | typeof TABLE_RESOURCES
   | typeof TABLE_SCORERS
   | typeof TABLE_SPANS
-  | typeof TABLE_AGENTS;
+  | typeof TABLE_AGENTS
+  | typeof TABLE_TRAINING_JOBS
+  | typeof TABLE_TRAINED_MODELS;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -105,6 +109,43 @@ export const AGENTS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const TRAINING_JOBS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  agentId: { type: 'text', nullable: false },
+  agentName: { type: 'text', nullable: false },
+  method: { type: 'text', nullable: false }, // 'sft' | 'dpo'
+  status: { type: 'text', nullable: false }, // 'pending' | 'preparing' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  providerJobId: { type: 'text', nullable: true }, // e.g., OpenAI fine-tuning job ID
+  fineTunedModelId: { type: 'text', nullable: true }, // ID of the resulting fine-tuned model
+  baseModel: { type: 'text', nullable: false },
+  trainingExamples: { type: 'integer', nullable: false },
+  validationExamples: { type: 'integer', nullable: true },
+  trainingFileId: { type: 'text', nullable: true },
+  validationFileId: { type: 'text', nullable: true },
+  metrics: { type: 'jsonb', nullable: true }, // { trainingLoss, validationLoss, trainedTokens, epochs, steps }
+  progress: { type: 'jsonb', nullable: true }, // { stage, stageLabel, current, total, percentage }
+  error: { type: 'text', nullable: true },
+  config: { type: 'jsonb', nullable: false }, // Full training configuration
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+};
+
+export const TRAINED_MODELS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  agentId: { type: 'text', nullable: false },
+  agentName: { type: 'text', nullable: false },
+  modelId: { type: 'text', nullable: false }, // Provider model ID (e.g., ft:gpt-4o-mini:org:suffix:id)
+  baseModel: { type: 'text', nullable: false },
+  trainingJobId: { type: 'text', nullable: false },
+  method: { type: 'text', nullable: false }, // 'sft' | 'dpo'
+  isActive: { type: 'boolean', nullable: false },
+  metrics: { type: 'jsonb', nullable: true }, // { trainingLoss, validationLoss, trainedTokens }
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> = {
   [TABLE_WORKFLOW_SNAPSHOT]: {
     workflow_name: {
@@ -167,4 +208,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_AGENTS]: AGENTS_SCHEMA,
+  [TABLE_TRAINING_JOBS]: TRAINING_JOBS_SCHEMA,
+  [TABLE_TRAINED_MODELS]: TRAINED_MODELS_SCHEMA,
 };

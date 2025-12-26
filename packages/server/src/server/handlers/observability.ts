@@ -123,16 +123,23 @@ export const LIST_TRACES_ROUTE = createRoute({
   tags: ['Observability'],
   handler: async ({ mastra, ...params }) => {
     try {
+      console.log('[LIST_TRACES] Incoming params:', params);
+
       // Transform legacy params to new format before processing
       const transformedParams = transformLegacyParams(params);
+      console.log('[LIST_TRACES] Transformed params:', transformedParams);
 
       const filters = pickParams(tracesFilterSchema, transformedParams);
       const pagination = pickParams(paginationArgsSchema, transformedParams);
       const orderBy = pickParams(tracesOrderBySchema, transformedParams);
+      console.log('[LIST_TRACES] Parsed:', { filters, pagination, orderBy });
 
       const observabilityStore = await getObservabilityStore(mastra);
-      return await observabilityStore.listTraces({ filters, pagination, orderBy });
+      const result = await observabilityStore.listTraces({ filters, pagination, orderBy });
+      console.log('[LIST_TRACES] Result:', { spansCount: result.spans?.length, pagination: result.pagination });
+      return result;
     } catch (error) {
+      console.error('[LIST_TRACES] Error:', error);
       handleError(error, 'Error listing traces');
     }
   },

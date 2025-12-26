@@ -1,0 +1,44 @@
+{
+  "name": "examples-trainer",
+  "type": "module",
+  "private": true,
+  "description": "Example project demonstrating Mastra's agent training and fine-tuning capabilities",
+  "scripts": {
+    "seed": "npx tsx src/seed.ts",
+    "train": "npx tsx src/train.ts",
+    "dev": "mastra dev"
+  },
+  "keywords": [
+    "mastra",
+    "training",
+    "fine-tuning",
+    "sft",
+    "dpo"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ai-sdk/openai": "^2.0.23",
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/trainer": "latest",
+    "mastra": "latest",
+    "zod": "^3.25.76"
+  },
+  "version": "0.0.1",
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/evals": "link:../../packages/evals",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/trainer": "link:../../packages/trainer",
+      "mastra": "link:../../packages/cli"
+    }
+  },
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
+}
