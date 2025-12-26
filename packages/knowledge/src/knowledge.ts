@@ -1,21 +1,21 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
-import {
-  MastraKnowledge,
-  type KnowledgeNode,
-  type KnowledgeEdge,
-  type KnowledgeData,
-  type KnowledgeSchema,
-  type SupportedEdgeType,
-  type GraphChunk,
-  type RankedNode,
-  type AddNodesFromChunksEdgeOptions,
-  type QueryOptions,
-  type KnowledgeBaseConfig,
-  type DocumentChunk,
-  type AddDocumentsOptions,
-  type Fact,
-  type AddFactResult,
+import { MastraKnowledge } from '@mastra/core/knowledge';
+import type {
+  KnowledgeNode,
+  KnowledgeEdge,
+  KnowledgeData,
+  KnowledgeSchema,
+  SupportedEdgeType,
+  GraphChunk,
+  RankedNode,
+  AddNodesFromChunksEdgeOptions,
+  QueryOptions,
+  KnowledgeBaseConfig,
+  DocumentChunk,
+  AddDocumentsOptions,
+  Fact,
+  AddFactResult,
 } from '@mastra/core/knowledge';
 
 /**

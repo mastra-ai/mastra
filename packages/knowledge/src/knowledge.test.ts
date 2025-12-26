@@ -1,7 +1,6 @@
-import { randomUUID } from 'crypto';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { randomUUID } from 'node:crypto';
 import type { GraphChunk, KnowledgeNode, KnowledgeEdge } from '@mastra/core/knowledge';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { Knowledge } from './knowledge';
 
