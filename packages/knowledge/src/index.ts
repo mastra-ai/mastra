@@ -13,3 +13,4 @@ export { KnowledgeStorage } from '@mastra/core/knowledge';
 export * from './knowledge';
 export * from './storage';
 export * from './processors';
+export * from './bm25';

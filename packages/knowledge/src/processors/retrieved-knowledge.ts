@@ -1,6 +1,6 @@
 import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 
-import type { Knowledge, KnowledgeSearchResult, SearchOptions } from '../knowledge';
+import type { Knowledge, KnowledgeSearchResult, SearchOptions, SearchMode } from '../knowledge';
 
 /**
  * Options for the RetrievedKnowledge processor
@@ -13,10 +13,30 @@ export interface RetrievedKnowledgeOptions {
    */
   topK?: number;
   /**
-   * Minimum similarity score threshold (0-1)
+   * Minimum similarity score threshold (0-1 for vector, varies for BM25)
    * Results below this score are filtered out
    */
   minScore?: number;
+  /**
+   * Search mode to use:
+   * - 'vector': Semantic similarity search using embeddings
+   * - 'bm25': Keyword-based search using BM25 algorithm
+   * - 'hybrid': Combine both vector and BM25 scores
+   *
+   * If not specified, the Knowledge instance will auto-detect based on its configuration.
+   */
+  mode?: SearchMode;
+  /**
+   * Hybrid search configuration (only applies when mode is 'hybrid')
+   */
+  hybrid?: {
+    /**
+     * Weight for vector similarity score (0-1).
+     * BM25 weight is automatically (1 - vectorWeight).
+     * @default 0.5
+     */
+    vectorWeight?: number;
+  };
   /**
    * How to format the retrieved knowledge in the system message
    * @default 'xml'
@@ -33,7 +53,7 @@ export interface RetrievedKnowledgeOptions {
    */
   queryExtractor?: (args: ProcessInputArgs) => string | undefined;
   /**
-   * Optional filter to apply to the search
+   * Optional filter to apply to the search (only applies to vector search)
    * Can be a static filter or a function that returns a filter based on runtime context
    */
   filter?: SearchOptions['filter'] | ((args: ProcessInputArgs) => SearchOptions['filter']);
@@ -44,10 +64,12 @@ export interface RetrievedKnowledgeOptions {
  * based on the user's query and adds relevant results to the context.
  *
  * Use this for large knowledge bases where you can't inject everything into
- * the system prompt - instead, semantically search for relevant content.
+ * the system prompt - instead, search for relevant content using vector similarity,
+ * BM25 keyword matching, or a hybrid combination of both.
  *
  * @example
  * ```typescript
+ * // Vector search (semantic similarity)
  * const knowledge = new Knowledge({
  *   storage: new FilesystemStorage({ namespace: './docs' }),
  *   index: {
@@ -57,17 +79,37 @@ export interface RetrievedKnowledgeOptions {
  *   },
  * });
  *
- * // Add documents (they get indexed automatically)
- * await knowledge.add({
- *   type: 'text',
- *   key: 'docs/password-reset.txt',
- *   content: 'To reset your password, go to Settings > Security...',
+ * const processor = new RetrievedKnowledge({
+ *   knowledge,
+ *   topK: 3,
+ *   minScore: 0.7,
+ *   mode: 'vector', // explicit vector search
+ * });
+ *
+ * // BM25 keyword search
+ * const knowledge = new Knowledge({
+ *   storage: new FilesystemStorage({ namespace: './docs' }),
+ *   bm25: true, // enable BM25
+ * });
+ *
+ * const processor = new RetrievedKnowledge({
+ *   knowledge,
+ *   topK: 5,
+ *   mode: 'bm25',
+ * });
+ *
+ * // Hybrid search (combines vector + BM25)
+ * const knowledge = new Knowledge({
+ *   storage: new FilesystemStorage({ namespace: './docs' }),
+ *   index: { vectorStore, embedder, indexName: 'docs' },
+ *   bm25: true,
  * });
  *
  * const processor = new RetrievedKnowledge({
  *   knowledge,
  *   topK: 3,
- *   minScore: 0.7,
+ *   mode: 'hybrid',
+ *   hybrid: { vectorWeight: 0.7 }, // 70% vector, 30% BM25
  * });
  *
  * const agent = new Agent({
@@ -76,7 +118,7 @@ export interface RetrievedKnowledgeOptions {
  * });
  *
  * // User asks: "How do I reset my password?"
- * // -> Processor searches index, finds relevant docs, injects into context
+ * // -> Processor searches, finds relevant docs, injects into context
  * ```
  */
 export class RetrievedKnowledge implements Processor {
@@ -86,6 +128,8 @@ export class RetrievedKnowledge implements Processor {
   private knowledge: Knowledge;
   private topK: number;
   private minScore?: number;
+  private mode?: SearchMode;
+  private hybrid?: { vectorWeight?: number };
   private format: 'xml' | 'markdown' | 'plain';
   private formatter?: (results: KnowledgeSearchResult[]) => string;
   private queryExtractor: (args: ProcessInputArgs) => string | undefined;
@@ -95,6 +139,8 @@ export class RetrievedKnowledge implements Processor {
     this.knowledge = options.knowledge;
     this.topK = options.topK ?? 3;
     this.minScore = options.minScore;
+    this.mode = options.mode;
+    this.hybrid = options.hybrid;
     this.format = options.format ?? 'xml';
     this.formatter = options.formatter;
     this.queryExtractor = options.queryExtractor ?? this.defaultQueryExtractor;
@@ -167,6 +213,8 @@ export class RetrievedKnowledge implements Processor {
       topK: this.topK,
       minScore: this.minScore,
       filter: resolvedFilter,
+      mode: this.mode,
+      hybrid: this.hybrid,
     });
 
     if (results.length === 0) {

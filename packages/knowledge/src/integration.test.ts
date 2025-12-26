@@ -543,6 +543,243 @@ describe('RetrievedKnowledge Processor', () => {
   });
 });
 
+describe('RetrievedKnowledge Processor with BM25', () => {
+  let testDir: string;
+  let knowledge: Knowledge;
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `retrieved-bm25-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(testDir, { recursive: true });
+
+    knowledge = new Knowledge({
+      storage: new FilesystemStorage({ namespace: testDir }),
+      bm25: true, // Enable BM25 only
+    });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  describe('processInput with BM25 mode', () => {
+    it('should retrieve relevant knowledge using BM25 keyword search', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/password-reset.txt',
+        content: 'To reset your password, go to Settings > Security > Reset Password.',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/billing-info.txt',
+        content: 'To update billing information, go to Account > Billing.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        topK: 3,
+        mode: 'bm25',
+        format: 'xml',
+      });
+
+      const messageList = createMessageListWithUserMessage('How do I reset my password?');
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const systemMessages = getSystemMessages(messageList);
+      expect(systemMessages.length).toBe(1);
+      expect(systemMessages[0]).toContain('<retrieved_knowledge>');
+      expect(systemMessages[0]).toContain('password-reset.txt');
+      expect(systemMessages[0]).toContain('Reset Password');
+    });
+
+    it('should use auto-detected mode when not specified', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/guide.txt',
+        content: 'This guide explains password management best practices.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        // No mode specified - should auto-detect BM25
+        format: 'plain',
+      });
+
+      const messageList = createMessageListWithUserMessage('password management');
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const systemMessages = getSystemMessages(messageList);
+      expect(systemMessages.length).toBe(1);
+      expect(systemMessages[0]).toContain('docs/guide.txt');
+    });
+
+    it('should return no results for unrelated query', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/recipes.txt',
+        content: 'Delicious chocolate cake recipe with vanilla frosting.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        mode: 'bm25',
+      });
+
+      const messageList = createMessageListWithUserMessage('network configuration settings');
+      const messagesBefore = messageList.get.all.db().length;
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const messagesAfter = messageList.get.all.db().length;
+      const systemMessages = getSystemMessages(messageList);
+
+      // No system messages should be added
+      expect(systemMessages.length).toBe(0);
+      expect(messagesAfter).toBe(messagesBefore);
+    });
+  });
+});
+
+describe('RetrievedKnowledge Processor with Hybrid Search', () => {
+  let testDir: string;
+  let dbPath: string;
+  let vectorStore: LibSQLVector;
+  let knowledge: Knowledge;
+  const indexName = 'hybrid_retrieved_index';
+  const dimension = 384;
+
+  const embedder = async (text: string): Promise<number[]> => {
+    const result = await embed({ model: fastembed, value: text });
+    return result.embedding;
+  };
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `retrieved-hybrid-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(testDir, { recursive: true });
+
+    dbPath = join(testDir, 'vectors.db');
+
+    vectorStore = new LibSQLVector({
+      connectionUrl: `file:${dbPath}`,
+      id: 'retrieved-hybrid-test',
+    });
+
+    await vectorStore.createIndex({ indexName, dimension });
+
+    knowledge = new Knowledge({
+      storage: new FilesystemStorage({ namespace: testDir }),
+      index: {
+        vectorStore,
+        embedder,
+        indexName,
+      },
+      bm25: true, // Enable both vector and BM25
+    });
+  });
+
+  afterEach(async () => {
+    try {
+      await vectorStore.deleteIndex({ indexName });
+    } catch {
+      // Ignore cleanup errors
+    }
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  describe('processInput with hybrid mode', () => {
+    it('should retrieve knowledge using hybrid search', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/password-reset.txt',
+        content: 'To reset your password, go to Settings > Security > Reset Password.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        mode: 'hybrid',
+        hybrid: { vectorWeight: 0.7 },
+        format: 'xml',
+      });
+
+      const messageList = createMessageListWithUserMessage('How do I reset my password?');
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const systemMessages = getSystemMessages(messageList);
+      expect(systemMessages.length).toBe(1);
+      expect(systemMessages[0]).toContain('<retrieved_knowledge>');
+      expect(systemMessages[0]).toContain('password-reset.txt');
+    }, 60000);
+
+    it('should use hybrid mode by default when both are configured', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/guide.txt',
+        content: 'Password security guide with best practices.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        // No mode specified - should auto-detect hybrid
+        format: 'plain',
+      });
+
+      const messageList = createMessageListWithUserMessage('password security');
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const systemMessages = getSystemMessages(messageList);
+      expect(systemMessages.length).toBe(1);
+      expect(systemMessages[0]).toContain('docs/guide.txt');
+    }, 60000);
+
+    it('should allow explicit vector-only mode in hybrid-capable knowledge', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/semantic.txt',
+        content: 'Understanding authentication and access control.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        mode: 'vector', // Explicitly use vector only
+        format: 'plain',
+      });
+
+      const messageList = createMessageListWithUserMessage('login security');
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const systemMessages = getSystemMessages(messageList);
+      expect(systemMessages.length).toBe(1);
+      expect(systemMessages[0]).toContain('docs/semantic.txt');
+    }, 60000);
+
+    it('should allow explicit BM25-only mode in hybrid-capable knowledge', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/keyword.txt',
+        content: 'Password reset instructions and guidelines.',
+      });
+
+      const processor = new RetrievedKnowledge({
+        knowledge,
+        mode: 'bm25', // Explicitly use BM25 only
+        format: 'plain',
+      });
+
+      const messageList = createMessageListWithUserMessage('password reset');
+
+      await processor.processInput(createProcessInputArgs(messageList));
+
+      const systemMessages = getSystemMessages(messageList);
+      expect(systemMessages.length).toBe(1);
+      expect(systemMessages[0]).toContain('docs/keyword.txt');
+    }, 60000);
+  });
+});
+
 describe('Combined StaticKnowledge + RetrievedKnowledge', () => {
   let testDir: string;
   let dbPath: string;

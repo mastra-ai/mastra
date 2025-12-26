@@ -389,13 +389,13 @@ describe('Knowledge with indexing', () => {
       }
     });
 
-    it('should throw error when index is not configured', async () => {
+    it('should throw error when no search is configured', async () => {
       const knowledgeWithoutIndex = new Knowledge({
         storage: new FilesystemStorage({ namespace: testDir }),
       });
 
       await expect(knowledgeWithoutIndex.search('test query')).rejects.toThrow(
-        'Knowledge search requires index configuration',
+        'Knowledge search requires either index or bm25 configuration',
       );
     });
 
@@ -448,6 +448,356 @@ describe('Knowledge with indexing', () => {
         storage: new FilesystemStorage({ namespace: testDir }),
       });
       expect(knowledgeWithoutIndex.canSearch).toBe(false);
+    });
+  });
+});
+
+describe('Knowledge with BM25', () => {
+  let testDir: string;
+  let knowledge: Knowledge;
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `knowledge-bm25-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(testDir, { recursive: true });
+
+    knowledge = new Knowledge({
+      storage: new FilesystemStorage({ namespace: testDir }),
+      bm25: true, // Enable BM25 with default config
+    });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  describe('BM25 search', () => {
+    it('should find documents by keyword matching', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/password-reset.txt',
+        content: 'To reset your password, go to Settings and click Reset Password button.',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/billing.txt',
+        content: 'To update your billing information, go to Account Settings.',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/account.txt',
+        content: 'Your account settings can be managed from the dashboard.',
+      });
+
+      const results = await knowledge.search('password reset', { mode: 'bm25' });
+
+      expect(results.length).toBeGreaterThan(0);
+      // Password reset doc should be first (contains both terms)
+      expect(results[0]?.key).toBe('docs/password-reset.txt');
+      expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+    });
+
+    it('should respect topK limit', async () => {
+      await knowledge.add({ type: 'text', key: 'doc1.txt', content: 'Search term appears here' });
+      await knowledge.add({ type: 'text', key: 'doc2.txt', content: 'Search term also here' });
+      await knowledge.add({ type: 'text', key: 'doc3.txt', content: 'Another search term document' });
+      await knowledge.add({ type: 'text', key: 'doc4.txt', content: 'More search term content' });
+
+      const results = await knowledge.search('search term', { mode: 'bm25', topK: 2 });
+
+      expect(results.length).toBe(2);
+    });
+
+    it('should handle queries with no matches', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'This document talks about apples and oranges.',
+      });
+
+      const results = await knowledge.search('javascript programming', { mode: 'bm25' });
+
+      expect(results.length).toBe(0);
+    });
+
+    it('should rank documents by relevance', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'highly-relevant.txt',
+        content: 'Machine learning machine learning machine learning is great',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'somewhat-relevant.txt',
+        content: 'Machine learning is a topic in computer science',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'barely-relevant.txt',
+        content: 'Learning about machines can be interesting',
+      });
+
+      const results = await knowledge.search('machine learning', { mode: 'bm25' });
+
+      expect(results.length).toBeGreaterThanOrEqual(2);
+      // Higher term frequency should score higher
+      expect(results[0]?.key).toBe('highly-relevant.txt');
+    });
+
+    it('should NOT index static artifacts', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'static/policy.txt',
+        content: 'This is a static policy document about passwords',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/password.txt',
+        content: 'Password documentation',
+      });
+
+      const results = await knowledge.search('password', { mode: 'bm25' });
+
+      // Should only find the non-static document
+      expect(results.find(r => r.key === 'static/policy.txt')).toBeUndefined();
+      expect(results.find(r => r.key === 'docs/password.txt')).toBeDefined();
+    });
+
+    it('should remove documents from BM25 index when deleted', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'to-delete.txt',
+        content: 'Unique searchable content here',
+      });
+
+      // Verify it's searchable
+      let results = await knowledge.search('unique searchable', { mode: 'bm25' });
+      expect(results.find(r => r.key === 'to-delete.txt')).toBeDefined();
+
+      // Delete
+      await knowledge.delete('to-delete.txt');
+
+      // Verify it's no longer searchable
+      results = await knowledge.search('unique searchable', { mode: 'bm25' });
+      expect(results.find(r => r.key === 'to-delete.txt')).toBeUndefined();
+    });
+  });
+
+  describe('canBM25Search', () => {
+    it('should return true when BM25 is configured', () => {
+      expect(knowledge.canBM25Search).toBe(true);
+    });
+
+    it('should return false when BM25 is not configured', () => {
+      const knowledgeWithoutBM25 = new Knowledge({
+        storage: new FilesystemStorage({ namespace: testDir }),
+      });
+      expect(knowledgeWithoutBM25.canBM25Search).toBe(false);
+    });
+  });
+
+  describe('BM25 configuration', () => {
+    it('should accept custom BM25 parameters', async () => {
+      const customKnowledge = new Knowledge({
+        storage: new FilesystemStorage({ namespace: testDir }),
+        bm25: {
+          bm25: { k1: 2.0, b: 0.5 },
+        },
+      });
+
+      await customKnowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'Test document content',
+      });
+
+      const results = await customKnowledge.search('test document', { mode: 'bm25' });
+      expect(results.length).toBeGreaterThan(0);
+    });
+
+    it('should accept custom tokenization options', async () => {
+      const customKnowledge = new Knowledge({
+        storage: new FilesystemStorage({ namespace: testDir }),
+        bm25: {
+          tokenize: {
+            lowercase: true,
+            minLength: 3,
+            stopwords: new Set(['the', 'a', 'an']),
+          },
+        },
+      });
+
+      await customKnowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'The quick brown fox jumps over the lazy dog',
+      });
+
+      const results = await customKnowledge.search('quick fox', { mode: 'bm25' });
+      expect(results.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe('Knowledge with hybrid search', () => {
+  let testDir: string;
+  let dbPath: string;
+  let vectorStore: LibSQLVector;
+  let knowledge: Knowledge;
+  const indexName = 'hybrid_index';
+  const dimension = 3;
+
+  // Simple mock embedder that returns predictable vectors based on content
+  const mockEmbedder = async (text: string): Promise<number[]> => {
+    const lowerText = text.toLowerCase();
+    // Create embeddings based on keyword presence for predictable similarity
+    const hasPassword = lowerText.includes('password') ? 0.9 : 0.1;
+    const hasReset = lowerText.includes('reset') ? 0.9 : 0.1;
+    const hasBilling = lowerText.includes('billing') ? 0.9 : 0.1;
+    return [hasPassword, hasReset, hasBilling];
+  };
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `knowledge-hybrid-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(testDir, { recursive: true });
+
+    dbPath = join(testDir, 'vectors.db');
+
+    vectorStore = new LibSQLVector({
+      connectionUrl: `file:${dbPath}`,
+      id: 'hybrid-test',
+    });
+
+    await vectorStore.createIndex({ indexName, dimension });
+
+    knowledge = new Knowledge({
+      storage: new FilesystemStorage({ namespace: testDir }),
+      index: {
+        vectorStore,
+        embedder: mockEmbedder,
+        indexName,
+      },
+      bm25: true,
+    });
+  });
+
+  afterEach(async () => {
+    try {
+      await vectorStore.deleteIndex({ indexName });
+    } catch {
+      // Ignore cleanup errors
+    }
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  describe('hybrid search', () => {
+    it('should combine vector and BM25 scores', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/password-reset.txt',
+        content: 'To reset your password, go to Settings and click Reset Password button.',
+      });
+      await knowledge.add({
+        type: 'text',
+        key: 'docs/billing.txt',
+        content: 'To update your billing information, go to Account Settings.',
+      });
+
+      const results = await knowledge.search('password reset', { mode: 'hybrid' });
+
+      expect(results.length).toBeGreaterThan(0);
+      // Should have both vector and BM25 scores
+      expect(results[0]?.scoreDetails?.vector).toBeDefined();
+      expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+    });
+
+    it('should use default hybrid mode when both are configured', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'Test document with password information',
+      });
+
+      // No mode specified - should default to hybrid
+      const results = await knowledge.search('password');
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.scoreDetails?.vector).toBeDefined();
+    });
+
+    it('should allow configuring vector weight', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'Password reset documentation',
+      });
+
+      const vectorHeavy = await knowledge.search('password reset', {
+        mode: 'hybrid',
+        hybrid: { vectorWeight: 0.9 },
+      });
+
+      const bm25Heavy = await knowledge.search('password reset', {
+        mode: 'hybrid',
+        hybrid: { vectorWeight: 0.1 },
+      });
+
+      // Both should return results
+      expect(vectorHeavy.length).toBeGreaterThan(0);
+      expect(bm25Heavy.length).toBeGreaterThan(0);
+    });
+
+    it('should allow explicit vector-only search', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'Password documentation here',
+      });
+
+      const results = await knowledge.search('password', { mode: 'vector' });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.scoreDetails?.vector).toBeDefined();
+      expect(results[0]?.scoreDetails?.bm25).toBeUndefined();
+    });
+
+    it('should allow explicit BM25-only search', async () => {
+      await knowledge.add({
+        type: 'text',
+        key: 'doc.txt',
+        content: 'Password documentation here',
+      });
+
+      const results = await knowledge.search('password documentation', { mode: 'bm25' });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.scoreDetails?.bm25).toBeDefined();
+      expect(results[0]?.scoreDetails?.vector).toBeUndefined();
+    });
+  });
+
+  describe('canHybridSearch', () => {
+    it('should return true when both index and BM25 are configured', () => {
+      expect(knowledge.canHybridSearch).toBe(true);
+    });
+
+    it('should return false when only index is configured', async () => {
+      const vectorOnlyKnowledge = new Knowledge({
+        storage: new FilesystemStorage({ namespace: testDir }),
+        index: {
+          vectorStore,
+          embedder: mockEmbedder,
+          indexName,
+        },
+      });
+      expect(vectorOnlyKnowledge.canHybridSearch).toBe(false);
+    });
+
+    it('should return false when only BM25 is configured', () => {
+      const bm25OnlyKnowledge = new Knowledge({
+        storage: new FilesystemStorage({ namespace: testDir }),
+        bm25: true,
+      });
+      expect(bm25OnlyKnowledge.canHybridSearch).toBe(false);
     });
   });
 });
