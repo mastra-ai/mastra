@@ -21,6 +21,18 @@ You'll also need to install the storage adapters you want to compose:
 npm install @mastra/pg@beta @mastra/libsql@beta
 ```
 
+## Storage Domains
+
+Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
+
+| Domain | Description |
+|--------|-------------|
+| `memory` | Conversation persistence for agents. Stores threads (conversation sessions), messages, resources (user identities), and working memory (persistent context across conversations). |
+| `workflows` | Workflow execution state. When workflows suspend for human input, external events, or scheduled resumption, their state is persisted here to enable resumption after server restarts. |
+| `scores` | Evaluation results from Mastra's evals system. Scores and metrics are persisted here for analysis and comparison over time. |
+| `observability` | Telemetry data including traces and spans. Agent interactions, tool calls, and LLM requests generate spans collected into traces for debugging and performance analysis. |
+| `agents` | Agent configurations for stored agents. Enables agents to be defined and updated at runtime without code deployments. |
+
 ## Usage
 
 ### Basic composition
@@ -29,7 +41,7 @@ Import domain classes directly from each store package and compose them:
 
 ```typescript
 import { MastraStorage } from "@mastra/core/storage";
-import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { WorkflowsPG, ScoresPG } from "@mastra/pg";
 import { MemoryLibSQL } from "@mastra/libsql";
 import { Mastra } from "@mastra/core";
 
@@ -161,6 +173,9 @@ const mastra = new Mastra({
 If using storage directly, call `init()` explicitly:
 
 ```typescript
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG } from "@mastra/pg";
+
 const storage = new MastraStorage({
   id: "composite",
   domains: {
@@ -217,6 +232,8 @@ const storage = new MastraStorage({
     scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
     observability: new ObservabilityStorageClickhouse({
       url: process.env.CLICKHOUSE_URL,
+      username: process.env.CLICKHOUSE_USERNAME,
+      password: process.env.CLICKHOUSE_PASSWORD,
     }),
   },
 });
