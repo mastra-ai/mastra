@@ -155,6 +155,30 @@ describe('ModelsDevGateway', () => {
       expect(providers.groq.models).not.toContain('deepseek-r1-distill-llama-70b');
     });
 
+    it('should return empty models array when all models are deprecated', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          groq: {
+            id: 'groq',
+            name: 'Groq',
+            models: {
+              'model-1': { name: 'Model 1', status: 'deprecated' },
+              'model-2': { name: 'Model 2', status: 'deprecated' },
+            },
+            env: ['GROQ_API_KEY'],
+            api: 'https://api.groq.com/openai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+      
+      expect(providers.groq).toBeDefined();
+      expect(providers.groq.models).toEqual([]);
+    });
+
     it('should extract model IDs from each provider', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,

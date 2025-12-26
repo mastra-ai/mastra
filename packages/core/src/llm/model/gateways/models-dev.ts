@@ -99,6 +99,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
+        // Filter out deprecated models before collecting model IDs
         const modelIds = Object.entries(providerInfo.models)
           .filter(([, modelInfo]) => modelInfo?.status !== 'deprecated')
           .map(([modelId]) => modelId)
