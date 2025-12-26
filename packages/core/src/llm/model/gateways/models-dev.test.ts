@@ -154,7 +154,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.groq.models).toEqual(['llama-3.1-8b']);
       expect(providers.groq.models).not.toContain('deepseek-r1-distill-llama-70b');
     });
-    
+
     it('should extract model IDs from each provider', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
