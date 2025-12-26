@@ -14,33 +14,18 @@ export interface MastraPackageInfo {
 
 function getResolvedVersion(packageName: string, specifiedVersion: string, rootDir: string): string {
   try {
-    // Pass the node_modules path to ensure local-pkg starts resolution from
-    // the user's project's node_modules directory
     const nodeModulesPath = join(rootDir, 'node_modules');
     const packageInfo = getPackageInfoSync(packageName, { paths: [nodeModulesPath] });
 
-    if (packageInfo?.version) {
-      // Verify the resolved package is actually from the user's project,
-      // not from a parent directory (e.g., the CLI's own dependencies)
-      const resolvedPath = normalize(packageInfo.rootPath);
-      const expectedPrefix = normalize(rootDir);
-
-      if (resolvedPath.startsWith(expectedPrefix)) {
-        return packageInfo.version;
-      }
+    // Verify resolved package is from the user's project, not CLI's dependencies
+    if (packageInfo?.version && normalize(packageInfo.rootPath).startsWith(normalize(rootDir))) {
+      return packageInfo.version;
     }
-  } catch {
-    // Fall through to fallback
-  }
 
-  // Fallback: read directly from the user's node_modules
-  try {
-    const packageJsonPath = join(rootDir, 'node_modules', packageName, 'package.json');
-    const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
-    const packageJson = JSON.parse(packageJsonContent);
-    return packageJson.version ?? specifiedVersion;
+    // Fallback: read directly from user's node_modules
+    const content = readFileSync(join(rootDir, 'node_modules', packageName, 'package.json'), 'utf-8');
+    return JSON.parse(content).version ?? specifiedVersion;
   } catch {
-    // Fall back to the specified version from package.json
     return specifiedVersion;
   }
 }
