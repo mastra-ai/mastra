@@ -1,6 +1,6 @@
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
-import type { PaginationInfo, StoragePagination } from '../../types';
+import type { StoragePagination } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
 import { ScoresStorage } from './base';
 
@@ -38,7 +38,7 @@ export class ScoresInMemory extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(score => {
       let baseFilter = score.scorerId === scorerId;
 
@@ -79,7 +79,7 @@ export class ScoresInMemory extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(score => score.runId === runId);
 
     const { page, perPage: perPageInput } = pagination;
@@ -106,7 +106,7 @@ export class ScoresInMemory extends ScoresStorage {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(score => {
       const baseFilter = score.entityId === entityId && score.entityType === entityType;
 
@@ -137,7 +137,7 @@ export class ScoresInMemory extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(
       score => score.traceId === traceId && score.spanId === spanId,
     );

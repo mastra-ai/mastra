@@ -22,7 +22,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, TracingContext, TracingOptions, TracingProperties } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
@@ -226,12 +226,13 @@ export class AgentLegacyHandler {
         const agentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           name: `agent run: '${this.capabilities.id}'`,
+          entityType: EntityType.AGENT,
+          entityId: this.capabilities.id,
+          entityName: this.capabilities.name,
           input: {
             messages,
           },
           attributes: {
-            agentId: this.capabilities.id,
-            agentName: this.capabilities.name,
             instructions: this.capabilities.convertInstructionsToString(instructions),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),

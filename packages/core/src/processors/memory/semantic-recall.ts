@@ -370,7 +370,7 @@ export class SemanticRecall implements Processor {
         withNextMessages: this.messageRange.after,
         withPreviousMessages: this.messageRange.before,
       })),
-      perPage: false, // Fetch all matching messages
+      perPage: 0,
     });
 
     return result.messages;

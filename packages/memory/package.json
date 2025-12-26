@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.9",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -45,6 +45,7 @@
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/ai-v6": "workspace:*",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",
     "@internal/lint": "workspace:*",

@@ -78,7 +78,14 @@ export async function createHonoServer(
     }
   }
 
-  app.onError((err, c) => errorHandler(err, c, options.isDev));
+  // Set up error handling - use custom onError handler if provided, otherwise use default
+  const customOnError = server?.onError;
+  app.onError((err, c) => {
+    if (customOnError) {
+      return customOnError(err, c);
+    }
+    return errorHandler(err, c, options.isDev);
+  });
 
   // Define body limit options
   const bodyLimitOptions = {

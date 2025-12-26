@@ -372,26 +372,16 @@ export function createTool<
     TSuspendSchema,
     TResumeSchema
   >,
-  TExecute extends ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext,
-    TId
-  >['execute'] = ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>['execute'],
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
-    execute?: TExecute;
-  },
-): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>,
+): [TSchemaIn, TSchemaOut] extends [ZodLikeSchema, ZodLikeSchema]
   ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> & {
       inputSchema: TSchemaIn;
       outputSchema: TSchemaOut;
       execute: (
-        inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
+        inputData: InferZodLikeSchema<TSchemaIn>,
         context?: TContext,
-      ) => Promise<TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> : unknown>;
+      ) => Promise<InferZodLikeSchemaInput<TSchemaOut> & { error?: never }>;
     }
   : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   return new Tool(opts) as any;

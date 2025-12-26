@@ -5,6 +5,7 @@ import z, { ZodObject } from 'zod';
 import type { MastraDBMessage } from '../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type {
+  MemoryStorage,
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
@@ -48,23 +49,27 @@ export class MockMemory extends MastraMemory {
     this._hasOwnStorage = true;
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const memoryStorage = await this.storage.getStore('memory');
-
-    if (!memoryStorage) {
+  protected async getMemoryStore(): Promise<MemoryStorage> {
+    const store = await this.storage.getStore('memory');
+    if (!store) {
       throw new MastraError({
-        id: 'MASTRA_MEMORY_GET_THREAD_BY_ID_NOT_SUPPORTED',
+        id: 'MASTRA_MEMORY_STORAGE_NOT_AVAILABLE',
         domain: ErrorDomain.MASTRA_MEMORY,
         category: ErrorCategory.SYSTEM,
         text: 'Memory storage is not supported by this storage adapter',
       });
     }
+    return store;
+  }
 
+  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+    const memoryStorage = await this.getMemoryStore();
     return memoryStorage.getThreadById({ threadId });
   }
 
   async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    return this.storage.saveThread({ thread });
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.saveThread({ thread });
   }
 
   async saveMessages({
@@ -73,19 +78,22 @@ export class MockMemory extends MastraMemory {
     messages: MastraDBMessage[];
     memoryConfig?: MemoryConfig;
   }): Promise<{ messages: MastraDBMessage[] }> {
-    return this.storage.saveMessages({ messages });
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.saveMessages({ messages });
   }
 
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.listThreadsByResourceId(args);
   }
 
   async recall(args: StorageListMessagesInput & { threadConfig?: MemoryConfig; vectorSearchString?: string }): Promise<{
     messages: MastraDBMessage[];
   }> {
-    const result = await this.storage.listMessages({
+    const memoryStorage = await this.getMemoryStore();
+    const result = await memoryStorage.listMessages({
       threadId: args.threadId,
       resourceId: args.resourceId,
       perPage: args.perPage,
@@ -99,14 +107,16 @@ export class MockMemory extends MastraMemory {
   }
 
   async deleteThread(threadId: string) {
-    return this.storage.deleteThread({ threadId });
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.deleteThread({ threadId });
   }
 
   async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
+    const memoryStorage = await this.getMemoryStore();
     const ids = Array.isArray(messageIds)
       ? messageIds?.map(item => (typeof item === 'string' ? item : item.id))
       : [messageIds];
-    return this.storage.deleteMessages(ids);
+    return memoryStorage.deleteMessages(ids);
   }
 
   async getWorkingMemory({
@@ -132,11 +142,17 @@ export class MockMemory extends MastraMemory {
       return null;
     }
 
-    const resource = await this.storage.getResourceById({ resourceId: id });
+    const memoryStorage = await this.getMemoryStore();
+    const resource = await memoryStorage.getResourceById({ resourceId: id });
     return resource?.workingMemory || null;
   }
 
   public listTools(_config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+    const mergedConfig = this.getMergedThreadConfig(_config);
+    if (!mergedConfig.workingMemory?.enabled) {
+      return {};
+    }
+
     return {
       updateWorkingMemory: createTool({
         id: 'update-working-memory',
@@ -252,7 +268,8 @@ export class MockMemory extends MastraMemory {
       throw new Error(`Cannot update working memory: ${scope} ID is required`);
     }
 
-    await this.storage.updateResource({
+    const memoryStorage = await this.getMemoryStore();
+    await memoryStorage.updateResource({
       resourceId: id,
       workingMemory,
     });

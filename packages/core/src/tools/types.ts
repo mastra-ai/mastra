@@ -235,10 +235,13 @@ export interface ToolAction<
   // Returns: The expected output OR a validation error if input validation fails
   // Note: When no outputSchema is provided, returns any to allow property access
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
+  // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (
     inputData: TSchemaIn extends ZodLikeSchema ? InferZodLikeSchema<TSchemaIn> : unknown,
     context?: TContext,
-  ) => Promise<(TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> : any) | ValidationError>;
+  ) => Promise<
+    (TSchemaOut extends ZodLikeSchema ? InferZodLikeSchemaInput<TSchemaOut> & { error?: never } : any) | ValidationError
+  >;
   mastra?: Mastra;
   requireApproval?: boolean;
   /**

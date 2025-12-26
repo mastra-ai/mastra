@@ -3,8 +3,15 @@ import { beforeAll, describe, it, expect, beforeEach } from 'vitest';
 import { createSampleScore } from './data';
 import type { ScoreRowData } from '@mastra/core/evals';
 import type { MastraStorage, ScoresStorage } from '@mastra/core/storage';
+import type { TestCapabilities } from '../../factory';
 
-export function createScoresTest({ storage }: { storage: MastraStorage }) {
+export function createScoresTest({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: TestCapabilities;
+}) {
   let scoresStorage: ScoresStorage;
 
   // Helper function for creating test scores
@@ -184,7 +191,7 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       await scoresStorage.saveScore(scorer);
 
       const result = await scoresStorage.listScoresByEntityId({
-        entityId: scorer.entity!.id!,
+        entityId: scorer.entity!.id as string,
         entityType: scorer.entityType!,
         pagination: { page: 0, perPage: 10 },
       });
@@ -195,7 +202,8 @@ export function createScoresTest({ storage }: { storage: MastraStorage }) {
       expect(result.pagination.hasMore).toBe(false);
     });
 
-    if (storage.supports.listScoresBySpan) {
+    // listScoresBySpan defaults to true since most stores support it
+    if (capabilities.listScoresBySpan !== false) {
       it('should retrieve scores by trace and span id', async () => {
         const scorerId = `scorer-${randomUUID()}`;
         const traceId = randomUUID();

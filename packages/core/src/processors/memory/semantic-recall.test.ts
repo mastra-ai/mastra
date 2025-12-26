@@ -170,7 +170,7 @@ describe('SemanticRecall', () => {
             withPreviousMessages: 1,
           },
         ],
-        perPage: false,
+        perPage: 0,
       });
     });
 

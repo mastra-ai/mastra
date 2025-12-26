@@ -1,122 +1,137 @@
 import { randomUUID } from 'node:crypto';
-import { SpanType } from '@mastra/core/observability';
-import type { SpanRecord } from '@mastra/core/storage';
+import { SpanType, EntityType } from '@mastra/core/observability';
+import type { CreateSpanRecord, SpanRecord } from '@mastra/core/storage';
 
-export function createSampleSpanForDB({
-  name,
-  traceId,
-  parentSpanId,
-  startedAt,
-  endedAt,
-  spanType,
-  isEvent,
-}: {
-  name: string;
-  scope: string;
-  traceId?: string;
-  parentSpanId?: string | null;
-  startedAt?: Date;
-  endedAt?: Date;
-  spanType?: SpanType;
-  isEvent?: boolean;
-}): SpanRecord {
-  const now = startedAt || new Date();
-  const end = endedAt || new Date(now.getTime() + 1000); // 1 second later
-  const generatedTraceId = traceId || `test-trace-${randomUUID()}`;
-  const spanId = `test-span-${randomUUID()}`;
+/**
+ * Default base date for testing - can be overridden
+ */
+export const DEFAULT_BASE_DATE = new Date('2024-01-01T00:00:00Z');
+
+/**
+ * Creates a span record for testing with sensible defaults.
+ * All fields can be overridden via the overrides parameter.
+ */
+export function createSpan(overrides: Partial<CreateSpanRecord> = {}): CreateSpanRecord {
+  const baseDate = overrides.startedAt || DEFAULT_BASE_DATE;
+  const traceId = overrides.traceId || `trace-${randomUUID()}`;
+  const spanId = overrides.spanId || `span-${randomUUID()}`;
 
   return {
-    traceId: generatedTraceId,
+    traceId,
     spanId,
-    parentSpanId: parentSpanId || null, // null for root spans, parentSpanId for child spans
-    name,
-    scope: {
-      version: '1.0.0',
-      environment: 'test',
-    },
-    spanType: spanType || SpanType.GENERIC,
-    attributes: {
-      tokenUsage: 100,
-    },
-    metadata: {
-      runId: `run-${randomUUID()}`,
-    },
+    parentSpanId: null,
+    name: 'Test Span',
+    spanType: SpanType.AGENT_RUN,
+    entityType: EntityType.AGENT,
+    entityId: 'agent-1',
+    entityName: 'Test Agent',
+    userId: null,
+    organizationId: null,
+    resourceId: null,
+    runId: null,
+    sessionId: null,
+    threadId: null,
+    requestId: null,
+    environment: 'test',
+    source: 'local',
+    serviceName: 'test-service',
+    scope: null,
+    attributes: null,
+    metadata: null,
+    tags: null,
     links: null,
-    startedAt: now,
-    endedAt: end,
-    createdAt: now,
-    updatedAt: null,
-    input: [{ role: 'user', content: 'test input' }],
-    output: [{ role: 'assistant', content: 'test output' }],
+    input: null,
+    output: null,
     error: null,
-    isEvent: isEvent || false,
+    isEvent: false,
+    startedAt: baseDate,
+    endedAt: new Date(baseDate.getTime() + 1000),
+    ...overrides,
   };
 }
 
 /**
- * Creates a root span (no parent) for testing
+ * Creates a root span (no parent) for testing.
+ * This is a convenience wrapper around createSpan.
  */
-export function createRootSpan(
-  {
-    name,
-    scope,
-    traceId,
-    startedAt,
-    endedAt,
-    spanType,
-    isEvent,
-  }: {
-    name: string;
-    scope: string;
-    traceId?: string;
-    startedAt?: Date;
-    endedAt?: Date;
-    spanType?: SpanType;
-    isEvent?: boolean;
-  } = {
-    name: 'test-root-span',
-    scope: 'test-scope',
-  },
-): SpanRecord {
-  return createSampleSpanForDB({
-    name,
-    scope,
-    traceId,
+export function createRootSpan(overrides: Partial<CreateSpanRecord> = {}): CreateSpanRecord {
+  return createSpan({
     parentSpanId: null,
-    startedAt,
-    endedAt,
-    spanType,
-    isEvent,
+    ...overrides,
   });
 }
 
 /**
- * Creates a child span with a specified parent span ID
+ * Creates a child span with a specified parent span ID.
+ * This is a convenience wrapper around createSpan.
  */
-export function createChildSpan({
-  name,
-  scope,
-  parentSpanId,
-  traceId,
-  startedAt,
-  endedAt,
-  isEvent,
-}: {
-  name: string;
-  scope: string;
-  parentSpanId: string;
-  traceId?: string;
-  startedAt?: Date;
-  endedAt?: Date;
-  isEvent?: boolean;
-}): SpanRecord {
-  return createSampleSpanForDB({
-    name,
-    scope,
-    traceId,
+export function createChildSpan(parentSpanId: string, overrides: Partial<CreateSpanRecord> = {}): CreateSpanRecord {
+  return createSpan({
     parentSpanId,
-    startedAt,
-    endedAt,
-    isEvent,
+    ...overrides,
   });
 }
+
+/**
+ * Creates a span record with only the OLD_SPAN_SCHEMA fields.
+ * This simulates data that existed before the schema migration added new columns.
+ *
+ * OLD_SPAN_SCHEMA fields:
+ * - traceId, spanId, parentSpanId, name, spanType
+ * - scope, attributes, metadata, links
+ * - input, output, error
+ * - startedAt, endedAt, createdAt, updatedAt
+ * - isEvent
+ *
+ * New fields NOT included (should be null after migration):
+ * - entityType, entityId, entityName
+ * - userId, organizationId, resourceId
+ * - runId, sessionId, threadId, requestId
+ * - environment, source, serviceName
+ * - tags
+ */
+export function createOldSchemaSpan(overrides: Partial<CreateSpanRecord> = {}): CreateSpanRecord {
+  const baseDate = overrides.startedAt || DEFAULT_BASE_DATE;
+  const traceId = overrides.traceId || `trace-${randomUUID()}`;
+  const spanId = overrides.spanId || `span-${randomUUID()}`;
+
+  return {
+    traceId,
+    spanId,
+    parentSpanId: overrides.parentSpanId ?? null,
+    name: overrides.name ?? 'Pre-Migration Span',
+    spanType: overrides.spanType ?? SpanType.AGENT_RUN,
+    isEvent: overrides.isEvent ?? false,
+    startedAt: overrides.startedAt ?? baseDate,
+    endedAt: overrides.endedAt ?? new Date(baseDate.getTime() + 1000),
+
+    // Old schema optional fields
+    scope: overrides.scope ?? null,
+    attributes: overrides.attributes ?? null,
+    metadata: overrides.metadata ?? null,
+    links: overrides.links ?? null,
+    input: overrides.input ?? null,
+    output: overrides.output ?? null,
+    error: overrides.error ?? null,
+
+    // New fields - explicitly set to null to simulate pre-migration data
+    entityType: null,
+    entityId: null,
+    entityName: null,
+    userId: null,
+    organizationId: null,
+    resourceId: null,
+    runId: null,
+    sessionId: null,
+    threadId: null,
+    requestId: null,
+    environment: null,
+    source: null,
+    serviceName: null,
+    tags: null,
+  };
+}
+
+// Re-export types and enums for convenience
+export { SpanType, EntityType };
+export type { CreateSpanRecord, SpanRecord };

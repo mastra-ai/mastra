@@ -22,13 +22,6 @@ describe('BenchmarkStore', () => {
     }
   });
 
-  describe('supports', () => {
-    it('should support resource scope and working memory', () => {
-      expect(store.supports.selectByIncludeResourceScope).toBe(true);
-      expect(store.supports.resourceWorkingMemory).toBe(true);
-    });
-  });
-
   describe('persist', () => {
     it('should save store data to a JSON file', async () => {
       // Add some test data

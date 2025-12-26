@@ -1,5 +1,7 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { z } from 'zod';
+
+import { createStep } from '../workflows';
 import { createTool } from './tool';
 
 describe('createTool type improvements', () => {
@@ -42,11 +44,10 @@ describe('createTool type improvements', () => {
 
     const result = await tool.execute({ name: 'Alice' });
 
-    // TypeScript should know the shape of the result
-    expectTypeOf(result).toMatchTypeOf<{
-      greeting: string;
-      timestamp: number;
-    }>();
+    // Use inline narrowing to access properties
+    if ('error' in result && result.error) {
+      throw new Error('Unexpected validation error');
+    }
 
     expect(result.greeting).toBe('Hello Alice');
     expect(typeof result.timestamp).toBe('number');
@@ -60,6 +61,10 @@ describe('createTool type improvements', () => {
         name: z.string(),
         age: z.number().min(0),
         email: z.string().email().optional(),
+      }),
+      outputSchema: z.object({
+        message: z.string(),
+        hasEmail: z.boolean(),
       }),
       execute: async input => {
         // TypeScript should know input.name is a string
@@ -82,23 +87,26 @@ describe('createTool type improvements', () => {
       age: 30,
     });
 
+    // Use inline narrowing to access properties
+    if ('error' in result && result.error) {
+      throw new Error('Unexpected validation error');
+    }
+
     expect(result.message).toBe('Bob is 30 years old');
     expect(result.hasEmail).toBe(false);
   });
 
-  it('should return unknown when no output schema is provided', async () => {
+  it('should return any when no output schema is provided', async () => {
     const tool = createTool({
       id: 'no-output-schema',
       description: 'Tool without output schema',
+      inputSchema: z.object({}),
       execute: async () => {
         return { anything: 'goes', nested: { value: 42 } };
       },
     });
 
-    const result = await tool.execute();
-
-    // Result type should be unknown (not any) when no output schema
-    expectTypeOf(result).toBeUnknown();
+    const result = await tool.execute!({});
 
     // But at runtime we can still access the values
     expect((result as any).anything).toBe('goes');
@@ -158,13 +166,112 @@ describe('createTool type improvements', () => {
       b: 3,
     });
 
-    // TypeScript should know the exact shape
-    expectTypeOf(output).toMatchTypeOf<{
-      result: number;
-      operation: string;
-    }>();
+    // Use inline narrowing to access properties
+    if ('error' in output && output.error) {
+      throw new Error('Unexpected validation error');
+    }
 
     expect(output.result).toBe(8);
     expect(output.operation).toBe('add');
+  });
+});
+
+/**
+ * Tests for GitHub Issue #11381
+ * https://github.com/mastra-ai/mastra/issues/11381
+ *
+ * The issue was that tool.execute return type was incorrectly typed as
+ * `ValidationError<any> | OutputType`, and TypeScript couldn't narrow
+ * the type properly after checking `'error' in result && result.error`.
+ *
+ * The fix adds `{ error?: never }` to the success type, enabling proper
+ * inline type narrowing.
+ */
+describe('Issue #11381 - Tool execute return type narrowing', () => {
+  const fullNameOutputSchema = z.object({
+    fullName: z.string(),
+  });
+
+  const fullNameFinderTool = createTool({
+    id: 'full-name-finder',
+    description: 'Finds a full name',
+    inputSchema: z.object({
+      firstName: z.string(),
+    }),
+    outputSchema: fullNameOutputSchema,
+    execute: async inputData => {
+      return {
+        fullName: `${inputData.firstName} von der Burg`,
+      };
+    },
+  });
+
+  const testStep = createStep({
+    id: 'test-step',
+    description: 'description',
+    inputSchema: z.object({
+      firstName: z.string(),
+    }),
+    outputSchema: fullNameOutputSchema,
+    execute: async ({ inputData }) => {
+      const result = await fullNameFinderTool.execute({ firstName: inputData.firstName });
+
+      if ('error' in result && result.error) {
+        console.error('Validation failed:', result.message);
+        console.error('Details:', result.validationErrors);
+        return { fullName: 'Error occurred' };
+      }
+
+      return {
+        fullName: result.fullName,
+      };
+    },
+  });
+
+  it('should allow inline narrowing with "error" in result check', async () => {
+    const result = await fullNameFinderTool.execute({ firstName: 'Hans' });
+
+    // INLINE NARROWING: This should work with 'error' in result check
+    if ('error' in result && result.error) {
+      console.error('Validation failed:', result.message);
+      return;
+    }
+
+    // TypeScript narrows result to { fullName: string } after the if block
+    expect(result.fullName).toBe('Hans von der Burg');
+  });
+
+  it('should have testStep defined correctly', () => {
+    expect(testStep).toBeDefined();
+    expect(testStep.id).toBe('test-step');
+  });
+
+  it('should correctly detect validation errors with inline check', async () => {
+    const tool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({
+        name: z.string().min(5),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async inputData => {
+        return { result: inputData.name };
+      },
+    });
+
+    // Pass invalid input (too short)
+    const result = await tool.execute({ name: 'ab' });
+
+    // INLINE NARROWING: Check for validation error
+    if ('error' in result && result.error) {
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('Tool input validation failed');
+      return;
+    }
+
+    // Should not reach here
+    throw new Error('Expected validation error');
   });
 });

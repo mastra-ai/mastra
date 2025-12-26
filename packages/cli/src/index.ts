@@ -65,7 +65,11 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
+  .option(
+    '-m, --mcp <editor>',
+    'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
+    parseMcp,
+  )
   .option(
     '--template [template-name]',
     'Create project from a template (use template name, public GitHub URL, or leave blank to select from list)',
@@ -86,7 +90,11 @@ program
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
-  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)', parseMcp)
+  .option(
+    '-m, --mcp <editor>',
+    'MCP Server for code editor (cursor, cursor-global, windsurf, vscode, antigravity)',
+    parseMcp,
+  )
   .action(initProject);
 
 program

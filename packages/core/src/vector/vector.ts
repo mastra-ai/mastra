@@ -1,6 +1,18 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModelV3 } from '@ai-sdk/provider-v6';
-import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
+import type {
+  EmbeddingModel as EmbeddingModelV1,
+  ProviderOptions as ProviderOptionsV1,
+  TelemetrySettings as TelemetrySettingsV1,
+} from '@internal/ai-sdk-v4';
+import type {
+  EmbeddingModelV2,
+  TelemetrySettings as TelemetrySettingsV5,
+  ProviderOptions as ProviderOptionsV5,
+} from '@internal/ai-sdk-v5';
+import type {
+  EmbeddingModelV3,
+  TelemetrySettings as TelemetrySettingsV6,
+  ProviderOptions as ProviderOptionsV6,
+} from '@internal/ai-v6';
 import { MastraBase } from '../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { VectorFilter } from './filter';
@@ -25,6 +37,20 @@ export type MastraSupportedEmbeddingModel<T> = EmbeddingModelV2<T> | EmbeddingMo
 
 /** All supported embedding model types */
 export type MastraEmbeddingModel<T> = MastraLegacyEmbeddingModel<T> | MastraSupportedEmbeddingModel<T>;
+
+export type MastraEmbeddingOptions = {
+  maxRetries?: number;
+
+  headers?: Record<string, string>;
+  /**
+   * Optional telemetry configuration (experimental).
+   */
+  telemetry?: TelemetrySettingsV1 | TelemetrySettingsV5 | TelemetrySettingsV6;
+
+  providerOptions?: ProviderOptionsV1 | ProviderOptionsV5 | ProviderOptionsV6;
+
+  maxParallelCalls?: number;
+};
 
 /** Specification versions for supported (modern) embedding models */
 export const supportedEmbeddingModelSpecifications = ['v2', 'v3'] as const;

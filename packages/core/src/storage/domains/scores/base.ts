@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
-import type { PaginationInfo, StoragePagination } from '../../types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
+import type { StoragePagination } from '../../types';
 import { StorageDomain } from '../base';
 
 export abstract class ScoresStorage extends StorageDomain {
@@ -9,6 +9,10 @@ export abstract class ScoresStorage extends StorageDomain {
       component: 'STORAGE',
       name: 'SCORES',
     });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    // Default no-op - subclasses override
   }
 
   abstract getScoreById({ id }: { id: string }): Promise<ScoreRowData | null>;
@@ -27,7 +31,7 @@ export abstract class ScoresStorage extends StorageDomain {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+  }): Promise<ListScoresResponse>;
 
   abstract listScoresByRunId({
     runId,
@@ -35,7 +39,7 @@ export abstract class ScoresStorage extends StorageDomain {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+  }): Promise<ListScoresResponse>;
 
   abstract listScoresByEntityId({
     entityId,
@@ -45,7 +49,7 @@ export abstract class ScoresStorage extends StorageDomain {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }>;
+  }): Promise<ListScoresResponse>;
 
   async listScoresBySpan({
     traceId,
@@ -55,7 +59,7 @@ export abstract class ScoresStorage extends StorageDomain {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,

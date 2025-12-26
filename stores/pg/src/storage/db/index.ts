@@ -321,7 +321,19 @@ export class PgDB extends MastraBase {
     try {
       const schemaName = getSchemaName(this.schemaName);
       const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-      await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+
+      // Check if table exists before truncating (handles case where init failed)
+      const tableExists = await this.client.oneOrNone<{ exists: boolean }>(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = $1 AND table_name = $2
+        )`,
+        [this.schemaName || 'mastra', tableName],
+      );
+
+      if (tableExists?.exists) {
+        await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -393,6 +405,21 @@ export class PgDB extends MastraBase {
             `
                 : ''
             }
+          ${
+            tableName === TABLE_SPANS
+              ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
+                PRIMARY KEY ("traceId", "spanId");
+              END IF;
+            END $$;
+            `
+              : ''
+          }
           `;
 
       await this.client.none(sql);
@@ -403,8 +430,10 @@ export class PgDB extends MastraBase {
         ifNotExists: timeZColumnNames,
       });
 
+      // Set up timestamp triggers and run migrations for Spans table
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
+        await this.migrateSpansTable();
       }
     } catch (error) {
       throw new MastraError(
@@ -461,6 +490,69 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+        if (!columnExists) {
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = this.getSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+          await this.client.none(alterSql);
+          this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+
+          // For timestamp columns, also add the timezone-aware version
+          // This matches the behavior in alterTable()
+          if (sqlType === 'TIMESTAMP') {
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${columnName}Z' to ${fullTableName}`);
+          }
+        }
+      }
+
+      // Also add timezone columns for any existing timestamp columns that don't have them yet
+      // This handles the case where timestamp columns existed but their *Z counterparts don't
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        if (columnDef.type === 'timestamp') {
+          const tzColumnName = `${columnName}Z`;
+          const tzColumnExists = await this.hasColumn(TABLE_SPANS, tzColumnName);
+          if (!tzColumnExists) {
+            const parsedTzColumnName = parseSqlIdentifier(tzColumnName, 'column name');
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedTzColumnName}" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${tzColumnName}' to ${fullTableName}`);
+          }
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -476,19 +568,20 @@ export class PgDB extends MastraBase {
       for (const columnName of ifNotExists) {
         if (schema[columnName]) {
           const columnDef = schema[columnName];
-          const sqlType = this.getSqlType(columnDef.type);
-          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = this.getSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
           await this.client.none(alterSql);
 
           if (sqlType === 'TIMESTAMP') {
-            const alterSql =
+            const timestampZSql =
               `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
-            await this.client.none(alterSql);
+            await this.client.none(timestampZSql);
           }
 
           this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);

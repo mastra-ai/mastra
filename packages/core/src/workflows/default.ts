@@ -635,6 +635,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           await this.invokeLifecycleCallbacks(result);
         }
 
+        if (lastOutput.result.status === 'paused') {
+          await params.pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'workflow-paused', payload: {} },
+          });
+        }
+
         return {
           ...result,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
@@ -655,6 +663,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           executionContext: lastExecutionContext!,
           workflowStatus: 'paused',
           requestContext: currentRequestContext,
+        });
+
+        await params.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'workflow-paused', payload: {} },
         });
 
         workflowSpan?.end({
