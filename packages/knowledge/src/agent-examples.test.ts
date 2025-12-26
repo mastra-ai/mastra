@@ -140,9 +140,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
   const dimension = 384;
 
   const embedder = async (text: string): Promise<number[]> => {
-    console.log('embedder', text);
     const result = await embed({ model: fastembed, value: text });
-    console.log('result', result);
     return result.embedding;
   };
 
@@ -209,7 +207,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
     console.log('Agent response (retrieved knowledge, XML format):', result.text);
   }, 60000);
 
-  it.only('should run agent with retrieved knowledge (markdown format)', async () => {
+  it('should run agent with retrieved knowledge (markdown format)', async () => {
     await knowledge.add({
       type: 'text',
       key: 'docs/guide.txt',

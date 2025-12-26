@@ -111,14 +111,31 @@ export class RetrievedKnowledge implements Processor {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg?.role === 'user') {
-        // Extract text content
-        if (typeof msg.content === 'string') {
-          return msg.content;
+        // Extract text content from different formats
+        const content = msg.content;
+
+        // Handle string content
+        if (typeof content === 'string') {
+          return content;
         }
-        if (Array.isArray(msg.content)) {
-          const textParts = msg.content
+
+        // Handle array content (AI SDK format)
+        if (Array.isArray(content)) {
+          const textParts = content
             .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
             .map(part => part.text);
+          if (textParts.length > 0) {
+            return textParts.join(' ');
+          }
+        }
+
+        // Handle MastraDBMessage format (content.parts)
+        if (content && typeof content === 'object' && 'parts' in content && Array.isArray(content.parts)) {
+          const textParts = content.parts
+            .filter(
+              (part: { type: string; text?: string }): part is { type: 'text'; text: string } => part.type === 'text',
+            )
+            .map((part: { type: 'text'; text: string }) => part.text);
           if (textParts.length > 0) {
             return textParts.join(' ');
           }

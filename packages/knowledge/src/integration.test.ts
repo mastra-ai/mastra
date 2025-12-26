@@ -49,16 +49,20 @@ function createProcessInputArgs(messageList: MessageList): ProcessInputArgs {
  * Helper to get the system messages added by a processor
  */
 function getSystemMessages(messageList: MessageList): string[] {
-  const allMessages = messageList.get.all.db();
-  return allMessages
-    .filter(m => m.role === 'system')
-    .map(m => {
-      const parts = m.content.parts;
-      return parts
-        .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+  const systemMessages = messageList.getAllSystemMessages();
+  return systemMessages.map(m => {
+    if (typeof m.content === 'string') {
+      return m.content;
+    }
+    // Handle array content
+    if (Array.isArray(m.content)) {
+      return m.content
+        .filter((p): p is { type: 'text'; text: string } => typeof p === 'object' && p.type === 'text')
         .map(p => p.text)
         .join('');
-    });
+    }
+    return '';
+  });
 }
 
 describe('StaticKnowledge Processor', () => {
