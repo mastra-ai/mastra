@@ -2,6 +2,8 @@ import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
+import { BraintrustExporter } from '@mastra/braintrust';
+import { initLogger } from 'braintrust';
 
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
@@ -43,6 +45,12 @@ const testScorer = createScorer({
   description: 'Scorer 1',
 }).generateScore(() => {
   return 1;
+});
+
+const logger = initLogger({ projectName: 'My Project' });
+
+const exporter = new BraintrustExporter({
+  braintrustLogger: logger,
 });
 
 const config = {
@@ -98,7 +106,12 @@ const config = {
     testScorer,
   },
   observability: new Observability({
-    default: { enabled: true },
+    configs: {
+      braintrust: {
+        serviceName: 'demo',
+        exporters: [exporter],
+      },
+    },
   }),
 };
 

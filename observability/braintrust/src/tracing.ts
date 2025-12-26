@@ -406,13 +406,13 @@ export class BraintrustExporter extends BaseExporter {
   private transformInput(input: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
       if (input && Array.isArray(input.messages)) {
-        return this.serializeDates(input.messages);
+        return input.messages;
       } else if (input && typeof input === 'object' && 'content' in input) {
-        return this.serializeDates([{ role: input.role, content: input.content }]);
+        return [{ role: input.role, content: input.content }];
       }
     }
 
-    return this.serializeDates(input);
+    return input;
   }
 
   /**
@@ -421,10 +421,10 @@ export class BraintrustExporter extends BaseExporter {
   private transformOutput(output: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
       const { text, ...rest } = output;
-      return this.serializeDates({ role: 'assistant', content: text, ...rest });
+      return { role: 'assistant', content: text, ...rest };
     }
 
-    return this.serializeDates(output);
+    return output;
   }
 
   private buildSpanPayload(span: AnyExportedSpan): Record<string, any> {
@@ -442,7 +442,7 @@ export class BraintrustExporter extends BaseExporter {
     payload.metrics = {};
     payload.metadata = {
       spanType: span.type,
-      ...this.serializeDates(span.metadata),
+      ...span.metadata,
     };
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
@@ -472,27 +472,27 @@ export class BraintrustExporter extends BaseExporter {
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
-        payload.metadata.modelParameters = this.serializeDates(modelAttr.parameters);
+        payload.metadata.modelParameters = modelAttr.parameters;
       }
 
       // Other LLM attributes go to metadata
       const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
-        ...this.serializeDates(otherAttributes),
+        ...otherAttributes,
       };
     } else {
       // For non-LLM spans, put all attributes in metadata
       payload.metadata = {
         ...payload.metadata,
-        ...this.serializeDates(attributes),
+        ...attributes,
       };
     }
 
     // Handle errors
     if (span.errorInfo) {
       payload.error = span.errorInfo.message;
-      payload.metadata.errorDetails = this.serializeDates(span.errorInfo);
+      payload.metadata.errorDetails = span.errorInfo;
     }
 
     // Clean up empty metrics object
