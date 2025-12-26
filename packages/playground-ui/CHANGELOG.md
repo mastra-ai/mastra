@@ -1,5 +1,42 @@
 # @mastra/playground-ui
 
+## 7.0.0-beta.17
+
+### Patch Changes
+
+- Updated dependencies [[`b5dc973`](https://github.com/mastra-ai/mastra/commit/b5dc9733a5158850298dfb103acb3babdba8a318), [`af56599`](https://github.com/mastra-ai/mastra/commit/af56599d73244ae3bf0d7bcade656410f8ded37b)]:
+  - @mastra/core@1.0.0-beta.17
+  - @mastra/schema-compat@1.0.0-beta.4
+  - @mastra/client-js@1.0.0-beta.17
+  - @mastra/react@0.1.0-beta.17
+
+## 7.0.0-beta.16
+
+### Patch Changes
+
+- Fix workflow observability view broken by invalid entityType parameter ([#11427](https://github.com/mastra-ai/mastra/pull/11427))
+
+  The UI workflow observability view was failing with a Zod validation error when trying to filter traces by workflow. The UI was sending `entityType=workflow`, but the backend's `EntityType` enum only accepts `workflow_run`.
+
+  **Root Cause**: The legacy value transformation was happening in the handler (after validation), but Zod validation occurred earlier in the request pipeline, rejecting the request before it could be transformed.
+
+  **Solution**:
+  - Added `z.preprocess()` to the query schema to transform `workflow` → `workflow_run` before validation
+  - Kept handler transformation for defense in depth
+  - Updated UI to use `EntityType.WORKFLOW_RUN` enum value for type safety
+
+  This maintains backward compatibility with legacy clients while fixing the validation error.
+
+  Fixes #11412
+
+- Add container queries, adjust the agent chat and use container queries to better display information on the agent sidebar ([#11408](https://github.com/mastra-ai/mastra/pull/11408))
+
+- Updated dependencies [[`3d93a15`](https://github.com/mastra-ai/mastra/commit/3d93a15796b158c617461c8b98bede476ebb43e2), [`efe406a`](https://github.com/mastra-ai/mastra/commit/efe406a1353c24993280ebc2ed61dd9f65b84b26), [`119e5c6`](https://github.com/mastra-ai/mastra/commit/119e5c65008f3e5cfca954eefc2eb85e3bf40da4), [`74e504a`](https://github.com/mastra-ai/mastra/commit/74e504a3b584eafd2f198001c6a113bbec589fd3), [`e33fdbd`](https://github.com/mastra-ai/mastra/commit/e33fdbd07b33920d81e823122331b0c0bee0bb59), [`929f69c`](https://github.com/mastra-ai/mastra/commit/929f69c3436fa20dd0f0e2f7ebe8270bd82a1529), [`6cbb549`](https://github.com/mastra-ai/mastra/commit/6cbb549475201a2fbf158f0fd7323f6495f46d08), [`8a73529`](https://github.com/mastra-ai/mastra/commit/8a73529ca01187f604b1f3019d0a725ac63ae55f)]:
+  - @mastra/core@1.0.0-beta.16
+  - @mastra/client-js@1.0.0-beta.16
+  - @mastra/react@0.1.0-beta.16
+  - @mastra/ai-sdk@1.0.0-beta.11
+
 ## 7.0.0-beta.15
 
 ### Minor Changes
