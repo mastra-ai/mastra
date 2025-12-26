@@ -174,7 +174,7 @@ describe('ModelsDevGateway', () => {
       });
 
       const providers = await gateway.fetchProviders();
-      
+
       expect(providers.groq).toBeDefined();
       expect(providers.groq.models).toEqual([]);
     });
