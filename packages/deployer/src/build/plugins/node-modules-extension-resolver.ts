@@ -1,103 +1,88 @@
-import { dirname, extname } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import resolveFrom from 'resolve-from';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import type { Plugin } from 'rollup';
-import { builtinModules } from 'node:module';
-import { getPackageName } from '../utils';
+import nodeResolve from '@rollup/plugin-node-resolve';
+import { getPackageName, isBuiltinModule } from '../utils';
+import { getPackageRootPath } from '../package-info';
+import type { PackageJson } from 'type-fest';
 
 /**
- * Check if a module is a Node.js builtin module
- * @param specifier - Module specifier
- * @returns True if it's a builtin module
+ * Check if a package has an exports field in its package.json.
+ * Results are cached to avoid repeated filesystem reads.
  */
-function isBuiltinModule(specifier: string): boolean {
-  return (
-    builtinModules.includes(specifier) ||
-    specifier.startsWith('node:') ||
-    builtinModules.includes(specifier.replace(/^node:/, ''))
-  );
-}
-
-function safeResolve(id: string, importer: string) {
-  try {
-    return resolveFrom(importer, id);
-  } catch {
-    return null;
+async function getPackageJSON(pkgName: string, importer: string): Promise<PackageJson> {
+  const pkgRoot = await getPackageRootPath(pkgName, importer);
+  if (!pkgRoot) {
+    throw new Error(`Package ${pkgName} not found`);
   }
+
+  const pkgJSON = JSON.parse(await readFile(join(pkgRoot, 'package.json'), 'utf-8')) as PackageJson;
+  return pkgJSON;
 }
 
-// we only need this for dev, so we can resolve the js extension of the module as we do not use node-resolve
+/**
+ * Rollup plugin that resolves module extensions for external dependencies.
+ *
+ * This plugin handles ESM compatibility for external imports when node-resolve is not used:
+ * - Packages WITH exports field (e.g., hono, date-fns): Keep imports as-is or strip redundant extensions
+ * - Packages WITHOUT exports field (e.g., lodash): Add .js extension for direct file imports
+ */
 export function nodeModulesExtensionResolver(): Plugin {
+  // Create a single instance of node-resolve to reuse
+  const nodeResolvePlugin = nodeResolve();
+
   return {
     name: 'node-modules-extension-resolver',
-    resolveId(id, importer) {
-      // if is relative, skip
-      if (id.startsWith('.') || id.startsWith('/') || !importer) {
+    async resolveId(id, importer, options) {
+      // Skip relative imports, absolute paths, no importer, or builtin modules
+      if (!importer || id.startsWith('.') || id.startsWith('/') || isBuiltinModule(id)) {
         return null;
       }
 
-      if (isBuiltinModule(id)) {
+      // Skip direct package imports (e.g., 'lodash', '@mastra/core')
+      const parts = id.split('/');
+      const isScoped = id.startsWith('@');
+      if ((isScoped && parts.length === 2) || (!isScoped && parts.length === 1)) {
         return null;
       }
 
-      // if it's a scoped direct import skip
-      if (id.startsWith('@') && id.split('/').length === 2) {
-        return null;
-      }
-
-      // if it's a direct import, skip
-      if (!id.startsWith('@') && id.split('/').length === 1) {
-        return null;
-      }
-
-      const foundExt = extname(id);
-      if (foundExt) {
+      const pkgName = getPackageName(id);
+      if (!pkgName) {
         return null;
       }
 
       try {
-        // if we cannot resolve it, it means it's a legacy module
-        const resolved = import.meta.resolve(id);
-
-        if (!extname(resolved)) {
-          throw new Error(`Cannot resolve ${id} from ${importer}`);
+        const packageJSON = await getPackageJSON(pkgName, importer);
+        // if it has exports, node should be able to rsolve it, if not the exports map is wrong.
+        if (!!packageJSON.exports) {
+          return null;
         }
 
+        const packageRoot = await getPackageRootPath(pkgName, importer);
+        // @ts-expect-error - handle is part of resolveId signature
+        const nodeResolved = await nodeResolvePlugin.resolveId?.handler?.call(this, id, importer, options);
+        // if we cannot resolve it, it's not a valid import so we let node handle it
+        if (!nodeResolved?.id) {
+          return null;
+        }
+
+        let filePath = nodeResolved.id;
+        console.log({ nodeResolved });
+        if (nodeResolved.resolvedBy === 'commonjs--resolver') {
+          filePath = filePath.substring(1).split('?')[0];
+          console.log({ filePath });
+        }
+
+        const resolvedImportPath = filePath.replace(packageRoot, pkgName);
+
+        return {
+          id: resolvedImportPath,
+          external: true,
+        };
+      } catch (err) {
+        console.error(err);
         return null;
-      } catch (e) {
-        // try to do a node like resolve first
-        const resolved = safeResolve(id, importer);
-        if (resolved) {
-          return {
-            id: pathToFileURL(resolved).href,
-            external: true,
-          };
-        }
-
-        for (const ext of ['.mjs', '.js', '.cjs']) {
-          const resolved = safeResolve(id + ext, importer);
-          if (resolved) {
-            const pkgName = getPackageName(id);
-            if (!pkgName) {
-              return null;
-            }
-
-            const pkgJsonPath = safeResolve(`${pkgName}/package.json`, importer);
-            if (!pkgJsonPath) {
-              return null;
-            }
-
-            const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
-
-            return {
-              id: pathToFileURL(newImportWithExtension).href,
-              external: true,
-            };
-          }
-        }
       }
-
-      return null;
     },
-  } satisfies Plugin;
+  };
 }

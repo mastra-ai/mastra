@@ -29,8 +29,9 @@ export default createTransformer((fileInfo, api, options, context) => {
     if (callee.property.type !== 'Identifier') return;
 
     const oldName = callee.property.name;
-    const newName = methodRenames[oldName];
+    if (!Object.hasOwn(methodRenames, oldName)) return;
 
+    const newName = methodRenames[oldName];
     if (newName) {
       callee.property.name = newName;
       count++;

@@ -1,14 +1,16 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import type { Context, Env, Hono, HonoRequest, MiddlewareHandler } from 'hono';
+import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
@@ -16,17 +18,36 @@ import { authenticationMiddleware, authorizationMiddleware } from './auth-middle
 export type HonoVariables = {
   mastra: Mastra;
   requestContext: RequestContext;
-  tools: Record<string, Tool>;
+  tools: ToolsInput;
   abortSignal: AbortSignal;
   taskStore: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
-  playground?: boolean;
-  isDev?: boolean;
 };
 
 export type HonoBindings = {};
 
-export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequest, Context> {
+/**
+ * Generic handler function type compatible across Hono versions.
+ * Uses a minimal signature that all Hono middleware handlers satisfy.
+ */
+type HonoRouteHandler = (...args: any[]) => any;
+
+/**
+ * Minimal interface representing what MastraServer needs from a Hono app.
+ * This allows any Hono app instance to be passed without strict generic matching,
+ * avoiding the version mismatch issues that occur with Hono's strict generic types.
+ */
+export interface HonoApp {
+  use(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  get(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  post(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  put(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  delete(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  patch(path: string, ...handlers: HonoRouteHandler[]): unknown;
+  all(path: string, ...handlers: HonoRouteHandler[]): unknown;
+}
+
+export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context> {
   createContextMiddleware(): MiddlewareHandler {
     return async (c, next) => {
       // Parse request context from request body and add to context
@@ -80,8 +101,6 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
       c.set('mastra', this.mastra);
       c.set('tools', this.tools || {});
       c.set('taskStore', this.taskStore);
-      c.set('playground', this.playground === true);
-      c.set('isDev', this.isDev === true);
       c.set('abortSignal', c.req.raw.signal);
       c.set('customRouteAuthConfig', this.customRouteAuthConfig);
 
@@ -142,11 +161,53 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     const queryParams = request.query();
     let body: unknown;
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
-      try {
-        body = await request.json();
-      } catch {}
+      const contentType = request.header('content-type') || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          body = await this.parseFormData(formData);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
+        }
+      } else {
+        try {
+          body = await request.json();
+        } catch (error) {
+          console.error('Failed to parse JSON body:', error);
+        }
+      }
     }
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  /**
+   * Parse FormData into a plain object, converting File objects to Buffers.
+   */
+  private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        const arrayBuffer = await value.arrayBuffer();
+        result[key] = Buffer.from(arrayBuffer);
+      } else if (typeof value === 'string') {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[key] = JSON.parse(value);
+        } catch {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {
@@ -203,11 +264,7 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
     }
   }
 
-  async registerRoute<E extends Env = any>(
-    app: Hono<E, any, any>,
-    route: ServerRoute,
-    { prefix }: { prefix?: string },
-  ): Promise<void> {
+  async registerRoute(app: HonoApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
     // Determine if body limits should be applied
     const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
 
@@ -237,11 +294,14 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
             params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
           } catch (error) {
             console.error('Error parsing query params', error);
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return c.json(formatZodError(error, 'query parameters'), 400);
+            }
             return c.json(
               {
                 error: 'Invalid query parameters',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );
@@ -253,11 +313,14 @@ export class MastraServer extends MastraServerBase<Hono<any, any, any>, HonoRequ
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
             console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return c.json(formatZodError(error, 'request body'), 400);
+            }
             return c.json(
               {
                 error: 'Invalid request body',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );

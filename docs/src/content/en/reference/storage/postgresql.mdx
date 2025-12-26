@@ -9,13 +9,13 @@ The PostgreSQL storage implementation provides a production-ready storage soluti
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/pg@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
@@ -105,7 +105,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { PostgresStore } from "@mastra/pg";
 
@@ -120,18 +120,20 @@ const mastra = new Mastra({
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
-```typescript copy
+```typescript
 import { PostgresStore } from "@mastra/pg";
 
 const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 });
 
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning
@@ -155,6 +157,77 @@ This enables direct queries and custom transaction management. When using these 
 
 This approach is intended for advanced scenarios where low-level access is required.
 
+## Usage Example
+
+### Adding memory to an agent
+
+To add PostgreSQL memory to an agent use the `Memory` class and create a new `storage` key using `PostgresStore`. The `connectionString` can either be a remote location, or a local database connection.
+
+```typescript title="src/mastra/agents/example-pg-agent.ts"
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { PostgresStore } from "@mastra/pg";
+
+export const pgAgent = new Agent({
+  id: "pg-agent",
+  name: "PG Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'pg-agent-storage',
+      connectionString: process.env.DATABASE_URL!,
+    }),
+    options: {
+      generateTitle: true, // Explicitly enable automatic title generation
+    },
+  }),
+});
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-pg-agent.ts" 
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("pg-agent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
 ## Index Management
 
 PostgreSQL storage provides comprehensive index management capabilities to optimize query performance.
@@ -174,7 +247,7 @@ These indexes significantly improve performance for filtered queries with sortin
 
 Create additional indexes to optimize specific query patterns:
 
-```typescript copy
+```typescript
 // Basic index for common queries
 await storage.createIndex({
   name: "idx_threads_resource",
@@ -278,7 +351,7 @@ For more advanced use cases, you can also use:
 
 List and monitor existing indexes:
 
-```typescript copy
+```typescript
 // List all indexes
 const allIndexes = await storage.listIndexes();
 console.log(allIndexes);
@@ -321,7 +394,7 @@ await storage.dropIndex("idx_threads_status");
 
 When using custom schemas, indexes are created with schema prefixes:
 
-```typescript copy
+```typescript
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,

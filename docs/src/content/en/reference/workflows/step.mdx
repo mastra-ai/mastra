@@ -10,7 +10,7 @@ It can take either a tool or an agent as a parameter to automatically create a s
 
 ## Usage example
 
-```typescript title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript title="src/mastra/workflows/test-workflow.ts"
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -31,6 +31,57 @@ const step1 = createStep({
   },
 });
 ```
+
+## Creating steps from agents
+
+You can create a step directly from an agent. The step will use the agent's name as its ID.
+
+### Basic agent step
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+import { testAgent } from "../agents/test-agent";
+
+const agentStep = createStep(testAgent);
+// inputSchema: { prompt: string }
+// outputSchema: { text: string }
+```
+
+### Agent step with structured output
+
+Pass `structuredOutput` to have the agent return typed structured data:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+});
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+});
+// inputSchema: { prompt: string }
+// outputSchema: { title: string, summary: string, tags: string[] }
+```
+
+### Agent step options
+
+<PropertiesTable
+  content={[
+    {
+      name: "structuredOutput",
+      type: "{ schema: z.ZodType<any> }",
+      description: "When provided, the agent returns structured data matching this schema instead of plain text. The step's outputSchema is set to the provided schema.",
+      required: false,
+    },
+    {
+      name: "onFinish",
+      type: "(result: AgentResult) => void",
+      description: "Callback invoked when the agent completes generation.",
+      required: false,
+    },
+  ]}
+/>
 
 ## Constructor Parameters
 

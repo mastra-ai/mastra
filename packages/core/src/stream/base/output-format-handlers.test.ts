@@ -1,13 +1,96 @@
 import { convertArrayToReadableStream, convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { asSchema } from 'ai-v5';
-import type { JSONSchema7 } from 'ai-v5';
+import { asSchema } from '@internal/ai-sdk-v5';
+import type { JSONSchema7 } from '@internal/ai-sdk-v5';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import z3 from 'zod/v3';
 import z4 from 'zod/v4';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
-import { createObjectStreamTransformer } from './output-format-handlers';
+import { createObjectStreamTransformer, escapeUnescapedControlCharsInJsonStrings } from './output-format-handlers';
+
+describe('escapeUnescapedControlCharsInJsonStrings', () => {
+  it('should escape newlines inside JSON strings', () => {
+    const input = '{"message": "Hello\nWorld"}';
+    const expected = '{"message": "Hello\\nWorld"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should escape carriage returns inside JSON strings', () => {
+    const input = '{"message": "Hello\rWorld"}';
+    const expected = '{"message": "Hello\\rWorld"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should escape tabs inside JSON strings', () => {
+    const input = '{"message": "Hello\tWorld"}';
+    const expected = '{"message": "Hello\\tWorld"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should not escape newlines outside JSON strings', () => {
+    const input = '{\n  "message": "Hello"\n}';
+    const expected = '{\n  "message": "Hello"\n}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should preserve already-escaped sequences', () => {
+    const input = '{"message": "Hello\\nWorld"}';
+    const expected = '{"message": "Hello\\nWorld"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle escaped quotes inside strings', () => {
+    const input = '{"message": "He said \\"Hello\nWorld\\""}';
+    const expected = '{"message": "He said \\"Hello\\nWorld\\""}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle multiple strings with mixed newlines', () => {
+    const input = '{"a": "line1\nline2", "b": "line3\nline4"}';
+    const expected = '{"a": "line1\\nline2", "b": "line3\\nline4"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle complex nested JSON with newlines in strings', () => {
+    const input = `{"outer": {"inner": "value with
+newline"}, "array": ["item1
+continued", "item2"]}`;
+    const expected = '{"outer": {"inner": "value with\\nnewline"}, "array": ["item1\\ncontinued", "item2"]}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle empty strings', () => {
+    const input = '{"message": ""}';
+    const expected = '{"message": ""}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle string with only newline', () => {
+    const input = '{"message": "\n"}';
+    const expected = '{"message": "\\n"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle CRLF sequences', () => {
+    const input = '{"message": "Hello\r\nWorld"}';
+    const expected = '{"message": "Hello\\r\\nWorld"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle partial/incomplete JSON (streaming scenario)', () => {
+    // During streaming, we might have incomplete JSON
+    const input = '{"message": "Hello\nWor';
+    const expected = '{"message": "Hello\\nWor';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+
+  it('should handle backslash at end of string', () => {
+    const input = '{"path": "C:\\\\"}';
+    const expected = '{"path": "C:\\\\"}';
+    expect(escapeUnescapedControlCharsInJsonStrings(input)).toBe(expected);
+  });
+});
 
 describe('output-format-handlers', () => {
   describe('schema validation', () => {
@@ -767,6 +850,220 @@ describe('output-format-handlers', () => {
       const objectResultChunk = chunks.find(c => c?.type === 'object-result');
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ title: 'Test', count: 5 });
+    });
+  });
+
+  describe('unescaped newlines in JSON strings', () => {
+    it('should handle LLM output with actual newlines in string values instead of \\n escape sequences', async () => {
+      // This test reproduces the issue where LLMs output actual newlines in JSON strings
+      // instead of properly escaped \n sequences, breaking JSON parsing
+      //
+      // User report: "Line breaks aren't being properly escaped: instead of getting \n
+      // in my strings, I'm getting actual newline characters that completely break
+      // the JSON object structure."
+      const schema = z.object({
+        fieldId: z.string(),
+        content: z.string(),
+        summary: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      // Simulates LLM outputting actual newlines instead of \n escape sequences
+      // This is invalid JSON but commonly produced by LLMs
+      const invalidJsonWithActualNewlines = `{"fieldId": "interview_notes", "content": "The candidate discussed:
+- Point 1
+- Point 2
+- Point 3", "summary": "Good candidate
+with strong skills"}`;
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: invalidJsonWithActualNewlines },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1' },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      // The system should handle this gracefully and parse the content
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({
+        fieldId: 'interview_notes',
+        content: `The candidate discussed:
+- Point 1
+- Point 2
+- Point 3`,
+        summary: `Good candidate
+with strong skills`,
+      });
+
+      // Should NOT have an error chunk
+      const errorChunk = chunks.find(c => c?.type === 'error');
+      expect(errorChunk).toBeUndefined();
+    });
+
+    it('should handle streaming chunks with unescaped newlines spread across deltas', async () => {
+      // More realistic scenario: newlines appear across multiple streaming chunks
+      const schema = z.object({
+        notes: z.string(),
+        recommendation: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: '{"notes": "First line' },
+        },
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          // Actual newline in the middle of a string value
+          payload: { id: 'text-1', text: '\nSecond line' },
+        },
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: '\nThird line", "recommendation": "Proceed' },
+        },
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: '\nwith interview"}' },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1' },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({
+        notes: 'First line\nSecond line\nThird line',
+        recommendation: 'Proceed\nwith interview',
+      });
+
+      const errorChunk = chunks.find(c => c?.type === 'error');
+      expect(errorChunk).toBeUndefined();
+    });
+
+    it('should handle interview transcript extraction with paragraph fields containing newlines', async () => {
+      // Reproduces the exact user scenario: interview transcription with paragraph fields
+      const noteFillerOutputSchema = z.object({
+        field_experience: z.string().describe('Previous work experience'),
+        field_skills: z.string().describe('Technical skills'),
+        field_motivation: z.string().describe('Motivation for the role'),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema: noteFillerOutputSchema },
+      });
+
+      // This is what the LLM might output - actual newlines instead of \n
+      const llmOutput = `{"field_experience": "Worked at Company A for 3 years
+Key responsibilities:
+- Led team of 5 engineers
+- Delivered 3 major projects", "field_skills": "Languages:
+- Python
+- JavaScript
+- Go
+
+Frameworks:
+- React
+- Django", "field_motivation": "Looking for growth opportunities
+Want to work on challenging problems"}`;
+
+      const streamParts: ChunkType<typeof noteFillerOutputSchema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1', text: llmOutput },
+        },
+        {
+          type: 'text-end',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: { id: 'text-1' },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+
+      // The content should be preserved with the newlines
+      expect(objectResultChunk?.object?.field_experience).toContain('Key responsibilities:');
+      expect(objectResultChunk?.object?.field_skills).toContain('Languages:');
+      expect(objectResultChunk?.object?.field_motivation).toContain('Looking for growth opportunities');
+
+      const errorChunk = chunks.find(c => c?.type === 'error');
+      expect(errorChunk).toBeUndefined();
     });
   });
 

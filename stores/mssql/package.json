@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mssql",
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0-beta.9",
   "description": "MSSQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -37,7 +37,6 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.8",
     "@types/mssql": "^9.1.8",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",

@@ -15,7 +15,7 @@ npm install @mastra/cloudflare-d1@beta
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { D1Store } from "@mastra/cloudflare-d1";
 
 type Env = {
@@ -99,7 +99,7 @@ The storage implementation handles schema creation and updates automatically. It
 
 When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
 
-```typescript copy
+```typescript
 import { Mastra } from "@mastra/core";
 import { D1Store } from "@mastra/cloudflare-d1";
 
@@ -114,18 +114,20 @@ const mastra = new Mastra({
 
 If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
 
-```typescript copy
+```typescript
 import { D1Store } from "@mastra/cloudflare-d1";
 
 const storage = new D1Store({
+  id: 'd1-storage',
   binding: D1Database,
 });
 
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning

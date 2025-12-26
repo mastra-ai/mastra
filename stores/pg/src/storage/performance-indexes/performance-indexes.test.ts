@@ -1,171 +1,126 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StoreOperationsPG } from '../domains/operations';
-import { PostgresStore } from '../index';
+import { MemoryPG } from '../domains/memory';
+import { ObservabilityPG } from '../domains/observability';
+import { ScoresPG } from '../domains/scores';
 
 // Mock pg-promise
 const mockClient = {
   none: vi.fn(),
   one: vi.fn(),
   manyOrNone: vi.fn(),
+  oneOrNone: vi.fn(),
+  query: vi.fn(),
 };
 
-const mockPgp = vi.fn(() => mockClient);
-vi.mock('pg-promise', () => ({ default: vi.fn(() => mockPgp) }));
+vi.mock('pg-promise', () => ({ default: vi.fn(() => vi.fn(() => mockClient)) }));
 
-describe('PostgresStore Performance Indexes', () => {
-  let operations: StoreOperationsPG;
-
+describe('PostgresStore Domain Performance Indexes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    operations = new StoreOperationsPG({
-      client: mockClient as any,
-      schemaName: 'test_schema',
-    });
-
-    // Mock createIndex method to simulate the actual implementation
-    vi.spyOn(operations, 'createIndex').mockResolvedValue(undefined);
   });
 
-  describe('createAutomaticIndexes', () => {
-    it('should create all necessary composite indexes', async () => {
-      await operations.createAutomaticIndexes();
+  describe('MemoryPG.getDefaultIndexDefinitions', () => {
+    it('should return composite indexes for threads and messages', () => {
+      const memory = new MemoryPG({
+        client: mockClient as any,
+        schemaName: 'test_schema',
+      });
 
-      // Verify that createIndex was called 4 times for composite indexes
-      expect(operations.createIndex).toHaveBeenCalledTimes(4);
+      const indexes = memory.getDefaultIndexDefinitions();
 
-      // Check that composite index for threads is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(indexes.length).toBe(2);
+      expect(indexes).toContainEqual({
         name: 'test_schema_mastra_threads_resourceid_createdat_idx',
         table: 'mastra_threads',
         columns: ['resourceId', 'createdAt DESC'],
       });
-
-      // Check that composite index for messages is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(indexes).toContainEqual({
         name: 'test_schema_mastra_messages_thread_id_createdat_idx',
         table: 'mastra_messages',
         columns: ['thread_id', 'createdAt DESC'],
       });
-
-      // Check that composite index for traces is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
-        name: 'test_schema_mastra_traces_name_starttime_idx',
-        table: 'mastra_traces',
-        columns: ['name', 'startTime DESC'],
-      });
-
-      // Check that composite index for evals is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
-        name: 'test_schema_mastra_evals_agent_name_created_at_idx',
-        table: 'mastra_evals',
-        columns: ['agent_name', 'created_at DESC'],
-      });
     });
 
-    it('should handle index creation errors gracefully', async () => {
-      // Mock the logger using Object.defineProperty to bypass protected access
-      const loggerWarnSpy = vi.fn();
-      Object.defineProperty(operations, 'logger', {
-        value: {
-          warn: loggerWarnSpy,
-        },
-        writable: true,
-        configurable: true,
-      });
-
-      // Make createIndex fail for the first index
-      vi.spyOn(operations, 'createIndex')
-        .mockRejectedValueOnce(new Error('Index already exists'))
-        .mockResolvedValue(undefined);
-
-      await operations.createAutomaticIndexes();
-
-      // Should log warning but continue with other indexes
-      expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to create index'), expect.any(Error));
-
-      // Should still try to create all 4 indexes
-      expect(operations.createIndex).toHaveBeenCalledTimes(4);
-    });
-
-    it('should work with default schema (public)', async () => {
-      const publicOperations = new StoreOperationsPG({
+    it('should work with default schema (public)', () => {
+      const memory = new MemoryPG({
         client: mockClient as any,
         // No schemaName provided, should default to public
       });
 
-      vi.spyOn(publicOperations, 'createIndex').mockResolvedValue(undefined);
-
-      await publicOperations.createAutomaticIndexes();
+      const indexes = memory.getDefaultIndexDefinitions();
 
       // Verify indexes are created without schema prefix
-      expect(publicOperations.createIndex).toHaveBeenCalledWith({
-        name: 'mastra_threads_resourceid_createdat_idx', // No schema prefix
+      expect(indexes).toContainEqual({
+        name: 'mastra_threads_resourceid_createdat_idx',
         table: 'mastra_threads',
         columns: ['resourceId', 'createdAt DESC'],
       });
     });
   });
 
-  describe('PostgresStore initialization', () => {
-    it('should create indexes during init without failing on index errors', async () => {
-      // Create a fresh store instance
-      const testStore = new PostgresStore({
-        id: 'index-error-test-store',
-        connectionString: 'postgresql://test:test@localhost:5432/test',
+  describe('ScoresPG.getDefaultIndexDefinitions', () => {
+    it('should return composite index for scores', () => {
+      const scores = new ScoresPG({
+        client: mockClient as any,
+        schemaName: 'test_schema',
       });
 
-      // Mock pgPromise and database connection
-      const mockDb = {
-        none: vi.fn().mockRejectedValue(new Error('Index creation failed')),
-        one: vi.fn(),
-        manyOrNone: vi.fn(),
-        oneOrNone: vi.fn(),
-      };
+      const indexes = scores.getDefaultIndexDefinitions();
 
-      // Use the already mocked pg-promise at module level
-      mockPgp.mockReturnValue(mockDb);
+      expect(indexes.length).toBe(1);
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_scores_trace_id_span_id_created_at_idx',
+        table: 'mastra_scores',
+        columns: ['traceId', 'spanId', 'createdAt DESC'],
+      });
+    });
+  });
 
-      // Create a mock operations instance with logger
-      const mockOperations = {
-        createAutomaticIndexes: vi.fn().mockImplementation(async function () {
-          // Simulate index creation failures with proper logging
-          for (let i = 0; i < 4; i++) {
-            try {
-              throw new Error('Index creation failed');
-            } catch (error) {
-              // Use logger if available
-              this.logger?.warn?.(`Failed to create index:`, error);
-            }
-          }
-        }),
-        logger: {
-          warn: vi.fn(),
-        },
-      };
-
-      // Mock the store's operations property
-      Object.defineProperty(testStore, 'stores', {
-        value: {
-          operations: mockOperations,
-        },
-        writable: true,
+  describe('ObservabilityPG.getDefaultIndexDefinitions', () => {
+    it('should return composite indexes for spans', () => {
+      const observability = new ObservabilityPG({
+        client: mockClient as any,
+        schemaName: 'test_schema',
       });
 
-      // Mock the init method to simulate what PostgresStore.init does
-      testStore.init = vi.fn().mockImplementation(async function () {
-        // Call createAutomaticIndexes like the real implementation does
-        await mockOperations.createAutomaticIndexes.call(mockOperations);
+      const indexes = observability.getDefaultIndexDefinitions();
+
+      expect(indexes.length).toBe(4);
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_traceid_startedat_idx',
+        table: 'mastra_ai_spans',
+        columns: ['traceId', 'startedAt DESC'],
       });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_parentspanid_startedat_idx',
+        table: 'mastra_ai_spans',
+        columns: ['parentSpanId', 'startedAt DESC'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_name_idx',
+        table: 'mastra_ai_spans',
+        columns: ['name'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_spantype_startedat_idx',
+        table: 'mastra_ai_spans',
+        columns: ['spanType', 'startedAt DESC'],
+      });
+    });
+  });
 
-      // Init should still succeed even if index creation fails
-      await expect(testStore.init()).resolves.not.toThrow();
+  describe('Total index count across all domains', () => {
+    it('should define 7 indexes total (2 memory + 1 scores + 4 observability)', () => {
+      const memory = new MemoryPG({ client: mockClient as any });
+      const scores = new ScoresPG({ client: mockClient as any });
+      const observability = new ObservabilityPG({ client: mockClient as any });
 
-      // Verify that createAutomaticIndexes was called
-      expect(mockOperations.createAutomaticIndexes).toHaveBeenCalled();
+      const totalIndexes =
+        memory.getDefaultIndexDefinitions().length +
+        scores.getDefaultIndexDefinitions().length +
+        observability.getDefaultIndexDefinitions().length;
 
-      // Verify warnings were logged using the logger
-      expect(mockOperations.logger.warn).toHaveBeenCalled();
+      expect(totalIndexes).toBe(7);
     });
   });
 });

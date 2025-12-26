@@ -9,7 +9,7 @@ The `.timeTravel()` method re-executes a workflow starting from any specific ste
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.timeTravel({
@@ -68,9 +68,9 @@ const result = await run.timeTravel({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output during time travel",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
@@ -213,7 +213,7 @@ const result = await run.timeTravel({
 
 ### Time travel with custom context
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.timeTravel({
   step: "step2",
   context: {
@@ -230,7 +230,7 @@ const result = await run.timeTravel({
 
 ### Time travel to nested workflow step
 
-```typescript showLineNumbers copy
+```typescript
 // Using dot notation
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
@@ -246,7 +246,7 @@ const result = await run.timeTravel({
 
 ### Time travel with initial state
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.timeTravel({
   step: "step2",
   inputData: { value: 10 },
@@ -259,7 +259,7 @@ const result = await run.timeTravel({
 
 ### Time travel with nested workflows context
 
-```typescript showLineNumbers copy
+```typescript
 const result = await run.timeTravel({
   step: "nestedWorkflow.step3",
   context: {

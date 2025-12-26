@@ -1,5 +1,17 @@
 # @mastra/fastembed
 
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Added support for AI SDK v6 embedding models (specification version v3) in memory and vector modules. Fixed TypeScript error where `ModelRouterEmbeddingModel` was trying to implement a union type instead of `EmbeddingModelV2` directly. ([#11362](https://github.com/mastra-ai/mastra/pull/11362))
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Embed AI types to fix peerdeps mismatches ([`9650cce`](https://github.com/mastra-ai/mastra/commit/9650cce52a1d917ff9114653398e2a0f5c3ba808))
+
 ## 1.0.0-beta.0
 
 ### Major Changes

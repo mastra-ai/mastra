@@ -10,7 +10,7 @@ export const personalAssistantAgent = new Agent({
     
     Keep your responses concise and friendly.
   `,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4.1-mini",
   tools: { ...mcpTools }, // Add MCP tools to your agent
 });
 ```

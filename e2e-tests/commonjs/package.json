@@ -7,12 +7,15 @@
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
     "npm-cli-login": "^1.0.0",
+    "rollup": "^4.41.1",
     "verdaccio": "^6.2.0",
     "verdaccio-auth-memory": "^10.3.1",
-    "rollup": "^4.41.1",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.8"
   },
   "scripts": {
     "test": "vitest run"
+  },
+  "dependencies": {
+    "form-data": "^2.5.4"
   }
 }

@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { WritableStream } from 'node:stream/web';
 import { RequestContext } from '@mastra/core/di';
 import type { Mastra } from '@mastra/core/mastra';
 import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
@@ -16,6 +15,7 @@ import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import type { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
+import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type { InngestEngineType, InngestFlowControlConfig, InngestWorkflowConfig } from './types';
 
@@ -64,7 +64,11 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      return { runs: [], total: 0 };
+    }
+    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
@@ -76,7 +80,13 @@ export class InngestWorkflow<
         ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
         : null;
     }
-    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) {
+      return this.runs.get(runId)
+        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
+    }
+    const run = (await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
 
     return (
       run ??
@@ -85,6 +95,7 @@ export class InngestWorkflow<
   }
 
   __registerMastra(mastra: Mastra) {
+    super.__registerMastra(mastra);
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
     const updateNested = (step: StepFlowEntry) => {
@@ -141,10 +152,13 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -204,7 +218,8 @@ export class InngestWorkflow<
       },
       { event: `workflow.${this.id}` },
       async ({ event, step, attempt, publish }) => {
-        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel } = event.data;
+        let { inputData, initialState, runId, resourceId, resume, outputOptions, format, timeTravel, perStep } =
+          event.data;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -212,32 +227,8 @@ export class InngestWorkflow<
           });
         }
 
-        const emitter = {
-          emit: async (event: string, data: any) => {
-            if (!publish) {
-              return;
-            }
-
-            try {
-              await publish({
-                channel: `workflow:${this.id}:${runId}`,
-                topic: event,
-                data,
-              });
-            } catch (err: any) {
-              this.logger.error('Error emitting event: ' + (err?.stack ?? err?.message ?? err));
-            }
-          },
-          on: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-          off: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-          once: (_event: string, _callback: (data: any) => void) => {
-            // no-op
-          },
-        };
+        // Create InngestPubSub instance with the publish function from Inngest context
+        const pubsub = new InngestPubSub(this.inngest, this.id, publish);
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options);
         const result = await engine.execute<
@@ -252,25 +243,40 @@ export class InngestWorkflow<
           serializedStepGraph: this.serializedStepGraph,
           input: inputData,
           initialState,
-          emitter,
+          pubsub,
           retryConfig: this.retryConfig,
           requestContext: new RequestContext(Object.entries(event.data.requestContext ?? {})),
           resume,
           timeTravel,
+          perStep,
           format,
           abortController: new AbortController(),
           // currentSpan: undefined, // TODO: Pass actual parent Span from workflow execution context
           outputOptions,
-          writableStream: new WritableStream<WorkflowStreamEvent>({
-            write(chunk) {
-              void emitter.emit('watch', chunk).catch(() => {});
-            },
-          }),
+          outputWriter: async (chunk: WorkflowStreamEvent) => {
+            try {
+              await pubsub.publish(`workflow.events.v2.${runId}`, {
+                type: 'watch',
+                runId,
+                data: chunk,
+              });
+            } catch (err) {
+              this.logger.debug?.('Failed to publish watch event:', err);
+            }
+          },
         });
 
-        // Final step to check workflow status and throw NonRetriableError if failed
-        // This is needed to ensure that the Inngest workflow run is marked as failed instead of success
+        // Final step to invoke lifecycle callbacks and check workflow status
+        // Wrapped in step.run for durability - callbacks are memoized on replay
         await step.run(`workflow.${this.id}.finalize`, async () => {
+          if (result.status !== 'paused') {
+            // Invoke lifecycle callbacks (onFinish and onError)
+            // Use invokeLifecycleCallbacksInternal to call the real implementation
+            // (invokeLifecycleCallbacks is overridden to no-op to prevent double calling)
+            await engine.invokeLifecycleCallbacksInternal(result as any);
+          }
+
+          // Throw NonRetriableError if failed to ensure Inngest marks the run as failed
           if (result.status === 'failed') {
             throw new NonRetriableError(`Workflow failed`, {
               cause: result,

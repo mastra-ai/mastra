@@ -11,6 +11,7 @@
     "@mastra/client-js": "*",
     "@mastra/mcp": "*",
     "dotenv": "^16.6.1",
+    "vite": "^7.3.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -20,7 +21,7 @@
     "get-port": "^7.1.0",
     "mastra": "*",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.8"
   },
   "pnpm": {
     "overrides": {

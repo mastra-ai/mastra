@@ -153,7 +153,6 @@ Step `suspendPayload` is now validated for steps that have a `suspendSchema` def
 -       return suspend({ reason: "Suspension reason" }); // Missing otherReason
 +       return suspend({ reason: "Suspension reason", otherReason: "Other reason" });
       }
-      //... continue execution logic
     },
   });
 ```
@@ -177,13 +176,54 @@ To migrate, update any code that consumes branch outputs to handle optional valu
 
 If your code depends on non-optional types, add runtime checks or provide default values when accessing branch outputs.
 
-### `setState` is now async and the data passed is validated
+### `writableStream` to `outputWriter` in `Run.start()` & `Run.timeTravel()`
 
-The `setState` function is now async. The data passed is now validated against the `stateSchema` defined in the step.
-The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not.
-Also, when calling `setState`, you can now pass only the state data being updated, instead of adding the previous state spread (`...state`).
+The `writableStream` parameter in `Run.start()` and `Run.timeTravel()` has been replaced with `outputWriter`. Instead of passing a `WritableStream`, you now pass an async callback function that receives each workflow event chunk directly.
 
-To migrate, update the `setState` function to be async.
+This change simplifies the API - rather than creating a `WritableStream` wrapper, you handle chunks directly in the callback.
+
+**Example:** Streaming workflow events to an HTTP response (SSE):
+
+```diff
+  const run = await workflow.createRun();
+
+- const stream = new WritableStream({
+-   write(chunk) {
+-     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
+-   }
+- });
+- await run.start({ inputData, writableStream: stream });
+
++ await run.start({
++   inputData,
++   outputWriter: async (chunk) => {
++     response.write(`data: ${JSON.stringify(chunk)}\n\n`);
++   },
++ });
+```
+
+:::note
+
+The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+
+```ts
+createStep({
+  id: 'my-step',
+  execute: async ({ writer }) => {
+    // This API is unchanged
+    await writer.write({ data: 'some output' });
+    await writer.custom({ type: 'custom-event', payload: {} });
+  },
+});
+```
+
+:::
+
+### `setState()` is now async and the data passed is validated
+
+The `setState()` function is now async. The data passed is now validated against the `stateSchema` defined in the step. The state data validation also uses the `validateInputs` flag to determine whether to validate the state data or not. Also, when calling `setState()`, you can now pass only the state data being updated, instead of adding the previous state spread `(...state)`.
+
+To migrate, update the `setState()` function to be async.
 
 ```diff
 - setState({ ...state, sharedCounter: state.sharedCounter + 1 });
@@ -293,7 +333,6 @@ createStep({
 +   if (!context.resumeData) {
 +     return context.suspend({})
 +   }
-+   //..continue execution logic
 + }
 });
 +

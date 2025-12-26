@@ -1,0 +1,23 @@
+{
+  "name": "e2e-type-check",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "execa": "^9.6.0",
+    "get-port": "^7.1.0",
+    "globby": "^16.0.0",
+    "npm-cli-login": "^1.0.0",
+    "tsx": "^4.21.0",
+    "verdaccio": "^6.2.2",
+    "verdaccio-auth-memory": "^10.3.1"
+  },
+  "scripts": {
+    "test": "tsx test.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

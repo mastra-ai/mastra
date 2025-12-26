@@ -1,18 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
+import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ExecuteFunction } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
-  Emitter,
   ExecutionContext,
+  OutputWriter,
   SerializedStepFlowEntry,
   StepFlowEntry,
   StepResult,
@@ -38,10 +37,10 @@ export interface ExecuteSleepParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   tracingContext: TracingContext;
 }
 
@@ -52,11 +51,11 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     entry,
     prevOutput,
     stepResults,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     executionContext,
-    writableStream,
+    outputWriter,
     tracingContext,
   } = params;
 
@@ -97,7 +96,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -108,7 +107,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
             name: 'sleep',
             runId,
           },
-          writableStream,
+          outputWriter,
         ),
       });
     });
@@ -150,10 +149,10 @@ export interface ExecuteSleepUntilParams {
     resumePath: number[];
   };
   executionContext: ExecutionContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   tracingContext: TracingContext;
 }
 
@@ -167,11 +166,11 @@ export async function executeSleepUntil(
     entry,
     prevOutput,
     stepResults,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
     executionContext,
-    writableStream,
+    outputWriter,
     tracingContext,
   } = params;
 
@@ -213,7 +212,7 @@ export async function executeSleepUntil(
         abort: () => {
           abortController?.abort();
         },
-        [EMITTER_SYMBOL]: emitter,
+        [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
@@ -224,7 +223,7 @@ export async function executeSleepUntil(
             name: 'sleepUntil',
             runId,
           },
-          writableStream,
+          outputWriter,
         ),
       });
     });

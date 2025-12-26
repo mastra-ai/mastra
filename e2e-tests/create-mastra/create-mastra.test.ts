@@ -112,8 +112,8 @@ describe('create mastra', () => {
               "id": "weather-agent",
               "inputProcessors": [
                 {
-                  "id": "message-history",
-                  "name": "MessageHistory",
+                  "id": "weather-agent-input-processor",
+                  "name": "weather-agent-input-processor",
                 },
               ],
               "instructions": "
@@ -135,8 +135,8 @@ describe('create mastra', () => {
               "name": "Weather Agent",
               "outputProcessors": [
                 {
-                  "id": "message-history",
-                  "name": "MessageHistory",
+                  "id": "weather-agent-output-processor",
+                  "name": "weather-agent-output-processor",
                 },
               ],
               "provider": "openai",

@@ -1,7 +1,7 @@
+import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
-import type { Tool } from '@mastra/core/tools';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { generateOpenAPIDocument } from './openapi-utils';
 import { SERVER_ROUTES } from './routes';
@@ -54,12 +54,10 @@ export interface StreamOptions {
 export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
-  protected tools?: Record<string, Tool>;
+  protected tools?: ToolsInput;
   protected prefix?: string;
   protected openapiPath?: string;
   protected taskStore?: InMemoryTaskStore;
-  protected playground?: boolean;
-  protected isDev?: boolean;
   protected customRouteAuthConfig?: Map<string, boolean>;
   protected streamOptions: StreamOptions;
 
@@ -71,20 +69,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     prefix = '',
     openapiPath = '',
     taskStore,
-    playground = false,
-    isDev = false,
     customRouteAuthConfig,
     streamOptions,
   }: {
     app: TApp;
     mastra: Mastra;
     bodyLimitOptions?: BodyLimitOptions;
-    tools?: Record<string, Tool>;
+    tools?: ToolsInput;
     prefix?: string;
     openapiPath?: string;
     taskStore?: InMemoryTaskStore;
-    playground?: boolean;
-    isDev?: boolean;
     customRouteAuthConfig?: Map<string, boolean>;
     streamOptions?: StreamOptions;
   }) {
@@ -95,8 +89,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.prefix = prefix;
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
-    this.playground = playground;
-    this.isDev = isDev;
     this.customRouteAuthConfig = customRouteAuthConfig;
     this.streamOptions = { redact: true, ...streamOptions };
 

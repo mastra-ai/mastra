@@ -1,18 +1,38 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
-import { createStorageErrorId, ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  ensureDate,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { D1DB, resolveD1Config } from '../../db';
+import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
-import type { StoreOperationsD1 } from '../operations';
 import { isArrayOfRecords } from '../utils';
 
 export class WorkflowsStorageD1 extends WorkflowsStorage {
-  private operations: StoreOperationsD1;
+  #db: D1DB;
 
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+  constructor(config: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new D1DB(resolveD1Config(config));
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   updateWorkflowResults(
@@ -40,13 +60,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
@@ -57,16 +71,20 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
-    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     const now = new Date().toISOString();
 
-    const currentSnapshot = await this.operations.load({
+    const currentSnapshot = await this.#db.load({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       keys: { workflow_name: workflowName, run_id: runId },
     });
@@ -76,19 +94,19 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           ...currentSnapshot,
           resourceId,
           snapshot: JSON.stringify(snapshot),
-          updatedAt: now,
+          updatedAt: updatedAt ? updatedAt.toISOString() : now,
         }
       : {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
           snapshot: snapshot as Record<string, any>,
-          createdAt: now,
-          updatedAt: now,
+          createdAt: createdAt ? createdAt.toISOString() : now,
+          updatedAt: updatedAt ? updatedAt.toISOString() : now,
         };
 
     // Process record for SQL insertion
-    const processedRecord = await this.operations.processRecord(persisting);
+    const processedRecord = await this.#db.processRecord(persisting);
 
     const columns = Object.keys(processedRecord);
     const values = Object.values(processedRecord);
@@ -107,7 +125,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
     } catch (error) {
       throw new MastraError(
         {
@@ -128,7 +146,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     this.logger.debug('Loading workflow snapshot', { workflowName, runId });
 
     try {
-      const d = await this.operations.load<{ snapshot: unknown }>({
+      const d = await this.#db.load<{ snapshot: unknown }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -181,7 +199,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     resourceId,
     status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const builder = createSqlBuilder().select().from(fullTableName);
       const countBuilder = createSqlBuilder().count().from(fullTableName);
@@ -192,7 +210,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
       }
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(fullTableName, 'resourceId');
+        const hasResourceId = await this.#db.hasColumn(fullTableName, 'resourceId');
         if (hasResourceId) {
           builder.whereAnd('resourceId = ?', resourceId);
           countBuilder.whereAnd('resourceId = ?', resourceId);
@@ -222,7 +240,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
 
       if (perPage !== undefined && page !== undefined) {
         const { sql: countSql, params: countParams } = countBuilder.build();
-        const countResult = await this.operations.executeQuery({
+        const countResult = await this.#db.executeQuery({
           sql: countSql,
           params: countParams,
           first: true,
@@ -230,7 +248,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
         total = Number((countResult as Record<string, any>)?.count ?? 0);
       }
 
-      const results = await this.operations.executeQuery({ sql, params });
+      const results = await this.#db.executeQuery({ sql, params });
       const runs = (isArrayOfRecords(results) ? results : []).map((row: any) => this.parseWorkflowRun(row));
       return { runs, total: total || runs.length };
     } catch (error) {
@@ -257,7 +275,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    const fullTableName = this.operations.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
     try {
       const conditions: string[] = [];
       const params: SqlParam[] = [];
@@ -271,7 +289,7 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
       }
       const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
       const sql = `SELECT * FROM ${fullTableName} ${whereClause} ORDER BY createdAt DESC LIMIT 1`;
-      const result = await this.operations.executeQuery({ sql, params, first: true });
+      const result = await this.#db.executeQuery({ sql, params, first: true });
       if (!result) return null;
       return this.parseWorkflowRun(result);
     } catch (error) {
@@ -282,6 +300,26 @@ export class WorkflowsStorageD1 extends WorkflowsStorage {
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve workflow run by ID: ${error instanceof Error ? error.message : String(error)}`,
           details: { runId, workflowName: workflowName ?? '' },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const fullTableName = this.#db.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    try {
+      const sql = `DELETE FROM ${fullTableName} WHERE workflow_name = ? AND run_id = ?`;
+      const params: SqlParam[] = [workflowName, runId];
+      await this.#db.executeQuery({ sql, params });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to delete workflow run by ID: ${error instanceof Error ? error.message : String(error)}`,
+          details: { runId, workflowName },
         },
         error,
       );

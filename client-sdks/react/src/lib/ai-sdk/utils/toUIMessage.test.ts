@@ -332,7 +332,7 @@ describe('toUIMessage', () => {
 
       const result = mapWorkflowStreamChunkToWatchResult(prev, chunk);
 
-      expect(result.suspended).toEqual([['step1', 'nested1', 'nested2']]);
+      expect((result as any).suspended).toEqual([['step1', 'nested1', 'nested2']]);
     });
 
     it('should handle workflow-step-waiting chunk', () => {
@@ -437,7 +437,7 @@ describe('toUIMessage', () => {
     it('should create a new assistant message for tripwire chunk', () => {
       const chunk: ChunkType = {
         type: 'tripwire',
-        payload: { tripwireReason: 'Security warning detected' },
+        payload: { reason: 'Security warning detected' },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
       };
@@ -456,10 +456,52 @@ describe('toUIMessage', () => {
         ],
         metadata: {
           ...baseMetadata,
-          status: 'warning',
+          status: 'tripwire',
+          tripwire: {
+            retry: undefined,
+            tripwirePayload: undefined,
+            processorId: undefined,
+          },
         },
       });
       expect(result[0].id).toMatch(/^tripwire-run-123/);
+    });
+
+    it('should include tripwire metadata when provided', () => {
+      const chunk: ChunkType = {
+        type: 'tripwire',
+        payload: {
+          reason: 'PII detected in message',
+          retry: false,
+          metadata: { detectedPII: ['email', 'phone'], severity: 'high' },
+          processorId: 'pii-detection',
+        },
+        runId: 'run-456',
+        from: ChunkFrom.AGENT,
+      };
+
+      const conversation: MastraUIMessage[] = [];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'PII detected in message',
+          },
+        ],
+        metadata: {
+          ...baseMetadata,
+          status: 'tripwire',
+          tripwire: {
+            retry: false,
+            tripwirePayload: { detectedPII: ['email', 'phone'], severity: 'high' },
+            processorId: 'pii-detection',
+          },
+        },
+      });
     });
   });
 
@@ -499,7 +541,7 @@ describe('toUIMessage', () => {
         type: 'text-start',
         payload: {
           id: 'text-1',
-          providerMetadata: { model: 'gpt-4' },
+          providerMetadata: { model: { name: 'gpt-4' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -521,7 +563,7 @@ describe('toUIMessage', () => {
         type: 'text',
         text: '',
         state: 'streaming',
-        providerMetadata: { model: 'gpt-4' },
+        providerMetadata: { model: { name: 'gpt-4' } },
       });
     });
 
@@ -564,7 +606,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'text-1',
           text: ' world',
-          providerMetadata: { model: 'gpt-4' },
+          providerMetadata: { model: { name: 'gpt-4' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -599,7 +641,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'text-1',
           text: 'Hello',
-          providerMetadata: { model: 'gpt-4' },
+          providerMetadata: { model: { name: 'gpt-4' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -620,7 +662,7 @@ describe('toUIMessage', () => {
         type: 'text',
         text: 'Hello',
         state: 'streaming',
-        providerMetadata: { model: 'gpt-4' },
+        providerMetadata: { model: { name: 'gpt-4' } },
       });
     });
 
@@ -678,7 +720,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'reasoning-1',
           text: ' this problem',
-          providerMetadata: { model: 'o1' },
+          providerMetadata: { model: { name: 'o1' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -713,7 +755,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'reasoning-1',
           text: 'Analyzing...',
-          providerMetadata: { model: 'o1' },
+          providerMetadata: { model: { name: 'o1' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -734,7 +776,7 @@ describe('toUIMessage', () => {
         type: 'reasoning',
         text: 'Analyzing...',
         state: 'streaming',
-        providerMetadata: { model: 'o1' },
+        providerMetadata: { model: { name: 'o1' } },
       });
     });
 
@@ -744,7 +786,7 @@ describe('toUIMessage', () => {
         payload: {
           id: 'reasoning-1',
           text: 'Thinking...',
-          providerMetadata: { model: 'o1' },
+          providerMetadata: { model: { name: 'o1' } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -761,7 +803,7 @@ describe('toUIMessage', () => {
             type: 'reasoning',
             text: 'Thinking...',
             state: 'streaming',
-            providerMetadata: { model: 'o1' },
+            providerMetadata: { model: { name: 'o1' } },
           },
         ],
         metadata: baseMetadata,
@@ -781,8 +823,8 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           toolName: 'search',
-          args: { query: 'weather' },
-          providerMetadata: { latency: 100 },
+          args: { query: 'weather' } as any,
+          providerMetadata: { latency: { value: 100 } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -805,7 +847,7 @@ describe('toUIMessage', () => {
         toolCallId: 'call-1',
         state: 'input-available',
         input: { query: 'weather' },
-        callProviderMetadata: { latency: 100 },
+        callProviderMetadata: { latency: { value: 100 } },
       });
     });
 
@@ -815,7 +857,7 @@ describe('toUIMessage', () => {
         payload: {
           toolCallId: 'call-1',
           toolName: 'calculator',
-          args: { a: 1, b: 2 },
+          args: { a: 1, b: 2 } as any,
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1296,7 +1338,7 @@ describe('toUIMessage', () => {
           sourceType: 'url',
           title: 'Example Article',
           url: 'https://example.com/article',
-          providerMetadata: { source: 'web' },
+          providerMetadata: { source: { web: true } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1318,7 +1360,7 @@ describe('toUIMessage', () => {
         sourceId: 'source-1',
         url: 'https://example.com/article',
         title: 'Example Article',
-        providerMetadata: { source: 'web' },
+        providerMetadata: { source: { web: true } },
       });
     });
 
@@ -1331,7 +1373,7 @@ describe('toUIMessage', () => {
           title: 'Research Paper',
           mimeType: 'application/pdf',
           filename: 'paper.pdf',
-          providerMetadata: { source: 'upload' },
+          providerMetadata: { source: { upload: true } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1354,7 +1396,7 @@ describe('toUIMessage', () => {
         mediaType: 'application/pdf',
         title: 'Research Paper',
         filename: 'paper.pdf',
-        providerMetadata: { source: 'upload' },
+        providerMetadata: { source: { upload: true } },
       });
     });
 
@@ -1446,9 +1488,9 @@ describe('toUIMessage', () => {
         type: 'file',
         payload: {
           data: 'SGVsbG8gV29ybGQ=',
-          base64: true,
+          base64: 'true',
           mimeType: 'text/plain',
-          providerMetadata: { source: 'upload' },
+          providerMetadata: { source: { upload: true } },
         },
         runId: 'run-123',
         from: ChunkFrom.AGENT,
@@ -1469,7 +1511,7 @@ describe('toUIMessage', () => {
         type: 'file',
         mediaType: 'text/plain',
         url: 'data:text/plain;base64,SGVsbG8gV29ybGQ=',
-        providerMetadata: { source: 'upload' },
+        providerMetadata: { source: { upload: true } },
       });
     });
 
@@ -1478,7 +1520,7 @@ describe('toUIMessage', () => {
         type: 'file',
         payload: {
           data: 'Hello World',
-          base64: false,
+          base64: '',
           mimeType: 'text/plain',
         },
         runId: 'run-123',
@@ -1578,7 +1620,7 @@ describe('toUIMessage', () => {
       expect(result[0].metadata).toEqual({
         mode: 'stream',
         requireApprovalMetadata: {
-          'call-1': {
+          'dangerous-tool': {
             toolCallId: 'call-1',
             toolName: 'dangerous-tool',
             args: { action: 'delete', target: 'database' },
@@ -1607,7 +1649,7 @@ describe('toUIMessage', () => {
           metadata: {
             mode: 'stream',
             requireApprovalMetadata: {
-              'call-1': {
+              'first-tool': {
                 toolCallId: 'call-1',
                 toolName: 'first-tool',
                 args: {},
@@ -1620,8 +1662,8 @@ describe('toUIMessage', () => {
       const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
 
       expect(result[0].metadata?.mode).toBe('stream');
-      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('call-1');
-      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('call-2');
+      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('first-tool');
+      expect((result[0].metadata as any)?.requireApprovalMetadata).toHaveProperty('another-tool');
     });
 
     it('should return unchanged if no assistant message', () => {
@@ -1654,7 +1696,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -1698,7 +1740,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -1733,7 +1775,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -1774,7 +1816,7 @@ describe('toUIMessage', () => {
         type: 'finish',
         payload: {
           stepResult: { reason: 'stop' },
-          output: { usage: {} },
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
           metadata: {},
           messages: { all: [], user: [], nonUser: [] },
         },
@@ -2326,6 +2368,302 @@ describe('toUIMessage', () => {
       expect(originalMessage.parts[0]).toMatchObject({
         text: 'Original',
       });
+    });
+  });
+
+  describe('data-* chunk handling', () => {
+    const baseMetadata: MastraUIMessageMetadata = {
+      mode: 'stream',
+    };
+
+    it('should add data-* chunks as data parts to the assistant message', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: {
+          taskName: 'test-task',
+          progress: 50,
+          status: 'in-progress',
+        },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: 'Processing...',
+            state: 'streaming',
+          },
+        ],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Verify data-* chunk is added as a data part with type: 'data-progress' (AI SDK v5 format)
+      const lastMessage = result[result.length - 1];
+      expect(lastMessage.role).toBe('assistant');
+
+      const dataPart = lastMessage.parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toEqual({
+        taskName: 'test-task',
+        progress: 50,
+        status: 'in-progress',
+      });
+    });
+
+    it('should handle multiple data-* chunks accumulating in the same message', () => {
+      const chunk1: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 25 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const chunk2: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 75 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      let conversation: MastraUIMessage[] = [existingMessage];
+      conversation = toUIMessage({ chunk: chunk1, conversation, metadata: baseMetadata });
+      conversation = toUIMessage({ chunk: chunk2, conversation, metadata: baseMetadata });
+
+      const lastMessage = conversation[conversation.length - 1];
+      const dataParts = lastMessage.parts.filter((p: any) => p.type.startsWith('data-'));
+
+      // Should have accumulated both data parts
+      expect(dataParts.length).toBe(2);
+      expect((dataParts[0] as any).data.progress).toBe(25);
+      expect((dataParts[1] as any).data.progress).toBe(75);
+    });
+
+    it('should handle data-* chunks with different types', () => {
+      const progressChunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const statusChunk: ChunkType = {
+        type: 'data-status',
+        data: { status: 'running', step: 'validation' },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      let conversation: MastraUIMessage[] = [existingMessage];
+      conversation = toUIMessage({ chunk: progressChunk, conversation, metadata: baseMetadata });
+      conversation = toUIMessage({ chunk: statusChunk, conversation, metadata: baseMetadata });
+
+      const lastMessage = conversation[conversation.length - 1];
+      const dataParts = lastMessage.parts.filter((p: any) => p.type.startsWith('data-'));
+
+      expect(dataParts.length).toBe(2);
+      expect((dataParts[0] as any).type).toBe('data-progress');
+      expect((dataParts[1] as any).type).toBe('data-status');
+    });
+
+    it('should create new assistant message for data-* chunk when conversation is empty', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const conversation: MastraUIMessage[] = [];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Should create a new assistant message with the data part
+      expect(result.length).toBe(1);
+      expect(result[0].role).toBe('assistant');
+      expect(result[0].id).toContain('data-run-123');
+
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data.progress).toBe(50);
+    });
+
+    it('should create new assistant message for data-* chunk when last message is user message', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const userMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Hello' }],
+      };
+
+      const conversation: MastraUIMessage[] = [userMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Should create a new assistant message (not modify the user message)
+      expect(result.length).toBe(2);
+      expect(result[0].role).toBe('user');
+      expect(result[1].role).toBe('assistant');
+
+      const dataPart = result[1].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data.progress).toBe(50);
+    });
+
+    // Negative test cases
+    it('should handle data-* chunk with missing data property gracefully', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        // data property intentionally missing
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Should handle gracefully without throwing
+      expect(result).toBeDefined();
+      expect(result.length).toBe(1);
+
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toBeUndefined();
+    });
+
+    it('should handle data-* chunk with null data property', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: null,
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toBeDefined();
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toBeNull();
+    });
+
+    it('should handle data-* chunk with undefined data property', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: undefined,
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result).toBeDefined();
+      const dataPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(dataPart).toBeDefined();
+      expect((dataPart as any).data).toBeUndefined();
+    });
+
+    // Immutability verification
+    it('should not mutate original conversation array when adding data-* chunk', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Hello' }],
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      const originalLength = conversation.length;
+      const originalMessageParts = existingMessage.parts.length;
+
+      const result = toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Original conversation should not be mutated
+      expect(conversation.length).toBe(originalLength);
+      expect(conversation[0].parts.length).toBe(originalMessageParts);
+
+      // Result should be a new array
+      expect(result).not.toBe(conversation);
+      expect(result[0]).not.toBe(existingMessage);
+      expect(result[0].parts.length).toBe(2); // original text + new data part
+    });
+
+    it('should not mutate original message parts array when adding data-* chunk', () => {
+      const chunk: ChunkType = {
+        type: 'data-progress',
+        data: { progress: 50 },
+        runId: 'run-123',
+        from: ChunkFrom.AGENT,
+      } as any;
+
+      const originalParts = [{ type: 'text' as const, text: 'Hello' }];
+      const existingMessage: MastraUIMessage = {
+        id: 'msg-1',
+        role: 'assistant',
+        parts: originalParts,
+        metadata: baseMetadata,
+      };
+
+      const conversation: MastraUIMessage[] = [existingMessage];
+      toUIMessage({ chunk, conversation, metadata: baseMetadata });
+
+      // Original parts array should not be mutated
+      expect(originalParts.length).toBe(1);
+      expect(originalParts[0].type).toBe('text');
     });
   });
 });

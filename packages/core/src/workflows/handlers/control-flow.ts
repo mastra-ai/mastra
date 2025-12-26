@@ -1,19 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { RequestContext } from '../../di';
+import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
+import type { PubSub } from '../../events/pubsub';
 import { SpanType } from '../../observability';
 import type { TracingContext } from '../../observability';
-import type { ChunkType } from '../../stream/types';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
-import { EMITTER_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
 import type {
   DefaultEngineType,
-  Emitter,
   ExecutionContext,
+  OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
   StepFailure,
@@ -49,11 +49,12 @@ export interface ExecuteParallelParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
+  perStep?: boolean;
 }
 
 export async function executeParallel(
@@ -73,11 +74,12 @@ export async function executeParallel(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
+    perStep,
   } = params;
 
   const parallelSpan = tracingContext.currentSpan?.createChildSpan({
@@ -101,7 +103,7 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === step.step.id;
     }
     if (!makeStepRunning) {
-      continue;
+      break;
     }
     const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
@@ -113,6 +115,9 @@ export async function executeParallel(
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     } as StepResult<any, any, any, any>;
     executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
+    if (perStep) {
+      break;
+    }
   }
 
   if (timeTravel && timeTravel.executionPath.length > 0) {
@@ -125,6 +130,9 @@ export async function executeParallel(
       const currStepResult = stepResults[step.step.id];
       if (currStepResult && currStepResult.status !== 'running') {
         return currStepResult;
+      }
+      if (!currStepResult && (perStep || timeTravel)) {
+        return {} as StepResult<any, any, any, any>;
       }
       const stepExecResult = await engine.executeStep({
         workflowId,
@@ -150,11 +158,12 @@ export async function executeParallel(
         tracingContext: {
           currentSpan: parallelSpan,
         },
-        emitter,
+        pubsub,
         abortController,
         requestContext,
-        writableStream,
+        outputWriter,
         disableScorers,
+        perStep,
       });
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
@@ -166,7 +175,12 @@ export async function executeParallel(
 
   const hasSuspended = results.find(result => result.status === 'suspended');
   if (hasFailed) {
-    execResults = { status: 'failed', error: hasFailed.error };
+    // Preserve tripwire property for proper status conversion in fmtReturnValue
+    execResults = {
+      status: 'failed',
+      error: hasFailed.error,
+      tripwire: (hasFailed as any).tripwire,
+    };
   } else if (hasSuspended) {
     execResults = {
       status: 'suspended',
@@ -190,9 +204,7 @@ export async function executeParallel(
   }
 
   if (execResults.status === 'failed') {
-    parallelSpan?.error({
-      error: new Error(execResults.error),
-    });
+    parallelSpan?.error({ error: execResults.error });
   } else {
     parallelSpan?.end({
       output: execResults.output || execResults,
@@ -224,11 +236,12 @@ export interface ExecuteConditionalParams {
   timeTravel?: TimeTravelExecutionParams;
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
+  perStep?: boolean;
 }
 
 export async function executeConditional(
@@ -248,11 +261,12 @@ export async function executeConditional(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
+    perStep,
   } = params;
 
   const conditionalSpan = tracingContext.currentSpan?.createChildSpan({
@@ -298,7 +312,7 @@ export async function executeConditional(
             abort: () => {
               abortController?.abort();
             },
-            [EMITTER_SYMBOL]: emitter,
+            [PUBSUB_SYMBOL]: pubsub,
             [STREAM_FORMAT_SYMBOL]: executionContext.format,
             engine: engine.getEngineContext(),
             abortSignal: abortController?.signal,
@@ -309,7 +323,7 @@ export async function executeConditional(
                 name: 'conditional',
                 runId,
               },
-              writableStream,
+              outputWriter,
             ),
           },
           {
@@ -331,19 +345,21 @@ export async function executeConditional(
 
           return result;
         } catch (e: unknown) {
-          const error = engine.preprocessExecutionError(
-            e,
+          const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
+          const mastraError = new MastraError(
             {
               id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
-              domain: 'MASTRA_WORKFLOW' as any,
-              category: 'USER' as any,
+              domain: ErrorDomain.MASTRA_WORKFLOW,
+              category: ErrorCategory.USER,
               details: { workflowId, runId },
             },
-            'Error evaluating condition: ',
+            errorInstance,
           );
+          engine.getLogger()?.trackException(mastraError);
+          engine.getLogger()?.error('Error evaluating condition: ' + errorInstance.stack);
 
           evalSpan?.error({
-            error,
+            error: mastraError,
             attributes: {
               result: false,
             },
@@ -355,7 +371,18 @@ export async function executeConditional(
     )
   ).filter((index): index is number => index !== null);
 
-  const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
+  let stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
+  if (perStep || (timeTravel && timeTravel.executionPath.length > 0)) {
+    const possibleStepsToRun = stepsToRun.filter(s => {
+      const currStepResult = stepResults[s.step.id];
+      if (timeTravel && timeTravel.executionPath.length > 0) {
+        return timeTravel.steps[0] === s.step.id;
+      }
+      return !currStepResult;
+    });
+    const possibleStepToRun = possibleStepsToRun?.[0];
+    stepsToRun = possibleStepToRun ? [possibleStepToRun] : stepsToRun;
+  }
 
   // Update conditional span with evaluation results
   conditionalSpan?.update({
@@ -404,11 +431,12 @@ export async function executeConditional(
         tracingContext: {
           currentSpan: conditionalSpan,
         },
-        emitter,
+        pubsub,
         abortController,
         requestContext,
-        writableStream,
+        outputWriter,
         disableScorers,
+        perStep,
       });
 
       // Apply context changes from conditional step execution
@@ -422,7 +450,12 @@ export async function executeConditional(
   const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
   const hasSuspended = results.find(result => result.status === 'suspended');
   if (hasFailed) {
-    execResults = { status: 'failed', error: hasFailed.error };
+    // Preserve tripwire property for proper status conversion in fmtReturnValue
+    execResults = {
+      status: 'failed',
+      error: hasFailed.error,
+      tripwire: (hasFailed as any).tripwire,
+    };
   } else if (hasSuspended) {
     execResults = {
       status: 'suspended',
@@ -447,9 +480,7 @@ export async function executeConditional(
   }
 
   if (execResults.status === 'failed') {
-    conditionalSpan?.error({
-      error: new Error(execResults.error),
-    });
+    conditionalSpan?.error({ error: execResults.error });
   } else {
     conditionalSpan?.end({
       output: execResults.output || execResults,
@@ -482,12 +513,13 @@ export interface ExecuteLoopParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
+  perStep?: boolean;
 }
 
 export async function executeLoop(
@@ -506,12 +538,13 @@ export async function executeLoop(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
     serializedStepGraph,
+    perStep,
   } = params;
 
   const { step, condition } = entry;
@@ -550,13 +583,14 @@ export async function executeLoop(
       tracingContext: {
         currentSpan: loopSpan,
       },
-      emitter,
+      pubsub,
       abortController,
       requestContext,
-      writableStream,
+      outputWriter,
       disableScorers,
       serializedStepGraph,
       iterationCount: iteration + 1,
+      perStep,
     });
 
     // Apply context changes from loop step execution
@@ -612,7 +646,7 @@ export async function executeLoop(
           abort: () => {
             abortController?.abort();
           },
-          [EMITTER_SYMBOL]: emitter,
+          [PUBSUB_SYMBOL]: pubsub,
           [STREAM_FORMAT_SYMBOL]: executionContext.format,
           engine: engine.getEngineContext(),
           abortSignal: abortController?.signal,
@@ -623,7 +657,7 @@ export async function executeLoop(
               name: 'loop',
               runId,
             },
-            writableStream,
+            outputWriter,
           ),
         },
         {
@@ -675,12 +709,13 @@ export interface ExecuteForeachParams {
   };
   executionContext: ExecutionContext;
   tracingContext: TracingContext;
-  emitter: Emitter;
+  pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  writableStream?: WritableStream<ChunkType>;
+  outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
+  perStep?: boolean;
 }
 
 export async function executeForeach(
@@ -699,12 +734,13 @@ export async function executeForeach(
     timeTravel,
     executionContext,
     tracingContext,
-    emitter,
+    pubsub,
     abortController,
     requestContext,
-    writableStream,
+    outputWriter,
     disableScorers,
     serializedStepGraph,
+    perStep,
   } = params;
 
   const { step, opts } = entry;
@@ -731,12 +767,16 @@ export async function executeForeach(
     tracingPolicy: engine.options?.tracingPolicy,
   });
 
-  await emitter.emit('watch', {
-    type: 'workflow-step-start',
-    payload: {
-      id: step.id,
-      ...stepInfo,
-      status: 'running',
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    runId,
+    data: {
+      type: 'workflow-step-start',
+      payload: {
+        id: step.id,
+        ...stepInfo,
+        status: 'running',
+      },
     },
   });
 
@@ -788,13 +828,14 @@ export async function executeForeach(
           resume: resumeToUse,
           prevOutput: item,
           tracingContext: { currentSpan: loopSpan },
-          emitter,
+          pubsub,
           abortController,
           requestContext,
           skipEmits: true,
-          writableStream,
+          outputWriter,
           disableScorers,
           serializedStepGraph,
+          perStep,
         });
 
         // Apply context changes from foreach step execution
@@ -812,19 +853,27 @@ export async function executeForeach(
         if (execResults.status === 'suspended') {
           foreachIndexObj[i + resultIndex] = execResults;
         } else {
-          await emitter.emit('watch', {
-            type: 'workflow-step-result',
-            payload: {
-              id: step.id,
-              ...execResults,
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-result',
+              payload: {
+                id: step.id,
+                ...execResults,
+              },
             },
           });
 
-          await emitter.emit('watch', {
-            type: 'workflow-step-finish',
-            payload: {
-              id: step.id,
-              metadata: {},
+          await pubsub.publish(`workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-finish',
+              payload: {
+                id: step.id,
+                metadata: {},
+              },
             },
           });
 
@@ -847,11 +896,15 @@ export async function executeForeach(
     if (Object.keys(foreachIndexObj).length > 0) {
       const suspendedIndices = Object.keys(foreachIndexObj).map(Number);
       const foreachIndex = suspendedIndices[0]!;
-      await emitter.emit('watch', {
-        type: 'workflow-step-suspended',
-        payload: {
-          id: step.id,
-          ...foreachIndexObj[foreachIndex],
+      await pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-step-suspended',
+          payload: {
+            id: step.id,
+            ...foreachIndexObj[foreachIndex],
+          },
         },
       });
 
@@ -878,21 +931,29 @@ export async function executeForeach(
     }
   }
 
-  await emitter.emit('watch', {
-    type: 'workflow-step-result',
-    payload: {
-      id: step.id,
-      status: 'success',
-      output: results,
-      endedAt: Date.now(),
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    runId,
+    data: {
+      type: 'workflow-step-result',
+      payload: {
+        id: step.id,
+        status: 'success',
+        output: results,
+        endedAt: Date.now(),
+      },
     },
   });
 
-  await emitter.emit('watch', {
-    type: 'workflow-step-finish',
-    payload: {
-      id: step.id,
-      metadata: {},
+  await pubsub.publish(`workflow.events.v2.${runId}`, {
+    type: 'watch',
+    runId,
+    data: {
+      type: 'workflow-step-finish',
+      payload: {
+        id: step.id,
+        metadata: {},
+      },
     },
   });
 

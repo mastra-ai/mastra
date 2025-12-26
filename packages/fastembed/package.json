@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -37,20 +37,25 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^2.0.0",
-    "ai": "^5.0.76",
-    "ai-v4": "npm:ai@4.3.19",
     "fastembed": "^1.14.4"
   },
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
   "devDependencies": {
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/node": "22.13.17",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "ai-v4": "npm:ai@4.3.19",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "^3.25.76"
   },
   "engines": {
     "node": ">=22.13.0"

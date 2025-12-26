@@ -23,18 +23,17 @@ import type {
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type {
-  TraceRecord,
-  SpanRecord,
-  PaginationInfo,
-  WorkflowRun,
-  WorkflowRuns,
-  StorageListMessagesInput,
-} from '@mastra/core/storage';
+import type { PaginationInfo, WorkflowRun, WorkflowRuns, StorageListMessagesInput } from '@mastra/core/storage';
 import type { OutputSchema } from '@mastra/core/stream';
 
 import type { QueryResult } from '@mastra/core/vector';
-import type { TimeTravelContext, Workflow, WorkflowResult, WorkflowState } from '@mastra/core/workflows';
+import type {
+  TimeTravelContext,
+  Workflow,
+  WorkflowResult,
+  WorkflowRunStatus,
+  WorkflowState,
+} from '@mastra/core/workflows';
 
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -172,6 +171,7 @@ export interface ListWorkflowRunsParams {
   page?: number;
   perPage?: number;
   resourceId?: string;
+  status?: WorkflowRunStatus;
   /** @deprecated Use page instead */
   offset?: number;
   /** @deprecated Use perPage instead */
@@ -182,7 +182,7 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowRun;
 
-export type GetWorkflowRunExecutionResultResponse = WorkflowState;
+export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
 
 export interface GetWorkflowResponse {
   name: string;
@@ -211,6 +211,8 @@ export interface GetWorkflowResponse {
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
+  isProcessorWorkflow?: boolean;
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
@@ -255,7 +257,9 @@ export interface SaveNetworkMessageToMemoryParams {
   networkId: string;
 }
 
-export type SaveMessageToMemoryResponse = (MastraMessageV1 | MastraDBMessage)[];
+export type SaveMessageToMemoryResponse = {
+  messages: (MastraMessageV1 | MastraDBMessage)[];
+};
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -415,10 +419,21 @@ export interface McpServerToolListResponse {
   tools: McpToolInfo[];
 }
 
+/**
+ * Client version of ScoreRowData with dates serialized as strings (from JSON)
+ */
 export type ClientScoreRowData = Omit<ScoreRowData, 'createdAt' | 'updatedAt'> & {
   createdAt: string;
   updatedAt: string;
-} & { spanId?: string };
+};
+
+/**
+ * Response for listing scores (client version with serialized dates)
+ */
+export type ListScoresResponse = {
+  pagination: PaginationInfo;
+  scores: ClientScoreRowData[];
+};
 
 // Scores-related types
 export interface ListScoresByRunIdParams {
@@ -442,25 +457,8 @@ export interface ListScoresByEntityIdParams {
   perPage?: number;
 }
 
-export interface ListScoresBySpanParams {
-  traceId: string;
-  spanId: string;
-  page?: number;
-  perPage?: number;
-}
-
 export interface SaveScoreParams {
   score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>;
-}
-
-export interface ListScoresResponse {
-  pagination: {
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  };
-  scores: ClientScoreRowData[];
 }
 
 export interface SaveScoreResponse {
@@ -490,15 +488,6 @@ export interface TemplateInstallationRequest {
   targetPath?: string;
   /** Environment variables for template */
   variables?: Record<string, string>;
-}
-
-export interface GetTraceResponse {
-  trace: TraceRecord;
-}
-
-export interface GetTracesResponse {
-  spans: SpanRecord[];
-  pagination: PaginationInfo;
 }
 
 export interface StreamVNextChunkType {
@@ -539,7 +528,6 @@ export interface MemorySearchResult {
 }
 
 export interface TimeTravelParams {
-  runId: string;
   step: string | string[];
   inputData?: Record<string, any>;
   resumeData?: Record<string, any>;
@@ -548,6 +536,114 @@ export interface TimeTravelParams {
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
   requestContext?: RequestContext | Record<string, any>;
   tracingOptions?: TracingOptions;
+  perStep?: boolean;
+}
+
+// ============================================================================
+// Stored Agents Types
+// ============================================================================
+
+/**
+ * Scorer config for stored agents
+ */
+export interface StoredAgentScorerConfig {
+  sampling?: {
+    type: 'ratio' | 'count';
+    rate?: number;
+    count?: number;
+  };
+}
+
+/**
+ * Stored agent data returned from API
+ */
+export interface StoredAgentResponse {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Parameters for listing stored agents
+ */
+export interface ListStoredAgentsParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+}
+
+/**
+ * Response for listing stored agents
+ */
+export interface ListStoredAgentsResponse {
+  agents: StoredAgentResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
+}
+
+/**
+ * Parameters for creating a stored agent
+ */
+export interface CreateStoredAgentParams {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  model: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for updating a stored agent
+ */
+export interface UpdateStoredAgentParams {
+  name?: string;
+  description?: string;
+  instructions?: string;
+  model?: Record<string, unknown>;
+  tools?: string[];
+  defaultOptions?: Record<string, unknown>;
+  workflows?: string[];
+  agents?: string[];
+  inputProcessors?: Record<string, unknown>[];
+  outputProcessors?: Record<string, unknown>[];
+  memory?: string;
+  scorers?: Record<string, StoredAgentScorerConfig>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for deleting a stored agent
+ */
+export interface DeleteStoredAgentResponse {
+  success: boolean;
+  message: string;
 }
 
 export interface ListAgentsModelProvidersResponse {
@@ -561,4 +657,17 @@ export interface Provider {
   connected: boolean;
   docUrl?: string;
   models: string[];
+}
+
+// ============================================================================
+// System Types
+// ============================================================================
+
+export interface MastraPackage {
+  name: string;
+  version: string;
+}
+
+export interface GetSystemPackagesResponse {
+  packages: MastraPackage[];
 }

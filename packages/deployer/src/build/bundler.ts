@@ -8,11 +8,13 @@ import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'roll
 import { esbuild } from './plugins/esbuild';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import { analyzeBundle } from './analyze';
-import { removeDeployer } from './plugins/remove-deployer';
+import { removeAllOptionsFromMastraExceptPlugin } from './plugins/remove-all-except';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { join } from 'node:path';
 import { slash } from './utils';
 import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
+import { removeDeployer } from './plugins/remove-deployer';
 
 export async function getInputOptions(
   entryFile: string,
@@ -25,12 +27,14 @@ export async function getInputOptions(
     projectRoot,
     workspaceRoot = undefined,
     enableEsmShim = true,
+    externalsPreset = false,
   }: {
     sourcemap?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
     enableEsmShim?: boolean;
+    externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
   let nodeResolvePlugin =
@@ -45,8 +49,7 @@ export async function getInputOptions(
         });
 
   const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies);
-
-  const externals = Array.from(externalsCopy);
+  const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
   return {
@@ -120,15 +123,17 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      commonjs({
-        extensions: ['.js', '.ts'],
-        transformMixedEsModules: true,
-        esmExternals(id) {
-          return externals.includes(id);
-        },
-      }),
+      externalsPreset
+        ? null
+        : commonjs({
+            extensions: ['.js', '.ts'],
+            transformMixedEsModules: true,
+            esmExternals(id) {
+              return externals.includes(id);
+            },
+          }),
       enableEsmShim ? esmShim() : undefined,
-      nodeResolvePlugin,
+      externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
       // {
       //   name: 'logger',

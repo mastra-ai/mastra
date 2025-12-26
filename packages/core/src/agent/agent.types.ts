@@ -1,16 +1,14 @@
-import type { WritableStream } from 'node:stream/web';
-import type { ModelMessage, ToolChoice } from 'ai-v5';
+import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
-import type { StreamTextOnFinishCallback, StreamTextOnStepFinishCallback } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { TracingContext, TracingOptions } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
-import type { ChunkType } from '../stream/types';
+import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
 
@@ -33,10 +31,7 @@ export type MultiPrimitiveExecutionOptions = {
   modelSettings?: LoopOptions['modelSettings'];
 };
 
-export type AgentExecutionOptions<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'mastra' | 'aisdk' | undefined = undefined,
-> = {
+export type AgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = {
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -72,10 +67,10 @@ export type AgentExecutionOptions<
   /** Provider-specific options passed to the language model */
   providerOptions?: ProviderOptions;
 
-  /** Callback fired after each execution step. Type varies by format */
-  onStepFinish?: FORMAT extends 'aisdk' ? StreamTextOnStepFinishCallback<any> : LoopConfig['onStepFinish'];
-  /** Callback fired when execution completes. Type varies by format */
-  onFinish?: FORMAT extends 'aisdk' ? StreamTextOnFinishCallback<any> : LoopConfig['onFinish'];
+  /** Callback fired after each execution step. */
+  onStepFinish?: LoopConfig['onStepFinish'];
+  /** Callback fired when execution completes. */
+  onFinish?: LoopConfig['onFinish'];
 
   /** Callback fired for each streaming chunk received */
   onChunk?: LoopConfig<OUTPUT>['onChunk'];
@@ -84,16 +79,22 @@ export type AgentExecutionOptions<
   /** Callback fired when streaming is aborted */
   onAbort?: LoopConfig['onAbort'];
   /** Tools that are active for this execution */
-  activeTools?: LoopConfig['activeTools'];
+  activeTools?: LoopOptions['activeTools'];
   /**
    * Signal to abort the streaming operation
    */
   abortSignal?: LoopConfig['abortSignal'];
 
   /** Input processors to use for this execution (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry for this generation.
+   * Overrides agent's default maxProcessorRetries.
+   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
+   */
+  maxProcessorRetries?: number;
 
   /** Additional tool sets that can be used for this execution */
   toolsets?: ToolsetsInput;
@@ -115,10 +116,16 @@ export type AgentExecutionOptions<
   tracingOptions?: TracingOptions;
 
   /** Callback function called before each step of multi-step execution */
-  prepareStep?: PrepareStepFunction<any>;
+  prepareStep?: PrepareStepFunction;
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
+
+  /** Automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+
+  /** Maximum number of tool calls to execute concurrently (default: 1 when approval may be required, otherwise 10) */
+  toolCallConcurrency?: number;
 
   /** Structured output generation with enhanced developer experience  */
   structuredOutput?: StructuredOutputOptions<OUTPUT extends OutputSchema ? OUTPUT : never>;
@@ -127,11 +134,8 @@ export type AgentExecutionOptions<
   includeRawChunks?: boolean;
 };
 
-export type InnerAgentExecutionOptions<
-  OUTPUT extends OutputSchema = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> = AgentExecutionOptions<OUTPUT, FORMAT> & {
-  writableStream?: WritableStream<ChunkType>;
+export type InnerAgentExecutionOptions<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
+  outputWriter?: OutputWriter;
   messages: MessageListInput;
   methodType: AgentMethodType;
   /** Internal: Model override for when structuredOutput.model is used with maxSteps=1 */

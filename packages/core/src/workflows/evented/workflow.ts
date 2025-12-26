@@ -17,7 +17,7 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
 } from '../../workflows/types';
-import { EMITTER_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
@@ -181,7 +181,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, requestContext, abortSignal, abort }) => {
+      execute: async ({ inputData, runId, [PUBSUB_SYMBOL]: pubsub, requestContext, abortSignal, abort }) => {
         // TODO: support stream
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -213,22 +213,24 @@ export function createStep<
           args: inputData,
         };
 
-        await emitter.emit('watch', {
-          type: 'tool-call-streaming-start',
-          ...(toolData ?? {}),
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
         });
         for await (const chunk of fullStream) {
           if (chunk.type === 'text-delta') {
-            await emitter.emit('watch', {
-              type: 'tool-call-delta',
-              ...(toolData ?? {}),
-              argsTextDelta: chunk.textDelta,
+            await pubsub.publish(`workflow.events.v2.${runId}`, {
+              type: 'watch',
+              runId,
+              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
             });
           }
         }
-        await emitter.emit('watch', {
-          type: 'tool-call-streaming-finish',
-          ...(toolData ?? {}),
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
         });
 
         return {
@@ -323,6 +325,8 @@ export function createWorkflow<
       validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
+      onFinish: params.options?.onFinish,
+      onError: params.options?.onError,
     },
   });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
@@ -350,7 +354,11 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -359,6 +367,7 @@ export class EventedWorkflow<
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -377,12 +386,16 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -416,6 +429,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -433,14 +447,38 @@ export class EventedRun<
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
+  /**
+   * Set up abort signal handler to publish workflow.cancel event when abortController.abort() is called.
+   * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
+   */
+  private setupAbortHandler(): void {
+    const abortHandler = () => {
+      this.mastra?.pubsub
+        .publish('workflows', {
+          type: 'workflow.cancel',
+          runId: this.runId,
+          data: {
+            workflowId: this.workflowId,
+            runId: this.runId,
+          },
+        })
+        .catch(err => {
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+        });
+    };
+    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
+  }
+
   async start({
     inputData,
     initialState,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -454,9 +492,11 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -476,6 +516,12 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    this.setupAbortHandler();
+
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
@@ -487,23 +533,11 @@ export class EventedRun<
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
       initialState: initialStateToUse,
-      emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
-        },
-        on: (event: string, callback: (data: any) => void) => {
-          this.emitter.on(event, callback);
-        },
-        off: (event: string, callback: (data: any) => void) => {
-          this.emitter.off(event, callback);
-        },
-        once: (event: string, callback: (data: any) => void) => {
-          this.emitter.once(event, callback);
-        },
-      },
+      pubsub: this.mastra.pubsub,
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
+      perStep,
     });
 
     // console.dir({ startResult: result }, { depth: null });
@@ -513,6 +547,80 @@ export class EventedRun<
     }
 
     return result;
+  }
+
+  /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId. The workflow executes in the background via pubsub.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   */
+  async startAsync({
+    inputData,
+    initialState,
+    requestContext,
+    perStep,
+  }: {
+    inputData?: z.infer<TInput>;
+    requestContext?: RequestContext;
+    initialState?: z.infer<TState>;
+    perStep?: boolean;
+  }): Promise<{ runId: string }> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
+    requestContext = requestContext ?? new RequestContext();
+
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        requestContext: Object.fromEntries(requestContext.entries()),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    // Fire-and-forget: publish the workflow start event without subscribing for completion
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.start',
+      runId: this.runId,
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        prevResult: { status: 'success', output: inputDataToUse },
+        requestContext: Object.fromEntries(requestContext.entries()),
+        initialState: initialStateToUse,
+        perStep,
+      },
+    });
+
+    // Return immediately without waiting for completion
+    return { runId: this.runId };
   }
 
   // TODO: stream
@@ -528,6 +636,7 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     let steps: string[] = [];
     if (typeof params.step === 'string') {
@@ -542,24 +651,31 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error('Cannot resume workflow: workflows store is required');
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
 
-    const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     if (!resumePath) {
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`,
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
       );
     }
 
     console.dir(
-      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
+      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
       { depth: null },
     );
     // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot
@@ -578,6 +694,12 @@ export class EventedRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    this.setupAbortHandler();
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -591,23 +713,10 @@ export class EventedRun<
           resumePayload: resumeDataToUse,
           resumePath,
         },
-        emitter: {
-          emit: (event: string, data: any) => {
-            this.emitter.emit(event, data);
-            return Promise.resolve();
-          },
-          on: (event: string, callback: (data: any) => void) => {
-            this.emitter.on(event, callback);
-          },
-          off: (event: string, callback: (data: any) => void) => {
-            this.emitter.off(event, callback);
-          },
-          once: (event: string, callback: (data: any) => void) => {
-            this.emitter.once(event, callback);
-          },
-        },
+        pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
+        perStep: params.perStep,
       })
       .then(result => {
         if (result.status !== 'suspended') {
@@ -657,13 +766,18 @@ export class EventedRun<
   }
 
   async cancel() {
-    await this.mastra?.pubsub.publish('workflows', {
-      type: 'workflow.cancel',
+    // Update storage directly for immediate status update (same pattern as Inngest)
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowState({
+      workflowName: this.workflowId,
       runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
+      opts: {
+        status: 'canceled',
       },
     });
+
+    // Trigger abort signal - the abort handler will publish the workflow.cancel event
+    // This ensures consistent behavior whether cancel() or abort() is called
+    this.abortController.abort();
   }
 }

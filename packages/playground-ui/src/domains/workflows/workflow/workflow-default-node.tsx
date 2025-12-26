@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
-import { CircleDashed, HourglassIcon, Loader2, PauseIcon } from 'lucide-react';
+import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
@@ -30,9 +30,14 @@ export type DefaultNode = Node<
 
 export interface WorkflowDefaultNodeProps {
   parentWorkflowName?: string;
+  stepsFlow: Record<string, string[]>;
 }
 
-export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
+export function WorkflowDefaultNode({
+  data,
+  parentWorkflowName,
+  stepsFlow,
+}: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
   const { steps } = useCurrentRun();
   const {
     label,
@@ -52,6 +57,10 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
 
   const step = steps[stepKey];
 
+  // Check if this is a tripwire (failed step with tripwire property)
+  const isTripwire = step?.status === 'failed' && step?.tripwire !== undefined;
+  const displayStatus = isTripwire ? 'tripwire' : step?.status;
+
   const { isSleepNode, isForEachNode, isMapNode, hasSpecialBadge } = getNodeBadgeInfo({
     duration,
     date,
@@ -67,16 +76,17 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
 
       <div
         data-workflow-node
-        data-workflow-step-status={step?.status ?? 'idle'}
+        data-workflow-step-status={displayStatus ?? 'idle'}
         data-testid="workflow-default-node"
         className={cn(
           'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
-          step?.status === 'success' && 'bg-accent1Darker',
-          step?.status === 'failed' && 'bg-accent2Darker',
-          step?.status === 'suspended' && 'bg-accent3Darker',
-          step?.status === 'waiting' && 'bg-accent5Darker',
-          step?.status === 'running' && 'bg-accent6Darker',
+          displayStatus === 'success' && 'bg-accent1Darker',
+          displayStatus === 'failed' && 'bg-accent2Darker',
+          displayStatus === 'tripwire' && 'bg-amber-950/40 border-amber-500/30',
+          displayStatus === 'suspended' && 'bg-accent3Darker',
+          displayStatus === 'waiting' && 'bg-accent5Darker',
+          displayStatus === 'running' && 'bg-accent6Darker',
         )}
       >
         {hasSpecialBadge && (
@@ -116,11 +126,12 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
         )}
         <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
           <Icon>
-            {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
-            {step?.status === 'success' && <CheckIcon className="text-accent1" />}
-            {step?.status === 'suspended' && <PauseIcon className="text-accent3" />}
-            {step?.status === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {step?.status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" />}
+            {displayStatus === 'failed' && <CrossIcon className="text-accent2" />}
+            {displayStatus === 'success' && <CheckIcon className="text-accent1" />}
+            {displayStatus === 'suspended' && <PauseIcon className="text-accent3" />}
+            {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" />}
+            {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" />}
             {!step && <CircleDashed className="text-icon2" />}
           </Icon>
 
@@ -153,10 +164,12 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           resumeData={step?.resumeData}
           output={step?.output}
           suspendOutput={step?.suspendOutput}
-          error={step?.error}
+          error={isTripwire ? undefined : step?.error}
+          tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
-          status={step?.status}
+          status={displayStatus as any}
           stepKey={stepKey}
+          stepsFlow={stepsFlow}
         />
       </div>
 

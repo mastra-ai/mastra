@@ -10,8 +10,16 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
 
   const agentsLink = paths.agentsLink();
   const workflowsLink = paths.workflowsLink();
-  const agentLink = paths.agentLink(trace?.metadata?.resourceId!);
-  const workflowLink = paths.workflowLink(trace?.attributes?.workflowId!);
+
+  // Use direct span fields for entity info
+  const entityId = trace.entityId;
+  const entityType = trace.entityType;
+  const entityName = trace.entityName;
+
+  const isAgent = entityType === 'agent';
+  const isWorkflow = entityType === 'workflow_run';
+  const entityLink =
+    isAgent && entityId ? paths.agentLink(entityId) : isWorkflow && entityId ? paths.workflowLink(entityId) : undefined;
 
   return [
     {
@@ -19,9 +27,9 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
       label: 'Entity Id',
       value: [
         {
-          id: trace?.metadata?.resourceId,
-          name: trace?.attributes?.agentId || trace?.attributes?.workflowId || '-',
-          path: trace?.attributes?.agentId ? agentLink : trace?.attributes?.workflowId ? workflowLink : undefined,
+          id: entityId ?? 'unknown',
+          name: entityName || entityId || '-',
+          path: entityLink,
         },
       ],
     },
@@ -30,16 +38,16 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
       label: 'Entity Type',
       value: [
         {
-          id: trace?.attributes?.agentId || trace?.attributes?.workflowId,
-          name: trace?.attributes?.agentId ? 'Agent' : trace?.attributes?.workflowId ? 'Workflow' : '-',
-          path: trace?.attributes?.agentId ? agentsLink : trace?.attributes?.workflowId ? workflowsLink : undefined,
+          id: entityType ?? 'unknown',
+          name: entityType ?? '-',
+          path: isAgent ? agentsLink : isWorkflow ? workflowsLink : undefined,
         },
       ],
     },
     {
       key: 'status',
       label: 'Status',
-      value: trace?.attributes?.status || '-',
+      value: (trace?.attributes?.status as string) || '-',
     },
     {
       key: 'startedAt',
@@ -56,11 +64,9 @@ export function useTraceInfo(trace: SpanRecord | undefined) {
 
 type getSpanInfoProps = {
   span: SpanRecord | undefined;
-  withTraceId?: boolean;
-  withSpanId?: boolean;
 };
 
-export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: getSpanInfoProps) {
+export function getSpanInfo({ span }: getSpanInfoProps) {
   if (!span) {
     return [];
   }
@@ -84,19 +90,12 @@ export function getSpanInfo({ span, withTraceId = true, withSpanId = true }: get
   ];
 
   // Add finish reason if available
-  if (span?.attributes?.finishReason) {
+  const finishReason = span?.attributes?.finishReason as string | undefined;
+  if (finishReason) {
     baseInfo.push({
       key: 'finishReason',
       label: 'Finish Reason',
-      value: span.attributes.finishReason,
-    });
-  }
-
-  if (withSpanId) {
-    baseInfo.unshift({
-      key: 'spanId',
-      label: '#',
-      value: span?.spanId,
+      value: finishReason,
     });
   }
 

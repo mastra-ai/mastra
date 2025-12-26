@@ -1,21 +1,25 @@
 import { createHash } from 'node:crypto';
-import type { WritableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { MastraLanguageModel } from './llm/model/shared.types';
+import { ErrorCategory, ErrorDomain, MastraError } from './error';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { TracingContext, TracingPolicy } from './observability';
 import type { RequestContext } from './request-context';
-import type { ChunkType } from './stream/types';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
+import { Tool } from './tools/tool';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
+import type { OutputWriter } from './workflows/types';
+
+// Re-export Zod utilities for external use (isZodType is defined locally below)
+export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -230,8 +234,11 @@ export interface ToolOptions {
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
-  model?: MastraLanguageModel;
-  writableStream?: WritableStream<ChunkType>;
+  model?: MastraLanguageModel | MastraLegacyLanguageModel;
+  /**
+   * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
+   */
+  outputWriter?: OutputWriter;
   requireApproval?: boolean;
   // Workflow-specific properties
   workflow?: any;
@@ -296,6 +303,19 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
   const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
+      // Check if the tool is a plain function (not a Tool instance or Vercel tool)
+      // This catches the common mistake of passing a tool factory function instead of the tool itself
+      // We need to cast to unknown first since ToolsInput doesn't include functions in its type,
+      // but users can still pass functions at runtime which causes silent failures
+      if (typeof tool === 'function' && !((tool as unknown) instanceof Tool) && !isVercelTool(tool)) {
+        throw new MastraError({
+          id: 'TOOL_INVALID_FORMAT',
+          domain: ErrorDomain.TOOL,
+          category: ErrorCategory.USER,
+          text: `Tool "${key}" is not a valid tool format. Tools must be created using createTool() or be a valid Vercel AI SDK tool. Received a function.`,
+        });
+      }
+
       if (isVercelTool(tool)) {
         acc[key] = setVercelToolProperties(tool) as VercelTool;
       } else {
@@ -333,16 +353,18 @@ export function makeCoreTool(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
 }
 
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
 }
 
 /**

@@ -7,16 +7,15 @@ description: Documentation for PinoLogger, which provides methods to record even
 
 A Logger instance is created using `new PinoLogger()` and provides methods to record events at various severity levels.
 
-When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/deployment/mastra-cloud/dashboard#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
+When deploying to Mastra Cloud, logs are displayed on the [Logs](/docs/v1/mastra-cloud/observability#logs) page. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
 ## Usage example
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
-  // ...
   logger: new PinoLogger({
     name: "Mastra",
     level: "info",
@@ -63,7 +62,7 @@ export const mastra = new Mastra({
 
 Writes structured logs to a file using the `FileTransport`. The logger accepts a plain message as the first argument and structured metadata as the second argument. These are internally converted to a `BaseLogMessage` and persisted to the configured file path.
 
-```typescript title="src/mastra/loggers/file-transport.ts" showLineNumbers copy
+```typescript title="src/mastra/loggers/file-transport.ts"
 import { FileTransport } from "@mastra/loggers/file";
 import { PinoLogger } from "@mastra/loggers/pino";
 
@@ -76,7 +75,7 @@ export const fileLogger = new PinoLogger({
 
 ### File transport usage
 
-```typescript showLineNumbers copy
+```typescript
 fileLogger.warn("Low disk space", {
   destinationPath: "system",
   type: "WORKFLOW",
@@ -87,7 +86,7 @@ fileLogger.warn("Low disk space", {
 
 Streams structured logs to a remote Redis list using the `UpstashTransport`. The logger accepts a string message and a structured metadata object. This enables centralized logging for distributed environments, supporting filtering by `destinationPath`, `type`, and `runId`.
 
-```typescript title="src/mastra/loggers/upstash-transport.ts" showLineNumbers copy
+```typescript title="src/mastra/loggers/upstash-transport.ts"
 import { UpstashTransport } from "@mastra/loggers/upstash";
 import { PinoLogger } from "@mastra/loggers/pino";
 
@@ -106,7 +105,7 @@ export const upstashLogger = new PinoLogger({
 
 ### Upstash transport usage
 
-```typescript showLineNumbers copy
+```typescript
 upstashLogger.info("User signed in", {
   destinationPath: "auth",
   type: "AGENT",
@@ -122,7 +121,7 @@ You can create custom transports using the `createCustomTransport` utility to in
 
 Creates a custom transport using `createCustomTransport` and integrates it with a third-party logging stream such as `pino-sentry-transport`. This allows forwarding logs to an external system like Sentry for advanced monitoring and observability.
 
-```typescript title="src/mastra/loggers/sentry-transport.ts" showLineNumbers copy
+```typescript title="src/mastra/loggers/sentry-transport.ts"
 import { createCustomTransport } from "@mastra/core/loggers";
 import { PinoLogger } from "@mastra/loggers/pino";
 import pinoSentry from "pino-sentry-transport";

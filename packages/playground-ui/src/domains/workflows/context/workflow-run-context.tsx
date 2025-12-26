@@ -5,6 +5,7 @@ import { useCancelWorkflowRun, useExecuteWorkflow, useStreamWorkflow } from '../
 import { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { useWorkflow, useWorkflowRunExecutionResult } from '@/hooks';
 import { TimeTravelParams } from '@mastra/client-js';
+import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
 
 export type WorkflowRunStreamResult = WorkflowStreamResult<any, any, any, any>;
 
@@ -32,11 +33,14 @@ type WorkflowRunContextType = {
     params: {
       workflowId: string;
       requestContext: Record<string, unknown>;
+      runId?: string;
     } & Omit<TimeTravelParams, 'requestContext'>,
   ) => Promise<void>;
   runSnapshot?: WorkflowRunState;
   isLoadingRunExecutionResult?: boolean;
   withoutTimeTravel?: boolean;
+  debugMode: boolean;
+  setDebugMode: Dispatch<SetStateAction<boolean>>;
 } & Omit<WorkflowTriggerProps, 'paramsRunId' | 'setRunId' | 'observeWorkflowStream'>;
 
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
@@ -60,6 +64,7 @@ export function WorkflowRunProvider({
   const [payload, setPayload] = useState<any>(() => snapshot?.context?.input ?? null);
   const [runId, setRunId] = useState<string>(() => initialRunId ?? '');
   const [isRunning, setIsRunning] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
 
   const refetchExecResultInterval = isRunning
     ? undefined
@@ -100,7 +105,7 @@ export function WorkflowRunProvider({
     closeStreamsAndReset,
     resumeWorkflowStream,
     timeTravelWorkflowStream,
-  } = useStreamWorkflow();
+  } = useStreamWorkflow({ debugMode });
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
   const clearData = () => {
@@ -160,9 +165,11 @@ export function WorkflowRunProvider({
         runSnapshot,
         isLoadingRunExecutionResult,
         withoutTimeTravel,
+        debugMode,
+        setDebugMode,
       }}
     >
-      {children}
+      <WorkflowStepDetailProvider>{children}</WorkflowStepDetailProvider>
     </WorkflowRunContext.Provider>
   );
 }

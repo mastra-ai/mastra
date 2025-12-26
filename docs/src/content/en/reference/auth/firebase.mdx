@@ -11,13 +11,12 @@ The `MastraAuthFirebase` class provides authentication for Mastra using Firebase
 
 ### Basic usage with environment variables
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -26,12 +25,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript title="src/mastra/index.ts" showLineNumbers copy
+```typescript title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account-key.json",
@@ -132,4 +130,4 @@ The `FirebaseUser` type used in the `authorizeUser` function corresponds to Fire
 
 ## Related
 
-[MastraAuthFirebase Class](/docs/v1/auth/firebase)
+[MastraAuthFirebase Class](/docs/v1/server/auth/firebase)

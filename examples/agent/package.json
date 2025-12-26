@@ -43,6 +43,7 @@
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
+    "processor-demo": "npx bun src/processor-demo.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },

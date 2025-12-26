@@ -252,18 +252,26 @@ To migrate, use `MastraDBMessage` for storage or AI SDK v5 message formats direc
 
 The `processors` config option in the Memory constructor has been deprecated and now throws an error. Processors should be configured at the Agent level instead. This change provides clearer configuration boundaries and better encapsulation.
 
-To migrate, move processor configuration from Memory to Agent.
+To migrate, move processor configuration from Memory to Agent using `inputProcessors` and/or `outputProcessors`.
 
 ```diff
++ import { TokenLimiter } from '@mastra/core/processors';
++
   const memory = new Memory({
     storage,
     vector,
     embedder,
 -   processors: [/* ... */],
   });
-  
+
   const agent = new Agent({
     memory,
-+   processors: [/* ... */],
++   inputProcessors: [
++     new TokenLimiter({ limit: 4000 }), // Limits historical messages to fit context window
++   ],
   });
 ```
+
+Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/v1/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
+
+For more information on using processors with agents, see the [Processors docs](/docs/v1/agents/processors). For a complete example with memory, see the [TokenLimiter reference](/reference/v1/processors/token-limiter-processor#extended-usage-example).

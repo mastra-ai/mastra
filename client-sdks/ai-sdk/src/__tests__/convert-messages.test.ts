@@ -123,7 +123,7 @@ describe('toAISdkFormat', () => {
             type: 'tripwire',
             runId: 'test-run-id',
             payload: {
-              tripwireReason,
+              reason: tripwireReason,
             },
           });
 
@@ -154,7 +154,7 @@ describe('toAISdkFormat', () => {
       // Verify tripwire chunk was received
       expect(tripwireChunk).toBeDefined();
       expect(tripwireChunk.type).toBe('data-tripwire');
-      expect(tripwireChunk.data.tripwireReason).toBe(tripwireReason);
+      expect(tripwireChunk.data.reason).toBe(tripwireReason);
 
       // Verify finish event was sent with finishReason 'other'
       expect(finishChunk).toBeDefined();
@@ -178,7 +178,7 @@ describe('toAISdkFormat', () => {
             type: 'tripwire',
             runId: 'test-run-id',
             payload: {
-              tripwireReason,
+              reason: tripwireReason,
             },
           });
 

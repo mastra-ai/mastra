@@ -13,7 +13,7 @@ import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
-import { normalizeUsageMetrics } from './metrics';
+import { formatUsageMetrics } from './metrics';
 
 const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
 
@@ -50,7 +50,6 @@ const DEFAULT_SPAN_TYPE = 'task';
 // Exceptions to the default mapping
 const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, string>> = {
   [SpanType.MODEL_GENERATION]: 'llm',
-  [SpanType.MODEL_CHUNK]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
@@ -274,14 +273,19 @@ export class BraintrustExporter extends BaseExporter {
       return;
     }
 
-    const logger = await initLogger({
-      projectName: this.config.projectName ?? 'mastra-tracing',
-      apiKey: this.config.apiKey,
-      appUrl: this.config.endpoint,
-      ...this.config.tuningParameters,
-    });
+    try {
+      const loggerInstance = await initLogger({
+        projectName: this.config.projectName ?? 'mastra-tracing',
+        apiKey: this.config.apiKey,
+        appUrl: this.config.endpoint,
+        ...this.config.tuningParameters,
+      });
 
-    this.initTraceMap({ logger, isExternal: false, traceId: span.traceId });
+      this.initTraceMap({ logger: loggerInstance, isExternal: false, traceId: span.traceId });
+    } catch (err) {
+      this.logger.error('Braintrust exporter: Failed to initialize logger', { error: err, traceId: span.traceId });
+      this.setDisabled('Failed to initialize Braintrust logger');
+    }
   }
 
   /**
@@ -426,7 +430,14 @@ export class BraintrustExporter extends BaseExporter {
       }
 
       // Usage/token info goes to metrics
-      payload.metrics = normalizeUsageMetrics(modelAttr);
+      payload.metrics = formatUsageMetrics(modelAttr.usage);
+
+      // Time to first token (TTFT) for streaming responses
+      // Braintrust expects TTFT in seconds (not milliseconds)
+      if (modelAttr.completionStartTime) {
+        payload.metrics.time_to_first_token =
+          (modelAttr.completionStartTime.getTime() - span.startTime.getTime()) / 1000;
+      }
 
       // Model parameters go to metadata
       if (modelAttr.parameters !== undefined) {
@@ -434,7 +445,7 @@ export class BraintrustExporter extends BaseExporter {
       }
 
       // Other LLM attributes go to metadata
-      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters']);
+      const otherAttributes = omitKeys(attributes, ['model', 'usage', 'parameters', 'completionStartTime']);
       payload.metadata = {
         ...payload.metadata,
         ...otherAttributes,

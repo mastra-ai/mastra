@@ -79,7 +79,7 @@ describe('Tracing', () => {
         expect(attributes?.['sessionId']).toBe('session-789'); // sessionId should not be redacted
       });
 
-      it('should NOT redact fields like promptTokens and totalTokens', () => {
+      it('should NOT redact fields like inputTokens and outputTokens', () => {
         const processor = new SensitiveDataFilter();
 
         const mockSpan = {
@@ -91,11 +91,10 @@ describe('Tracing', () => {
           trace: { traceId: 'trace-123' } as any,
           attributes: {
             model: 'gpt-4',
-            promptTokens: 100, // Should NOT be redacted (normalizes to "prompttokens", not "token")
-            completionTokens: 50, // Should NOT be redacted (normalizes to "completiontokens")
-            totalTokens: 150, // Should NOT be redacted (normalizes to "totaltokens")
-            prompt_tokens: 100, // Should NOT be redacted (normalizes to "prompttokens")
-            total_tokens: 150, // Should NOT be redacted (normalizes to "totaltokens")
+            inputTokens: 100, // Should NOT be redacted (normalizes to "inputtokens", not "token")
+            outputTokens: 50, // Should NOT be redacted (normalizes to "outputtokens")
+            input_tokens: 100, // Should NOT be redacted (normalizes to "inputtokens")
+            output_tokens: 50, // Should NOT be redacted (normalizes to "outputtokens")
             token: 'auth-token-123', // Should be redacted (normalizes to "token")
             authToken: 'bearer-456', // Should NOT be redacted (normalizes to "authtoken", not "token")
             api_key: 'sk-123456', // Should be redacted (normalizes to "apikey")
@@ -118,11 +117,10 @@ describe('Tracing', () => {
         const attributes = filtered!.attributes;
 
         // Check that token-related metrics are NOT redacted
-        expect(attributes?.['promptTokens']).toBe(100);
-        expect(attributes?.['completionTokens']).toBe(50);
-        expect(attributes?.['totalTokens']).toBe(150);
-        expect(attributes?.['prompt_tokens']).toBe(100);
-        expect(attributes?.['total_tokens']).toBe(150);
+        expect(attributes?.['inputTokens']).toBe(100);
+        expect(attributes?.['outputTokens']).toBe(50);
+        expect(attributes?.['input_tokens']).toBe(100);
+        expect(attributes?.['output_tokens']).toBe(50);
 
         // Check that fields that don't exactly match after normalization are NOT redacted
         expect(attributes?.['authToken']).toBe('bearer-456');
@@ -328,6 +326,45 @@ describe('Tracing', () => {
 
         // Invalid JSON should pass through unchanged
         expect(input.messages[0].content).toBe('{ email": "test@test.com" }');
+      });
+
+      it('should preserve Date objects in attributes', () => {
+        const processor = new SensitiveDataFilter();
+        const testDate = new Date('2024-01-15T10:00:00.000Z');
+
+        const mockSpan = {
+          id: 'test-span-1',
+          name: 'model-generation',
+          type: SpanType.MODEL_GENERATION,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          attributes: {
+            model: 'gpt-4',
+            completionStartTime: testDate,
+            nestedConfig: {
+              createdAt: new Date('2024-01-01'),
+              updatedAt: new Date(),
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const attributes = filtered!.attributes;
+
+        // Date objects should be preserved, not converted to {}
+        expect(attributes?.completionStartTime).toBeInstanceOf(Date);
+        expect(attributes?.completionStartTime.getTime()).toBe(testDate.getTime());
+        expect(attributes?.nestedConfig?.createdAt).toBeInstanceOf(Date);
+        expect(attributes?.nestedConfig?.updatedAt).toBeInstanceOf(Date);
+
+        // Other fields should still work
+        expect(attributes?.model).toBe('gpt-4');
       });
 
       it('should handle circular references', () => {

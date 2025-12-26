@@ -1,5 +1,4 @@
-import type { EmbeddingModelV2 } from '@ai-sdk/provider-v5';
-import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
+import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 
@@ -9,7 +8,7 @@ import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared
 import type { RequestContext } from '../request-context';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
-import type { MastraVector } from '../vector';
+import type { MastraEmbeddingModel, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -47,7 +46,7 @@ export type StorageThreadType = {
  * Memory-specific context passed via RequestContext under the 'MastraMemory' key
  * This provides processors with access to memory-related execution context
  */
-export type MemoryRuntimeContext = {
+export type MemoryRequestContext = {
   thread?: Partial<StorageThreadType> & { id: string };
   resourceId?: string;
   memoryConfig?: MemoryConfig;
@@ -55,23 +54,23 @@ export type MemoryRuntimeContext = {
 
 /**
  * Parse and validate memory runtime context from RequestContext
- * @param runtimeContext - The RequestContext to extract memory context from
- * @returns The validated MemoryRuntimeContext or null if not available
+ * @param requestContext - The RequestContext to extract memory context from
+ * @returns The validated MemoryRequestContext or null if not available
  * @throws Error if the context exists but is malformed
  */
-export function parseMemoryRuntimeContext(runtimeContext?: RequestContext): MemoryRuntimeContext | null {
-  if (!runtimeContext) {
+export function parseMemoryRequestContext(requestContext?: RequestContext): MemoryRequestContext | null {
+  if (!requestContext) {
     return null;
   }
 
-  const memoryContext = runtimeContext.get('MastraMemory');
+  const memoryContext = requestContext.get('MastraMemory');
   if (!memoryContext) {
     return null;
   }
 
   // Validate the structure
   if (typeof memoryContext !== 'object' || memoryContext === null) {
-    throw new Error(`Invalid MemoryRuntimeContext: expected object, got ${typeof memoryContext}`);
+    throw new Error(`Invalid MemoryRequestContext: expected object, got ${typeof memoryContext}`);
   }
 
   const ctx = memoryContext as Record<string, unknown>;
@@ -79,20 +78,20 @@ export function parseMemoryRuntimeContext(runtimeContext?: RequestContext): Memo
   // Validate thread if present
   if (ctx.thread !== undefined) {
     if (typeof ctx.thread !== 'object' || ctx.thread === null) {
-      throw new Error(`Invalid MemoryRuntimeContext.thread: expected object, got ${typeof ctx.thread}`);
+      throw new Error(`Invalid MemoryRequestContext.thread: expected object, got ${typeof ctx.thread}`);
     }
     const thread = ctx.thread as Record<string, unknown>;
     if (typeof thread.id !== 'string') {
-      throw new Error(`Invalid MemoryRuntimeContext.thread.id: expected string, got ${typeof thread.id}`);
+      throw new Error(`Invalid MemoryRequestContext.thread.id: expected string, got ${typeof thread.id}`);
     }
   }
 
   // Validate resourceId if present
   if (ctx.resourceId !== undefined && typeof ctx.resourceId !== 'string') {
-    throw new Error(`Invalid MemoryRuntimeContext.resourceId: expected string, got ${typeof ctx.resourceId}`);
+    throw new Error(`Invalid MemoryRequestContext.resourceId: expected string, got ${typeof ctx.resourceId}`);
   }
 
-  return memoryContext as MemoryRuntimeContext;
+  return memoryContext as MemoryRequestContext;
 }
 
 export type MessageResponse<T extends 'raw' | 'core_message'> = {
@@ -487,7 +486,7 @@ export type SharedMemoryConfig = {
    * embedder: openai.embedding("text-embedding-3-small")
    * ```
    */
-  embedder?: EmbeddingModelId | EmbeddingModel<string> | EmbeddingModelV2<string>;
+  embedder?: EmbeddingModelId | MastraEmbeddingModel<string>;
 
   /**
    * @deprecated This option is deprecated and will throw an error if used.

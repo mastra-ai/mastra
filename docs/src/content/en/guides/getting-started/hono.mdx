@@ -1,0 +1,227 @@
+---
+title: "Hono | Frameworks"
+description: "Get started with Mastra and Hono"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Integrate Mastra in your Hono project
+
+In this guide, you'll build a tool-calling AI agent using Mastra and Hono. Using the [Hono server adapter](/reference/v1/server/hono-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new Hono app (optional)
+
+If you already have a Hono app, skip to the next step.
+
+Run the following command to [create a new Hono app](https://hono.dev/docs/getting-started/basic):
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm create hono@latest mastra-hono -- --template nodejs --install --pm npm
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm create hono@latest mastra-hono --template nodejs --install --pm pnpm
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn create hono@latest mastra-hono --template nodejs --install --pm yarn
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun create hono@latest mastra-hono --template nodejs --install --pm bun
+```
+
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-hono`, but you can replace it with any name you want.
+
+## Initialize Mastra
+
+Inside your Hono project directory, run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+cd mastra-hono
+npx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+cd mastra-hono
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+cd mastra-hono
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+cd mastra-hono
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll pass the `src/mastra/index.ts` file to the Hono server adapter later.
+
+## Add server adapter
+
+Install the Hono server adapter package:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/hono@beta
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/hono@beta
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/hono@beta
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/hono@beta
+```
+
+</TabItem>
+</Tabs>
+
+Open the Hono entry file at `src/index.ts` and add the required import and initialization code:
+
+```typescript title="src/index.ts" {3-8,10-11,13}
+import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
+import {
+  type HonoBindings,
+  type HonoVariables,
+  MastraServer
+} from '@mastra/hono';
+import { mastra } from './mastra/index.js';
+
+const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+const server = new MastraServer({ app, mastra });
+
+await server.init();
+
+app.get('/', (c) => {
+  return c.text('Hello Hono!')
+})
+
+serve({
+  fetch: app.fetch,
+  port: 3000
+}, (info) => {
+  console.log(`Server is running on http://localhost:${info.port}`)
+})
+```
+
+The ⁠`MastraServer` is initialized with the existing Hono `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
+
+## Test your agent
+
+By default, Mastra's endpoints are added under the `/api` subpath and use your agent/workflow IDs. The default `weather-agent` created by `mastra init` is available at `/api/agents/weather-agent`.
+
+Start your Hono server:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm run dev
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm run dev
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn run dev
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun run dev
+```
+
+</TabItem>
+</Tabs>
+
+In a separate terminal window, use `curl` to ask the weather agent:
+
+```bash
+curl -X POST http://localhost:3000/api/agents/weather-agent/generate -H "Content-Type: application/json" -d "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather like in Seoul?\"}]}"
+```
+
+## Next steps
+
+Congratulations on building your Mastra agent with Hono! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with Hono:
+
+- [Server Adapters](/docs/v1/server/server-adapters)

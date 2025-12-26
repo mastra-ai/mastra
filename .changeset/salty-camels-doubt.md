@@ -6,7 +6,7 @@ Update agent workflow and sub-agent tool transformations to accept more input ar
 
 These tools now accept the following
 
-```
+```ts
 workflowTool.execute({ inputData, initialState }, context)
 
 agentTool.execute({ prompt, threadId, resourceId, instructions, maxSteps }, context)
@@ -14,7 +14,7 @@ agentTool.execute({ prompt, threadId, resourceId, instructions, maxSteps }, cont
 
 Workflow tools now also properly return errors when the workflow run fails
 
-```
+```ts
 const workflowResult = await workflowTool.execute({ inputData, initialState }, context)
 
 console.log(workflowResult.error) // error msg if error

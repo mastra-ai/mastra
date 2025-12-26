@@ -113,6 +113,12 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     }
     seen.add(obj);
 
+    // Preserve Date objects - they have no enumerable keys
+    // and Object.keys() returns [], which would incorrectly convert them to {}
+    if (obj instanceof Date) {
+      return obj;
+    }
+
     if (Array.isArray(obj)) {
       return obj.map(item => this.deepFilter(item, seen));
     }

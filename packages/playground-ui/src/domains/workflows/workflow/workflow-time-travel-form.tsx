@@ -23,6 +23,10 @@ const buttonClass = 'text-icon3 hover:text-icon6';
 export type WorkflowTimeTravelFormProps = {
   stepKey: string;
   closeModal: () => void;
+  isPerStepRun?: boolean;
+  isContinueRun?: boolean;
+  buttonText?: string;
+  inputData?: unknown;
 };
 
 const prettyJson = (value: unknown) => {
@@ -189,17 +193,24 @@ const JsonField = ({
   );
 };
 
-export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTravelFormProps) => {
+export const WorkflowTimeTravelForm = ({
+  stepKey,
+  closeModal,
+  isPerStepRun,
+  isContinueRun,
+  buttonText = 'Start time travel',
+  inputData,
+}: WorkflowTimeTravelFormProps) => {
   const {
     result,
     workflow,
     timeTravelWorkflowStream,
-    createWorkflowRun,
     runId: prevRunId,
     workflowId,
+    setDebugMode,
   } = useContext(WorkflowRunContext);
   const { requestContext } = usePlaygroundStore();
-  const stepResult = result?.steps?.[stepKey];
+  const stepResult = inputData ? { payload: inputData } : result?.steps?.[stepKey];
   const [resumeData, setResumeData] = useState(() => '{}');
   const [contextValue, setContextValue] = useState(() => '{}');
   const [nestedContextValue, setNestedContextValue] = useState(() => '{}');
@@ -231,10 +242,8 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
       const parsedContext = contextValue.trim() ? JSON.parse(contextValue) : {};
       const parsedNestedContext = nestedContextValue.trim() ? JSON.parse(nestedContextValue) : {};
 
-      const { runId } = await createWorkflowRun({ workflowId, prevRunId });
-
       const payload = {
-        runId,
+        runId: prevRunId,
         workflowId,
         step: stepKey,
         inputData: data,
@@ -242,7 +251,12 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
         context: Object.keys(parsedContext)?.length > 0 ? parsedContext : undefined,
         nestedStepsContext: Object.keys(parsedNestedContext)?.length > 0 ? parsedNestedContext : undefined,
         requestContext: requestContext,
+        ...(isContinueRun ? { perStep: false } : {}),
       };
+
+      if (isContinueRun) {
+        setDebugMode(false);
+      }
 
       timeTravelWorkflowStream(payload);
 
@@ -271,52 +285,56 @@ export const WorkflowTimeTravelForm = ({ stepKey, closeModal }: WorkflowTimeTrav
           schema={stepSchema}
           defaultValues={stepResult?.payload}
           isSubmitLoading={isSubmitting}
-          submitButtonLabel="Start time travel"
+          submitButtonLabel={buttonText}
           onSubmit={handleSubmit}
         >
           <div className="space-y-4 pb-4">
-            <JsonField
-              label="Resume Data (JSON)"
-              value={resumeData}
-              onChange={setResumeData}
-              helperText="Provide any resume payloads that should be passed to the step."
-            />
-            <JsonField
-              label="Context (JSON)"
-              value={contextValue}
-              onChange={setContextValue}
-              helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
-              exampleCode={prettyJson({
-                stepId: {
-                  status: 'success',
-                  payload: {
-                    value: 'test value',
-                  },
-                  output: {
-                    value: 'test output',
-                  },
-                },
-              })}
-            />
-            <JsonField
-              label="Nested Step Context (JSON)"
-              value={nestedContextValue}
-              onChange={setNestedContextValue}
-              helperText="Includes nested workflow steps that are required in the time travel execution."
-              exampleCode={prettyJson({
-                nestedWorkflowId: {
-                  stepId: {
-                    status: 'success',
-                    payload: {
-                      value: 'test value',
+            {isPerStepRun || isContinueRun ? null : (
+              <>
+                <JsonField
+                  label="Resume Data (JSON)"
+                  value={resumeData}
+                  onChange={setResumeData}
+                  helperText="Provide any resume payloads that should be passed to the step."
+                />
+                <JsonField
+                  label="Context (JSON)"
+                  value={contextValue}
+                  onChange={setContextValue}
+                  helperText="Only include top level steps (no nested workflow steps) that are required in the time travel execution."
+                  exampleCode={prettyJson({
+                    stepId: {
+                      status: 'success',
+                      payload: {
+                        value: 'test value',
+                      },
+                      output: {
+                        value: 'test output',
+                      },
                     },
-                    output: {
-                      value: 'test output',
+                  })}
+                />
+                <JsonField
+                  label="Nested Step Context (JSON)"
+                  value={nestedContextValue}
+                  onChange={setNestedContextValue}
+                  helperText="Includes nested workflow steps that are required in the time travel execution."
+                  exampleCode={prettyJson({
+                    nestedWorkflowId: {
+                      stepId: {
+                        status: 'success',
+                        payload: {
+                          value: 'test value',
+                        },
+                        output: {
+                          value: 'test output',
+                        },
+                      },
                     },
-                  },
-                },
-              })}
-            />
+                  })}
+                />
+              </>
+            )}
             {formError && (
               <Txt variant="ui-sm" className="text-accent2">
                 {formError}

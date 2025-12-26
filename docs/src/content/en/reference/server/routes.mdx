@@ -58,16 +58,43 @@ Server adapters register these routes when you call `server.init()`. All routes 
 |--------|------|-------------|
 | `GET` | `/api/workflows` | List all workflows |
 | `GET` | `/api/workflows/:workflowId` | Get workflow by ID |
+| `POST` | `/api/workflows/:workflowId/create-run` | Create a new workflow run |
+| `POST` | `/api/workflows/:workflowId/start-async` | Start workflow and await result |
 | `POST` | `/api/workflows/:workflowId/stream` | Stream workflow execution |
 | `POST` | `/api/workflows/:workflowId/resume` | Resume suspended workflow |
 | `POST` | `/api/workflows/:workflowId/resume-async` | Resume asynchronously |
 | `GET` | `/api/workflows/:workflowId/runs` | List workflow runs |
 | `GET` | `/api/workflows/:workflowId/runs/:runId` | Get specific run |
 
+### Create run request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  disableScorers?: boolean; // Disable scorers for this run
+}
+```
+
+### Start-async request body
+
+```typescript
+{
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  tracingOptions?: {
+    spanName?: string;
+    attributes?: Record<string, unknown>;
+  };
+}
+```
+
 ### Stream workflow request body
 
 ```typescript
 {
+  resourceId?: string;     // Associate run with a resource (e.g., user ID)
   inputData?: unknown;
   initialState?: unknown;
   requestContext?: Record<string, unknown>;
@@ -247,4 +274,4 @@ Common status codes:
 ## Related
 
 - [createRoute()](/reference/v1/server/create-route) - Creating custom routes
-- [Server Adapters](/docs/v1/server-db/server-adapters) - Using adapters
+- [Server Adapters](/docs/v1/server/server-adapters) - Using adapters

@@ -1,15 +1,17 @@
 import type { RequestContext } from '../../di';
+import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
 import type {
-  Emitter,
   SerializedStepFlowEntry,
   StepResult,
   RestartExecutionParams,
   TimeTravelExecutionParams,
+  WorkflowRunStatus,
 } from '../types';
+import { hydrateSerializedStepErrors } from '../utils';
 import type { WorkflowEventProcessor } from './workflow-event-processor';
 import { getStep } from './workflow-event-processor/utils';
 
@@ -54,7 +56,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       resumePayload: any;
       resumePath: number[];
     };
-    emitter: Emitter;
+    pubsub?: PubSub; // Not used - evented engine uses this.mastra.pubsub directly
     requestContext: RequestContext;
     retryConfig?: {
       attempts?: number;
@@ -62,6 +64,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     abortController: AbortController;
     format?: 'legacy' | 'vnext' | undefined;
+    perStep?: boolean;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
@@ -85,6 +88,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeData: params.resume.resumePayload,
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          perStep: params.perStep,
         },
       });
     } else if (params.timeTravel) {
@@ -102,6 +106,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: prevResult?.payload },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          perStep: params.perStep,
         },
       });
     } else {
@@ -114,11 +119,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: params.input },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          perStep: params.perStep,
         },
       });
     }
 
-    const resultData: any = await new Promise(resolve => {
+    const resultData: any = await new Promise((resolve, reject) => {
       const finishCb = async (event: Event, ack?: () => Promise<void>) => {
         if (event.runId !== params.runId) {
           await ack?.();
@@ -128,6 +134,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
         if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
           await ack?.();
           await pubsub.unsubscribe('workflows-finish', finishCb);
+          // Re-hydrate serialized errors back to Error instances when workflow fails
+          if (event.type === 'workflow.fail' && event.data.stepResults) {
+            event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
+          }
           resolve(event.data);
           return;
         }
@@ -135,36 +145,68 @@ export class EventedExecutionEngine extends ExecutionEngine {
         await ack?.();
       };
 
-      pubsub.subscribe('workflows-finish', finishCb).catch(() => {});
+      pubsub.subscribe('workflows-finish', finishCb).catch(err => {
+        this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
+        reject(err);
+      });
     });
 
+    // Build the callback argument with proper typing for invokeLifecycleCallbacks
+    let callbackArg: {
+      status: WorkflowRunStatus;
+      result?: any;
+      error?: any;
+      steps: Record<string, StepResult<any, any, any, any>>;
+    };
+
     if (resultData.prevResult.status === 'failed') {
-      return {
+      callbackArg = {
         status: 'failed',
         error: resultData.prevResult.error,
         steps: resultData.stepResults,
-      } as TOutput;
+      };
     } else if (resultData.prevResult.status === 'suspended') {
+      callbackArg = {
+        status: 'suspended',
+        steps: resultData.stepResults,
+      };
+    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+      callbackArg = {
+        status: 'paused',
+        steps: resultData.stepResults,
+      };
+    } else {
+      callbackArg = {
+        status: resultData.prevResult.status,
+        result: resultData.prevResult?.output,
+        steps: resultData.stepResults,
+      };
+    }
+
+    if (callbackArg.status !== 'paused') {
+      // Invoke lifecycle callbacks before returning
+      await this.invokeLifecycleCallbacks(callbackArg);
+    }
+
+    // Build the final result with any additional fields needed for the return type
+    let result: TOutput;
+    if (resultData.prevResult.status === 'suspended') {
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([_stepId, stepResult]: [string, any]) => {
           if (stepResult.status === 'suspended') {
             return stepResult.suspendPayload?.__workflow_meta?.path ?? [];
           }
-
           return null;
         })
         .filter(Boolean);
-      return {
-        status: 'suspended',
-        steps: resultData.stepResults,
+      result = {
+        ...callbackArg,
         suspended: suspendedSteps,
       } as TOutput;
+    } else {
+      result = callbackArg as TOutput;
     }
 
-    return {
-      status: resultData.prevResult.status,
-      result: resultData.prevResult?.output,
-      steps: resultData.stepResults,
-    } as TOutput;
+    return result;
   }
 }

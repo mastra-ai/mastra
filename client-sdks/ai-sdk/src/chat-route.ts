@@ -11,7 +11,7 @@ import { toAISdkV5Stream } from './convert-streams';
 export type ChatStreamHandlerParams<
   UI_MESSAGE extends UIMessage,
   OUTPUT extends OutputSchema = undefined,
-> = AgentExecutionOptions<OUTPUT, 'mastra'> & {
+> = AgentExecutionOptions<OUTPUT> & {
   messages: UI_MESSAGE[];
   resumeData?: Record<string, any>;
 };
@@ -20,7 +20,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extend
   mastra: Mastra;
   agentId: string;
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
   sendStart?: boolean;
   sendFinish?: boolean;
   sendReasoning?: boolean;
@@ -111,7 +111,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
 }
 
 export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
 } & (
   | {
       path: `${string}:agentId${string}`;
@@ -304,10 +304,17 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
           );
       }
 
-      if (contextRequestContext && defaultOptions?.requestContext) {
+      // Prioritize requestContext from middleware/route options over body
+      const effectiveRequestContext = contextRequestContext || defaultOptions?.requestContext || params.requestContext;
+
+      if (
+        (contextRequestContext && defaultOptions?.requestContext) ||
+        (contextRequestContext && params.requestContext) ||
+        (defaultOptions?.requestContext && params.requestContext)
+      ) {
         mastra
           .getLogger()
-          ?.warn(`"requestContext" set in the route options will be overridden by the request's "requestContext".`);
+          ?.warn(`Multiple "requestContext" sources provided. Using priority: middleware > route options > body.`);
       }
 
       if (!agentToUse) {
@@ -319,7 +326,7 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         agentId: agentToUse,
         params: {
           ...params,
-          requestContext: contextRequestContext || params.requestContext,
+          requestContext: effectiveRequestContext,
         },
         defaultOptions,
         sendStart,

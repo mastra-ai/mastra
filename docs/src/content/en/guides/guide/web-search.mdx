@@ -140,7 +140,7 @@ Setup the tool:
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy title="src/mastra/index.ts" {2, 5}
+```ts title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { searchAgent } from "./agents/searchAgent";
 
@@ -155,7 +155,7 @@ export const mastra = new Mastra({
 
 You can test your agent with [Studio](/docs/v1/getting-started/studio) using the `mastra dev` command:
 
-```bash copy
+```bash
 mastra dev
 ```
 
@@ -175,7 +175,7 @@ For more control over search behavior, you can integrate external search APIs as
 
 Install dependencies
 
-```bash copy
+```bash
 npm install exa-js
 ```
 
@@ -185,7 +185,7 @@ npm install exa-js
 
 Create a new file `src/mastra/agents/searchAgent.ts` and define your agent:
 
-```ts copy title="src/mastra/agents/searchAgent.ts"
+```ts title="src/mastra/agents/searchAgent.ts"
 import { Agent } from "@mastra/core/agent";
 
 export const searchAgent = new Agent({
@@ -203,7 +203,7 @@ export const searchAgent = new Agent({
 
 Setup the tool
 
-```ts copy title="src/mastra/tools/searchTool.ts"
+```ts title="src/mastra/tools/searchTool.ts"
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import Exa from "exa-js";
@@ -246,7 +246,7 @@ export const webSearch = createTool({
 
 Add to your Agent
 
-```ts copy title="src/mastra/agents/searchAgent.ts"
+```ts title="src/mastra/agents/searchAgent.ts"
 import { webSearch } from "./tools/searchTool";
 
 export const searchAgent = new Agent({
@@ -267,7 +267,7 @@ export const searchAgent = new Agent({
 
 In your `src/mastra/index.ts` file, register the agent:
 
-```ts copy title="src/mastra/index.ts" {2, 5}
+```ts title="src/mastra/index.ts" {2, 5}
 import { Mastra } from "@mastra/core";
 import { searchAgent } from "./agents/searchAgent";
 
@@ -282,7 +282,7 @@ export const mastra = new Mastra({
 
 You can test your agent with [Studio](/docs/v1/getting-started/studio) using the `mastra dev` command:
 
-```bash copy
+```bash
 mastra dev
 ```
 

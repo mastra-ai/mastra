@@ -13,10 +13,12 @@ import type {
   TraceState,
   IModelSpanTracker,
   AIModelGenerationSpan,
+  EntityType,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
+import { deepClean } from './serialization';
 
 /**
  * Determines if a span type should be considered internal based on flags.
@@ -126,6 +128,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public metadata?: Record<string, any>;
   public tags?: string[];
   public traceState?: TraceState;
+  /** Entity type that created the span (e.g., agent, workflow) */
+  public entityType?: EntityType;
+  /** Entity ID that created the span */
+  public entityId?: string;
+  /** Entity name that created the span */
+  public entityName?: string;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
 
@@ -142,6 +150,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
+    // Entity identification
+    this.entityType = options.entityType;
+    this.entityId = options.entityId;
+    this.entityName = options.entityName;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -225,6 +237,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       traceId: this.traceId,
       name: this.name,
       type: this.type,
+      entityType: this.entityType,
+      entityId: this.entityId,
+      entityName: this.entityName,
       attributes: this.attributes,
       metadata: this.metadata,
       startTime: this.startTime,
@@ -271,75 +286,4 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
     return fn();
   }
-}
-
-const DEFAULT_KEYS_TO_STRIP = new Set([
-  'logger',
-  'experimental_providerMetadata',
-  'providerMetadata',
-  'steps',
-  'tracingContext',
-]);
-export interface DeepCleanOptions {
-  keysToStrip?: Set<string>;
-  maxDepth?: number;
-}
-
-/**
- * Recursively cleans a value by removing circular references and stripping problematic or sensitive keys.
- * Circular references are replaced with "[Circular]". Unserializable values are replaced with error messages.
- * Keys like "logger" and "tracingContext" are stripped by default.
- * A maximum recursion depth is enforced to avoid stack overflow or excessive memory usage.
- *
- * @param value - The value to clean (object, array, primitive, etc.)
- * @param options - Optional configuration:
- *   - keysToStrip: Set of keys to remove from objects (default: logger, tracingContext)
- *   - maxDepth: Maximum recursion depth before values are replaced with "[MaxDepth]" (default: 10)
- * @returns A cleaned version of the input with circular references, specified keys, and overly deep values handled
- */
-export function deepClean(
-  value: any,
-  options: DeepCleanOptions = {},
-  _seen: WeakSet<any> = new WeakSet(),
-  _depth: number = 0,
-): any {
-  const { keysToStrip = DEFAULT_KEYS_TO_STRIP, maxDepth = 10 } = options;
-
-  if (_depth > maxDepth) {
-    return '[MaxDepth]';
-  }
-
-  if (value === null || typeof value !== 'object') {
-    try {
-      JSON.stringify(value);
-      return value;
-    } catch (error) {
-      return `[${error instanceof Error ? error.message : String(error)}]`;
-    }
-  }
-
-  if (_seen.has(value)) {
-    return '[Circular]';
-  }
-
-  _seen.add(value);
-
-  if (Array.isArray(value)) {
-    return value.map(item => deepClean(item, options, _seen, _depth + 1));
-  }
-
-  const cleaned: Record<string, any> = {};
-  for (const [key, val] of Object.entries(value)) {
-    if (keysToStrip.has(key)) {
-      continue;
-    }
-
-    try {
-      cleaned[key] = deepClean(val, options, _seen, _depth + 1);
-    } catch (error) {
-      cleaned[key] = `[${error instanceof Error ? error.message : String(error)}]`;
-    }
-  }
-
-  return cleaned;
 }

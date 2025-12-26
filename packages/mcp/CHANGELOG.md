@@ -1,5 +1,45 @@
 # @mastra/mcp
 
+## 1.0.0-beta.7
+
+### Patch Changes
+
+- Add support for `instructions` field in MCPServer ([#11421](https://github.com/mastra-ai/mastra/pull/11421))
+
+  Implements the official MCP specification's `instructions` field, which allows MCP servers to provide system-wide prompts that are automatically sent to clients during initialization. This eliminates the need for per-project configuration files (like AGENTS.md) by centralizing the system prompt in the server definition.
+
+  **What's New:**
+  - Added `instructions` optional field to `MCPServerConfig` type
+  - Instructions are passed to the underlying MCP SDK Server during initialization
+  - Instructions are sent to clients in the `InitializeResult` response
+  - Fully compatible with all MCP clients (Cursor, Windsurf, Claude Desktop, etc.)
+
+  **Example Usage:**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'GitHub MCP Server',
+    version: '1.0.0',
+    instructions:
+      'Use the available tools to help users manage GitHub repositories, issues, and pull requests. Always search before creating to avoid duplicates.',
+    tools: { searchIssues, createIssue, listPRs },
+  });
+  ```
+
+- Updated dependencies [[`3d93a15`](https://github.com/mastra-ai/mastra/commit/3d93a15796b158c617461c8b98bede476ebb43e2), [`efe406a`](https://github.com/mastra-ai/mastra/commit/efe406a1353c24993280ebc2ed61dd9f65b84b26), [`119e5c6`](https://github.com/mastra-ai/mastra/commit/119e5c65008f3e5cfca954eefc2eb85e3bf40da4), [`74e504a`](https://github.com/mastra-ai/mastra/commit/74e504a3b584eafd2f198001c6a113bbec589fd3), [`e33fdbd`](https://github.com/mastra-ai/mastra/commit/e33fdbd07b33920d81e823122331b0c0bee0bb59), [`929f69c`](https://github.com/mastra-ai/mastra/commit/929f69c3436fa20dd0f0e2f7ebe8270bd82a1529), [`8a73529`](https://github.com/mastra-ai/mastra/commit/8a73529ca01187f604b1f3019d0a725ac63ae55f)]:
+  - @mastra/core@1.0.0-beta.16
+
+## 1.0.0-beta.6
+
+### Patch Changes
+
+- Add "Not connected" error detection to MCP auto-reconnection ([#10994](https://github.com/mastra-ai/mastra/pull/10994))
+
+  Enhanced the MCPClient auto-reconnection feature to also detect and handle "Not connected" protocol errors. When the MCP SDK's transport layer throws this error (typically when the connection is in a disconnected state), the client will now automatically reconnect and retry the operation.
+
+- Updated dependencies [[`72df8ae`](https://github.com/mastra-ai/mastra/commit/72df8ae595584cdd7747d5c39ffaca45e4507227), [`9198899`](https://github.com/mastra-ai/mastra/commit/91988995c427b185c33714b7f3be955367911324), [`653e65a`](https://github.com/mastra-ai/mastra/commit/653e65ae1f9502c2958a32f47a5a2df11e612a92), [`c6fd6fe`](https://github.com/mastra-ai/mastra/commit/c6fd6fedd09e9cf8004b03a80925f5e94826ad7e), [`0bed332`](https://github.com/mastra-ai/mastra/commit/0bed332843f627202c6520eaf671771313cd20f3)]:
+  - @mastra/core@1.0.0-beta.9
+
 ## 1.0.0-beta.5
 
 ### Minor Changes

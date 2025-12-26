@@ -76,7 +76,7 @@ await thread.delete();
 Save messages to memory:
 
 ```typescript
-const savedMessages = await mastraClient.saveMessageToMemory({
+const result = await mastraClient.saveMessageToMemory({
   messages: [
     {
       role: "user",
@@ -90,6 +90,9 @@ const savedMessages = await mastraClient.saveMessageToMemory({
   ],
   agentId: "agent-1",
 });
+
+// result.messages contains the saved messages
+console.log(result.messages);
 ```
 
 ### Retrieve Thread Messages

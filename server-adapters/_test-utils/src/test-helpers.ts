@@ -41,8 +41,6 @@ export interface AdapterTestContext {
   tools?: Record<string, Tool>;
   taskStore?: InMemoryTaskStore;
   customRouteAuthConfig?: Map<string, boolean>;
-  playground?: boolean;
-  isDev?: boolean;
 }
 
 /**
@@ -251,6 +249,10 @@ const createMockWorkflowStream = () => {
  * This provides everything needed for adapter integration tests.
  */
 export async function createDefaultTestContext(): Promise<AdapterTestContext> {
+  // Mock OPENAI_API_KEY so that isProviderConnected('openai') returns true
+  // This is needed for routes like ENHANCE_INSTRUCTIONS_ROUTE that check provider connectivity
+  vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
+
   // Create memory and pre-populate with test thread
   const memory = createMockMemory();
   await memory.createThread({
@@ -268,6 +270,17 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Create test agent with memory and mocks
   const agent = createTestAgent({ name: 'test-agent', memory });
   mockAgentMethods(agent);
+
+  // Mock Agent.prototype.generate for routes that create new Agent instances
+  // (e.g., ENHANCE_INSTRUCTIONS_ROUTE creates a systemPromptAgent)
+  // This needs to return both text and object for different use cases
+  vi.spyOn(Agent.prototype, 'generate').mockResolvedValue({
+    text: 'test response',
+    object: {
+      explanation: 'Enhanced the instructions for clarity and specificity.',
+      new_prompt: 'You are a helpful assistant with enhanced instructions.',
+    },
+  } as any);
 
   // Create test workflow with mocks
   const workflow = createTestWorkflow({ id: 'test-workflow' });
@@ -405,23 +418,34 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Add test trace by creating a span with that traceId
   const storage = mastra.getStorage();
   if (storage) {
-    await storage.createSpan({
-      spanId: 'test-span-1',
-      traceId: 'test-trace',
-      parentSpanId: null,
-      name: 'test-span',
-      scope: null,
-      spanType: SpanType.GENERIC,
-      attributes: {},
-      metadata: null,
-      links: null,
-      startedAt: new Date(),
-      endedAt: new Date(),
-      input: null,
-      output: null,
-      error: null,
-      isEvent: false,
-    });
+    const observability = await storage.getStore('observability');
+    if (observability) {
+      await observability.createSpan({
+        span: {
+          spanId: 'test-span-1',
+          traceId: 'test-trace',
+          name: 'test-span',
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          isEvent: false,
+        },
+      });
+    }
+
+    // Add test stored agent for stored agents routes
+    const agents = await storage.getStore('agents');
+    if (agents) {
+      await agents.createAgent({
+        agent: {
+          id: 'test-stored-agent',
+          name: 'Test Stored Agent',
+          description: 'A test stored agent for integration tests',
+          instructions: 'Test instructions for stored agent',
+          model: { provider: 'openai', name: 'gpt-4o' },
+        },
+      });
+    }
   }
 
   return {
