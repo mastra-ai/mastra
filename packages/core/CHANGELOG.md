@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.0.0-beta.18
+
+### Patch Changes
+
+- Fixed semantic recall fetching all thread messages instead of only matched ones. ([#11435](https://github.com/mastra-ai/mastra/pull/11435))
+
+  When using `semanticRecall` with `scope: 'thread'`, the processor was incorrectly fetching all messages from the thread instead of just the semantically matched messages with their context. This caused memory to return far more messages than expected when `topK` and `messageRange` were set to small values.
+
+  Fixes #11428
+
 ## 1.0.0-beta.17
 
 ### Patch Changes
