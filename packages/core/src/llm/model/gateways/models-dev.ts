@@ -99,8 +99,11 @@ export class ModelsDevGateway extends MastraModelGateway {
 
       if (isOpenAICompatible || hasInstalledPackage || hasApiAndEnv) {
         // Get model IDs from the models object
-        const modelIds = Object.keys(providerInfo.models).sort();
-
+        const modelIds = Object.entries(providerInfo.models)
+          .filter(([, modelInfo]) => modelInfo?.status !== 'deprecated')
+          .map(([modelId]) => modelId)
+          .sort();
+          
         // Get the API URL from the provider info or overrides
         const url = providerInfo.api || OPENAI_COMPATIBLE_OVERRIDES[normalizedId]?.url;
 

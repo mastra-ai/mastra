@@ -127,6 +127,34 @@ describe('ModelsDevGateway', () => {
       expect(providers['fireworks-ai'].apiKeyEnvVar).toBe('FIREWORKS_API_KEY');
     });
 
+    it('should filter out deprecated models', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          groq: {
+            id: 'groq',
+            name: 'Groq',
+            models: {
+              'llama-3.1-8b': { name: 'Llama 3.1 8B' },
+              'deepseek-r1-distill-llama-70b': {
+                name: 'DeepSeek R1 Distill LLaMA 70B',
+                status: 'deprecated',
+              },
+            },
+            env: ['GROQ_API_KEY'],
+            api: 'https://api.groq.com/openai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.groq).toBeDefined();
+      expect(providers.groq.models).toEqual(['llama-3.1-8b']);
+      expect(providers.groq.models).not.toContain('deepseek-r1-distill-llama-70b');
+    });
+    
     it('should extract model IDs from each provider', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
