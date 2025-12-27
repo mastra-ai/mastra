@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.0.0-beta.19
+
+### Patch Changes
+
+- Fixed an issue where deprecated Groq models were shown during template creation. The model selection now filters out models marked as deprecated, displaying only active and supported models. ([#11445](https://github.com/mastra-ai/mastra/pull/11445))
+
 ## 1.0.0-beta.18
 
 ### Patch Changes
