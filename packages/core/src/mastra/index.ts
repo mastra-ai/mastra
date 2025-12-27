@@ -28,6 +28,7 @@ import type { ToolAction } from '../tools';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
+import type { MastraKnowledge } from '../knowledge';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
@@ -209,6 +210,26 @@ export interface Config<
   memory?: TMemory;
 
   /**
+   * Knowledge instance for document storage and retrieval.
+   * Supports vector search, BM25 keyword search, and hybrid search.
+   * Processors like RetrievedKnowledge can inherit this instance from Mastra.
+   *
+   * @example
+   * ```typescript
+   * import { Knowledge } from '@mastra/knowledge';
+   *
+   * const mastra = new Mastra({
+   *   knowledge: new Knowledge({
+   *     id: 'support-docs',
+   *     storage: new FilesystemStorage({ basePath: './docs' }),
+   *     bm25: true,
+   *   }),
+   * });
+   * ```
+   */
+  knowledge?: MastraKnowledge;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -278,6 +299,7 @@ export class Mastra<
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
 > {
   #vectors?: TVectors;
+  #knowledge?: MastraKnowledge;
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
@@ -294,6 +316,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #memory?: TMemory;
+  // Note: #knowledge is declared above with #vectors
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -485,6 +508,7 @@ export class Mastra<
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
+    this.#knowledge = undefined;
     this.#mcpServers = {} as TMCPServers;
     this.#tts = {} as TTTS;
     this.#agents = {} as TAgents;
@@ -529,6 +553,10 @@ export class Mastra<
           this.addVector(vector, key);
         }
       });
+    }
+
+    if (config?.knowledge) {
+      this.#knowledge = config.knowledge;
     }
 
     if (config?.scorers) {
@@ -1370,6 +1398,37 @@ export class Mastra<
     return this.listVectors();
   }
 
+  // ============================================================================
+  // Knowledge Management
+  // ============================================================================
+
+  /**
+   * Returns the registered knowledge instance.
+   *
+   * @returns The knowledge instance or undefined if none is registered
+   *
+   * @example
+   * ```typescript
+   * import { Knowledge } from '@mastra/knowledge';
+   *
+   * const mastra = new Mastra({
+   *   knowledge: new Knowledge({
+   *     id: 'support-docs',
+   *     storage: new FilesystemStorage({ basePath: './docs' }),
+   *     bm25: true,
+   *   }),
+   * });
+   *
+   * const knowledge = mastra.getKnowledge();
+   * if (knowledge) {
+   *   const results = await knowledge.search('default', 'password reset', { mode: 'bm25' });
+   * }
+   * ```
+   */
+  public getKnowledge(): MastraKnowledge | undefined {
+    return this.#knowledge;
+  }
+
   /**
    * Gets the currently configured deployment provider.
    *
@@ -2043,6 +2102,11 @@ export class Mastra<
       const logger = this.getLogger();
       logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
+    }
+
+    // Register Mastra with the processor if it supports it
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;

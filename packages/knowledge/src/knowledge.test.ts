@@ -9,6 +9,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Knowledge, STATIC_PREFIX } from './knowledge';
 import { FilesystemStorage } from './storage';
 
+// Default namespace used in tests
+const NS = 'default';
+
 describe('Knowledge', () => {
   let testDir: string;
   let knowledge: Knowledge;
@@ -17,7 +20,8 @@ describe('Knowledge', () => {
     testDir = join(tmpdir(), `knowledge-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
     });
   });
 
@@ -33,9 +37,10 @@ describe('Knowledge', () => {
         content: 'Hello, World!',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
-      const content = await readFile(join(testDir, 'hello.txt'), 'utf8');
+      // Files are now stored in namespace subdirectory
+      const content = await readFile(join(testDir, NS, 'hello.txt'), 'utf8');
       expect(content).toBe('Hello, World!');
     });
 
@@ -46,9 +51,9 @@ describe('Knowledge', () => {
         content: JSON.stringify({ foo: 'bar' }),
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
-      const content = await readFile(join(testDir, 'data.json'), 'utf8');
+      const content = await readFile(join(testDir, NS, 'data.json'), 'utf8');
       expect(JSON.parse(content)).toEqual({ foo: 'bar' });
     });
 
@@ -59,9 +64,9 @@ describe('Knowledge', () => {
         content: Buffer.from([0x00, 0x01, 0x02, 0x03]),
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
-      const content = await readFile(join(testDir, 'binary.bin'));
+      const content = await readFile(join(testDir, NS, 'binary.bin'));
       expect(content).toEqual(Buffer.from([0x00, 0x01, 0x02, 0x03]));
     });
 
@@ -76,9 +81,9 @@ describe('Knowledge', () => {
         mimeType: 'image/png',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
-      const content = await readFile(join(testDir, 'image.png'));
+      const content = await readFile(join(testDir, NS, 'image.png'));
       expect(content).toEqual(pngBuffer);
     });
 
@@ -89,9 +94,9 @@ describe('Knowledge', () => {
         content: 'Nested content',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
-      const content = await readFile(join(testDir, 'nested/path/to/file.txt'), 'utf8');
+      const content = await readFile(join(testDir, NS, 'nested/path/to/file.txt'), 'utf8');
       expect(content).toBe('Nested content');
     });
 
@@ -108,10 +113,10 @@ describe('Knowledge', () => {
         content: 'Updated content',
       };
 
-      await knowledge.add(artifact1);
-      await knowledge.add(artifact2);
+      await knowledge.add(NS, artifact1);
+      await knowledge.add(NS, artifact2);
 
-      const content = await readFile(join(testDir, 'overwrite.txt'), 'utf8');
+      const content = await readFile(join(testDir, NS, 'overwrite.txt'), 'utf8');
       expect(content).toBe('Updated content');
     });
   });
@@ -119,24 +124,24 @@ describe('Knowledge', () => {
   describe('getStatic', () => {
     it('should return artifacts from static/ prefix', async () => {
       // Add static artifacts
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: `${STATIC_PREFIX}/policy.txt`,
         content: 'Company policy here',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: `${STATIC_PREFIX}/rules.txt`,
         content: 'Business rules here',
       });
       // Add non-static artifact
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/manual.txt',
         content: 'User manual',
       });
 
-      const staticArtifacts = await knowledge.getStatic();
+      const staticArtifacts = await knowledge.getStatic(NS);
 
       expect(staticArtifacts).toHaveLength(2);
       expect(staticArtifacts.map(a => a.key)).toContain(`${STATIC_PREFIX}/policy.txt`);
@@ -145,13 +150,13 @@ describe('Knowledge', () => {
     });
 
     it('should return empty array when no static artifacts exist', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/manual.txt',
         content: 'User manual',
       });
 
-      const staticArtifacts = await knowledge.getStatic();
+      const staticArtifacts = await knowledge.getStatic(NS);
 
       expect(staticArtifacts).toHaveLength(0);
     });
@@ -159,11 +164,11 @@ describe('Knowledge', () => {
 
   describe('list with prefix', () => {
     it('should list artifacts with given prefix', async () => {
-      await knowledge.add({ type: 'text', key: 'docs/a.txt', content: 'A' });
-      await knowledge.add({ type: 'text', key: 'docs/b.txt', content: 'B' });
-      await knowledge.add({ type: 'text', key: 'other/c.txt', content: 'C' });
+      await knowledge.add(NS, { type: 'text', key: 'docs/a.txt', content: 'A' });
+      await knowledge.add(NS, { type: 'text', key: 'docs/b.txt', content: 'B' });
+      await knowledge.add(NS, { type: 'text', key: 'other/c.txt', content: 'C' });
 
-      const docsKeys = await knowledge.list('docs');
+      const docsKeys = await knowledge.list(NS, 'docs');
 
       expect(docsKeys).toHaveLength(2);
       expect(docsKeys).toContain('docs/a.txt');
@@ -171,12 +176,42 @@ describe('Knowledge', () => {
     });
 
     it('should list all artifacts when no prefix given', async () => {
-      await knowledge.add({ type: 'text', key: 'docs/a.txt', content: 'A' });
-      await knowledge.add({ type: 'text', key: 'other/b.txt', content: 'B' });
+      await knowledge.add(NS, { type: 'text', key: 'docs/a.txt', content: 'A' });
+      await knowledge.add(NS, { type: 'text', key: 'other/b.txt', content: 'B' });
 
-      const allKeys = await knowledge.list();
+      const allKeys = await knowledge.list(NS);
 
       expect(allKeys).toHaveLength(2);
+    });
+  });
+
+  describe('namespace management', () => {
+    it('should create namespace when adding artifacts', async () => {
+      await knowledge.add('new-namespace', { type: 'text', key: 'file.txt', content: 'Content' });
+
+      const exists = await knowledge.hasNamespace('new-namespace');
+      expect(exists).toBe(true);
+    });
+
+    it('should list namespaces', async () => {
+      await knowledge.createNamespace({ namespace: 'ns1' });
+      await knowledge.createNamespace({ namespace: 'ns2', description: 'Second namespace' });
+
+      const namespaces = await knowledge.listNamespaces();
+
+      expect(namespaces.length).toBeGreaterThanOrEqual(2);
+      expect(namespaces.find(ns => ns.namespace === 'ns1')).toBeDefined();
+      expect(namespaces.find(ns => ns.namespace === 'ns2')?.description).toBe('Second namespace');
+    });
+
+    it('should delete namespace', async () => {
+      await knowledge.createNamespace({ namespace: 'to-delete' });
+      await knowledge.add('to-delete', { type: 'text', key: 'file.txt', content: 'Content' });
+
+      await knowledge.deleteNamespace('to-delete');
+
+      const exists = await knowledge.hasNamespace('to-delete');
+      expect(exists).toBe(false);
     });
   });
 });
@@ -186,7 +221,9 @@ describe('Knowledge with indexing', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'knowledge_index';
+  const indexPrefix = 'knowledge_index';
+  // The actual index name will be indexPrefix_NS (e.g., knowledge_index_default)
+  const indexName = `${indexPrefix}_${NS}`;
   const dimension = 3;
 
   // Simple mock embedder that returns predictable vectors based on content
@@ -211,14 +248,16 @@ describe('Knowledge with indexing', () => {
       id: 'knowledge-test',
     });
 
+    // Create index with the namespaced name
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder: mockEmbedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
     });
   });
@@ -240,7 +279,7 @@ describe('Knowledge with indexing', () => {
         content: 'This is indexed content',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
       // Query the vector store to verify indexing
       const queryVector = await mockEmbedder(artifact.content);
@@ -263,7 +302,7 @@ describe('Knowledge with indexing', () => {
         content: 'Static policy content',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
       // Query the vector store - should not find it
       const queryVector = await mockEmbedder(artifact.content);
@@ -284,10 +323,10 @@ describe('Knowledge with indexing', () => {
         content: 'This should not be indexed',
       };
 
-      await knowledge.add(artifact, { skipIndex: true });
+      await knowledge.add(NS, artifact, { skipIndex: true });
 
       // File should exist
-      const content = await readFile(join(testDir, 'not-indexed.txt'), 'utf8');
+      const content = await readFile(join(testDir, NS, 'not-indexed.txt'), 'utf8');
       expect(content).toBe('This should not be indexed');
 
       // But should not be in vector store
@@ -311,7 +350,7 @@ describe('Knowledge with indexing', () => {
         content: 'Content to delete',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
       // Verify it exists
       const queryVector = await mockEmbedder(artifact.content);
@@ -319,10 +358,10 @@ describe('Knowledge with indexing', () => {
       expect(results.find(r => r.id === 'to-delete.txt')).toBeDefined();
 
       // Delete
-      await knowledge.delete('to-delete.txt');
+      await knowledge.delete(NS, 'to-delete.txt');
 
       // Verify removed from storage
-      await expect(knowledge.get('to-delete.txt')).rejects.toThrow();
+      await expect(knowledge.get(NS, 'to-delete.txt')).rejects.toThrow();
 
       // Verify removed from index
       results = await vectorStore.query({ indexName, queryVector, topK: 10 });
@@ -333,19 +372,19 @@ describe('Knowledge with indexing', () => {
   describe('search', () => {
     it('should search for indexed artifacts by semantic similarity', async () => {
       // Add some documents - our mock embedder gives high scores to matching keywords
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password-reset.txt',
         content: 'To reset your password, go to Settings and click Reset Password.',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/billing.txt',
         content: 'To update your billing information, go to Account Settings.',
       });
 
       // Search for password-related content
-      const results = await knowledge.search('password reset');
+      const results = await knowledge.search(NS, 'password reset');
 
       expect(results.length).toBeGreaterThan(0);
       // The password-reset doc should be found (it contains "password" and "reset")
@@ -357,31 +396,31 @@ describe('Knowledge with indexing', () => {
 
     it('should respect topK limit', async () => {
       // Add multiple documents
-      await knowledge.add({ type: 'text', key: 'doc1.txt', content: 'Document one content' });
-      await knowledge.add({ type: 'text', key: 'doc2.txt', content: 'Document two content' });
-      await knowledge.add({ type: 'text', key: 'doc3.txt', content: 'Document three content' });
-      await knowledge.add({ type: 'text', key: 'doc4.txt', content: 'Document four content' });
-      await knowledge.add({ type: 'text', key: 'doc5.txt', content: 'Document five content' });
+      await knowledge.add(NS, { type: 'text', key: 'doc1.txt', content: 'Document one content' });
+      await knowledge.add(NS, { type: 'text', key: 'doc2.txt', content: 'Document two content' });
+      await knowledge.add(NS, { type: 'text', key: 'doc3.txt', content: 'Document three content' });
+      await knowledge.add(NS, { type: 'text', key: 'doc4.txt', content: 'Document four content' });
+      await knowledge.add(NS, { type: 'text', key: 'doc5.txt', content: 'Document five content' });
 
-      const results = await knowledge.search('document content', { topK: 2 });
+      const results = await knowledge.search(NS, 'document content', { topK: 2 });
 
       expect(results.length).toBeLessThanOrEqual(2);
     });
 
     it('should filter results by minScore', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'relevant.txt',
         content: 'Very relevant matching content',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'irrelevant.txt',
         content: 'Completely different unrelated text',
       });
 
       // With a high minScore threshold, should only get highly relevant results
-      const results = await knowledge.search('relevant matching', { minScore: 0.9 });
+      const results = await knowledge.search(NS, 'relevant matching', { minScore: 0.9 });
 
       // Results should only contain items above the threshold
       for (const result of results) {
@@ -391,24 +430,25 @@ describe('Knowledge with indexing', () => {
 
     it('should throw error when no search is configured', async () => {
       const knowledgeWithoutIndex = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'no-index',
+        storage: new FilesystemStorage({ basePath: testDir }),
       });
 
-      await expect(knowledgeWithoutIndex.search('test query')).rejects.toThrow(
+      await expect(knowledgeWithoutIndex.search(NS, 'test query')).rejects.toThrow(
         'Knowledge search requires either index or bm25 configuration',
       );
     });
 
     it('should return empty array when no results match', async () => {
       // Add some documents
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'Some content about topic A',
       });
 
       // Search with very high minScore that won't match
-      const results = await knowledge.search('completely different topic', { minScore: 0.99 });
+      const results = await knowledge.search(NS, 'completely different topic', { minScore: 0.99 });
 
       // May return empty or low-score results filtered out
       expect(results.every(r => r.score >= 0.99)).toBe(true);
@@ -416,6 +456,7 @@ describe('Knowledge with indexing', () => {
 
     it('should include metadata in search results', async () => {
       await knowledge.add(
+        NS,
         {
           type: 'text',
           key: 'docs/guide.txt',
@@ -429,7 +470,7 @@ describe('Knowledge with indexing', () => {
         },
       );
 
-      const results = await knowledge.search('user guide');
+      const results = await knowledge.search(NS, 'user guide');
 
       expect(results.length).toBeGreaterThan(0);
       const result = results.find(r => r.key === 'docs/guide.txt');
@@ -445,7 +486,8 @@ describe('Knowledge with indexing', () => {
 
     it('should return false when index is not configured', () => {
       const knowledgeWithoutIndex = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'no-index',
+        storage: new FilesystemStorage({ basePath: testDir }),
       });
       expect(knowledgeWithoutIndex.canSearch).toBe(false);
     });
@@ -461,7 +503,8 @@ describe('Knowledge with BM25', () => {
     await mkdir(testDir, { recursive: true });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       bm25: true, // Enable BM25 with default config
     });
   });
@@ -472,23 +515,23 @@ describe('Knowledge with BM25', () => {
 
   describe('BM25 search', () => {
     it('should find documents by keyword matching', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password-reset.txt',
         content: 'To reset your password, go to Settings and click Reset Password button.',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/billing.txt',
         content: 'To update your billing information, go to Account Settings.',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/account.txt',
         content: 'Your account settings can be managed from the dashboard.',
       });
 
-      const results = await knowledge.search('password reset', { mode: 'bm25' });
+      const results = await knowledge.search(NS, 'password reset', { mode: 'bm25' });
 
       expect(results.length).toBeGreaterThan(0);
       // Password reset doc should be first (contains both terms)
@@ -497,46 +540,46 @@ describe('Knowledge with BM25', () => {
     });
 
     it('should respect topK limit', async () => {
-      await knowledge.add({ type: 'text', key: 'doc1.txt', content: 'Search term appears here' });
-      await knowledge.add({ type: 'text', key: 'doc2.txt', content: 'Search term also here' });
-      await knowledge.add({ type: 'text', key: 'doc3.txt', content: 'Another search term document' });
-      await knowledge.add({ type: 'text', key: 'doc4.txt', content: 'More search term content' });
+      await knowledge.add(NS, { type: 'text', key: 'doc1.txt', content: 'Search term appears here' });
+      await knowledge.add(NS, { type: 'text', key: 'doc2.txt', content: 'Search term also here' });
+      await knowledge.add(NS, { type: 'text', key: 'doc3.txt', content: 'Another search term document' });
+      await knowledge.add(NS, { type: 'text', key: 'doc4.txt', content: 'More search term content' });
 
-      const results = await knowledge.search('search term', { mode: 'bm25', topK: 2 });
+      const results = await knowledge.search(NS, 'search term', { mode: 'bm25', topK: 2 });
 
       expect(results.length).toBe(2);
     });
 
     it('should handle queries with no matches', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'This document talks about apples and oranges.',
       });
 
-      const results = await knowledge.search('javascript programming', { mode: 'bm25' });
+      const results = await knowledge.search(NS, 'javascript programming', { mode: 'bm25' });
 
       expect(results.length).toBe(0);
     });
 
     it('should rank documents by relevance', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'highly-relevant.txt',
         content: 'Machine learning machine learning machine learning is great',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'somewhat-relevant.txt',
         content: 'Machine learning is a topic in computer science',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'barely-relevant.txt',
         content: 'Learning about machines can be interesting',
       });
 
-      const results = await knowledge.search('machine learning', { mode: 'bm25' });
+      const results = await knowledge.search(NS, 'machine learning', { mode: 'bm25' });
 
       expect(results.length).toBeGreaterThanOrEqual(2);
       // Higher term frequency should score higher
@@ -544,18 +587,18 @@ describe('Knowledge with BM25', () => {
     });
 
     it('should NOT index static artifacts', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'static/policy.txt',
         content: 'This is a static policy document about passwords',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password.txt',
         content: 'Password documentation',
       });
 
-      const results = await knowledge.search('password', { mode: 'bm25' });
+      const results = await knowledge.search(NS, 'password', { mode: 'bm25' });
 
       // Should only find the non-static document
       expect(results.find(r => r.key === 'static/policy.txt')).toBeUndefined();
@@ -563,21 +606,21 @@ describe('Knowledge with BM25', () => {
     });
 
     it('should remove documents from BM25 index when deleted', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'to-delete.txt',
         content: 'Unique searchable content here',
       });
 
       // Verify it's searchable
-      let results = await knowledge.search('unique searchable', { mode: 'bm25' });
+      let results = await knowledge.search(NS, 'unique searchable', { mode: 'bm25' });
       expect(results.find(r => r.key === 'to-delete.txt')).toBeDefined();
 
       // Delete
-      await knowledge.delete('to-delete.txt');
+      await knowledge.delete(NS, 'to-delete.txt');
 
       // Verify it's no longer searchable
-      results = await knowledge.search('unique searchable', { mode: 'bm25' });
+      results = await knowledge.search(NS, 'unique searchable', { mode: 'bm25' });
       expect(results.find(r => r.key === 'to-delete.txt')).toBeUndefined();
     });
   });
@@ -589,7 +632,8 @@ describe('Knowledge with BM25', () => {
 
     it('should return false when BM25 is not configured', () => {
       const knowledgeWithoutBM25 = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'no-bm25',
+        storage: new FilesystemStorage({ basePath: testDir }),
       });
       expect(knowledgeWithoutBM25.canBM25Search).toBe(false);
     });
@@ -598,25 +642,27 @@ describe('Knowledge with BM25', () => {
   describe('BM25 configuration', () => {
     it('should accept custom BM25 parameters', async () => {
       const customKnowledge = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'custom-bm25',
+        storage: new FilesystemStorage({ basePath: testDir }),
         bm25: {
           bm25: { k1: 2.0, b: 0.5 },
         },
       });
 
-      await customKnowledge.add({
+      await customKnowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'Test document content',
       });
 
-      const results = await customKnowledge.search('test document', { mode: 'bm25' });
+      const results = await customKnowledge.search(NS, 'test document', { mode: 'bm25' });
       expect(results.length).toBeGreaterThan(0);
     });
 
     it('should accept custom tokenization options', async () => {
       const customKnowledge = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'custom-tokenize',
+        storage: new FilesystemStorage({ basePath: testDir }),
         bm25: {
           tokenize: {
             lowercase: true,
@@ -626,13 +672,13 @@ describe('Knowledge with BM25', () => {
         },
       });
 
-      await customKnowledge.add({
+      await customKnowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'The quick brown fox jumps over the lazy dog',
       });
 
-      const results = await customKnowledge.search('quick fox', { mode: 'bm25' });
+      const results = await customKnowledge.search(NS, 'quick fox', { mode: 'bm25' });
       expect(results.length).toBeGreaterThan(0);
     });
   });
@@ -643,7 +689,9 @@ describe('Knowledge with hybrid search', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'hybrid_index';
+  const indexPrefix = 'hybrid_index';
+  // The actual index name will be indexPrefix_NS
+  const indexName = `${indexPrefix}_${NS}`;
   const dimension = 3;
 
   // Simple mock embedder that returns predictable vectors based on content
@@ -667,14 +715,16 @@ describe('Knowledge with hybrid search', () => {
       id: 'hybrid-test',
     });
 
+    // Create index with the namespaced name
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder: mockEmbedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
       bm25: true,
     });
@@ -691,18 +741,18 @@ describe('Knowledge with hybrid search', () => {
 
   describe('hybrid search', () => {
     it('should combine vector and BM25 scores', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password-reset.txt',
         content: 'To reset your password, go to Settings and click Reset Password button.',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/billing.txt',
         content: 'To update your billing information, go to Account Settings.',
       });
 
-      const results = await knowledge.search('password reset', { mode: 'hybrid' });
+      const results = await knowledge.search(NS, 'password reset', { mode: 'hybrid' });
 
       expect(results.length).toBeGreaterThan(0);
       // Should have both vector and BM25 scores
@@ -711,32 +761,32 @@ describe('Knowledge with hybrid search', () => {
     });
 
     it('should use default hybrid mode when both are configured', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'Test document with password information',
       });
 
       // No mode specified - should default to hybrid
-      const results = await knowledge.search('password');
+      const results = await knowledge.search(NS, 'password');
 
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.scoreDetails?.vector).toBeDefined();
     });
 
     it('should allow configuring vector weight', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'Password reset documentation',
       });
 
-      const vectorHeavy = await knowledge.search('password reset', {
+      const vectorHeavy = await knowledge.search(NS, 'password reset', {
         mode: 'hybrid',
         hybrid: { vectorWeight: 0.9 },
       });
 
-      const bm25Heavy = await knowledge.search('password reset', {
+      const bm25Heavy = await knowledge.search(NS, 'password reset', {
         mode: 'hybrid',
         hybrid: { vectorWeight: 0.1 },
       });
@@ -747,13 +797,13 @@ describe('Knowledge with hybrid search', () => {
     });
 
     it('should allow explicit vector-only search', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'Password documentation here',
       });
 
-      const results = await knowledge.search('password', { mode: 'vector' });
+      const results = await knowledge.search(NS, 'password', { mode: 'vector' });
 
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.scoreDetails?.vector).toBeDefined();
@@ -761,13 +811,13 @@ describe('Knowledge with hybrid search', () => {
     });
 
     it('should allow explicit BM25-only search', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'doc.txt',
         content: 'Password documentation here',
       });
 
-      const results = await knowledge.search('password documentation', { mode: 'bm25' });
+      const results = await knowledge.search(NS, 'password documentation', { mode: 'bm25' });
 
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.scoreDetails?.bm25).toBeDefined();
@@ -782,11 +832,12 @@ describe('Knowledge with hybrid search', () => {
 
     it('should return false when only index is configured', async () => {
       const vectorOnlyKnowledge = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'vector-only',
+        storage: new FilesystemStorage({ basePath: testDir }),
         index: {
           vectorStore,
           embedder: mockEmbedder,
-          indexName,
+          indexNamePrefix: indexName,
         },
       });
       expect(vectorOnlyKnowledge.canHybridSearch).toBe(false);
@@ -794,7 +845,8 @@ describe('Knowledge with hybrid search', () => {
 
     it('should return false when only BM25 is configured', () => {
       const bm25OnlyKnowledge = new Knowledge({
-        storage: new FilesystemStorage({ namespace: testDir }),
+        id: 'bm25-only',
+        storage: new FilesystemStorage({ basePath: testDir }),
         bm25: true,
       });
       expect(bm25OnlyKnowledge.canHybridSearch).toBe(false);
@@ -805,15 +857,46 @@ describe('Knowledge with hybrid search', () => {
 describe('FilesystemStorage', () => {
   let testDir: string;
   let storage: FilesystemStorage;
+  const NS = 'test-ns';
 
   beforeEach(async () => {
     testDir = join(tmpdir(), `fs-storage-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    storage = new FilesystemStorage({ namespace: testDir });
+    storage = new FilesystemStorage({ basePath: testDir });
+    // Create the namespace
+    await storage.createNamespace({ namespace: NS });
   });
 
   afterEach(async () => {
     await rm(testDir, { recursive: true, force: true });
+  });
+
+  describe('namespace management', () => {
+    it('should create and list namespaces', async () => {
+      await storage.createNamespace({ namespace: 'ns1', description: 'First' });
+      await storage.createNamespace({ namespace: 'ns2', description: 'Second' });
+
+      const namespaces = await storage.listNamespaces();
+
+      expect(namespaces.length).toBeGreaterThanOrEqual(2);
+      expect(namespaces.find(n => n.namespace === 'ns1')?.description).toBe('First');
+    });
+
+    it('should check if namespace exists', async () => {
+      await storage.createNamespace({ namespace: 'exists' });
+
+      expect(await storage.hasNamespace('exists')).toBe(true);
+      expect(await storage.hasNamespace('not-exists')).toBe(false);
+    });
+
+    it('should delete namespace', async () => {
+      await storage.createNamespace({ namespace: 'to-delete' });
+      await storage.add('to-delete', { type: 'text', key: 'file.txt', content: 'Content' });
+
+      await storage.deleteNamespace('to-delete');
+
+      expect(await storage.hasNamespace('to-delete')).toBe(false);
+    });
   });
 
   describe('get', () => {
@@ -824,8 +907,8 @@ describe('FilesystemStorage', () => {
         content: 'Content to retrieve',
       };
 
-      await storage.add(artifact);
-      const content = await storage.get('retrieve.txt');
+      await storage.add(NS, artifact);
+      const content = await storage.get(NS, 'retrieve.txt');
 
       expect(content).toBe('Content to retrieve');
     });
@@ -839,30 +922,30 @@ describe('FilesystemStorage', () => {
         content: 'Content to delete',
       };
 
-      await storage.add(artifact);
-      await storage.delete('delete-me.txt');
+      await storage.add(NS, artifact);
+      await storage.delete(NS, 'delete-me.txt');
 
-      await expect(storage.get('delete-me.txt')).rejects.toThrow();
+      await expect(storage.get(NS, 'delete-me.txt')).rejects.toThrow();
     });
   });
 
   describe('list', () => {
     it('should list all artifact keys recursively', async () => {
-      await storage.add({ type: 'text', key: 'file1.txt', content: 'Content 1' });
-      await storage.add({ type: 'text', key: 'nested/file2.txt', content: 'Content 2' });
+      await storage.add(NS, { type: 'text', key: 'file1.txt', content: 'Content 1' });
+      await storage.add(NS, { type: 'text', key: 'nested/file2.txt', content: 'Content 2' });
 
-      const keys = await storage.list();
+      const keys = await storage.list(NS);
 
       expect(keys).toContain('file1.txt');
       expect(keys).toContain('nested/file2.txt');
     });
 
     it('should list artifacts with prefix', async () => {
-      await storage.add({ type: 'text', key: 'static/a.txt', content: 'A' });
-      await storage.add({ type: 'text', key: 'static/b.txt', content: 'B' });
-      await storage.add({ type: 'text', key: 'docs/c.txt', content: 'C' });
+      await storage.add(NS, { type: 'text', key: 'static/a.txt', content: 'A' });
+      await storage.add(NS, { type: 'text', key: 'static/b.txt', content: 'B' });
+      await storage.add(NS, { type: 'text', key: 'docs/c.txt', content: 'C' });
 
-      const staticKeys = await storage.list('static');
+      const staticKeys = await storage.list(NS, 'static');
 
       expect(staticKeys).toHaveLength(2);
       expect(staticKeys).toContain('static/a.txt');
@@ -872,12 +955,12 @@ describe('FilesystemStorage', () => {
 
   describe('clear', () => {
     it('should clear all artifacts', async () => {
-      await storage.add({ type: 'text', key: 'file1.txt', content: 'Content 1' });
-      await storage.add({ type: 'text', key: 'nested/file2.txt', content: 'Content 2' });
+      await storage.add(NS, { type: 'text', key: 'file1.txt', content: 'Content 1' });
+      await storage.add(NS, { type: 'text', key: 'nested/file2.txt', content: 'Content 2' });
 
-      await storage.clear();
+      await storage.clear(NS);
 
-      const keys = await storage.list();
+      const keys = await storage.list(NS);
       expect(keys).toHaveLength(0);
     });
   });

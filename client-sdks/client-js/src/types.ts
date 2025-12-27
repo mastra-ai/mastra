@@ -671,3 +671,146 @@ export interface MastraPackage {
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
 }
+
+// ============================================================================
+// Knowledge Types
+// ============================================================================
+
+/**
+ * Knowledge namespace metadata
+ */
+export interface KnowledgeNamespace {
+  namespace: string;
+  description?: string;
+  artifactCount: number;
+  createdAt: string;
+  updatedAt: string;
+  hasBM25: boolean;
+  hasVector: boolean;
+}
+
+/**
+ * Response for listing knowledge namespaces
+ */
+export interface ListKnowledgeNamespacesResponse {
+  namespaces: KnowledgeNamespace[];
+}
+
+/**
+ * Parameters for creating a knowledge namespace
+ */
+export interface CreateKnowledgeNamespaceParams {
+  namespace: string;
+  description?: string;
+  enableBM25?: boolean;
+  vectorConfig?: {
+    vectorStoreName: string;
+    indexName: string;
+    embedderName?: string;
+  };
+}
+
+/**
+ * Knowledge artifact metadata
+ */
+export interface KnowledgeArtifact {
+  key: string;
+  type: 'text' | 'file' | 'image';
+  size?: number;
+  mimeType?: string;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing knowledge artifacts
+ */
+export interface ListKnowledgeArtifactsResponse {
+  artifacts: KnowledgeArtifact[];
+  namespace: string;
+}
+
+/**
+ * Parameters for listing knowledge artifacts
+ */
+export interface ListKnowledgeArtifactsParams {
+  prefix?: string;
+}
+
+/**
+ * Response for getting artifact content
+ */
+export interface GetKnowledgeArtifactResponse {
+  key: string;
+  content: string;
+  type: 'text' | 'file' | 'image';
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for adding a text artifact
+ */
+export interface AddKnowledgeArtifactParams {
+  key: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for adding an artifact
+ */
+export interface AddKnowledgeArtifactResponse {
+  success: boolean;
+  key: string;
+}
+
+/**
+ * Response for deleting an artifact
+ */
+export interface DeleteKnowledgeArtifactResponse {
+  success: boolean;
+  key: string;
+}
+
+/**
+ * Knowledge search result
+ */
+export interface KnowledgeSearchResult {
+  key: string;
+  content: string;
+  score: number;
+  metadata?: Record<string, unknown>;
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching knowledge
+ */
+export interface SearchKnowledgeParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  mode?: 'vector' | 'bm25' | 'hybrid';
+  vectorWeight?: number;
+}
+
+/**
+ * Response for searching knowledge
+ */
+export interface SearchKnowledgeResponse {
+  results: KnowledgeSearchResult[];
+  query: string;
+  mode: 'vector' | 'bm25' | 'hybrid';
+  namespace: string;
+}
+
+/**
+ * Response for deleting a namespace
+ */
+export interface DeleteKnowledgeNamespaceResponse {
+  success: boolean;
+  namespace: string;
+}

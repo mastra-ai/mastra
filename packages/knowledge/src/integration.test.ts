@@ -14,6 +14,9 @@ import { Knowledge } from './knowledge';
 import { StaticKnowledge, RetrievedKnowledge } from './processors';
 import { FilesystemStorage } from './storage';
 
+// Default namespace
+const NS = 'default';
+
 /**
  * Helper to create a MessageList with a user message for testing processors
  */
@@ -74,7 +77,8 @@ describe('StaticKnowledge Processor', () => {
     await mkdir(testDir, { recursive: true });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
     });
   });
 
@@ -97,11 +101,12 @@ describe('StaticKnowledge Processor', () => {
         content: 'Our products come in sizes: Small, Medium, Large, XL.',
       };
 
-      await knowledge.add(faqArtifact);
-      await knowledge.add(productArtifact);
+      await knowledge.add(NS, faqArtifact);
+      await knowledge.add(NS, productArtifact);
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         format: 'xml',
       });
 
@@ -128,10 +133,11 @@ describe('StaticKnowledge Processor', () => {
         content: 'Step 1: Open the app. Step 2: Click start.',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         format: 'markdown',
       });
 
@@ -154,10 +160,11 @@ describe('StaticKnowledge Processor', () => {
         content: 'Plain text content here.',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         format: 'plain',
       });
 
@@ -179,10 +186,11 @@ describe('StaticKnowledge Processor', () => {
         content: 'Custom content here.',
       };
 
-      await knowledge.add(artifact);
+      await knowledge.add(NS, artifact);
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         formatter: artifacts => {
           return `=== CUSTOM FORMAT ===\n${artifacts.map(a => `* ${a.key}: ${a.content}`).join('\n')}\n=== END ===`;
         },
@@ -202,7 +210,7 @@ describe('StaticKnowledge Processor', () => {
 
     it('should dynamically add knowledge by adding to the Knowledge instance', async () => {
       // Add initial static artifact
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'static/initial.txt',
         content: 'Initial content.',
@@ -210,6 +218,7 @@ describe('StaticKnowledge Processor', () => {
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         format: 'plain',
       });
 
@@ -222,7 +231,7 @@ describe('StaticKnowledge Processor', () => {
       expect(systemMessages1[0]).not.toContain('Dynamically added');
 
       // Dynamically add more items to knowledge
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'static/dynamic.txt',
         content: 'Dynamically added content.',
@@ -239,14 +248,14 @@ describe('StaticKnowledge Processor', () => {
 
     it('should not include non-static artifacts', async () => {
       // Add a static artifact
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'static/public-info.txt',
         content: 'This is public information.',
       });
 
       // Add a non-static artifact (should NOT be included)
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/internal.txt',
         content: 'This is internal documentation.',
@@ -254,6 +263,7 @@ describe('StaticKnowledge Processor', () => {
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         format: 'plain',
       });
 
@@ -268,7 +278,7 @@ describe('StaticKnowledge Processor', () => {
 
     it('should return unchanged messages when no static knowledge exists', async () => {
       // No artifacts added under static/ prefix
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/not-static.txt',
         content: 'This is not static.',
@@ -276,6 +286,7 @@ describe('StaticKnowledge Processor', () => {
 
       const processor = new StaticKnowledge({
         knowledge,
+        namespace: NS,
         format: 'xml',
       });
 
@@ -299,7 +310,8 @@ describe('RetrievedKnowledge Processor', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'retrieved_index';
+  const indexPrefix = 'retrieved_index';
+  const indexName = `${indexPrefix}_${NS}`;
   // bge-small-en-v1.5 produces 384-dimensional embeddings
   const dimension = 384;
 
@@ -324,11 +336,12 @@ describe('RetrievedKnowledge Processor', () => {
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
     });
   });
@@ -345,12 +358,12 @@ describe('RetrievedKnowledge Processor', () => {
   describe('processInput', () => {
     it('should retrieve relevant knowledge and add as system message', async () => {
       // Add documents to knowledge (they get indexed)
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password-reset.txt',
         content: 'To reset your password, go to Settings > Security > Reset Password.',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/billing-info.txt',
         content: 'To update billing information, go to Account > Billing.',
@@ -358,6 +371,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         topK: 3,
         format: 'xml',
       });
@@ -374,7 +388,7 @@ describe('RetrievedKnowledge Processor', () => {
     }, 60000);
 
     it('should format retrieved knowledge as markdown', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/guide.txt',
         content: 'This is a user guide about password management.',
@@ -382,6 +396,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         format: 'markdown',
       });
 
@@ -397,7 +412,7 @@ describe('RetrievedKnowledge Processor', () => {
     }, 60000);
 
     it('should format retrieved knowledge as plain text', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/info.txt',
         content: 'Password reset information here.',
@@ -405,6 +420,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         format: 'plain',
       });
 
@@ -419,7 +435,7 @@ describe('RetrievedKnowledge Processor', () => {
     }, 60000);
 
     it('should support custom formatter', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/custom.txt',
         content: 'Custom content about password reset.',
@@ -427,6 +443,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         formatter: results => {
           return `=== RETRIEVED ===\n${results.map(r => `${r.key}: ${r.content}`).join('\n')}\n=== END ===`;
         },
@@ -445,7 +462,7 @@ describe('RetrievedKnowledge Processor', () => {
 
     it('should return unchanged when no relevant results found', async () => {
       // Add document about something completely unrelated
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/recipes.txt',
         content: 'Delicious chocolate cake recipe with vanilla frosting.',
@@ -453,6 +470,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         minScore: 0.9, // High threshold
       });
 
@@ -471,12 +489,13 @@ describe('RetrievedKnowledge Processor', () => {
 
     it('should respect topK limit', async () => {
       // Add multiple documents
-      await knowledge.add({ type: 'text', key: 'doc1.txt', content: 'Password reset guide one.' });
-      await knowledge.add({ type: 'text', key: 'doc2.txt', content: 'Password reset guide two.' });
-      await knowledge.add({ type: 'text', key: 'doc3.txt', content: 'Password reset guide three.' });
+      await knowledge.add(NS, { type: 'text', key: 'doc1.txt', content: 'Password reset guide one.' });
+      await knowledge.add(NS, { type: 'text', key: 'doc2.txt', content: 'Password reset guide two.' });
+      await knowledge.add(NS, { type: 'text', key: 'doc3.txt', content: 'Password reset guide three.' });
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         topK: 2, // Only get top 2
         format: 'plain',
       });
@@ -494,7 +513,7 @@ describe('RetrievedKnowledge Processor', () => {
     }, 60000);
 
     it('should use custom query extractor', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/billing.txt',
         content: 'All about billing and payment processing.',
@@ -502,6 +521,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         // Custom extractor that always searches for "billing"
         queryExtractor: () => 'billing',
         format: 'plain',
@@ -519,7 +539,7 @@ describe('RetrievedKnowledge Processor', () => {
     }, 60000);
 
     it('should return unchanged when no user message exists', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/test.txt',
         content: 'Test content.',
@@ -527,6 +547,7 @@ describe('RetrievedKnowledge Processor', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
       });
 
       // Create messageList without user message
@@ -552,7 +573,8 @@ describe('RetrievedKnowledge Processor with BM25', () => {
     await mkdir(testDir, { recursive: true });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       bm25: true, // Enable BM25 only
     });
   });
@@ -563,12 +585,12 @@ describe('RetrievedKnowledge Processor with BM25', () => {
 
   describe('processInput with BM25 mode', () => {
     it('should retrieve relevant knowledge using BM25 keyword search', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password-reset.txt',
         content: 'To reset your password, go to Settings > Security > Reset Password.',
       });
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/billing-info.txt',
         content: 'To update billing information, go to Account > Billing.',
@@ -576,6 +598,7 @@ describe('RetrievedKnowledge Processor with BM25', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         topK: 3,
         mode: 'bm25',
         format: 'xml',
@@ -593,7 +616,7 @@ describe('RetrievedKnowledge Processor with BM25', () => {
     });
 
     it('should use auto-detected mode when not specified', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/guide.txt',
         content: 'This guide explains password management best practices.',
@@ -601,6 +624,7 @@ describe('RetrievedKnowledge Processor with BM25', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         // No mode specified - should auto-detect BM25
         format: 'plain',
       });
@@ -615,7 +639,7 @@ describe('RetrievedKnowledge Processor with BM25', () => {
     });
 
     it('should return no results for unrelated query', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/recipes.txt',
         content: 'Delicious chocolate cake recipe with vanilla frosting.',
@@ -623,6 +647,7 @@ describe('RetrievedKnowledge Processor with BM25', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         mode: 'bm25',
       });
 
@@ -646,7 +671,8 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'hybrid_retrieved_index';
+  const indexPrefix = 'hybrid_retrieved_index';
+  const indexName = `${indexPrefix}_${NS}`;
   const dimension = 384;
 
   const embedder = async (text: string): Promise<number[]> => {
@@ -668,11 +694,12 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
       bm25: true, // Enable both vector and BM25
     });
@@ -689,7 +716,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
 
   describe('processInput with hybrid mode', () => {
     it('should retrieve knowledge using hybrid search', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/password-reset.txt',
         content: 'To reset your password, go to Settings > Security > Reset Password.',
@@ -697,6 +724,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         mode: 'hybrid',
         hybrid: { vectorWeight: 0.7 },
         format: 'xml',
@@ -713,7 +741,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
     }, 60000);
 
     it('should use hybrid mode by default when both are configured', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/guide.txt',
         content: 'Password security guide with best practices.',
@@ -721,6 +749,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         // No mode specified - should auto-detect hybrid
         format: 'plain',
       });
@@ -735,7 +764,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
     }, 60000);
 
     it('should allow explicit vector-only mode in hybrid-capable knowledge', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/semantic.txt',
         content: 'Understanding authentication and access control.',
@@ -743,6 +772,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         mode: 'vector', // Explicitly use vector only
         format: 'plain',
       });
@@ -757,7 +787,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
     }, 60000);
 
     it('should allow explicit BM25-only mode in hybrid-capable knowledge', async () => {
-      await knowledge.add({
+      await knowledge.add(NS, {
         type: 'text',
         key: 'docs/keyword.txt',
         content: 'Password reset instructions and guidelines.',
@@ -765,6 +795,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
 
       const processor = new RetrievedKnowledge({
         knowledge,
+        namespace: NS,
         mode: 'bm25', // Explicitly use BM25 only
         format: 'plain',
       });
@@ -785,7 +816,8 @@ describe('Combined StaticKnowledge + RetrievedKnowledge', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'combined_index';
+  const indexPrefix = 'combined_index';
+  const indexName = `${indexPrefix}_${NS}`;
   const dimension = 384;
 
   const embedder = async (text: string): Promise<number[]> => {
@@ -807,11 +839,12 @@ describe('Combined StaticKnowledge + RetrievedKnowledge', () => {
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
     });
   });
@@ -827,14 +860,14 @@ describe('Combined StaticKnowledge + RetrievedKnowledge', () => {
 
   it('should work with both static and retrieved knowledge processors', async () => {
     // Add static knowledge (always injected)
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'static/company-policy.txt',
       content: 'Our company policy requires all password resets to be verified.',
     });
 
     // Add indexed knowledge (retrieved on demand)
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'docs/password-steps.txt',
       content: 'Step 1: Go to settings. Step 2: Click reset password.',
@@ -842,11 +875,13 @@ describe('Combined StaticKnowledge + RetrievedKnowledge', () => {
 
     const staticProcessor = new StaticKnowledge({
       knowledge,
+      namespace: NS,
       format: 'xml',
     });
 
     const retrievedProcessor = new RetrievedKnowledge({
       knowledge,
+      namespace: NS,
       format: 'xml',
     });
 

@@ -1,13 +1,25 @@
-import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
+import type { MastraKnowledge, KnowledgeSearchResult } from '@mastra/core/knowledge';
+import { BaseProcessor } from '@mastra/core/processors';
+import type { ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 
-import type { Knowledge, KnowledgeSearchResult, SearchOptions, SearchMode } from '../knowledge';
+import type { Knowledge, SearchMode, SearchOptions } from '../knowledge';
 
 /**
  * Options for the RetrievedKnowledge processor
  */
 export interface RetrievedKnowledgeOptions {
-  /** Knowledge instance to search */
-  knowledge: Knowledge;
+  /**
+   * Knowledge source - either:
+   * - A Knowledge instance to search directly
+   * - Omit to inherit from Mastra at runtime (requires agent to be registered with Mastra)
+   */
+  knowledge?: Knowledge | MastraKnowledge;
+
+  /**
+   * Namespace to search within the knowledge instance.
+   * @default 'default'
+   */
+  namespace?: string;
   /**
    * Maximum number of results to retrieve (default: 3)
    */
@@ -121,11 +133,12 @@ export interface RetrievedKnowledgeOptions {
  * // -> Processor searches, finds relevant docs, injects into context
  * ```
  */
-export class RetrievedKnowledge implements Processor {
-  readonly id = 'retrieved-knowledge';
+export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
+  readonly id = 'retrieved-knowledge' as const;
   readonly name = 'RetrievedKnowledge';
 
-  private knowledge: Knowledge;
+  private knowledge?: Knowledge | MastraKnowledge;
+  private namespace: string;
   private topK: number;
   private minScore?: number;
   private mode?: SearchMode;
@@ -135,8 +148,11 @@ export class RetrievedKnowledge implements Processor {
   private queryExtractor: (args: ProcessInputArgs) => string | undefined;
   private filter?: SearchOptions['filter'] | ((args: ProcessInputArgs) => SearchOptions['filter']);
 
-  constructor(options: RetrievedKnowledgeOptions) {
+  constructor(options: RetrievedKnowledgeOptions = {}) {
+    super();
     this.knowledge = options.knowledge;
+    this.namespace = options.namespace ?? 'default';
+
     this.topK = options.topK ?? 3;
     this.minScore = options.minScore;
     this.mode = options.mode;
@@ -145,6 +161,31 @@ export class RetrievedKnowledge implements Processor {
     this.formatter = options.formatter;
     this.queryExtractor = options.queryExtractor ?? this.defaultQueryExtractor;
     this.filter = options.filter;
+  }
+
+  /**
+   * Get the knowledge instance.
+   * If knowledge was not provided, attempts to inherit from the registered Mastra instance.
+   * @throws Error if knowledge cannot be resolved
+   */
+  private getKnowledgeInstance(): Knowledge | MastraKnowledge {
+    // If knowledge was provided directly, use it
+    if (this.knowledge) {
+      return this.knowledge;
+    }
+
+    // Try to inherit from the registered Mastra instance
+    if (this.mastra?.getKnowledge) {
+      const inherited = this.mastra.getKnowledge();
+      if (inherited) {
+        return inherited;
+      }
+    }
+
+    throw new Error(
+      'No knowledge instance available. Either pass a knowledge instance to the processor, ' +
+        'or register a knowledge instance with Mastra.',
+    );
   }
 
   /**
@@ -208,8 +249,11 @@ export class RetrievedKnowledge implements Processor {
     // Resolve filter (may be a function)
     const resolvedFilter = typeof this.filter === 'function' ? this.filter(args) : this.filter;
 
-    // Search knowledge
-    const results = await this.knowledge.search(query, {
+    // Get the knowledge instance (from options or inherited from Mastra)
+    const knowledge = this.getKnowledgeInstance();
+
+    // Search knowledge in the specified namespace
+    const results = await knowledge.search(this.namespace, query, {
       topK: this.topK,
       minScore: this.minScore,
       filter: resolvedFilter,

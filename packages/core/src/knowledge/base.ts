@@ -1,25 +1,39 @@
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 
-import type { AnyArtifact } from './types';
+import type { AnyArtifact, KnowledgeNamespaceInfo } from './types';
+
+/**
+ * Options for creating a namespace in storage
+ */
+export interface CreateNamespaceStorageOptions {
+  /** Namespace identifier */
+  namespace: string;
+  /** Optional description */
+  description?: string;
+}
 
 /**
  * Abstract base class for knowledge storage backends.
  * Implementations handle the actual persistence of artifacts.
+ *
+ * Storage backends support multiple namespaces within a single instance.
+ * For filesystem storage, namespaces are subdirectories.
+ * For key-value stores, namespaces can be prefixes.
  *
  * This class lives in @mastra/core so that storage adapters
  * can be built in separate packages.
  */
 export abstract class KnowledgeStorage extends MastraBase {
   /**
-   * Namespace for this storage instance.
-   * Used to isolate different knowledge bases.
+   * Base path/prefix for this storage instance.
+   * All namespaces are created within this base.
    */
-  namespace: string;
+  basePath: string;
 
-  constructor({ namespace }: { namespace: string }) {
-    super({ component: RegisteredLogger.KNOWLEDGE, name: namespace });
-    this.namespace = namespace;
+  constructor({ basePath }: { basePath: string }) {
+    super({ component: RegisteredLogger.KNOWLEDGE, name: basePath });
+    this.basePath = basePath;
   }
 
   /**
@@ -30,29 +44,62 @@ export abstract class KnowledgeStorage extends MastraBase {
     // Default no-op - adapters override if they need initialization
   }
 
-  /**
-   * Add an artifact to storage.
-   */
-  abstract add(artifact: AnyArtifact): Promise<void>;
+  // ============================================================================
+  // Namespace Management
+  // ============================================================================
 
   /**
-   * Get artifact content by key.
+   * List all namespaces in this storage.
    */
-  abstract get(key: string): Promise<string>;
+  abstract listNamespaces(): Promise<KnowledgeNamespaceInfo[]>;
 
   /**
-   * Delete an artifact by key.
+   * Create a new namespace.
    */
-  abstract delete(key: string): Promise<void>;
+  abstract createNamespace(options: CreateNamespaceStorageOptions): Promise<KnowledgeNamespaceInfo>;
 
   /**
-   * List all artifact keys.
+   * Delete a namespace and all its artifacts.
    */
-  abstract list(prefix?: string): Promise<string[]>;
+  abstract deleteNamespace(namespace: string): Promise<void>;
 
   /**
-   * Clear all artifacts from storage.
+   * Check if a namespace exists.
+   */
+  abstract hasNamespace(namespace: string): Promise<boolean>;
+
+  /**
+   * Get namespace info.
+   */
+  abstract getNamespaceInfo(namespace: string): Promise<KnowledgeNamespaceInfo | null>;
+
+  // ============================================================================
+  // Artifact Operations (within a namespace)
+  // ============================================================================
+
+  /**
+   * Add an artifact to a namespace.
+   */
+  abstract add(namespace: string, artifact: AnyArtifact): Promise<void>;
+
+  /**
+   * Get artifact content by key from a namespace.
+   */
+  abstract get(namespace: string, key: string): Promise<string>;
+
+  /**
+   * Delete an artifact by key from a namespace.
+   */
+  abstract delete(namespace: string, key: string): Promise<void>;
+
+  /**
+   * List all artifact keys in a namespace.
+   */
+  abstract list(namespace: string, prefix?: string): Promise<string[]>;
+
+  /**
+   * Clear all artifacts from a namespace.
    * Destructive operation - use with caution.
    */
-  abstract clear(): Promise<void>;
+  abstract clear(namespace: string): Promise<void>;
 }

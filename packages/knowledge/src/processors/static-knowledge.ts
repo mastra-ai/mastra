@@ -1,4 +1,6 @@
-import type { Processor, ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
+import type { MastraKnowledge } from '@mastra/core/knowledge';
+import { BaseProcessor } from '@mastra/core/processors';
+import type { ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
 
 import type { Knowledge } from '../knowledge';
 
@@ -6,8 +8,16 @@ import type { Knowledge } from '../knowledge';
  * Options for the StaticKnowledge processor
  */
 export interface StaticKnowledgeOptions {
-  /** Knowledge instance to fetch static artifacts from */
-  knowledge: Knowledge;
+  /**
+   * Knowledge instance to fetch static artifacts from.
+   * If omitted, inherits from Mastra at runtime.
+   */
+  knowledge?: Knowledge | MastraKnowledge;
+  /**
+   * Namespace to fetch static artifacts from
+   * @default 'default'
+   */
+  namespace?: string;
   /**
    * How to format the knowledge in the system message
    * @default 'xml'
@@ -51,28 +61,59 @@ export interface StaticKnowledgeOptions {
  * });
  * ```
  */
-export class StaticKnowledge implements Processor {
-  readonly id = 'static-knowledge';
+export class StaticKnowledge extends BaseProcessor<'static-knowledge'> {
+  readonly id = 'static-knowledge' as const;
   readonly name = 'StaticKnowledge';
 
-  private knowledge: Knowledge;
+  private knowledge?: Knowledge | MastraKnowledge;
+  private namespace: string;
   private format: 'xml' | 'markdown' | 'plain';
   private formatter?: (artifacts: Array<{ key: string; content: string }>) => string;
 
-  constructor(options: StaticKnowledgeOptions) {
+  constructor(options: StaticKnowledgeOptions = {}) {
+    super();
     this.knowledge = options.knowledge;
+    this.namespace = options.namespace ?? 'default';
     this.format = options.format ?? 'xml';
     this.formatter = options.formatter;
+  }
+
+  /**
+   * Get the knowledge instance from options or inherited from Mastra
+   */
+  private getKnowledgeInstance(): Knowledge | MastraKnowledge {
+    if (this.knowledge) {
+      return this.knowledge;
+    }
+
+    // Try to inherit from the registered Mastra instance
+    if (this.mastra?.getKnowledge) {
+      const inherited = this.mastra.getKnowledge();
+      if (inherited) {
+        return inherited;
+      }
+    }
+
+    throw new Error(
+      'No knowledge instance available. Either pass a knowledge instance to the processor, ' +
+        'or register a knowledge instance with Mastra.',
+    );
   }
 
   /**
    * Process input by fetching static knowledge and adding to system messages
    */
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
-    const { messages, messageList } = args;
+    const { messageList } = args;
+
+    // Get the knowledge instance
+    const knowledge = this.getKnowledgeInstance();
 
     // Fetch static artifacts from knowledge
-    const artifacts = await this.knowledge.getStatic();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const artifacts = await (knowledge as any).getStatic(this.namespace);
+
+    console.log('artifacts', artifacts);
 
     if (artifacts.length === 0) {
       return messageList;

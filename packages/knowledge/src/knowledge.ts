@@ -1,4 +1,12 @@
-import type { KnowledgeStorage, AnyArtifact } from '@mastra/core/knowledge';
+import type {
+  KnowledgeStorage,
+  AnyArtifact,
+  MastraKnowledge,
+  KnowledgeNamespaceInfo,
+  CreateNamespaceOptions,
+  KnowledgeSearchOptions,
+  KnowledgeSearchResult,
+} from '@mastra/core/knowledge';
 import type { MastraVector } from '@mastra/core/vector';
 
 import { BM25Index, type BM25Config, type TokenizeOptions, type BM25SearchResult } from './bm25';
@@ -21,8 +29,8 @@ export interface KnowledgeIndexConfig {
   vectorStore: MastraVector;
   /** Embedder function for generating vectors */
   embedder: Embedder;
-  /** Index name in the vector store */
-  indexName: string;
+  /** Index name prefix - will be combined with namespace */
+  indexNamePrefix?: string;
 }
 
 /**
@@ -54,24 +62,13 @@ export interface StaticArtifact {
 }
 
 /**
- * Search result from knowledge
+ * Internal namespace state - tracks BM25 index and vector config per namespace
  */
-export interface KnowledgeSearchResult {
-  /** Artifact key */
-  key: string;
-  /** Content of the artifact */
-  content: string;
-  /** Similarity/relevance score (higher is more relevant) */
-  score: number;
-  /** Additional metadata stored with the artifact */
-  metadata?: Record<string, unknown>;
-  /** Score breakdown for hybrid search */
-  scoreDetails?: {
-    /** Vector similarity score (0-1) */
-    vector?: number;
-    /** BM25 relevance score */
-    bm25?: number;
-  };
+interface NamespaceState {
+  bm25Index?: BM25Index;
+  vectorIndexName?: string;
+  enableBM25: boolean;
+  hasVectorConfig: boolean;
 }
 
 /**
@@ -80,34 +77,12 @@ export interface KnowledgeSearchResult {
 export type SearchMode = 'vector' | 'bm25' | 'hybrid';
 
 /**
- * Options for searching knowledge
+ * Options for searching knowledge (re-export for convenience)
  */
-export interface SearchOptions {
-  /** Maximum number of results to return (default: 5) */
-  topK?: number;
-  /** Minimum similarity score threshold (0-1 for vector, varies for BM25) */
-  minScore?: number;
-  /** Metadata filter (only applies to vector search) */
-  filter?: Record<string, unknown>;
-  /**
-   * Search mode:
-   * - 'vector': Semantic similarity search using embeddings (default if index configured)
-   * - 'bm25': Keyword-based search using BM25 algorithm (default if only BM25 configured)
-   * - 'hybrid': Combine both vector and BM25 scores
-   */
-  mode?: SearchMode;
-  /**
-   * Hybrid search configuration (only applies when mode is 'hybrid')
-   */
-  hybrid?: {
-    /**
-     * Weight for vector similarity score (0-1).
-     * BM25 weight is automatically (1 - vectorWeight).
-     * @default 0.5
-     */
-    vectorWeight?: number;
-  };
-}
+export interface SearchOptions extends KnowledgeSearchOptions {}
+
+// Re-export types for convenience
+export type { KnowledgeSearchResult } from '@mastra/core/knowledge';
 
 /**
  * Normalize BM25 scores to 0-1 range using min-max normalization
@@ -131,18 +106,65 @@ function normalizeBM25Scores(results: BM25SearchResult[]): BM25SearchResult[] {
   }));
 }
 
-export class Knowledge {
-  storage: KnowledgeStorage;
+/**
+ * Knowledge - manages multiple namespaces of knowledge artifacts.
+ *
+ * Each namespace can have:
+ * - A storage backend (filesystem, etc.)
+ * - BM25 keyword search index
+ * - Vector search configuration
+ *
+ * @example
+ * ```typescript
+ * const knowledge = new Knowledge({
+ *   id: 'my-knowledge',
+ *   storage: new FilesystemStorage({ basePath: './knowledge-data' }),
+ *   bm25: true, // Enable BM25 for all namespaces
+ *   index: { vectorStore, embedder }, // Optional vector search
+ * });
+ *
+ * // Create a namespace
+ * await knowledge.createNamespace({ namespace: 'docs' });
+ *
+ * // Add artifacts
+ * await knowledge.add('docs', { type: 'text', key: 'intro.md', content: '...' });
+ *
+ * // Search
+ * const results = await knowledge.search('docs', 'how to get started');
+ * ```
+ */
+export class Knowledge implements MastraKnowledge {
+  /** Unique identifier for this knowledge instance */
+  readonly id: string;
+
+  /** Storage backend */
+  readonly storage: KnowledgeStorage;
+
+  /** Global index config (applied to all namespaces) */
   #indexConfig?: KnowledgeIndexConfig;
-  #bm25Index?: BM25Index;
+
+  /** Global BM25 config */
+  #bm25Config?: KnowledgeBM25Config;
+
+  /** Whether BM25 is enabled globally */
+  #enableBM25: boolean;
+
+  /** Prefix for static artifacts */
   #staticPrefix: string;
 
+  /** Per-namespace state (BM25 indexes, etc.) */
+  #namespaceStates: Map<string, NamespaceState> = new Map();
+
   constructor({
+    id,
     storage,
     index,
     bm25,
     staticPrefix = STATIC_PREFIX,
   }: {
+    /** Unique identifier for this knowledge instance */
+    id: string;
+    /** Storage backend for artifacts */
     storage: KnowledgeStorage;
     /** Optional indexing configuration for semantic search */
     index?: KnowledgeIndexConfig;
@@ -151,62 +173,205 @@ export class Knowledge {
     /** Prefix for static knowledge artifacts (default: 'static') */
     staticPrefix?: string;
   }) {
+    this.id = id;
     this.storage = storage;
     this.#indexConfig = index;
     this.#staticPrefix = staticPrefix;
 
-    // Initialize BM25 index if configured
+    // Parse BM25 config
     if (bm25 === true) {
-      this.#bm25Index = new BM25Index();
+      this.#enableBM25 = true;
+      this.#bm25Config = {};
     } else if (bm25 && typeof bm25 === 'object') {
-      this.#bm25Index = new BM25Index(bm25.bm25, bm25.tokenize);
+      this.#enableBM25 = true;
+      this.#bm25Config = bm25;
+    } else {
+      this.#enableBM25 = false;
     }
   }
 
-  /**
-   * Add an artifact to the knowledge store.
-   * If index config is provided, the artifact will also be indexed for semantic search.
-   * If BM25 is enabled, the artifact will be indexed for keyword search.
-   */
-  async add(artifact: AnyArtifact, options?: AddArtifactOptions): Promise<void> {
-    // Store the artifact
-    await this.storage.add(artifact);
+  // ============================================================================
+  // Namespace Management
+  // ============================================================================
 
-    // Check if this is a static artifact
+  async listNamespaces(): Promise<KnowledgeNamespaceInfo[]> {
+    const storageNamespaces = await this.storage.listNamespaces();
+
+    // Enrich with search capability info from our state
+    return storageNamespaces.map(ns => {
+      const state = this.#namespaceStates.get(ns.namespace);
+      return {
+        ...ns,
+        hasBM25: state?.enableBM25 ?? this.#enableBM25,
+        hasVector: state?.hasVectorConfig ?? !!this.#indexConfig,
+      };
+    });
+  }
+
+  async createNamespace(options: CreateNamespaceOptions): Promise<KnowledgeNamespaceInfo> {
+    // Create in storage
+    const storageInfo = await this.storage.createNamespace({
+      namespace: options.namespace,
+      description: options.description,
+    });
+
+    // Initialize namespace state
+    const enableBM25 = options.enableBM25 ?? this.#enableBM25;
+    const hasVectorConfig = !!options.vectorConfig || !!this.#indexConfig;
+
+    const state: NamespaceState = {
+      enableBM25,
+      hasVectorConfig,
+    };
+
+    // Create BM25 index if enabled
+    if (enableBM25 && this.#bm25Config) {
+      state.bm25Index = new BM25Index(this.#bm25Config.bm25, this.#bm25Config.tokenize);
+    } else if (enableBM25) {
+      state.bm25Index = new BM25Index();
+    }
+
+    // Determine vector index name (use underscores for SQL compatibility)
+    if (hasVectorConfig) {
+      const prefix = (this.#indexConfig?.indexNamePrefix || this.id).replace(/-/g, '_');
+      const safeNamespace = options.namespace.replace(/-/g, '_');
+      state.vectorIndexName = options.vectorConfig?.indexName || `${prefix}_${safeNamespace}`;
+    }
+
+    this.#namespaceStates.set(options.namespace, state);
+
+    return {
+      ...storageInfo,
+      hasBM25: enableBM25,
+      hasVector: hasVectorConfig,
+    };
+  }
+
+  async deleteNamespace(namespace: string): Promise<void> {
+    // Delete from storage
+    await this.storage.deleteNamespace(namespace);
+
+    // Clean up namespace state
+    this.#namespaceStates.delete(namespace);
+  }
+
+  async hasNamespace(namespace: string): Promise<boolean> {
+    return this.storage.hasNamespace(namespace);
+  }
+
+  // ============================================================================
+  // Artifact Operations
+  // ============================================================================
+
+  async add(
+    namespace: string,
+    artifact: AnyArtifact,
+    options?: { skipIndex?: boolean; metadata?: Record<string, unknown> },
+  ): Promise<void> {
+    // Ensure namespace exists and get/create its state
+    await this.#ensureNamespaceState(namespace);
+
+    // Store the artifact
+    await this.storage.add(namespace, artifact);
+
+    // Check if this is a static artifact (not indexed)
     const isStatic = artifact.key.startsWith(`${this.#staticPrefix}/`);
 
-    // Index if configured and not skipped
-    // Static artifacts (under static/) are not indexed by default
+    // Index if not skipped and not static
     if (!options?.skipIndex && !isStatic) {
-      // Vector indexing
-      if (this.#indexConfig) {
-        await this.#indexArtifact(artifact, options?.metadata);
-      }
+      await this.#indexArtifact(namespace, artifact, options?.metadata);
+    }
+  }
 
-      // BM25 indexing
-      if (this.#bm25Index) {
-        const content = this.#getArtifactContent(artifact);
-        const metadata: Record<string, unknown> = {
-          key: artifact.key,
-          type: artifact.type,
-          ...options?.metadata,
-        };
-        this.#bm25Index.add(artifact.key, content, metadata);
+  async get(namespace: string, key: string): Promise<string> {
+    return this.storage.get(namespace, key);
+  }
+
+  async delete(namespace: string, key: string): Promise<void> {
+    await this.storage.delete(namespace, key);
+
+    // Remove from indexes
+    const state = this.#namespaceStates.get(namespace);
+
+    if (state?.bm25Index) {
+      state.bm25Index.remove(key);
+    }
+
+    if (this.#indexConfig && state?.vectorIndexName) {
+      try {
+        await this.#indexConfig.vectorStore.deleteVector({
+          indexName: state.vectorIndexName,
+          id: key,
+        });
+      } catch {
+        // Vector may not exist, ignore
       }
     }
   }
 
+  async list(namespace: string, prefix?: string): Promise<string[]> {
+    return this.storage.list(namespace, prefix);
+  }
+
+  // ============================================================================
+  // Search
+  // ============================================================================
+
+  async search(
+    namespace: string,
+    query: string,
+    options: KnowledgeSearchOptions = {},
+  ): Promise<KnowledgeSearchResult[]> {
+    const state = await this.#ensureNamespaceState(namespace);
+    const { topK = 5, minScore, filter, mode, hybrid } = options;
+
+    // Determine the effective search mode
+    const effectiveMode = this.#determineSearchMode(state, mode);
+
+    if (effectiveMode === 'bm25') {
+      return this.#searchBM25(state, query, topK, minScore);
+    }
+
+    if (effectiveMode === 'vector') {
+      return this.#searchVector(state, query, topK, minScore, filter);
+    }
+
+    // Hybrid search
+    return this.#searchHybrid(state, query, topK, minScore, filter, hybrid?.vectorWeight ?? 0.5);
+  }
+
+  async getNamespaceCapabilities(namespace: string): Promise<{
+    canVectorSearch: boolean;
+    canBM25Search: boolean;
+    canHybridSearch: boolean;
+  }> {
+    const state = await this.#ensureNamespaceState(namespace);
+
+    const canBM25 = !!state.bm25Index;
+    const canVector = !!this.#indexConfig && !!state.vectorIndexName;
+
+    return {
+      canVectorSearch: canVector,
+      canBM25Search: canBM25,
+      canHybridSearch: canVector && canBM25,
+    };
+  }
+
+  // ============================================================================
+  // Static Artifacts (for agent system prompts)
+  // ============================================================================
+
   /**
-   * Get all static artifacts (for system prompt injection)
-   * Static artifacts are stored under the static/ prefix
+   * Get all static artifacts from a namespace (for system prompt injection).
+   * Static artifacts are stored under the static/ prefix.
    */
-  async getStatic(): Promise<StaticArtifact[]> {
-    const keys = await this.storage.list(this.#staticPrefix);
+  async getStatic(namespace: string): Promise<StaticArtifact[]> {
+    const keys = await this.storage.list(namespace, this.#staticPrefix);
     const artifacts: StaticArtifact[] = [];
 
     for (const key of keys) {
       try {
-        const content = await this.storage.get(key);
+        const content = await this.storage.get(namespace, key);
         artifacts.push({ key, content });
       } catch {
         // Skip artifacts that can't be read
@@ -216,41 +381,135 @@ export class Knowledge {
     return artifacts;
   }
 
+  // ============================================================================
+  // Private Helpers
+  // ============================================================================
+
   /**
-   * Index an artifact in the vector store
+   * Ensure a namespace has its state initialized
    */
-  async #indexArtifact(artifact: AnyArtifact, additionalMetadata?: Record<string, unknown>): Promise<void> {
-    if (!this.#indexConfig) {
-      return;
+  async #ensureNamespaceState(namespace: string): Promise<NamespaceState> {
+    let state = this.#namespaceStates.get(namespace);
+
+    if (!state) {
+      // Check if namespace exists in storage
+      const exists = await this.storage.hasNamespace(namespace);
+
+      if (!exists) {
+        // Auto-create the namespace
+        await this.createNamespace({ namespace });
+        state = this.#namespaceStates.get(namespace)!;
+      } else {
+        // Initialize state for existing namespace
+        state = {
+          enableBM25: this.#enableBM25,
+          hasVectorConfig: !!this.#indexConfig,
+        };
+
+        if (this.#enableBM25) {
+          state.bm25Index = this.#bm25Config
+            ? new BM25Index(this.#bm25Config.bm25, this.#bm25Config.tokenize)
+            : new BM25Index();
+        }
+
+        if (this.#indexConfig) {
+          const prefix = (this.#indexConfig.indexNamePrefix || this.id).replace(/-/g, '_');
+          const safeNamespace = namespace.replace(/-/g, '_');
+          state.vectorIndexName = `${prefix}_${safeNamespace}`;
+        }
+
+        this.#namespaceStates.set(namespace, state);
+
+        // Rebuild BM25 index from existing artifacts
+        if (state.bm25Index) {
+          await this.#rebuildBM25Index(namespace, state);
+        }
+      }
     }
 
-    const { vectorStore, embedder, indexName } = this.#indexConfig;
+    return state;
+  }
 
-    // Get content as string
+  /**
+   * Rebuild the BM25 index from existing artifacts in storage
+   */
+  async #rebuildBM25Index(namespace: string, state: NamespaceState): Promise<void> {
+    if (!state.bm25Index) return;
+
+    try {
+      // List all artifact keys (excluding static/ prefix which shouldn't be indexed)
+      const keys = await this.storage.list(namespace);
+
+      for (const key of keys) {
+        // Skip static artifacts - they shouldn't be in the search index
+        if (key.startsWith(`${this.#staticPrefix}/`)) {
+          continue;
+        }
+
+        try {
+          const content = await this.storage.get(namespace, key);
+          // Add to BM25 index with basic metadata
+          state.bm25Index.add(key, content, { key, type: 'text' });
+        } catch {
+          // Skip artifacts that can't be read
+        }
+      }
+    } catch {
+      // Failed to rebuild index, will start empty
+    }
+  }
+
+  /**
+   * Index an artifact in both BM25 and vector stores
+   */
+  async #indexArtifact(
+    namespace: string,
+    artifact: AnyArtifact,
+    additionalMetadata?: Record<string, unknown>,
+  ): Promise<void> {
+    const state = this.#namespaceStates.get(namespace);
+    if (!state) return;
+
     const content = this.#getArtifactContent(artifact);
 
-    // Generate embedding
-    const embedding = await embedder(content);
-
-    // Prepare metadata
-    const metadata: Record<string, unknown> = {
-      key: artifact.key,
-      type: artifact.type,
-      text: content,
-      ...additionalMetadata,
-    };
-
-    if (artifact.type === 'image' && 'mimeType' in artifact) {
-      metadata.mimeType = artifact.mimeType;
+    // BM25 indexing
+    if (state.bm25Index) {
+      const metadata: Record<string, unknown> = {
+        key: artifact.key,
+        type: artifact.type,
+        ...additionalMetadata,
+      };
+      state.bm25Index.add(artifact.key, content, metadata);
     }
 
-    // Upsert to vector store
-    await vectorStore.upsert({
-      indexName,
-      vectors: [embedding],
-      metadata: [metadata],
-      ids: [artifact.key],
-    });
+    // Vector indexing
+    if (this.#indexConfig && state.vectorIndexName) {
+      const { vectorStore, embedder } = this.#indexConfig;
+
+      // Generate embedding
+      const embedding = await embedder(content);
+
+      // Prepare metadata
+      const metadata: Record<string, unknown> = {
+        key: artifact.key,
+        type: artifact.type,
+        text: content,
+        namespace,
+        ...additionalMetadata,
+      };
+
+      if (artifact.type === 'image' && 'mimeType' in artifact) {
+        metadata.mimeType = artifact.mimeType;
+      }
+
+      // Upsert to vector store
+      await vectorStore.upsert({
+        indexName: state.vectorIndexName,
+        vectors: [embedding],
+        metadata: [metadata],
+        ids: [artifact.key],
+      });
+    }
   }
 
   /**
@@ -265,142 +524,37 @@ export class Knowledge {
   }
 
   /**
-   * Delete an artifact from storage and optionally from the index
-   */
-  async delete(key: string): Promise<void> {
-    await this.storage.delete(key);
-
-    if (this.#indexConfig) {
-      await this.#indexConfig.vectorStore.deleteVector({
-        indexName: this.#indexConfig.indexName,
-        id: key,
-      });
-    }
-
-    if (this.#bm25Index) {
-      this.#bm25Index.remove(key);
-    }
-  }
-
-  /**
-   * Get an artifact by key
-   */
-  async get(key: string): Promise<string> {
-    return this.storage.get(key);
-  }
-
-  /**
-   * List all artifact keys, optionally filtered by prefix
-   */
-  async list(prefix?: string): Promise<string[]> {
-    return this.storage.list(prefix);
-  }
-
-  /**
-   * Clear all artifacts from storage and index
-   */
-  async clear(): Promise<void> {
-    // Get all keys before clearing
-    const keys = await this.storage.list();
-
-    // Clear storage
-    await this.storage.clear();
-
-    // Clear from vector index if configured
-    if (this.#indexConfig && keys.length > 0) {
-      for (const key of keys) {
-        try {
-          await this.#indexConfig.vectorStore.deleteVector({
-            indexName: this.#indexConfig.indexName,
-            id: key,
-          });
-        } catch {
-          // Vector may not exist, ignore
-        }
-      }
-    }
-
-    // Clear BM25 index
-    if (this.#bm25Index) {
-      this.#bm25Index.clear();
-    }
-  }
-
-  /**
-   * Search for relevant knowledge artifacts.
-   * Supports vector search, BM25 keyword search, or hybrid search combining both.
-   *
-   * @param query - The search query text
-   * @param options - Search options (topK, minScore, filter, mode)
-   * @returns Array of matching artifacts with scores
-   *
-   * @example
-   * ```typescript
-   * // Vector search (semantic similarity)
-   * const results = await knowledge.search('How do I reset my password?', {
-   *   mode: 'vector',
-   *   topK: 3,
-   *   minScore: 0.7,
-   * });
-   *
-   * // BM25 search (keyword matching)
-   * const results = await knowledge.search('password reset', {
-   *   mode: 'bm25',
-   *   topK: 5,
-   * });
-   *
-   * // Hybrid search (combines both)
-   * const results = await knowledge.search('reset password', {
-   *   mode: 'hybrid',
-   *   hybrid: { vectorWeight: 0.7 },
-   * });
-   * ```
-   */
-  async search(query: string, options: SearchOptions = {}): Promise<KnowledgeSearchResult[]> {
-    const { topK = 5, minScore, filter, mode, hybrid } = options;
-
-    // Determine the effective search mode
-    const effectiveMode = this.#determineSearchMode(mode);
-
-    if (effectiveMode === 'bm25') {
-      return this.#searchBM25(query, topK, minScore);
-    }
-
-    if (effectiveMode === 'vector') {
-      return this.#searchVector(query, topK, minScore, filter);
-    }
-
-    // Hybrid search
-    return this.#searchHybrid(query, topK, minScore, filter, hybrid?.vectorWeight ?? 0.5);
-  }
-
-  /**
    * Determine the effective search mode based on configuration
    */
-  #determineSearchMode(requestedMode?: SearchMode): SearchMode {
+  #determineSearchMode(
+    state: NamespaceState,
+    requestedMode?: 'vector' | 'bm25' | 'hybrid',
+  ): 'vector' | 'bm25' | 'hybrid' {
+    const canVector = !!this.#indexConfig && !!state.vectorIndexName;
+    const canBM25 = !!state.bm25Index;
+
     if (requestedMode) {
       // Validate the requested mode is available
-      if (requestedMode === 'vector' && !this.#indexConfig) {
+      if (requestedMode === 'vector' && !canVector) {
         throw new Error('Vector search requires index configuration. Provide index config when creating Knowledge.');
       }
-      if (requestedMode === 'bm25' && !this.#bm25Index) {
+      if (requestedMode === 'bm25' && !canBM25) {
         throw new Error('BM25 search requires bm25 configuration. Provide bm25 config when creating Knowledge.');
       }
-      if (requestedMode === 'hybrid' && (!this.#indexConfig || !this.#bm25Index)) {
+      if (requestedMode === 'hybrid' && (!canVector || !canBM25)) {
         throw new Error('Hybrid search requires both index and bm25 configuration.');
       }
       return requestedMode;
     }
 
     // Auto-determine mode based on available configuration
-    if (this.#indexConfig && this.#bm25Index) {
-      // Both available, default to hybrid
+    if (canVector && canBM25) {
       return 'hybrid';
     }
-    if (this.#indexConfig) {
+    if (canVector) {
       return 'vector';
     }
-    if (this.#bm25Index) {
+    if (canBM25) {
       return 'bm25';
     }
 
@@ -408,26 +562,53 @@ export class Knowledge {
   }
 
   /**
+   * Perform BM25 keyword search
+   */
+  #searchBM25(state: NamespaceState, query: string, topK: number, minScore?: number): KnowledgeSearchResult[] {
+    if (!state.bm25Index) {
+      throw new Error('BM25 search requires bm25 configuration.');
+    }
+
+    const results = state.bm25Index.search(query, topK, minScore);
+
+    return results.map(result => {
+      // Extract metadata, excluding internal fields
+      const { key: _key, type: _type, ...restMetadata } = result.metadata ?? {};
+
+      return {
+        key: result.id,
+        content: result.content,
+        score: result.score,
+        metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
+        scoreDetails: {
+          bm25: result.score,
+        },
+      };
+    });
+  }
+
+  /**
    * Perform vector search
    */
   async #searchVector(
+    state: NamespaceState,
     query: string,
     topK: number,
     minScore?: number,
     filter?: Record<string, unknown>,
   ): Promise<KnowledgeSearchResult[]> {
-    if (!this.#indexConfig) {
+    if (!this.#indexConfig || !state.vectorIndexName) {
       throw new Error('Vector search requires index configuration.');
     }
 
-    const { vectorStore, embedder, indexName } = this.#indexConfig;
+    const { vectorStore, embedder } = this.#indexConfig;
 
     // Generate embedding for the query
     const queryEmbedding = await embedder(query);
 
     // Query the vector store
     const results = await vectorStore.query({
-      indexName,
+      indexName: state.vectorIndexName,
       queryVector: queryEmbedding,
       topK,
       filter: filter as any,
@@ -447,7 +628,7 @@ export class Knowledge {
 
       if (key && content) {
         // Extract metadata, excluding internal fields
-        const { key: _key, text: _text, type: _type, ...restMetadata } = result.metadata ?? {};
+        const { key: _key, text: _text, type: _type, namespace: _ns, ...restMetadata } = result.metadata ?? {};
 
         searchResults.push({
           key,
@@ -465,42 +646,17 @@ export class Knowledge {
   }
 
   /**
-   * Perform BM25 keyword search
-   */
-  #searchBM25(query: string, topK: number, minScore?: number): KnowledgeSearchResult[] {
-    if (!this.#bm25Index) {
-      throw new Error('BM25 search requires bm25 configuration.');
-    }
-
-    const results = this.#bm25Index.search(query, topK, minScore);
-
-    return results.map(result => {
-      // Extract metadata, excluding internal fields
-      const { key: _key, type: _type, ...restMetadata } = result.metadata ?? {};
-
-      return {
-        key: result.id,
-        content: result.content,
-        score: result.score,
-        metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
-        scoreDetails: {
-          bm25: result.score,
-        },
-      };
-    });
-  }
-
-  /**
    * Perform hybrid search combining vector and BM25 scores
    */
   async #searchHybrid(
+    state: NamespaceState,
     query: string,
     topK: number,
     minScore?: number,
     filter?: Record<string, unknown>,
     vectorWeight: number = 0.5,
   ): Promise<KnowledgeSearchResult[]> {
-    if (!this.#indexConfig || !this.#bm25Index) {
+    if (!this.#indexConfig || !state.bm25Index || !state.vectorIndexName) {
       throw new Error('Hybrid search requires both index and bm25 configuration.');
     }
 
@@ -509,8 +665,8 @@ export class Knowledge {
 
     // Perform both searches in parallel
     const [vectorResults, bm25Results] = await Promise.all([
-      this.#searchVector(query, expandedTopK, undefined, filter),
-      Promise.resolve(this.#searchBM25(query, expandedTopK, undefined)),
+      this.#searchVector(state, query, expandedTopK, undefined, filter),
+      Promise.resolve(this.#searchBM25(state, query, expandedTopK, undefined)),
     ]);
 
     // Normalize BM25 scores to 0-1 range for fair combination
@@ -587,38 +743,27 @@ export class Knowledge {
     return results.slice(0, topK);
   }
 
-  /**
-   * Check if this knowledge instance has search capabilities
-   */
-  get canSearch(): boolean {
-    return this.#indexConfig !== undefined || this.#bm25Index !== undefined;
-  }
+  // ============================================================================
+  // Legacy Compatibility Getters
+  // ============================================================================
 
-  /**
-   * Check if this knowledge instance has vector search capabilities
-   */
+  /** @deprecated Use getNamespaceCapabilities instead */
   get canVectorSearch(): boolean {
-    return this.#indexConfig !== undefined;
+    return !!this.#indexConfig;
   }
 
-  /**
-   * Check if this knowledge instance has BM25 search capabilities
-   */
+  /** @deprecated Use getNamespaceCapabilities instead */
   get canBM25Search(): boolean {
-    return this.#bm25Index !== undefined;
+    return this.#enableBM25;
   }
 
-  /**
-   * Check if this knowledge instance has hybrid search capabilities
-   */
+  /** @deprecated Use getNamespaceCapabilities instead */
   get canHybridSearch(): boolean {
-    return this.#indexConfig !== undefined && this.#bm25Index !== undefined;
+    return this.canVectorSearch && this.canBM25Search;
   }
 
-  /**
-   * Get the BM25 index (for advanced use cases like serialization)
-   */
-  get bm25Index(): BM25Index | undefined {
-    return this.#bm25Index;
+  /** @deprecated Use getNamespaceCapabilities instead */
+  get canSearch(): boolean {
+    return this.canVectorSearch || this.canBM25Search;
   }
 }

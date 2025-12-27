@@ -23,6 +23,9 @@ import { Knowledge } from './knowledge';
 import { StaticKnowledge, RetrievedKnowledge } from './processors';
 import { FilesystemStorage } from './storage';
 
+// Default namespace
+const NS = 'default';
+
 describe('Agent with StaticKnowledge Examples', () => {
   let testDir: string;
   let knowledge: Knowledge;
@@ -32,7 +35,8 @@ describe('Agent with StaticKnowledge Examples', () => {
     await mkdir(testDir, { recursive: true });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
     });
   });
 
@@ -53,11 +57,12 @@ describe('Agent with StaticKnowledge Examples', () => {
       content: 'Our products come in sizes: Small, Medium, Large, XL.',
     };
 
-    await knowledge.add(faqArtifact);
-    await knowledge.add(productArtifact);
+    await knowledge.add(NS, faqArtifact);
+    await knowledge.add(NS, productArtifact);
 
     const staticKnowledgeProcessor = new StaticKnowledge({
       knowledge,
+      namespace: NS,
       format: 'xml',
     });
 
@@ -81,10 +86,11 @@ describe('Agent with StaticKnowledge Examples', () => {
       content: 'Step 1: Open the app. Step 2: Click start.',
     };
 
-    await knowledge.add(artifact);
+    await knowledge.add(NS, artifact);
 
     const processor = new StaticKnowledge({
       knowledge,
+      namespace: NS,
       format: 'markdown',
     });
 
@@ -108,10 +114,11 @@ describe('Agent with StaticKnowledge Examples', () => {
       content: 'Custom content here.',
     };
 
-    await knowledge.add(artifact);
+    await knowledge.add(NS, artifact);
 
     const processor = new StaticKnowledge({
       knowledge,
+      namespace: NS,
       formatter: artifacts => {
         return `=== CUSTOM FORMAT ===\n${artifacts.map(a => `* ${a.key}: ${a.content}`).join('\n')}\n=== END ===`;
       },
@@ -136,7 +143,8 @@ describe('Agent with RetrievedKnowledge Examples', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'agent_retrieved_index';
+  const indexPrefix = 'agent_retrieved_index';
+  const indexName = `${indexPrefix}_${NS}`;
   const dimension = 384;
 
   const embedder = async (text: string): Promise<number[]> => {
@@ -158,11 +166,12 @@ describe('Agent with RetrievedKnowledge Examples', () => {
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
     });
   });
@@ -177,12 +186,12 @@ describe('Agent with RetrievedKnowledge Examples', () => {
   });
 
   it('should run agent with retrieved knowledge (XML format)', async () => {
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'docs/password-reset.txt',
       content: 'To reset your password, go to Settings > Security > Reset Password.',
     });
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'docs/billing-info.txt',
       content: 'To update billing information, go to Account > Billing.',
@@ -190,6 +199,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
 
     const processor = new RetrievedKnowledge({
       knowledge,
+      namespace: NS,
       topK: 3,
       format: 'xml',
     });
@@ -208,7 +218,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
   }, 60000);
 
   it('should run agent with retrieved knowledge (markdown format)', async () => {
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'docs/guide.txt',
       content: 'This is a user guide about password management.',
@@ -216,6 +226,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
 
     const processor = new RetrievedKnowledge({
       knowledge,
+      namespace: NS,
       format: 'markdown',
     });
 
@@ -233,7 +244,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
   }, 60000);
 
   it('should run agent with custom query extractor', async () => {
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'docs/billing.txt',
       content: 'All about billing and payment processing.',
@@ -241,6 +252,7 @@ describe('Agent with RetrievedKnowledge Examples', () => {
 
     const processor = new RetrievedKnowledge({
       knowledge,
+      namespace: NS,
       queryExtractor: () => 'billing',
       format: 'plain',
     });
@@ -265,7 +277,8 @@ describe('Agent with Hybrid Knowledge Examples', () => {
   let dbPath: string;
   let vectorStore: LibSQLVector;
   let knowledge: Knowledge;
-  const indexName = 'agent_hybrid_index';
+  const indexPrefix = 'agent_hybrid_index';
+  const indexName = `${indexPrefix}_${NS}`;
   const dimension = 384;
 
   const embedder = async (text: string): Promise<number[]> => {
@@ -287,11 +300,12 @@ describe('Agent with Hybrid Knowledge Examples', () => {
     await vectorStore.createIndex({ indexName, dimension });
 
     knowledge = new Knowledge({
-      storage: new FilesystemStorage({ namespace: testDir }),
+      id: 'test-knowledge',
+      storage: new FilesystemStorage({ basePath: testDir }),
       index: {
         vectorStore,
         embedder,
-        indexName,
+        indexNamePrefix: indexPrefix,
       },
     });
   });
@@ -307,14 +321,14 @@ describe('Agent with Hybrid Knowledge Examples', () => {
 
   it('should run agent with both static and retrieved knowledge', async () => {
     // Add static knowledge (always injected)
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'static/company-policy.txt',
       content: 'Our company policy requires all password resets to be verified.',
     });
 
     // Add indexed knowledge (retrieved on demand)
-    await knowledge.add({
+    await knowledge.add(NS, {
       type: 'text',
       key: 'docs/password-steps.txt',
       content: 'Step 1: Go to settings. Step 2: Click reset password.',
@@ -322,11 +336,13 @@ describe('Agent with Hybrid Knowledge Examples', () => {
 
     const staticProcessor = new StaticKnowledge({
       knowledge,
+      namespace: NS,
       format: 'xml',
     });
 
     const retrievedProcessor = new RetrievedKnowledge({
       knowledge,
+      namespace: NS,
       format: 'xml',
     });
 

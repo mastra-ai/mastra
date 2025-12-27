@@ -18,6 +18,7 @@
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
+    "@mastra/knowledge": "latest",
     "@mastra/observability": "latest",
     "@mastra/voice-openai": "latest",
     "ai": "^4.3.19",
@@ -40,6 +41,7 @@
       "@mastra/observability": "link:../../observability/mastra",
       "@mastra/braintrust": "link:../../observability/braintrust",
       "@mastra/evals": "link:../../packages/evals",
+      "@mastra/knowledge": "link:../../packages/knowledge",
       "mastra": "link:../../packages/cli"
     }
   },
@@ -47,6 +49,7 @@
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
+    "knowledge-demo": "npx bun src/knowledge-demo.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },
