@@ -189,18 +189,11 @@ export type ProviderModelsMap = {
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2'];
   readonly groq: readonly [
-    'deepseek-r1-distill-llama-70b',
-    'gemma2-9b-it',
     'llama-3.1-8b-instant',
     'llama-3.3-70b-versatile',
-    'llama-guard-3-8b',
-    'llama3-70b-8192',
-    'llama3-8b-8192',
     'meta-llama/llama-4-maverick-17b-128e-instruct',
     'meta-llama/llama-4-scout-17b-16e-instruct',
     'meta-llama/llama-guard-4-12b',
-    'mistral-saba-24b',
-    'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
@@ -258,7 +251,6 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4.5',
     'deepseek/deepseek-r1',
-    'deepseek/deepseek-r1-distill-llama-70b',
     'deepseek/deepseek-v3.1-terminus',
     'deepseek/deepseek-v3.2-exp',
     'deepseek/deepseek-v3.2-exp-thinking',
@@ -284,7 +276,6 @@ export type ProviderModelsMap = {
     'mistral/mixtral-8x22b-instruct',
     'mistral/pixtral-12b',
     'mistral/pixtral-large',
-    'moonshotai/kimi-k2',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'openai/gpt-4-turbo',
@@ -1280,7 +1271,6 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Thinking',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
-    'zai-org/GLM-4.5',
     'zai-org/GLM-4.7',
   ];
   readonly zhipuai: readonly [
