@@ -7,6 +7,7 @@ import { convertMastraChunkToAISDKv5 } from '../../../stream/aisdk/v5/transform'
 import type { OutputSchema } from '../../../stream/base/schema';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { createStep } from '../../../workflows';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -174,7 +175,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
           await processAndEnqueueChunk(chunk);
 
-          if (initialResult?.metadata?.modelVersion === 'v2') {
+          if (supportedLanguageModelSpecifications.includes(initialResult?.metadata?.modelVersion)) {
             await rest.options?.onChunk?.({
               chunk: convertMastraChunkToAISDKv5({
                 chunk,
