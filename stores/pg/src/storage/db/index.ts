@@ -152,6 +152,118 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
+function mapToSqlType(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'uuid':
+      return 'UUID';
+    case 'boolean':
+      return 'BOOLEAN';
+    default:
+      return getSqlType(type);
+  }
+}
+
+function generateTableSQL({
+  tableName,
+  schema,
+  schemaName,
+}: {
+  tableName: TABLE_NAMES;
+  schema: Record<string, StorageColumn>;
+  schemaName?: string;
+}): string {
+  const timeZColumns = Object.entries(schema)
+    .filter(([_, def]) => def.type === 'timestamp')
+    .map(([name]) => {
+      const parsedName = parseSqlIdentifier(name, 'column name');
+      return `"${parsedName}Z" TIMESTAMPTZ DEFAULT NOW()`;
+    });
+
+  const columns = Object.entries(schema).map(([name, def]) => {
+    const parsedName = parseSqlIdentifier(name, 'column name');
+    const constraints = [];
+    if (def.primaryKey) constraints.push('PRIMARY KEY');
+    if (!def.nullable) constraints.push('NOT NULL');
+    return `"${parsedName}" ${mapToSqlType(def.type)} ${constraints.join(' ')}`;
+  });
+
+  const finalColumns = [...columns, ...timeZColumns].join(',\n');
+  // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
+  const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+  const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
+  const quotedSchemaName = getSchemaName(schemaName);
+
+  const sql = `
+            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })} (
+              ${finalColumns}
+            );
+            ${
+              tableName === TABLE_WORKFLOW_SNAPSHOT
+                ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+              ) AND NOT EXISTS (
+                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
+                UNIQUE (workflow_name, run_id);
+              END IF;
+            END $$;
+            `
+                : ''
+            }
+          ${
+            tableName === TABLE_SPANS
+              ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
+                PRIMARY KEY ("traceId", "spanId");
+              END IF;
+            END $$;
+            `
+              : ''
+          }
+          `;
+
+  return sql;
+}
+
+/**
+ * Exports the Mastra database schema as SQL DDL statements.
+ * Does not require a database connection.
+ */
+export function exportSchemas(schemaName?: string): string {
+  const statements: string[] = [];
+
+  // Add schema creation if needed
+  if (schemaName) {
+    const quotedSchemaName = getSchemaName(schemaName);
+    statements.push(`-- Create schema if it doesn't exist`);
+    statements.push(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName};`);
+    statements.push('');
+  }
+
+  // Generate SQL for all tables
+  for (const [tableName, schema] of Object.entries(TABLE_SCHEMAS)) {
+    statements.push(`-- Table: ${tableName}`);
+    const sql = generateTableSQL({
+      tableName: tableName as TABLE_NAMES,
+      schema,
+      schemaName,
+    });
+    statements.push(sql.trim());
+    statements.push('');
+  }
+
+  return statements.join('\n');
+}
+
 /**
  * Internal config for PgDB - accepts already-resolved client
  */
@@ -310,17 +422,6 @@ export class PgDB extends MastraBase {
     await registryEntry!.promise;
   }
 
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'uuid':
-        return 'UUID';
-      case 'boolean':
-        return 'BOOLEAN';
-      default:
-        return getSqlType(type);
-    }
-  }
-
   protected getDefaultValue(type: StorageColumn['type']): string {
     switch (type) {
       case 'timestamp':
@@ -404,66 +505,11 @@ export class PgDB extends MastraBase {
         .filter(([_, def]) => def.type === 'timestamp')
         .map(([name]) => name);
 
-      const timeZColumns = Object.entries(schema)
-        .filter(([_, def]) => def.type === 'timestamp')
-        .map(([name]) => {
-          const parsedName = parseSqlIdentifier(name, 'column name');
-          return `"${parsedName}Z" TIMESTAMPTZ DEFAULT NOW()`;
-        });
-
-      const columns = Object.entries(schema).map(([name, def]) => {
-        const parsedName = parseSqlIdentifier(name, 'column name');
-        const constraints = [];
-        if (def.primaryKey) constraints.push('PRIMARY KEY');
-        if (!def.nullable) constraints.push('NOT NULL');
-        return `"${parsedName}" ${this.getSqlType(def.type)} ${constraints.join(' ')}`;
-      });
-
       if (this.schemaName) {
         await this.setupSchema();
       }
 
-      const finalColumns = [...columns, ...timeZColumns].join(',\n');
-      const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
-      const schemaName = getSchemaName(this.schemaName);
-
-      const sql = `
-            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName })} (
-              ${finalColumns}
-            );
-            ${
-              tableName === TABLE_WORKFLOW_SNAPSHOT
-                ? `
-            DO $$ BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
-              ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
-              ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName })}
-                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
-                UNIQUE (workflow_name, run_id);
-              END IF;
-            END $$;
-            `
-                : ''
-            }
-          ${
-            tableName === TABLE_SPANS
-              ? `
-            DO $$ BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
-              ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })}
-                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
-                PRIMARY KEY ("traceId", "spanId");
-              END IF;
-            END $$;
-            `
-              : ''
-          }
-          `;
+      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName });
 
       await this.client.none(sql);
 
@@ -547,7 +593,7 @@ export class PgDB extends MastraBase {
         const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
         if (!columnExists) {
           const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
-          const sqlType = this.getSqlType(columnDef.type);
+          const sqlType = mapToSqlType(columnDef.type);
           // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
           const nullable = columnDef.nullable ? '' : 'NOT NULL';
           const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
@@ -612,7 +658,7 @@ export class PgDB extends MastraBase {
         if (schema[columnName]) {
           const columnDef = schema[columnName];
           const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
-          const sqlType = this.getSqlType(columnDef.type);
+          const sqlType = mapToSqlType(columnDef.type);
           // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
           const nullable = columnDef.nullable ? '' : 'NOT NULL';
           const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
