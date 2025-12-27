@@ -7,8 +7,8 @@ import {
   createDomainIndexTests,
 } from '@internal/storage-test-utils';
 import { TABLE_THREADS } from '@mastra/core/storage';
-import pgPromise from 'pg-promise';
-import { vi } from 'vitest';
+import { Pool } from 'pg';
+import { describe, it, expect, vi, afterAll } from 'vitest';
 
 import { MemoryPG } from './domains/memory';
 import { ScoresPG } from './domains/scores';
@@ -21,39 +21,38 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 createTestSuite(new PostgresStore(TEST_CONFIG));
 createTestSuite(new PostgresStore({ ...TEST_CONFIG, schemaName: 'my_schema' }));
 
-// Helper to create a pre-configured pg-promise client
-const createTestClient = () => {
-  const pgp = pgPromise();
-  return { client: pgp(connectionString), pgp };
+// Helper to create a pre-configured pg.Pool
+const createTestPool = () => {
+  return new Pool({ connectionString });
 };
 
-// Pre-configured client acceptance tests
+// Pre-configured pool acceptance tests
 createClientAcceptanceTests({
   storeName: 'PostgresStore',
   expectedStoreName: 'PostgresStore',
   createStoreWithClient: () => {
-    const { client } = createTestClient();
+    const pool = createTestPool();
     return new PostgresStore({
-      id: 'pg-client-test',
-      client,
+      id: 'pg-pool-test',
+      pool,
     });
   },
 });
 
-// Domain-level pre-configured client tests
+// Domain-level pre-configured pool tests
 createDomainDirectTests({
   storeName: 'PostgreSQL',
   createMemoryDomain: () => {
-    const { client } = createTestClient();
-    return new MemoryPG({ client });
+    const pool = createTestPool();
+    return new MemoryPG({ pool });
   },
   createWorkflowsDomain: () => {
-    const { client } = createTestClient();
-    return new WorkflowsPG({ client });
+    const pool = createTestPool();
+    return new WorkflowsPG({ pool });
   },
   createScoresDomain: () => {
-    const { client } = createTestClient();
-    return new ScoresPG({ client });
+    const pool = createTestPool();
+    return new ScoresPG({ pool });
   },
 });
 
@@ -98,12 +97,12 @@ createConfigValidationTests({
       },
     },
     {
-      description: 'pre-configured pg-promise client',
-      config: { id: 'test-store', client: createTestClient().client },
+      description: 'pre-configured pg.Pool',
+      config: { id: 'test-store', pool: createTestPool() },
     },
     {
-      description: 'client with schemaName',
-      config: { id: 'test-store', client: createTestClient().client, schemaName: 'custom_schema' },
+      description: 'pool with schemaName',
+      config: { id: 'test-store', pool: createTestPool(), schemaName: 'custom_schema' },
     },
     {
       description: 'disableInit with host config',
@@ -118,8 +117,8 @@ createConfigValidationTests({
       },
     },
     {
-      description: 'disableInit with client',
-      config: { id: 'test-store', client: createTestClient().client, disableInit: true },
+      description: 'disableInit with pool',
+      config: { id: 'test-store', pool: createTestPool(), disableInit: true },
     },
     {
       description: 'connectionString with ssl: true',
@@ -180,12 +179,12 @@ createConfigValidationTests({
     {
       description: 'missing required fields',
       config: { id: 'test-store', user: 'test' },
-      expectedError: /invalid config.*Provide either.*connectionString.*host.*ClientConfig/i,
+      expectedError: /invalid config.*Provide either.*pool.*connectionString.*host/i,
     },
     {
       description: 'completely empty config',
       config: { id: 'test-store' },
-      expectedError: /invalid config.*Provide either.*connectionString.*host.*ClientConfig/i,
+      expectedError: /invalid config.*Provide either.*pool.*connectionString.*host/i,
     },
   ],
 });
@@ -197,7 +196,7 @@ pgTests();
 const pgIndexExists = async (store: PostgresStore, namePattern: string): Promise<boolean> => {
   // PostgresStore exposes schema through .schema property
   const schemaName = (store as any).schema || 'public';
-  const result = await store.db.oneOrNone(
+  const result = await store.db.oneOrNone<{ exists: boolean }>(
     `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname ILIKE $2) AS exists`,
     [schemaName, `%${namePattern}%`],
   );
@@ -256,35 +255,35 @@ createDomainIndexTests({
   domainName: 'MemoryPG',
   createDefaultDomain: () => {
     currentDomainTestSchema = `idx_d_${domainTestId}_d`;
-    const { client } = createTestClient();
-    return new MemoryPG({ client, schemaName: currentDomainTestSchema });
+    const pool = createTestPool();
+    return new MemoryPG({ pool, schemaName: currentDomainTestSchema });
   },
   createDomainWithSkipDefaults: () => {
     currentDomainTestSchema = `idx_d_${domainTestId}_s`;
-    const { client } = createTestClient();
-    return new MemoryPG({ client, schemaName: currentDomainTestSchema, skipDefaultIndexes: true });
+    const pool = createTestPool();
+    return new MemoryPG({ pool, schemaName: currentDomainTestSchema, skipDefaultIndexes: true });
   },
   createDomainWithCustomIndexes: indexes => {
     currentDomainTestSchema = `idx_d_${domainTestId}_c`;
-    const { client } = createTestClient();
-    return new MemoryPG({ client, schemaName: currentDomainTestSchema, indexes: indexes as any });
+    const pool = createTestPool();
+    return new MemoryPG({ pool, schemaName: currentDomainTestSchema, indexes: indexes as any });
   },
   createDomainWithInvalidTable: indexes => {
     currentDomainTestSchema = `idx_d_${domainTestId}_i`;
-    const { client } = createTestClient();
-    return new MemoryPG({ client, schemaName: currentDomainTestSchema, indexes: indexes as any });
+    const pool = createTestPool();
+    return new MemoryPG({ pool, schemaName: currentDomainTestSchema, indexes: indexes as any });
   },
   indexExists: async (_domain, pattern) => {
-    // Create a fresh client to check indexes
-    const { client, pgp } = createTestClient();
+    // Create a fresh pool to check indexes
+    const pool = createTestPool();
     try {
-      const result = await client.oneOrNone(
+      const result = await pool.query(
         `SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = $1 AND indexname ILIKE $2) AS exists`,
         [currentDomainTestSchema, `%${pattern}%`],
       );
-      return result?.exists === true;
+      return result.rows[0]?.exists === true;
     } finally {
-      pgp.end();
+      await pool.end();
     }
   },
   defaultIndexPattern: 'threads_resourceid_createdat',
@@ -299,4 +298,40 @@ createDomainIndexTests({
     table: 'nonexistent_table_xyz',
     columns: ['id'],
   },
+});
+
+// Pool integration tests
+describe('PostgresStore pool integration', () => {
+  it('should expose the same pool instance that was passed in', async () => {
+    const pool = createTestPool();
+    const store = new PostgresStore({ id: 'pool-test', pool });
+    expect(store.pool).toBe(pool);
+    await pool.end();
+  });
+
+  it('should not close a passed-in pool when close() is called', async () => {
+    const pool = createTestPool();
+    const store = new PostgresStore({ id: 'shared-pool-test', pool });
+
+    await store.close();
+
+    // Pool should still be usable after store.close()
+    const result = await pool.query('SELECT 1 as test');
+    expect(result.rows[0].test).toBe(1);
+
+    await pool.end();
+  });
+
+  it('should close pool when close() is called on internally-created pool', async () => {
+    const store = new PostgresStore({
+      id: 'close-test',
+      connectionString,
+    });
+
+    expect(store.pool).toBeDefined();
+    await store.close();
+
+    // Pool should be closed now
+    await expect(store.pool.query('SELECT 1')).rejects.toThrow();
+  });
 });

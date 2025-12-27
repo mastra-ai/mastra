@@ -44,6 +44,16 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
+/**
+ * Generate SQL placeholder string for IN clauses.
+ * @param count - Number of placeholders to generate
+ * @param startIndex - Starting index for placeholders (default: 1)
+ * @returns Comma-separated placeholder string, e.g. "$1, $2, $3"
+ */
+function inPlaceholders(count: number, startIndex = 1): string {
+  return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
+}
+
 export class MemoryPG extends MemoryStorage {
   #db: PgDB;
   #schema: string;
@@ -351,17 +361,18 @@ export class MemoryPG extends MemoryStorage {
     };
 
     try {
+      const now = new Date().toISOString();
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
                         title = $1,
                         metadata = $2,
                         "updatedAt" = $3,
-                        "updatedAtZ" = $3
-                    WHERE id = $4
+                        "updatedAtZ" = $4
+                    WHERE id = $5
                     RETURNING *
                 `,
-        [title, mergedMetadata, new Date().toISOString(), id],
+        [title, mergedMetadata, now, now, id],
       );
 
       return {
@@ -538,7 +549,7 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const query = `
         ${selectStatement} FROM ${tableName}
-        WHERE id IN (${messageIds.map((_, i) => `$${i + 1}`).join(', ')})
+        WHERE id IN (${inPlaceholders(messageIds.length)})
         ORDER BY "createdAt" DESC
       `;
       const resultRows = await this.#db.client.manyOrNone(query, messageIds);
@@ -608,8 +619,7 @@ export class MemoryPG extends MemoryStorage {
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
-      const threadPlaceholders = threadIds.map((_, i) => `$${i + 1}`).join(', ');
-      const conditions: string[] = [`thread_id IN (${threadPlaceholders})`];
+      const conditions: string[] = [`thread_id IN (${inPlaceholders(threadIds.length)})`];
       const queryParams: any[] = [...threadIds];
       let paramIndex = threadIds.length + 1;
 
@@ -789,14 +799,15 @@ export class MemoryPG extends MemoryStorage {
         });
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+        const nowStr = new Date().toISOString();
         const threadUpdate = t.none(
           `UPDATE ${threadTableName}
                         SET
                             "updatedAt" = $1,
-                            "updatedAtZ" = $1
-                        WHERE id = $2
+                            "updatedAtZ" = $2
+                        WHERE id = $3
                     `,
-          [new Date().toISOString(), threadId],
+          [nowStr, nowStr, threadId],
         );
 
         await Promise.all([...messageInserts, threadUpdate]);
@@ -847,9 +858,9 @@ export class MemoryPG extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN ($1:list)`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
 
-    const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, [messageIds]);
+    const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, messageIds);
 
     if (existingMessagesDb.length === 0) {
       return [];
@@ -926,10 +937,11 @@ export class MemoryPG extends MemoryStorage {
       }
 
       if (threadIdsToUpdate.size > 0) {
+        const threadIds = Array.from(threadIdsToUpdate);
         queries.push(
           t.none(
-            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN ($1:list)`,
-            [Array.from(threadIdsToUpdate)],
+            `UPDATE ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) })} SET "updatedAt" = NOW(), "updatedAtZ" = NOW() WHERE id IN (${inPlaceholders(threadIds.length)})`,
+            threadIds,
           ),
         );
       }
@@ -939,7 +951,7 @@ export class MemoryPG extends MemoryStorage {
       }
     });
 
-    const updatedMessages = await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, [messageIds]);
+    const updatedMessages = await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, messageIds);
 
     return (updatedMessages || []).map((row: MessageRowFromDB) => {
       const message = this.normalizeMessageRow(row);
@@ -1076,12 +1088,11 @@ export class MemoryPG extends MemoryStorage {
       paramIndex++;
     }
 
-    updates.push(`"updatedAt" = $${paramIndex}`);
-    values.push(updatedResource.updatedAt.toISOString());
+    const updatedAtStr = updatedResource.updatedAt.toISOString();
+    updates.push(`"updatedAt" = $${paramIndex++}`);
+    values.push(updatedAtStr);
     updates.push(`"updatedAtZ" = $${paramIndex++}`);
-    values.push(updatedResource.updatedAt.toISOString());
-
-    paramIndex++;
+    values.push(updatedAtStr);
 
     values.push(resourceId);
 
