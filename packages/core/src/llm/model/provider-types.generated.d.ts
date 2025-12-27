@@ -189,18 +189,11 @@ export type ProviderModelsMap = {
   ];
   readonly upstage: readonly ['solar-mini', 'solar-pro2'];
   readonly groq: readonly [
-    'deepseek-r1-distill-llama-70b',
-    'gemma2-9b-it',
     'llama-3.1-8b-instant',
     'llama-3.3-70b-versatile',
-    'llama-guard-3-8b',
-    'llama3-70b-8192',
-    'llama3-8b-8192',
     'meta-llama/llama-4-maverick-17b-128e-instruct',
     'meta-llama/llama-4-scout-17b-16e-instruct',
     'meta-llama/llama-guard-4-12b',
-    'mistral-saba-24b',
-    'moonshotai/kimi-k2-instruct',
     'moonshotai/kimi-k2-instruct-0905',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
@@ -258,7 +251,6 @@ export type ProviderModelsMap = {
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4.5',
     'deepseek/deepseek-r1',
-    'deepseek/deepseek-r1-distill-llama-70b',
     'deepseek/deepseek-v3.1-terminus',
     'deepseek/deepseek-v3.2-exp',
     'deepseek/deepseek-v3.2-exp-thinking',
@@ -284,7 +276,6 @@ export type ProviderModelsMap = {
     'mistral/mixtral-8x22b-instruct',
     'mistral/pixtral-12b',
     'mistral/pixtral-large',
-    'moonshotai/kimi-k2',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
     'openai/gpt-4-turbo',
@@ -1280,7 +1271,6 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2-Thinking',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
-    'zai-org/GLM-4.5',
     'zai-org/GLM-4.7',
   ];
   readonly zhipuai: readonly [
@@ -1303,6 +1293,29 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
+  ];
+  readonly 'nano-gpt': readonly [
+    'deepseek/deepseek-r1',
+    'deepseek/deepseek-v3.2:thinking',
+    'meta-llama/llama-3.3-70b-instruct',
+    'meta-llama/llama-4-maverick',
+    'minimax/minimax-m2.1',
+    'mistralai/devstral-2-123b-instruct-2512',
+    'mistralai/ministral-14b-instruct-2512',
+    'mistralai/mistral-large-3-675b-instruct-2512',
+    'moonshotai/kimi-k2-instruct',
+    'moonshotai/kimi-k2-thinking',
+    'nousresearch/hermes-4-405b:thinking',
+    'nvidia/llama-3_3-nemotron-super-49b-v1_5',
+    'openai/gpt-oss-120b',
+    'qwen/qwen3-235b-a22b-thinking-2507',
+    'qwen/qwen3-coder',
+    'z-ai/glm-4.6',
+    'z-ai/glm-4.6:thinking',
+    'zai-org/glm-4.5-air',
+    'zai-org/glm-4.5-air:thinking',
+    'zai-org/glm-4.7',
+    'zai-org/glm-4.7:thinking',
   ];
   readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v', 'glm-4.7'];
   readonly inference: readonly [
