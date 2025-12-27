@@ -17,6 +17,7 @@ import { ObservabilityPG } from './domains/observability';
 import { ScoresPG } from './domains/scores';
 import { WorkflowsPG } from './domains/workflows';
 
+export { exportSchemas } from './db';
 // Export domain classes for direct use with MastraStorage composition
 export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
 export type { PgDomainConfig } from './db';
