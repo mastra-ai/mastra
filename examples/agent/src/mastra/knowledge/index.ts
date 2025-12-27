@@ -6,6 +6,6 @@ import { FilesystemStorage, Knowledge } from '@mastra/knowledge';
  */
 export const supportKnowledge = new Knowledge({
   id: 'support-knowledge',
-  storage: new FilesystemStorage({ basePath: '.mastra-knowledge/knowledge/support' }),
+  storage: new FilesystemStorage({ basePath: '../../.mastra-knowledge/knowledge/support' }),
   bm25: true,
 });

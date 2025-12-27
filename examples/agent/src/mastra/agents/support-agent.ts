@@ -7,7 +7,6 @@ import { RetrievedKnowledge, StaticKnowledge } from '@mastra/knowledge';
  * Reads from static/* artifacts in the knowledge store.
  */
 const companyPoliciesProcessor = new StaticKnowledge({
-  namespace: 'default',
   format: 'markdown',
 });
 
@@ -15,7 +14,6 @@ const companyPoliciesProcessor = new StaticKnowledge({
  * Retrieved knowledge processor - dynamically fetches relevant FAQ docs based on user query.
  */
 const faqRetrieverProcessor = new RetrievedKnowledge({
-  namespace: 'default',
   topK: 3, // Get top 3 most relevant documents
   mode: 'bm25', // Use BM25 keyword search (fast, no embeddings needed)
   format: 'xml', // Format as XML for better LLM parsing
