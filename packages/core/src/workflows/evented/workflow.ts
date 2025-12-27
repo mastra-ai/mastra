@@ -386,7 +386,7 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, {
+    const workflowSnapshotInStorage = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 

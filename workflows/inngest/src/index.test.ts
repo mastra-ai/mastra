@@ -1082,7 +1082,7 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(run.runId);
+      const executionResult = await workflow.getWorkflowRunById(run.runId);
 
       expect(executionResult?.status).toBe('paused');
       expect(executionResult?.steps).toEqual({
@@ -13763,7 +13763,7 @@ describe('MastraInngestWorkflow', () => {
       // Poll for completion with longer timeout for Inngest
       let result;
       for (let i = 0; i < 30; i++) {
-        result = await workflow.getWorkflowRunExecutionResult(runId);
+        result = await workflow.getWorkflowRunById(runId);
         if (result?.status === 'success' || result?.status === 'failed') break;
         await new Promise(resolve => setTimeout(resolve, 1000));
       }

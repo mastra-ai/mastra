@@ -264,10 +264,23 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         : never
     : never;
 
+/**
+ * Unified workflow state that combines metadata with processed execution state.
+ */
 export interface WorkflowState {
+  // Metadata
+  runId: string;
+  workflowName: string;
+  resourceId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+
+  // Execution State
   status: WorkflowRunStatus;
-  activeStepsPath: Record<string, number[]>;
-  serializedStepGraph: SerializedStepFlowEntry[];
+  // Optional detailed fields (can be excluded for performance)
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: SerializedStepFlowEntry[];
+  // Step Information (processed)
   steps: Record<
     string,
     {
@@ -286,6 +299,20 @@ export interface WorkflowState {
   payload?: Record<string, any>;
   error?: SerializedError;
 }
+
+/**
+ * Valid field names for filtering WorkflowState responses.
+ * Use with getWorkflowRunById to reduce payload size.
+ */
+export type WorkflowStateField =
+  | 'status'
+  | 'result'
+  | 'error'
+  | 'payload'
+  | 'steps'
+  | 'metadata'
+  | 'activeStepsPath'
+  | 'serializedStepGraph';
 
 export interface WorkflowRunState {
   // Core state info

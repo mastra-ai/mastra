@@ -2364,7 +2364,7 @@ describe('Workflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(run.runId);
+      const executionResult = await workflow.getWorkflowRunById(run.runId);
 
       expect(executionResult?.status).toBe('paused');
       expect(executionResult?.steps).toEqual({
@@ -11600,7 +11600,7 @@ describe('Workflow', () => {
       // Poll for completion
       let result;
       for (let i = 0; i < 10; i++) {
-        result = await workflow.getWorkflowRunExecutionResult(runId);
+        result = await workflow.getWorkflowRunById(runId);
         if (result?.status === 'success') break;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
