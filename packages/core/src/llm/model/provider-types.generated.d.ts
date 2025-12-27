@@ -1341,17 +1341,17 @@ export type ProviderModelsMap = {
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly friendli: readonly [
-    'LGAI-EXAONE-EXAONE-4.0.1-32B',
-    'Qwen-Qwen3-235B-A22B-Instruct-2507',
-    'Qwen-Qwen3-235B-A22B-Thinking-2507',
-    'Qwen-Qwen3-30B-A3B',
-    'Qwen-Qwen3-32B',
-    'deepseek-ai-DeepSeek-R1-0528',
+    'LGAI-EXAONE/EXAONE-4.0.1-32B',
+    'Qwen/Qwen3-235B-A22B-Instruct-2507',
+    'Qwen/Qwen3-235B-A22B-Thinking-2507',
+    'Qwen/Qwen3-30B-A3B',
+    'Qwen/Qwen3-32B',
+    'deepseek-ai/DeepSeek-R1-0528',
     'meta-llama-3.1-8b-instruct',
     'meta-llama-3.3-70b-instruct',
-    'meta-llama-Llama-4-Maverick-17B-128E-Instruct',
-    'meta-llama-Llama-4-Scout-17B-16E-Instruct',
-    'zai-org-GLM-4.6',
+    'meta-llama/Llama-4-Maverick-17B-128E-Instruct',
+    'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+    'zai-org/GLM-4.6',
   ];
   readonly anthropic: readonly [
     'claude-3-5-haiku-20241022',
@@ -1390,6 +1390,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/kimi-k2-instruct',
     'accounts/fireworks/models/kimi-k2-thinking',
     'accounts/fireworks/models/minimax-m2',
+    'accounts/fireworks/models/minimax-m2p1',
     'accounts/fireworks/models/qwen3-235b-a22b',
     'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct',
   ];
