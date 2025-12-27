@@ -1304,6 +1304,29 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5-FP8',
   ];
+  readonly 'nano-gpt': readonly [
+    'deepseek/deepseek-r1',
+    'deepseek/deepseek-v3.2:thinking',
+    'meta-llama/llama-3.3-70b-instruct',
+    'meta-llama/llama-4-maverick',
+    'minimax/minimax-m2.1',
+    'mistralai/devstral-2-123b-instruct-2512',
+    'mistralai/ministral-14b-instruct-2512',
+    'mistralai/mistral-large-3-675b-instruct-2512',
+    'moonshotai/kimi-k2-instruct',
+    'moonshotai/kimi-k2-thinking',
+    'nousresearch/hermes-4-405b:thinking',
+    'nvidia/llama-3_3-nemotron-super-49b-v1_5',
+    'openai/gpt-oss-120b',
+    'qwen/qwen3-235b-a22b-thinking-2507',
+    'qwen/qwen3-coder',
+    'z-ai/glm-4.6',
+    'z-ai/glm-4.6:thinking',
+    'zai-org/glm-4.5-air',
+    'zai-org/glm-4.5-air:thinking',
+    'zai-org/glm-4.7',
+    'zai-org/glm-4.7:thinking',
+  ];
   readonly zai: readonly ['glm-4.5', 'glm-4.5-air', 'glm-4.5-flash', 'glm-4.5v', 'glm-4.6', 'glm-4.6v', 'glm-4.7'];
   readonly inference: readonly [
     'google/gemma-3',
