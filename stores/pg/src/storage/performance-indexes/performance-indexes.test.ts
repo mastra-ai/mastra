@@ -3,16 +3,18 @@ import { MemoryPG } from '../domains/memory';
 import { ObservabilityPG } from '../domains/observability';
 import { ScoresPG } from '../domains/scores';
 
-// Mock pg-promise
+// Mock DbClient
 const mockClient = {
+  $pool: {},
   none: vi.fn(),
   one: vi.fn(),
   manyOrNone: vi.fn(),
   oneOrNone: vi.fn(),
+  many: vi.fn(),
+  any: vi.fn(),
   query: vi.fn(),
+  tx: vi.fn(),
 };
-
-vi.mock('pg-promise', () => ({ default: vi.fn(() => vi.fn(() => mockClient)) }));
 
 describe('PostgresStore Domain Performance Indexes', () => {
   beforeEach(() => {
