@@ -41,3 +41,11 @@ export {
 } from './system-prompt-scrubber';
 
 export { ToolCallFilter } from './tool-call-filter';
+
+export {
+  SkillsProcessor,
+  type SkillsProcessorOptions,
+  type SkillFormat,
+  type SkillMetadata,
+  type Skill,
+} from './skills';
