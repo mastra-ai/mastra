@@ -291,6 +291,7 @@
     "fix-convex-schema-exports",
     "fix-convex-threads-table-missing-title",
     "fix-create-runtime-detection",
+    "fix-deprecated-groq-models",
     "fix-duplicate-text-ids",
     "fix-embedding-model-v3-support",
     "fix-empty-override-scorers",
