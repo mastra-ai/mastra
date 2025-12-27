@@ -3,7 +3,6 @@ import {
   MainContentLayout,
   Header,
   HeaderAction,
-  MainContentContent,
   Icon,
   Button,
   DocsIcon,
@@ -20,13 +19,11 @@ import {
   useDeleteKnowledgeArtifact,
   useSearchKnowledge,
   useKnowledgeNamespaces,
-  Badge,
 } from '@mastra/playground-ui';
 
 import { Link, useParams } from 'react-router';
 import { Database, Search, Sparkles, FolderOpen } from 'lucide-react';
 
-// Type for artifact parameters from AddArtifactDialog
 interface AddArtifactParams {
   key: string;
   type: 'text' | 'file';
@@ -42,7 +39,7 @@ export default function KnowledgeNamespaceDetail() {
 
   const [viewingArtifact, setViewingArtifact] = useState<string | null>(null);
 
-  // Fetch namespace info for capabilities
+  // Fetch namespace info
   const { data: namespacesData } = useKnowledgeNamespaces();
   const namespaceInfo = namespacesData?.namespaces.find(ns => ns.namespace === decodedNamespace);
 
@@ -82,9 +79,7 @@ export default function KnowledgeNamespaceDetail() {
   };
 
   const handleDeleteArtifact = (artifactKey: string) => {
-    if (confirm(`Are you sure you want to delete the artifact "${artifactKey}"?`)) {
-      deleteArtifact.mutate(artifactKey);
-    }
+    deleteArtifact.mutate(artifactKey);
   };
 
   const handleSearch = (params: { query: string; topK?: number; mode?: 'vector' | 'bm25' | 'hybrid' }) => {
@@ -112,7 +107,7 @@ export default function KnowledgeNamespaceDetail() {
 
         <HeaderAction>
           <AddArtifactDialog onSubmit={handleAddArtifact} isLoading={isAddingArtifact} />
-          <Button as={Link} to="https://mastra.ai/en/docs" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/rag/overview" target="_blank">
             <Icon>
               <DocsIcon />
             </Icon>
@@ -121,58 +116,34 @@ export default function KnowledgeNamespaceDetail() {
         </HeaderAction>
       </Header>
 
-      <MainContentContent>
-        <div className="space-y-6">
-          {/* Namespace Info Card */}
-          <div className="rounded-xl border border-border1 bg-surface1 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-accent1/10">
-                  <Database className="h-6 w-6 text-accent3" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-semibold">{decodedNamespace}</h1>
-                  {namespaceInfo?.description && (
-                    <p className="text-sm text-text3 mt-0.5">{namespaceInfo.description}</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                {/* Stats */}
-                <div className="flex items-center gap-6 px-4 py-2 rounded-lg bg-surface2">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="h-4 w-4 text-icon3" />
-                    <span className="text-sm font-medium">{artifacts.length}</span>
-                    <span className="text-xs text-text3">artifacts</span>
-                  </div>
-                  <div className="h-4 w-px bg-border1" />
-                  <div className="flex items-center gap-2">
-                    {hasBM25 && (
-                      <Badge
-                        variant="default"
-                        className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                      >
-                        <Search className="h-3 w-3 mr-1" />
-                        BM25
-                      </Badge>
-                    )}
-                    {hasVector && (
-                      <Badge
-                        variant="default"
-                        className="text-xs bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                      >
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        Vector
-                      </Badge>
-                    )}
-                    {!hasBM25 && !hasVector && <span className="text-xs text-text3">No search</span>}
-                  </div>
-                </div>
+      <div className="grid overflow-y-auto h-full">
+        <div className="max-w-[100rem] px-[3rem] mx-auto grid content-start gap-[1rem] h-full w-full">
+          {/* Header */}
+          <div className="pt-[2rem]">
+            <div className="flex items-center gap-4 mb-2">
+              <h1 className="text-[1.25rem] text-icon6 font-normal flex items-center gap-2">
+                <Database className="h-5 w-5 text-icon3" />
+                {decodedNamespace}
+              </h1>
+              <div className="flex items-center gap-1.5">
+                {hasBM25 && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6875rem] bg-blue-500/10 text-blue-400">
+                    <Search className="h-3 w-3" />
+                    BM25
+                  </span>
+                )}
+                {hasVector && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.6875rem] bg-purple-500/10 text-purple-400">
+                    <Sparkles className="h-3 w-3" />
+                    Vector
+                  </span>
+                )}
               </div>
             </div>
+            {namespaceInfo?.description && <p className="text-[0.875rem] text-icon4">{namespaceInfo.description}</p>}
           </div>
 
-          {/* Search Panel */}
+          {/* Search */}
           {(hasBM25 || hasVector) && (
             <SearchKnowledgePanel
               onSearch={handleSearch}
@@ -184,11 +155,12 @@ export default function KnowledgeNamespaceDetail() {
             />
           )}
 
-          {/* Artifacts Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">Artifacts</h2>
-              <span className="text-sm text-text3">{artifacts.length} total</span>
+          {/* Artifacts */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <FolderOpen className="h-4 w-4 text-icon3" />
+              <h2 className="text-sm font-medium text-icon6">Artifacts</h2>
+              <span className="text-xs text-icon3">({artifacts.length})</span>
             </div>
             <ArtifactTable
               artifacts={artifacts}
@@ -198,17 +170,17 @@ export default function KnowledgeNamespaceDetail() {
             />
           </div>
         </div>
+      </div>
 
-        {/* Artifact Viewer Dialog */}
-        <ArtifactViewerDialog
-          open={!!viewingArtifact}
-          onOpenChange={(open: boolean) => !open && setViewingArtifact(null)}
-          artifactKey={viewingArtifact ?? ''}
-          content={artifactDetail?.content}
-          metadata={artifactDetail?.metadata}
-          isLoading={isLoadingDetail}
-        />
-      </MainContentContent>
+      {/* Artifact Viewer */}
+      <ArtifactViewerDialog
+        open={!!viewingArtifact}
+        onOpenChange={open => !open && setViewingArtifact(null)}
+        artifactKey={viewingArtifact ?? ''}
+        content={artifactDetail?.content}
+        metadata={artifactDetail?.metadata}
+        isLoading={isLoadingDetail}
+      />
     </MainContentLayout>
   );
 }

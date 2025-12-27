@@ -1,12 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 import { Button } from '@/ds/components/Button';
+import { Icon } from '@/ds/icons/Icon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, FileText, Upload, X, File, AlertCircle, Lock, Unlock } from 'lucide-react';
+import { Plus, FileText, Upload, X, File, Lock, Search } from 'lucide-react';
 
 type ArtifactType = 'text' | 'file';
 
@@ -63,45 +63,34 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
     setIsDragging(false);
   };
 
-  const handleFileSelect = (file: File) => {
-    setFileInfo({
-      file,
-      name: file.name,
-      size: file.size,
-      type: file.type || 'application/octet-stream',
-    });
-    // Auto-fill key from filename if empty
-    if (!key.trim()) {
-      setKey(file.name);
-    }
-  };
+  const handleFileSelect = useCallback(
+    (file: File) => {
+      setFileInfo({
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+      });
+      if (!key.trim()) {
+        setKey(file.name);
+      }
+    },
+    [key],
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
       const file = e.dataTransfer.files[0];
-      if (file) {
-        handleFileSelect(file);
-      }
+      if (file) handleFileSelect(file);
     },
-    [key],
+    [handleFileSelect],
   );
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!key.trim()) return;
-
     if (artifactType === 'text' && !content.trim()) return;
     if (artifactType === 'file' && !fileInfo) return;
 
@@ -111,7 +100,7 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
         metadata = JSON.parse(metadataStr);
         setMetadataError(null);
       } catch {
-        setMetadataError('Invalid JSON format');
+        setMetadataError('Invalid JSON');
         return;
       }
     }
@@ -141,44 +130,52 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="default" size="lg">
-          <Plus className="h-4 w-4 mr-2" />
+        <Button>
+          <Icon>
+            <Plus />
+          </Icon>
           Add Artifact
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[640px]">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Add Knowledge Artifact
+            <FileText className="h-4 w-4" />
+            Add Artifact
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5 mt-4">
-          {/* Artifact Type Tabs */}
-          <Tabs value={artifactType} onValueChange={val => setArtifactType(val as ArtifactType)} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 bg-surface2 rounded-lg p-1 h-auto">
-              <TabsTrigger
-                value="text"
-                className="flex items-center gap-2 py-2.5 px-4 rounded-md data-[state=active]:bg-surface4 data-[state=active]:text-text1"
-              >
-                <FileText className="h-4 w-4" />
-                Text Content
-              </TabsTrigger>
-              <TabsTrigger
-                value="file"
-                disabled={!supportsFileUpload}
-                className="flex items-center gap-2 py-2.5 px-4 rounded-md data-[state=active]:bg-surface4 data-[state=active]:text-text1 disabled:opacity-50"
-              >
-                <Upload className="h-4 w-4" />
-                File Upload
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+        <form onSubmit={handleSubmit} className="grid gap-4 mt-2">
+          {/* Type Tabs */}
+          <div className="flex gap-1 p-1 bg-surface4 rounded-lg">
+            <button
+              type="button"
+              onClick={() => setArtifactType('text')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded text-sm font-medium transition-colors ${
+                artifactType === 'text' ? 'bg-surface2 text-icon6' : 'text-icon4 hover:text-icon5'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Text
+            </button>
+            <button
+              type="button"
+              onClick={() => setArtifactType('file')}
+              disabled={!supportsFileUpload}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
+                artifactType === 'file' ? 'bg-surface2 text-icon6' : 'text-icon4 hover:text-icon5'
+              }`}
+            >
+              <Upload className="h-4 w-4" />
+              File
+            </button>
+          </div>
 
-          {/* Artifact Key */}
-          <div className="space-y-2">
-            <Label htmlFor="key">Artifact Key</Label>
+          {/* Key */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="key" className="text-xs text-icon4">
+              Key
+            </Label>
             <Input
               id="key"
               value={key}
@@ -187,30 +184,30 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
               className="font-mono"
               required
             />
-            <p className="text-xs text-text3">A unique identifier for this artifact within the namespace.</p>
           </div>
 
-          {/* Content based on type */}
+          {/* Content / File */}
           {artifactType === 'text' ? (
-            <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
+            <div className="grid gap-1.5">
+              <div className="flex justify-between">
+                <Label htmlFor="content" className="text-xs text-icon4">
+                  Content
+                </Label>
+                <span className="text-xs text-icon3">{content.length} chars</span>
+              </div>
               <Textarea
                 id="content"
                 value={content}
                 onChange={e => setContent(e.target.value)}
-                placeholder="Enter the text content for this artifact..."
-                rows={8}
+                placeholder="Enter text content..."
+                rows={6}
                 required
                 className="font-mono text-sm resize-none"
               />
-              <div className="flex justify-between text-xs text-text3">
-                <span>Plain text content that will be indexed for search</span>
-                <span>{content.length} characters</span>
-              </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              <Label>File</Label>
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-icon4">File</Label>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -221,15 +218,13 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
                 className="hidden"
               />
               {fileInfo ? (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-surface2 border border-border1">
-                  <div className="p-2 rounded-md bg-surface3">
-                    <File className="h-5 w-5 text-icon3" />
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface4">
+                  <div className="p-2 rounded bg-surface5">
+                    <File className="h-4 w-4 text-icon4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{fileInfo.name}</p>
-                    <p className="text-xs text-text3">
-                      {formatFileSize(fileInfo.size)} &middot; {fileInfo.type}
-                    </p>
+                    <p className="text-sm text-icon6 truncate">{fileInfo.name}</p>
+                    <p className="text-xs text-icon3">{formatFileSize(fileInfo.size)}</p>
                   </div>
                   <Button
                     type="button"
@@ -246,38 +241,40 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
               ) : (
                 <div
                   onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={e => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                  }}
                   onClick={() => fileInputRef.current?.click()}
-                  className={`
-                    flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed cursor-pointer transition-colors
-                    ${isDragging ? 'border-accent3 bg-accent1/10' : 'border-border1 hover:border-border2 hover:bg-surface2'}
-                  `}
+                  className={`flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+                    isDragging ? 'border-accent1 bg-accent1/5' : 'border-border1 hover:border-border2'
+                  }`}
                 >
-                  <div className="p-3 rounded-full bg-surface3">
-                    <Upload className="h-6 w-6 text-icon3" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-medium">Drop a file here or click to browse</p>
-                    <p className="text-xs text-text3 mt-1">Supports any file type</p>
-                  </div>
+                  <Upload className="h-6 w-6 text-icon3" />
+                  <p className="text-sm text-icon4">Drop file or click to browse</p>
                 </div>
               )}
             </div>
           )}
 
           {/* Static Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-surface2 border border-border1">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-md ${isStatic ? 'bg-amber-500/10' : 'bg-surface3'}`}>
-                {isStatic ? <Lock className="h-4 w-4 text-amber-400" /> : <Unlock className="h-4 w-4 text-icon3" />}
+          <div className="flex items-center justify-between p-3 rounded-lg bg-surface4">
+            <div className="flex items-center gap-2.5">
+              <div className={`p-1.5 rounded ${isStatic ? 'bg-amber-500/10' : 'bg-blue-500/10'}`}>
+                {isStatic ? (
+                  <Lock className="h-3.5 w-3.5 text-amber-400" />
+                ) : (
+                  <Search className="h-3.5 w-3.5 text-blue-400" />
+                )}
               </div>
               <div>
-                <p className="text-sm font-medium">Static Artifact</p>
-                <p className="text-xs text-text3">
-                  {isStatic
-                    ? 'Available via getStatic() for system prompts, not indexed for search'
-                    : 'Will be indexed and searchable'}
+                <p className="text-sm text-icon6">{isStatic ? 'Static (not searchable)' : 'Searchable'}</p>
+                <p className="text-xs text-icon3">
+                  {isStatic ? 'Retrieve with getStatic()' : 'Indexed for keyword/vector search'}
                 </p>
               </div>
             </div>
@@ -285,11 +282,10 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
           </div>
 
           {/* Metadata */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="metadata">Metadata (optional)</Label>
-              <span className="text-xs text-text3">JSON format</span>
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="metadata" className="text-xs text-icon4">
+              Metadata <span className="text-icon3">(optional JSON)</span>
+            </Label>
             <Textarea
               id="metadata"
               value={metadataStr}
@@ -297,20 +293,15 @@ export function AddArtifactDialog({ onSubmit, isLoading, supportsFileUpload = tr
                 setMetadataStr(e.target.value);
                 setMetadataError(null);
               }}
-              placeholder='{"source": "docs", "category": "tutorial", "author": "team"}'
-              rows={3}
+              placeholder='{"key": "value"}'
+              rows={2}
               className="font-mono text-sm resize-none"
             />
-            {metadataError && (
-              <div className="flex items-center gap-1.5 text-xs text-red-500">
-                <AlertCircle className="h-3 w-3" />
-                {metadataError}
-              </div>
-            )}
+            {metadataError && <p className="text-xs text-red-400">{metadataError}</p>}
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4 border-t border-border1">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="light" type="button" onClick={() => setOpen(false)}>
               Cancel
             </Button>

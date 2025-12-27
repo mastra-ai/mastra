@@ -2,11 +2,11 @@ import {
   MainContentLayout,
   Header,
   HeaderTitle,
-  MainContentContent,
-  Icon,
   HeaderAction,
-  DocsIcon,
+  Icon,
   Button,
+  DocsIcon,
+  PageHeader,
   KnowledgeTable,
   CreateNamespaceDialog,
   useKnowledgeNamespaces,
@@ -24,16 +24,18 @@ export default function Knowledge() {
 
   const namespaces = data?.namespaces ?? [];
   const isKnowledgeConfigured = data?.isKnowledgeConfigured ?? false;
-  const isEmpty = !isLoading && namespaces.length === 0;
 
-  const handleCreateNamespace = (params: { namespace: string; description?: string; enableBM25?: boolean }) => {
+  const handleCreateNamespace = (params: {
+    namespace: string;
+    description?: string;
+    enableBM25?: boolean;
+    vectorConfig?: { vectorStoreName?: string; indexName?: string };
+  }) => {
     createNamespace.mutate(params);
   };
 
   const handleDeleteNamespace = (namespace: string) => {
-    if (confirm(`Are you sure you want to delete the namespace "${namespace}" and all its artifacts?`)) {
-      deleteNamespace.mutate(namespace);
-    }
+    deleteNamespace.mutate(namespace);
   };
 
   return (
@@ -50,7 +52,7 @@ export default function Knowledge() {
           {isKnowledgeConfigured && (
             <CreateNamespaceDialog onSubmit={handleCreateNamespace} isLoading={createNamespace.isPending} />
           )}
-          <Button as={Link} to="https://mastra.ai/en/docs" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/rag/overview" target="_blank">
             <Icon>
               <DocsIcon />
             </Icon>
@@ -59,14 +61,22 @@ export default function Knowledge() {
         </HeaderAction>
       </Header>
 
-      <MainContentContent isCentered={isEmpty || !isKnowledgeConfigured}>
-        <KnowledgeTable
-          namespaces={namespaces}
-          isLoading={isLoading}
-          isKnowledgeConfigured={isKnowledgeConfigured}
-          onDelete={handleDeleteNamespace}
-        />
-      </MainContentContent>
+      <div className="grid overflow-y-auto h-full">
+        <div className="max-w-[100rem] px-[3rem] mx-auto grid content-start h-full w-full">
+          <PageHeader
+            title="Knowledge"
+            description="Manage knowledge namespaces and artifacts for your agents"
+            icon={<Database />}
+          />
+
+          <KnowledgeTable
+            namespaces={namespaces}
+            isLoading={isLoading}
+            isKnowledgeConfigured={isKnowledgeConfigured}
+            onDelete={handleDeleteNamespace}
+          />
+        </div>
+      </div>
     </MainContentLayout>
   );
 }
