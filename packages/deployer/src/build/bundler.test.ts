@@ -1,52 +1,45 @@
-// vi.mock must be at the top level and can't reference variables defined in this file
-vi.mock('./bundler', () => ({
-  getInputOptions: vi.fn((_, __, ___, env = { 'process.env.NODE_ENV': JSON.stringify('production') }) => {
-    return Promise.resolve({ env });
-  }),
-}));
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { getInputOptions } from './bundler';
 
-describe('bundler', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+const analyzedBundleInfo = {
+  dependencies: new Map<string, string>(),
+  externalDependencies: new Set<string>(),
+  workspaceMap: new Map(),
+};
+
+function getEsbuildPlugin(result: any) {
+  return result.plugins.find((p: any) => p?.name === 'esbuild');
+}
+
+describe('getInputOptions', () => {
+  it('uses production NODE_ENV by default', async () => {
+    const result = await getInputOptions(
+      'test-entry.js',
+      analyzedBundleInfo,
+      'node',
+      undefined,
+      { projectRoot: '/test/project' }
+    );
+
+    const esbuildPlugin = getEsbuildPlugin(result);
+
+    expect(esbuildPlugin).toBeDefined();
+    expect(esbuildPlugin.options.define['process.env.NODE_ENV'])
+      .toBe(JSON.stringify('production'));
   });
 
-  describe('getInputOptions', () => {
-    it('should use production NODE_ENV by default', async () => {
-      // Act
-      const result = (await getInputOptions(
-        'test-entry.js',
-        {
-          dependencies: new Map(),
-          externalDependencies: new Set(),
-          invalidChunks: new Set(),
-        },
-        'node',
-      )) as any;
+  it('uses custom NODE_ENV when provided', async () => {
+    const result = await getInputOptions(
+      'test-entry.js',
+      analyzedBundleInfo,
+      'node',
+      { 'process.env.NODE_ENV': JSON.stringify('development') },
+      { projectRoot: '/test/project' }
+    );
 
-      // Assert
-      expect(result.env['process.env.NODE_ENV']).toBe(JSON.stringify('production'));
-    });
+    const esbuildPlugin = getEsbuildPlugin(result);
 
-    it('should use custom NODE_ENV when provided', async () => {
-      // Act
-      const result = (await getInputOptions(
-        'test-entry.js',
-        {
-          dependencies: new Map(),
-          externalDependencies: new Set(),
-          invalidChunks: new Set(),
-        },
-        'node',
-        {
-          'process.env.NODE_ENV': JSON.stringify('development'),
-        },
-      )) as any;
-
-      // Assert
-      expect(result.env['process.env.NODE_ENV']).toBe(JSON.stringify('development'));
-    });
+    expect(esbuildPlugin.options.define['process.env.NODE_ENV'])
+      .toBe(JSON.stringify('development'));
   });
 });
