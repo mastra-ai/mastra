@@ -1617,7 +1617,7 @@ describe('Workflow', () => {
         expect.fail('Execution result is not set');
       }
 
-      expect(watchData.length).toBe(4);
+      expect(watchData.length).toBe(5);
       expect(watchData).toMatchObject([
         {
           payload: {},
@@ -1649,7 +1649,14 @@ describe('Workflow', () => {
           runId,
         },
         {
+          type: 'workflow-paused',
+          payload: {},
+          runId,
+          from: 'WORKFLOW',
+        },
+        {
           payload: {
+            workflowStatus: 'paused',
             metadata: {},
             output: {
               usage: {
@@ -6632,7 +6639,8 @@ describe('Workflow', () => {
 
     it('should persist error message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
-      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+      const workflowsStore = await mockStorage.getStore('workflows');
+      const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
@@ -6692,7 +6700,8 @@ describe('Workflow', () => {
 
     it('should persist MastraError message without stack trace in snapshot', async () => {
       const mockStorage = new MockStore();
-      const persistSpy = vi.spyOn(mockStorage, 'persistWorkflowSnapshot');
+      const workflowsStore = await mockStorage.getStore('workflows');
+      const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
 
       const mastra = new Mastra({
         storage: mockStorage,
@@ -7201,7 +7210,8 @@ describe('Workflow', () => {
       expect(result.status).toBe('failed');
 
       // Now load the workflow run from storage
-      const workflowRun = await mockStorage.getWorkflowRunById({
+      const workflowsStore = await mockStorage.getStore('workflows');
+      const workflowRun = await workflowsStore!.getWorkflowRunById({
         runId: run.runId,
         workflowName: 'storage-roundtrip-workflow',
       });
@@ -8995,6 +9005,94 @@ describe('Workflow', () => {
       expect(((step2Result as any)?.error as Error).message).toContain('start: Expected string, received number');
     });
 
+    it('should properly validate input schema when .map is used after .foreach. bug #11313', async () => {
+      const startTime = Date.now();
+      const map = vi.fn().mockImplementation(async ({ inputData }) => {
+        await new Promise(resolve => setTimeout(resolve, 1e3));
+        return { value: inputData.value + 11 };
+      });
+      const mapStep = createStep({
+        id: 'map',
+        description: 'Maps (+11) on the current value',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: map,
+      });
+
+      const finalStep = createStep({
+        id: 'final',
+        description: 'Final step that prints the result',
+        inputSchema: z.object({
+          inputValue: z.number(),
+        }),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return { finalValue: inputData.inputValue };
+        },
+      });
+
+      const counterWorkflow = createWorkflow({
+        steps: [mapStep, finalStep],
+        id: 'counter-workflow',
+        inputSchema: z.array(z.object({ value: z.number() })),
+        outputSchema: z.object({
+          finalValue: z.number(),
+        }),
+      });
+
+      counterWorkflow
+        .foreach(mapStep)
+        .map(
+          async ({ inputData }) => {
+            return {
+              inputValue: inputData.reduce((acc, curr) => acc + curr.value, 0),
+            };
+          },
+          { id: 'map-step' },
+        )
+        .then(finalStep)
+        .commit();
+
+      const run = await counterWorkflow.createRun();
+      const result = await run.start({ inputData: [{ value: 1 }, { value: 22 }, { value: 333 }] });
+
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      expect(duration).toBeGreaterThan(3e3 - 200);
+
+      expect(map).toHaveBeenCalledTimes(3);
+      expect(result.steps).toEqual({
+        input: [{ value: 1 }, { value: 22 }, { value: 333 }],
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        'map-step': {
+          status: 'success',
+          output: { inputValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: { inputValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
+    });
+
     it('should throw error when you try to resume a workflow step with invalid resume data', async () => {
       const resumeStep = createStep({
         id: 'resume',
@@ -10733,7 +10831,8 @@ describe('Workflow', () => {
       expect(result.status).toBe('suspended');
 
       // Step 2: Manually verify storage has the suspended status
-      const storageSnapshot = await mastra.getStorage()?.loadWorkflowSnapshot({
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const storageSnapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: 'test-prove-issue-workflow',
         runId,
       });
@@ -12339,9 +12438,11 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
+      const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId,
         snapshot: {
@@ -12499,9 +12600,11 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
+      const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId,
         snapshot: {
@@ -12534,7 +12637,7 @@ describe('Workflow', () => {
       });
 
       //mimic a workflow run that was previously active for the nested workflow
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId,
         snapshot: {
@@ -12624,7 +12727,7 @@ describe('Workflow', () => {
       const runId2 = 'test-run-id-2';
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId: runId2,
         snapshot: {
@@ -12657,7 +12760,7 @@ describe('Workflow', () => {
       });
 
       //mimic a workflow run that was previously created for the nested workflow but server died before it started running
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: runId2,
         snapshot: {
@@ -12822,9 +12925,11 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
+      const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'promptEvalWorkflow',
         runId,
         snapshot: {
@@ -13061,9 +13166,11 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
+      const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'dowhile-workflow',
         runId,
         snapshot: {
@@ -13092,7 +13199,7 @@ describe('Workflow', () => {
       });
 
       //mimic a workflow run that was previously active for the nested workflow
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'simple-nested-workflow',
         runId,
         snapshot: {
@@ -13249,9 +13356,11 @@ describe('Workflow', () => {
 
       const runId = 'test-run-id';
       const storage = mastra.getStorage();
+      const workflowsStore = await storage?.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
       //mimic a workflow run that was previously active
-      await storage?.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'test-parallel-workflow',
         runId,
         snapshot: {
@@ -13423,8 +13532,10 @@ describe('Workflow', () => {
       });
 
       const runId = 'test-run-id';
+      const workflowsStore = await testStorage.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
 
-      await testStorage.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'testWorkflow',
         runId,
         snapshot: {
@@ -14266,7 +14377,9 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
-      const nestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
+      const workflowsStore = await testStorage.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
+      const nestedWorkflowSnapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run.runId,
       });
@@ -14337,7 +14450,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(0);
 
-      const nestedWorkflowSnapshot2 = await testStorage.loadWorkflowSnapshot({
+      const nestedWorkflowSnapshot2 = await workflowsStore!.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run2.runId,
       });
@@ -14408,7 +14521,7 @@ describe('Workflow', () => {
       expect(execute).toHaveBeenCalledTimes(0);
       expect(executeStep2).toHaveBeenCalledTimes(1);
 
-      const nestedWorkflowSnapshot3 = await testStorage.loadWorkflowSnapshot({
+      const nestedWorkflowSnapshot3 = await workflowsStore!.loadWorkflowSnapshot({
         workflowName: 'nestedWorkflow',
         runId: run3.runId,
       });
@@ -14912,7 +15025,9 @@ describe('Workflow', () => {
         },
       });
 
-      const simpleNestedWorkflowSnapshot = await testStorage.loadWorkflowSnapshot({
+      const workflowsStore = await testStorage.getStore('workflows');
+      expect(workflowsStore).toBeDefined();
+      const simpleNestedWorkflowSnapshot = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: 'simple-nested-workflow',
         runId: run.runId,
       });
@@ -15573,15 +15688,6 @@ describe('Workflow', () => {
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
-          parallelStep1: {
-            payload: {
-              result: 'next step done',
-            },
-            startedAt: expect.any(Number),
-            status: 'success',
-            output: {},
-            endedAt: expect.any(Number),
-          },
           parallelStep2: {
             payload: {
               result: 'next step done',
@@ -15591,15 +15697,6 @@ describe('Workflow', () => {
             output: {
               result: 'parallelStep2 done',
             },
-            endedAt: expect.any(Number),
-          },
-          parallelStep3: {
-            payload: {
-              result: 'next step done',
-            },
-            startedAt: expect.any(Number),
-            status: 'success',
-            output: {},
             endedAt: expect.any(Number),
           },
         },
@@ -15838,7 +15935,6 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { status: 'success' } },
-        step2: { status: 'success', output: {} },
         step5: { status: 'success', output: { result: 'step5' } },
       });
       expect(result.status).toBe('paused');

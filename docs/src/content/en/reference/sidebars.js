@@ -541,6 +541,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "storage/composite",
+          label: "Storage Composition",
+        },
+        {
+          type: "doc",
           id: "storage/cloudflare-d1",
           label: "Cloudflare D1 Storage",
         },

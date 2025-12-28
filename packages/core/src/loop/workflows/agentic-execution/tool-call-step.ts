@@ -38,6 +38,7 @@ export function createToolCallStep<
   streamState,
   modelSpanTracker,
   _internal,
+  logger,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -133,7 +134,7 @@ export function createToolCallStep<
             try {
               await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             } catch (error) {
-              console.error('Error removing tool suspension metadata:', error);
+              logger?.error('Error removing tool suspension metadata:', error);
             }
           }
         }
@@ -165,7 +166,7 @@ export function createToolCallStep<
           // Flush all pending messages immediately
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
-          console.error('Error flushing messages before suspension:', error);
+          logger?.error('Error flushing messages before suspension:', error);
         }
       };
 
@@ -190,7 +191,7 @@ export function createToolCallStep<
             abortSignal: options?.abortSignal,
           });
         } catch (error) {
-          console.error('Error calling onInputAvailable', error);
+          logger?.error('Error calling onInputAvailable', error);
         }
       }
 
@@ -214,7 +215,26 @@ export function createToolCallStep<
 
         const isResumeToolCall = !!resumeDataFromArgs;
 
-        if (requireToolApproval || (tool as any).requireApproval) {
+        // Check if approval is required
+        // requireApproval can be:
+        // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
+        // - undefined (no approval needed)
+        // If needsApprovalFn exists, evaluate it with the tool args
+        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
+        if ((tool as any).needsApprovalFn) {
+          // Evaluate the function with the parsed args
+          try {
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args);
+            toolRequiresApproval = needsApprovalResult;
+          } catch (error) {
+            // Log error to help developers debug faulty needsApprovalFn implementations
+            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
+            // On error, default to requiring approval to be safe
+            toolRequiresApproval = true;
+          }
+        }
+
+        if (toolRequiresApproval) {
           if (!resumeData) {
             controller.enqueue({
               type: 'tool-call-approval',
@@ -333,7 +353,7 @@ export function createToolCallStep<
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onOutput', error);
+            logger?.error('Error calling onOutput', error);
           }
         }
 

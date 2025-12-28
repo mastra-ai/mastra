@@ -838,7 +838,8 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
         id: 'mock-message-history',
         processInput: async ({ messages }) => {
           // Fetch historical messages from the storage
-          const historicalMessagesResult = await mockMemory.storage.listMessages({
+          const memoryStore = await mockMemory.storage.getStore('memory');
+          const historicalMessagesResult = await memoryStore!.listMessages({
             threadId,
             resourceId,
             perPage: 10,

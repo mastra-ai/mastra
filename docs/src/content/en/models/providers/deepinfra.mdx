@@ -143,6 +143,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 98304,
     "inputCost": 0.6,
     "outputCost": 2.2
+  },
+  {
+    "model": "deepinfra/zai-org/GLM-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 16384,
+    "inputCost": 0.43,
+    "outputCost": 1.75
   }
 ]}
 />
@@ -175,7 +187,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "deepinfra/zai-org/GLM-4.5"
+      ? "deepinfra/zai-org/GLM-4.7"
       : "deepinfra/MiniMaxAI/MiniMax-M2";
   }
 });

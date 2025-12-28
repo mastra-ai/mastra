@@ -1,21 +1,23 @@
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
+import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { MastraMemory } from '@mastra/core/memory';
+
 import type {
-  MastraMessageV1,
   MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
+import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
   StorageListMessagesInput,
+  MemoryStorage,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -33,7 +35,7 @@ import {
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
-export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
+export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -42,8 +44,6 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
-
-import { extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -65,6 +65,17 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
+  /**
+   * Gets the memory storage domain, throwing if not available.
+   */
+  protected async getMemoryStore(): Promise<MemoryStorage> {
+    const store = await this.storage.getStore('memory');
+    if (!store) {
+      throw new Error(`Memory storage domain is not available on ${this.storage.constructor.name}`);
+    }
+    return store;
+  }
+
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
@@ -82,29 +93,6 @@ export class Memory extends MastraMemory {
     if (thread && thread.resourceId !== resourceId) {
       throw new Error(
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
-      );
-    }
-  }
-
-  protected checkStorageFeatureSupport(config: MemoryConfig) {
-    const resourceScope =
-      (typeof config.semanticRecall === 'object' && config.semanticRecall.scope !== 'thread') ||
-      // resource scope is now default
-      config.semanticRecall === true;
-
-    if (resourceScope && !this.storage.supports.selectByIncludeResourceScope) {
-      throw new Error(
-        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
-      );
-    }
-
-    if (
-      config.workingMemory?.enabled &&
-      config.workingMemory.scope === `resource` &&
-      !this.storage.supports.resourceWorkingMemory
-    ) {
-      throw new Error(
-        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support workingMemory: { scope: "resource" } yet and currently only supports per-thread working memory. Supported adapters: LibSQL, PostgreSQL, Upstash.`,
       );
     }
   }
@@ -149,8 +137,6 @@ export class Memory extends MastraMemory {
       workingMemoryEnabled: config.workingMemory?.enabled,
       semanticRecallEnabled: Boolean(config.semanticRecall),
     });
-
-    this.checkStorageFeatureSupport(config);
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
     const defaultTopK = DEFAULT_TOP_K;
@@ -209,7 +195,8 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const paginatedResult = await this.storage.listMessages({
+    const memoryStore = await this.getMemoryStore();
+    const paginatedResult = await memoryStore.listMessages({
       threadId,
       resourceId,
       perPage,
@@ -245,13 +232,15 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.getThreadById({ threadId });
   }
 
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.listThreadsByResourceId(args);
   }
 
   private async handleWorkingMemoryFromMetadata({
@@ -266,13 +255,12 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (config.workingMemory?.enabled) {
-      this.checkStorageFeatureSupport(config);
-
       const scope = config.workingMemory.scope || 'resource';
 
       // For resource scope, update the resource's working memory
       if (scope === 'resource' && resourceId) {
-        await this.storage.updateResource({
+        const memoryStore = await this.getMemoryStore();
+        await memoryStore.updateResource({
           resourceId,
           workingMemory,
         });
@@ -288,7 +276,8 @@ export class Memory extends MastraMemory {
     thread: StorageThreadType;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    const savedThread = await this.storage.saveThread({ thread });
+    const memoryStore = await this.getMemoryStore();
+    const savedThread = await memoryStore.saveThread({ thread });
 
     // Check if metadata contains workingMemory and working memory is enabled
     if (thread.metadata?.workingMemory && typeof thread.metadata.workingMemory === 'string' && thread.resourceId) {
@@ -313,7 +302,8 @@ export class Memory extends MastraMemory {
     metadata: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    const updatedThread = await this.storage.updateThread({
+    const memoryStore = await this.getMemoryStore();
+    const updatedThread = await memoryStore.updateThread({
       id,
       title,
       metadata,
@@ -332,7 +322,8 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    await this.storage.deleteThread({ threadId });
+    const memoryStore = await this.getMemoryStore();
+    await memoryStore.deleteThread({ threadId });
   }
 
   async updateWorkingMemory({
@@ -352,8 +343,6 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
-    this.checkStorageFeatureSupport(config);
-
     const scope = config.workingMemory.scope || 'resource';
 
     // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
@@ -364,9 +353,10 @@ export class Memory extends MastraMemory {
       );
     }
 
+    const memoryStore = await this.getMemoryStore();
     if (scope === 'resource' && resourceId) {
       // Update working memory in resource table
-      await this.storage.updateResource({
+      await memoryStore.updateResource({
         resourceId,
         workingMemory,
       });
@@ -377,7 +367,7 @@ export class Memory extends MastraMemory {
         throw new Error(`Thread ${threadId} not found`);
       }
 
-      await this.storage.updateThread({
+      await memoryStore.updateThread({
         id: threadId,
         title: thread.title || 'Untitled Thread',
         metadata: {
@@ -410,8 +400,6 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
     }
-
-    this.checkStorageFeatureSupport(config);
 
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
@@ -475,9 +463,10 @@ ${workingMemory}`;
         );
       }
 
+      const memoryStore = await this.getMemoryStore();
       if (scope === 'resource' && resourceId) {
         // Update working memory in resource table
-        await this.storage.updateResource({
+        await memoryStore.updateResource({
           resourceId,
           workingMemory,
         });
@@ -492,7 +481,7 @@ ${workingMemory}`;
           throw new Error(`Thread ${threadId} not found`);
         }
 
-        await this.storage.updateThread({
+        await memoryStore.updateThread({
           id: threadId,
           title: thread.title || 'Untitled Thread',
           metadata: {
@@ -570,11 +559,27 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    const promise = (this.embedder.specificationVersion === `v2` ? embedManyV5 : embedMany)({
+    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
+    const specVersion = this.embedder.specificationVersion;
+
+    switch (specVersion) {
+      case 'v3':
+        embedFn = embedManyV6;
+        break;
+      case 'v2':
+        embedFn = embedManyV5;
+        break;
+      default:
+        embedFn = embedMany;
+        break;
+    }
+
+    const promise = embedFn({
       values: chunks,
       maxRetries: 3,
       // @ts-ignore
       model: this.embedder,
+      ...(this.embedderOptions || {}),
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
@@ -612,7 +617,8 @@ ${workingMemory}`;
       .add(updatedMessages, 'memory')
       .get.all.db();
 
-    const result = await this.storage.saveMessages({
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.saveMessages({
       messages: dbMessages,
     });
 
@@ -692,34 +698,7 @@ ${workingMemory}`;
 
     return result;
   }
-  protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
-    if (typeof message?.content === `string`) {
-      return {
-        ...message,
-        content: removeWorkingMemoryTags(message.content).trim(),
-      };
-    } else if (Array.isArray(message?.content)) {
-      // Filter out updateWorkingMemory tool-call/result content items
-      const filteredContent = message.content.filter(
-        content =>
-          (content.type !== 'tool-call' && content.type !== 'tool-result') ||
-          content.toolName !== 'updateWorkingMemory',
-      );
-      const newContent = filteredContent.map(content => {
-        if (content.type === 'text') {
-          return {
-            ...content,
-            text: removeWorkingMemoryTags(content.text).trim(),
-          };
-        }
-        return { ...content };
-      }) as MastraMessageV1['content'];
-      if (!newContent.length) return null;
-      return { ...message, content: newContent };
-    } else {
-      return { ...message };
-    }
-  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
@@ -780,8 +759,6 @@ ${workingMemory}`;
       return null;
     }
 
-    this.checkStorageFeatureSupport(config);
-
     const scope = config.workingMemory.scope || 'resource';
     let workingMemoryData: string | null = null;
 
@@ -795,7 +772,8 @@ ${workingMemory}`;
 
     if (scope === 'resource' && resourceId) {
       // Get working memory from resource table
-      const resource = await this.storage.getResourceById({ resourceId });
+      const memoryStore = await this.getMemoryStore();
+      const resource = await memoryStore.getResourceById({ resourceId });
       workingMemoryData = resource?.workingMemory || null;
     } else {
       // Get working memory from thread metadata (default behavior)
@@ -1030,7 +1008,8 @@ ${
 
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
-    return this.storage.updateMessages({ messages });
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.updateMessages({ messages });
   }
 
   /**
@@ -1069,7 +1048,8 @@ ${
     }
 
     // Delete from storage
-    await this.storage.deleteMessages(messageIds);
+    const memoryStore = await this.getMemoryStore();
+    await memoryStore.deleteMessages(messageIds);
 
     // TODO: Delete from vector store if semantic recall is enabled
     // This would require getting the messages first to know their threadId/resourceId

@@ -1072,6 +1072,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       await consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
         onError: options?.onError,
+        logger: this.logger,
       });
     } catch (error) {
       options?.onError?.(error);
@@ -1084,7 +1085,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
   async getFullOutput() {
     await this.consumeStream({
       onError: (error: unknown) => {
-        console.error(error);
+        this.logger.error('Error consuming stream', error);
         throw error;
       },
     });

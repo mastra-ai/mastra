@@ -173,6 +173,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/friendli",
+          label: "Friendli",
+        },
+        {
+          type: "doc",
           id: "providers/github-models",
           label: "GitHub Models",
         },
@@ -260,6 +265,11 @@ const sidebars = {
           type: "doc",
           id: "providers/morph",
           label: "Morph",
+        },
+        {
+          type: "doc",
+          id: "providers/nano-gpt",
+          label: "NanoGPT",
         },
         {
           type: "doc",

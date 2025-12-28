@@ -391,7 +391,8 @@ export class EventedWorkflow<
     });
 
     if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
@@ -462,7 +463,7 @@ export class EventedRun<
           },
         })
         .catch(err => {
-          console.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
         });
     };
     this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
@@ -491,7 +492,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -575,7 +577,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
       resourceId: this.resourceId,
@@ -648,24 +651,31 @@ export class EventedRun<
       throw new Error('No steps provided to resume');
     }
 
-    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error('Cannot resume workflow: workflows store is required');
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
 
-    const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     if (!resumePath) {
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`,
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
       );
     }
 
     console.dir(
-      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
+      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
       { depth: null },
     );
     // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot
@@ -757,7 +767,8 @@ export class EventedRun<
 
   async cancel() {
     // Update storage directly for immediate status update (same pattern as Inngest)
-    await this.mastra?.getStorage()?.updateWorkflowState({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
       opts: {

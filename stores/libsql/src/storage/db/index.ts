@@ -2,7 +2,13 @@ import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, getSqlType, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  getSqlType,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -434,7 +440,7 @@ export class LibSQLDB extends MastraBase {
     let statement = `SELECT * FROM ${parsedTableName}`;
 
     if (whereClause?.sql) {
-      statement += `${whereClause.sql}`;
+      statement += ` ${whereClause.sql}`;
     }
 
     if (orderBy) {
@@ -546,6 +552,11 @@ export class LibSQLDB extends MastraBase {
 
       await this.client.execute(sql);
       this.logger.debug(`LibSQLDB: Created table ${tableName}`);
+
+      // Run migrations for Spans table to add any new columns
+      if (tableName === TABLE_SPANS) {
+        await this.migrateSpansTable();
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -556,6 +567,33 @@ export class LibSQLDB extends MastraBase {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+        if (!columnExists) {
+          const sqlType = this.getSqlType(columnDef.type);
+          // For new columns, use nullable (no default needed) since existing rows will have NULL
+          const alterSql = `ALTER TABLE "${TABLE_SPANS}" ADD COLUMN "${columnName}" ${sqlType}`;
+          await this.client.execute(alterSql);
+          this.logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_SPANS}`);
+        }
+      }
+
+      this.logger.info(`LibSQLDB: Migration completed for ${TABLE_SPANS}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger.warn(`LibSQLDB: Failed to migrate spans table ${TABLE_SPANS}:`, error);
     }
   }
 
