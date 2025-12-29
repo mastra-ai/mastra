@@ -441,6 +441,80 @@ describe('OpenAISchemaCompatLayer - Edge Cases', () => {
   });
 });
 
+describe('OpenAISchemaCompatLayer - Partial Nested Objects (GitHub #11457)', () => {
+  // This test suite reproduces the bug reported in https://github.com/mastra-ai/mastra/issues/11457
+  // When a nested object has .partial() applied, all its properties become optional.
+  // The issue is that when the LLM omits a field entirely (undefined), validation fails
+  // because .optional() was converted to .nullable() which only accepts null, not undefined.
+
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should validate partial nested objects when fields are omitted (undefined)', () => {
+    // This is the exact schema from the bug report
+    const inputSchema = z.object({
+      eventId: z.string(),
+      request: z
+        .object({
+          City: z.string(),
+          Name: z.string(),
+          Slug: z.string(),
+        })
+        .partial()
+        .passthrough(),
+      eventImageFile: z.any().optional(),
+    });
+
+    // This is the test data from the bug report - only providing one field
+    const testData = {
+      eventId: '123',
+      request: { Name: 'Test' }, // City and Slug are omitted (undefined)
+      eventImageFile: null,
+    };
+
+    // Original schema should validate successfully
+    const originalValidation = inputSchema.safeParse(testData);
+    expect(originalValidation.success).toBe(true);
+
+    // Process through OpenAI compat layer
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processedSchema = layer.processZodType(inputSchema);
+
+    // BUG: This fails because .optional() was converted to .nullable()
+    // and .nullable() does not accept undefined values
+    const processedValidation = processedSchema.safeParse(testData);
+
+    // This assertion should pass but currently FAILS
+    expect(processedValidation.success).toBe(true);
+    if (!processedValidation.success) {
+      console.error('Validation errors:', processedValidation.error.format());
+    }
+  });
+
+  it('should accept undefined values for optional properties after processing', () => {
+    // Simpler test case to isolate the issue
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const processed = layer.processZodType(schema);
+
+    // BUG: When age is OMITTED (undefined), validation should pass
+    // but it fails because .nullable() doesn't accept undefined
+    const result = processed.safeParse({ name: 'John' }); // age is undefined/omitted
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      console.error('Validation errors:', result.error.format());
+    }
+  });
+});
+
 describe('OpenAISchemaCompatLayer - JSON Serialization', () => {
   const modelInfo: ModelInformation = {
     provider: 'openai',

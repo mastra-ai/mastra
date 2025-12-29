@@ -30,23 +30,25 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV4): ZodTypeV4;
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
-      // For OpenAI strict mode, convert .optional() to .nullable() with transform
+      // For OpenAI strict mode, convert .optional() to .nullish() with transform
       // This ensures all fields are in the required array but can accept null values
       // The transform converts null -> undefined to match original .optional() semantics
+      // Using .nullish() instead of .nullable() to also accept undefined values (GitHub #11457)
+      // This handles cases where fields are omitted entirely rather than explicitly set to null
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
 
       if (innerType) {
         // If inner is nullable, just process and return it with transform (strips the optional wrapper)
-        // This converts .optional().nullable() -> .nullable() with transform
+        // This converts .optional().nullable() -> .nullish() with transform
         if (isNullable(z)(innerType)) {
           const processed = this.processZodType(innerType);
-          return processed.transform((val: any) => (val === null ? undefined : val));
+          return processed.optional().transform((val: any) => (val === null ? undefined : val));
         }
 
-        // Otherwise, process inner, make it nullable, and add transform
-        // This converts .optional() -> .nullable() with transform that converts null to undefined
+        // Otherwise, process inner, make it nullish, and add transform
+        // This converts .optional() -> .nullish() with transform that converts null to undefined
         const processedInner = this.processZodType(innerType);
-        return processedInner.nullable().transform((val: any) => (val === null ? undefined : val));
+        return processedInner.nullish().transform((val: any) => (val === null ? undefined : val));
       }
 
       return value;
@@ -55,13 +57,13 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
       if (innerType) {
         // Special case: if inner is optional, strip it and add transform for OpenAI strict mode
-        // This converts .nullable().optional() -> .nullable() with transform
+        // This converts .nullable().optional() -> .nullish() with transform
         if (isOptional(z)(innerType)) {
           const innerInnerType =
             '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
           if (innerInnerType) {
             const processedInnerInner = this.processZodType(innerInnerType);
-            return processedInnerInner.nullable().transform((val: any) => (val === null ? undefined : val));
+            return processedInnerInner.nullish().transform((val: any) => (val === null ? undefined : val));
           }
         }
 
@@ -70,17 +72,18 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       }
       return value;
     } else if (isDefault(z)(value)) {
-      // For OpenAI strict mode, convert .default() to .nullable() with transform
+      // For OpenAI strict mode, convert .default() to .nullish() with transform
       // This ensures all fields are in the required array but can accept null values
-      // The transform converts null -> default value to match original .default() semantics
+      // The transform converts null/undefined -> default value to match original .default() semantics
+      // Using .nullish() to also accept undefined values (GitHub #11457)
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
       const defaultValue = '_def' in value ? value._def.defaultValue : (value as any)._zod?.def?.defaultValue;
 
       if (innerType) {
         const processedInner = this.processZodType(innerType);
-        // Transform null -> default value (call defaultValue() if it's a function)
-        return processedInner.nullable().transform((val: any) => {
-          if (val === null) {
+        // Transform null/undefined -> default value (call defaultValue() if it's a function)
+        return processedInner.nullish().transform((val: any) => {
+          if (val === null || val === undefined) {
             return typeof defaultValue === 'function' ? defaultValue() : defaultValue;
           }
           return val;
