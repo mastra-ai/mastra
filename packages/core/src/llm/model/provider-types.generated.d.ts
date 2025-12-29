@@ -855,6 +855,7 @@ export type ProviderModelsMap = {
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
+    'minimax-m2.1-free',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
