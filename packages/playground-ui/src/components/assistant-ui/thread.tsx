@@ -41,7 +41,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
         <ThreadWelcome agentName={agentName} />
 
-        <div className="max-w-[568px] w-full mx-auto px-4 pb-7">
+        <div className="max-w-3xl w-full mx-auto px-4 pb-7">
           <ThreadPrimitive.Messages
             components={{
               UserMessage: UserMessage,
@@ -110,12 +110,12 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
-        <div className="max-w-[568px] w-full mx-auto pb-2">
+        <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
 
         <div
-          className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
+          className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-3xl w-full mx-auto px-4 focus-within:outline focus-within:outline-accent1 -outline-offset-2"
           onClick={() => {
             textareaRef.current?.focus();
           }}

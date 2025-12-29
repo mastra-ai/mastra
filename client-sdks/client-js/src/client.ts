@@ -1,6 +1,7 @@
+import type { ListScoresResponse } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
+import type { TraceRecord, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
 import type { WorkflowInfo } from '@mastra/core/workflows';
 import {
   Agent,
@@ -15,6 +16,11 @@ import {
   Observability,
   StoredAgent,
 } from './resources';
+import type {
+  ListScoresBySpanParams,
+  LegacyTracesPaginatedArg,
+  LegacyGetTracesResponse,
+} from './resources/observability';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -31,13 +37,10 @@ import type {
   McpServerToolListResponse,
   GetScorerResponse,
   ListScoresByScorerIdParams,
-  ListScoresResponse,
   ListScoresByRunIdParams,
   ListScoresByEntityIdParams,
-  ListScoresBySpanParams,
   SaveScoreParams,
   SaveScoreResponse,
-  GetTracesResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
   ListMemoryThreadMessagesResponse,
@@ -50,6 +53,7 @@ import type {
   CreateStoredAgentParams,
   StoredAgentResponse,
   GetSystemPackagesResponse,
+  ListScoresResponse as ListScoresResponseOld,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -589,7 +593,7 @@ export class MastraClient extends BaseResource {
     return this.request(`/api/scores/scorers/${encodeURIComponent(scorerId)}`);
   }
 
-  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponse> {
+  public listScoresByScorerId(params: ListScoresByScorerIdParams): Promise<ListScoresResponseOld> {
     const { page, perPage, scorerId, entityId, entityType } = params;
     const searchParams = new URLSearchParams();
 
@@ -615,7 +619,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing run ID and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponse> {
+  public listScoresByRunId(params: ListScoresByRunIdParams): Promise<ListScoresResponseOld> {
     const { runId, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -635,7 +639,7 @@ export class MastraClient extends BaseResource {
    * @param params - Parameters containing entity ID, type, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponse> {
+  public listScoresByEntityId(params: ListScoresByEntityIdParams): Promise<ListScoresResponseOld> {
     const { entityId, entityType, page, perPage } = params;
     const searchParams = new URLSearchParams();
 
@@ -668,8 +672,27 @@ export class MastraClient extends BaseResource {
     return this.observability.getTrace(traceId);
   }
 
-  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
+  /**
+   * Retrieves paginated list of traces with optional filtering.
+   * This is the legacy API preserved for backward compatibility.
+   *
+   * @param params - Parameters for pagination and filtering (legacy format)
+   * @returns Promise containing paginated traces and pagination info
+   * @deprecated Use {@link listTraces} instead for new features like ordering and more filters.
+   */
+  getTraces(params: LegacyTracesPaginatedArg): Promise<LegacyGetTracesResponse> {
     return this.observability.getTraces(params);
+  }
+
+  /**
+   * Retrieves paginated list of traces with optional filtering and sorting.
+   * This is the new API with improved filtering options.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated traces and pagination info
+   */
+  listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
+    return this.observability.listTraces(params);
   }
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {

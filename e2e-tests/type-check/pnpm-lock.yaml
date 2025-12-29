@@ -11,6 +11,9 @@ importers:
       execa:
         specifier: ^9.6.0
         version: 9.6.0
+      form-data:
+        specifier: ^2.5.4
+        version: 2.5.4
       get-port:
         specifier: ^7.1.0
         version: 7.1.0

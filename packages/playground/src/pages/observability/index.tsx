@@ -21,6 +21,7 @@ import {
   useWorkflows,
   useScorers,
 } from '@mastra/playground-ui';
+import { EntityType } from '@mastra/core/observability';
 import { useEffect, useState } from 'react';
 import { EyeIcon } from 'lucide-react';
 import { useTraces } from '@/domains/observability/hooks/use-traces';
@@ -86,13 +87,13 @@ export default function Observability() {
   const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([_, value]) => ({
     value: value.id,
     label: value.name,
-    type: 'agent' as const,
+    type: EntityType.AGENT,
   }));
 
   const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
     value: value.name,
     label: value.name,
-    type: 'workflow' as const,
+    type: EntityType.WORKFLOW_RUN,
   }));
 
   const entityOptions: EntityOptions[] = [

@@ -1,6 +1,12 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { createStorageErrorId, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, getDefaultValue } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+  getDefaultValue,
+} from '@mastra/core/storage';
 import type {
   StorageColumn,
   TABLE_NAMES,
@@ -107,16 +113,57 @@ export class MssqlDB extends MastraBase {
   private setupSchemaPromise: Promise<void> | null = null;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  protected getSqlType(type: StorageColumn['type'], isPrimaryKey = false, useLargeStorage = false): string {
+  /**
+   * Columns that participate in composite indexes need smaller sizes (NVARCHAR(100)).
+   * MSSQL has a 900-byte index key limit, so composite indexes with NVARCHAR(400) columns fail.
+   * These are typically ID/type fields that don't need 400 chars.
+   */
+  private readonly COMPOSITE_INDEX_COLUMNS = [
+    'traceId', // Used in: PRIMARY KEY (traceId, spanId), index (traceId, spanId, seq_id)
+    'spanId', // Used in: PRIMARY KEY (traceId, spanId), index (traceId, spanId, seq_id)
+    'parentSpanId', // Used in: index (parentSpanId, startedAt)
+    'entityType', // Used in: (entityType, entityId), (entityType, entityName)
+    'entityId', // Used in: (entityType, entityId)
+    'entityName', // Used in: (entityType, entityName)
+    'organizationId', // Used in: (organizationId, userId)
+    'userId', // Used in: (organizationId, userId)
+  ];
+
+  /**
+   * Columns that store large amounts of data and should use NVARCHAR(MAX).
+   * Avoid listing columns that participate in indexes (resourceId, thread_id, agent_name, name, etc.)
+   */
+  private readonly LARGE_DATA_COLUMNS = [
+    'workingMemory',
+    'snapshot',
+    'metadata',
+    'content', // messages.content - can be very long conversation content
+    'input', // evals.input - test input data
+    'output', // evals.output - test output data
+    'instructions', // evals.instructions - evaluation instructions
+    'other', // traces.other - additional trace data
+  ];
+
+  protected getSqlType(
+    type: StorageColumn['type'],
+    isPrimaryKey = false,
+    useLargeStorage = false,
+    useSmallStorage = false,
+  ): string {
     switch (type) {
       case 'text':
         // Use NVARCHAR(MAX) for columns that store large amounts of data (workingMemory, snapshot, metadata)
         if (useLargeStorage) {
           return 'NVARCHAR(MAX)';
         }
-        // Use NVARCHAR(400) for regular columns to enable composite indexing
-        // MSSQL has a 900-byte index key limit
-        // NVARCHAR(400) = 800 bytes, leaving 100 bytes for other columns in composite indexes
+        // Use NVARCHAR(100) for columns that participate in composite indexes
+        // MSSQL has a 900-byte index key limit, NVARCHAR(100) = 200 bytes
+        // This allows up to 4 columns in a composite index (4 * 200 = 800 bytes < 900)
+        if (useSmallStorage) {
+          return 'NVARCHAR(100)';
+        }
+        // Use NVARCHAR(400) for regular columns to enable single-column indexing
+        // MSSQL has a 900-byte index key limit, NVARCHAR(400) = 800 bytes
         // Primary keys use NVARCHAR(255) for consistency with common UUID/ID lengths
         return isPrimaryKey ? 'NVARCHAR(255)' : 'NVARCHAR(400)';
       case 'timestamp':
@@ -310,19 +357,6 @@ export class MssqlDB extends MastraBase {
     try {
       const uniqueConstraintColumns = tableName === TABLE_WORKFLOW_SNAPSHOT ? ['workflow_name', 'run_id'] : [];
 
-      // Columns that store large amounts of data and should use NVARCHAR(MAX)
-      // Avoid listing columns that participate in indexes (resourceId, thread_id, agent_name, name, etc.)
-      const largeDataColumns = [
-        'workingMemory',
-        'snapshot',
-        'metadata',
-        'content', // messages.content - can be very long conversation content
-        'input', // evals.input - test input data
-        'output', // evals.output - test output data
-        'instructions', // evals.instructions - evaluation instructions
-        'other', // traces.other - additional trace data
-      ];
-
       const columns = Object.entries(schema)
         .map(([name, def]) => {
           const parsedName = parseSqlIdentifier(name, 'column name');
@@ -330,8 +364,9 @@ export class MssqlDB extends MastraBase {
           if (def.primaryKey) constraints.push('PRIMARY KEY');
           if (!def.nullable) constraints.push('NOT NULL');
           const isIndexed = !!def.primaryKey || uniqueConstraintColumns.includes(name);
-          const useLargeStorage = largeDataColumns.includes(name);
-          return `[${parsedName}] ${this.getSqlType(def.type, isIndexed, useLargeStorage)} ${constraints.join(' ')}`.trim();
+          const useLargeStorage = this.LARGE_DATA_COLUMNS.includes(name);
+          const useSmallStorage = this.COMPOSITE_INDEX_COLUMNS.includes(name);
+          return `[${parsedName}] ${this.getSqlType(def.type, isIndexed, useLargeStorage, useSmallStorage)} ${constraints.join(' ')}`.trim();
         })
         .join(',\n');
 
@@ -379,16 +414,42 @@ export class MssqlDB extends MastraBase {
         await this.pool.request().query(alterSql);
       }
 
+      // Use schema prefix for constraint names to avoid collisions across schemas
+      const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
+
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        const constraintName = 'mastra_workflow_snapshot_workflow_name_run_id_key';
+        const constraintName = `${schemaPrefix}mastra_workflow_snapshot_workflow_name_run_id_key`;
         const checkConstraintSql = `SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`;
         const checkConstraintRequest = this.pool.request();
         checkConstraintRequest.input('constraintName', constraintName);
         const constraintResult = await checkConstraintRequest.query(checkConstraintSql);
         const constraintExists = Array.isArray(constraintResult.recordset) && constraintResult.recordset.length > 0;
         if (!constraintExists) {
-          const addConstraintSql = `ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} ADD CONSTRAINT ${constraintName} UNIQUE ([workflow_name], [run_id])`;
+          const addConstraintSql = `ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} ADD CONSTRAINT [${constraintName}] UNIQUE ([workflow_name], [run_id])`;
           await this.pool.request().query(addConstraintSql);
+        }
+      }
+
+      // Run migrations and add composite primary key for Spans table
+      if (tableName === TABLE_SPANS) {
+        await this.migrateSpansTable();
+
+        // Add composite primary key for spans table (traceId, spanId)
+        const pkConstraintName = `${schemaPrefix}mastra_ai_spans_traceid_spanid_pk`;
+        const checkPkRequest = this.pool.request();
+        checkPkRequest.input('constraintName', pkConstraintName);
+        const pkResult = await checkPkRequest.query(
+          `SELECT 1 AS found FROM sys.key_constraints WHERE name = @constraintName`,
+        );
+        const pkExists = Array.isArray(pkResult.recordset) && pkResult.recordset.length > 0;
+        if (!pkExists) {
+          try {
+            const addPkSql = `ALTER TABLE ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} ADD CONSTRAINT [${pkConstraintName}] PRIMARY KEY ([traceId], [spanId])`;
+            await this.pool.request().query(addPkSql);
+          } catch (pkError) {
+            // Log warning but don't fail - existing tables might have data issues
+            this.logger?.warn?.(`Failed to add composite primary key to spans table:`, pkError);
+          }
         }
       }
     } catch (error) {
@@ -403,6 +464,41 @@ export class MssqlDB extends MastraBase {
         },
         error,
       );
+    }
+  }
+
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+        if (!columnExists) {
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const useLargeStorage = this.LARGE_DATA_COLUMNS.includes(columnName);
+          const useSmallStorage = this.COMPOSITE_INDEX_COLUMNS.includes(columnName);
+          const isIndexed = !!columnDef.primaryKey;
+          const sqlType = this.getSqlType(columnDef.type, isIndexed, useLargeStorage, useSmallStorage);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD [${parsedColumnName}] ${sqlType} ${nullable} ${defaultValue}`.trim();
+          await this.pool.request().query(alterSql);
+          this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
     }
   }
 
@@ -434,22 +530,13 @@ export class MssqlDB extends MastraBase {
           const columnExists = Array.isArray(checkResult.recordset) && checkResult.recordset.length > 0;
           if (!columnExists) {
             const columnDef = schema[columnName];
-            // Apply the same large data column logic as createTable
-            const largeDataColumns = [
-              'workingMemory',
-              'snapshot',
-              'metadata',
-              'content',
-              'input',
-              'output',
-              'instructions',
-              'other',
-            ];
-            const useLargeStorage = largeDataColumns.includes(columnName);
+            const useLargeStorage = this.LARGE_DATA_COLUMNS.includes(columnName);
+            const useSmallStorage = this.COMPOSITE_INDEX_COLUMNS.includes(columnName);
             const isIndexed = !!columnDef.primaryKey;
-            const sqlType = this.getSqlType(columnDef.type, isIndexed, useLargeStorage);
-            const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-            const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+            const sqlType = this.getSqlType(columnDef.type, isIndexed, useLargeStorage, useSmallStorage);
+            // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+            const nullable = columnDef.nullable ? '' : 'NOT NULL';
+            const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
             const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
             const alterSql =
               `ALTER TABLE ${fullTableName} ADD [${parsedColumnName}] ${sqlType} ${nullable} ${defaultValue}`.trim();

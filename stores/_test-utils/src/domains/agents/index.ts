@@ -4,8 +4,8 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 
 export function createAgentsTests({ storage }: { storage: MastraStorage }) {
-  // Skip tests if storage doesn't support agents
-  const describeAgents = storage.supports.agents ? describe : describe.skip;
+  // Skip tests if storage doesn't have agents domain
+  const describeAgents = storage.stores?.agents ? describe : describe.skip;
 
   let agentsStorage: AgentsStorage;
 

@@ -1,3 +1,4 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -300,7 +301,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
-          providerOptions: this.providerOptions,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

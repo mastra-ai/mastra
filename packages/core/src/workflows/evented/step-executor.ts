@@ -237,7 +237,7 @@ export class StepExecutor extends MastraBase {
             iterationCount: 0,
           });
         } catch (e) {
-          console.error('error evaluating condition', e);
+          this.mastra?.getLogger()?.error('error evaluating condition', e);
           return false;
         }
       }),
@@ -388,7 +388,7 @@ export class StepExecutor extends MastraBase {
         ),
       );
     } catch (e) {
-      console.error('error evaluating condition', e);
+      this.mastra?.getLogger()?.error('error evaluating condition', e);
       return 0;
     }
   }
@@ -464,7 +464,7 @@ export class StepExecutor extends MastraBase {
 
       return result.getTime() - Date.now();
     } catch (e) {
-      console.error('error evaluating condition', e);
+      this.mastra?.getLogger()?.error('error evaluating condition', e);
       return 0;
     }
   }

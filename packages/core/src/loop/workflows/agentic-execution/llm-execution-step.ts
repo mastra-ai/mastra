@@ -8,6 +8,7 @@ import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
+import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -43,6 +44,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
     request: any;
     rawResponse: any;
   };
+  logger?: IMastraLogger;
 };
 
 async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
@@ -55,6 +57,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   controller,
   responseFromModel,
   includeRawChunks,
+  logger,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
@@ -162,7 +165,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onInputStart', error);
+            logger?.error('Error calling onInputStart', error);
           }
         }
 
@@ -187,7 +190,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onInputDelta', error);
+            logger?.error('Error calling onInputDelta', error);
           }
         }
         if (isControllerOpen(controller)) {
@@ -268,10 +271,12 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
 
         messageList.add(message, 'response');
 
-        // Reset reasoning state
+        // Reset reasoning state - clear providerOptions to prevent reasoning metadata
+        // (like openai.itemId) from leaking into subsequent text parts
         runState.setState({
           isReasoning: false,
           reasoningDeltas: [],
+          providerOptions: undefined,
         });
 
         if (isControllerOpen(controller)) {
@@ -399,7 +404,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   }
 }
 
-function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
+function executeStreamWithFallbackModels<T>(
+  models: ModelManagerModelConfig[],
+  logger?: IMastraLogger,
+): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = 0;
     let finalResult: T | undefined;
@@ -430,7 +438,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
 
           attempt++;
 
-          console.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
+          logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
 
           // If we've exhausted all retries for this model, break and try the next model
           if (attempt > maxRetries) {
@@ -445,7 +453,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
       }
     }
     if (typeof finalResult === 'undefined') {
-      console.error('Exhausted all fallback models and reached the maximum number of retries.');
+      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
       throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
     }
     return finalResult;
@@ -488,6 +496,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      // Start the MODEL_STEP span at the beginning of LLM execution
+      modelSpanTracker?.startStep();
+
       let modelResult;
       let warnings: any;
       let request: any;
@@ -498,7 +509,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
-      }>(models)(async (modelConfig, isLastModel) => {
+      }>(
+        models,
+        logger,
+      )(async (modelConfig, isLastModel) => {
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
         // Reset system messages to original before each step execution
@@ -607,7 +621,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 stepTools: tools,
               };
             }
-            console.error('Error in processInputStep processors:', error);
+            logger?.error('Error in processInputStep processors:', error);
             throw error;
           }
         }
@@ -752,9 +766,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               request,
               rawResponse,
             },
+            logger,
           });
         } catch (error) {
-          console.error('Error in LLM Execution Step', error);
+          logger?.error('Error in LLM Execution Step', error);
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
@@ -900,6 +915,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           const currentRetryCount = inputData.processorRetryCount || 0;
 
           await processorRunner.runProcessOutputStep({
+            steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
             messageList,
             stepNumber,
@@ -916,7 +932,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {
-            console.error('Error in processOutputStep processors:', error);
+            logger?.error('Error in processOutputStep processors:', error);
             throw error;
           }
         }

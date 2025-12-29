@@ -2,6 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -9,6 +10,7 @@ import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
+import { ZodError } from 'zod';
 
 import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
 
@@ -159,11 +161,53 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const queryParams = request.query();
     let body: unknown;
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
-      try {
-        body = await request.json();
-      } catch {}
+      const contentType = request.header('content-type') || '';
+
+      if (contentType.includes('multipart/form-data')) {
+        try {
+          const formData = await request.formData();
+          body = await this.parseFormData(formData);
+        } catch (error) {
+          console.error('Failed to parse multipart form data:', error);
+          // Re-throw size limit errors, let others fall through to validation
+          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
+            throw error;
+          }
+        }
+      } else {
+        try {
+          body = await request.json();
+        } catch (error) {
+          console.error('Failed to parse JSON body:', error);
+        }
+      }
     }
     return { urlParams, queryParams: queryParams as Record<string, string>, body };
+  }
+
+  /**
+   * Parse FormData into a plain object, converting File objects to Buffers.
+   */
+  private async parseFormData(formData: FormData): Promise<Record<string, unknown>> {
+    const result: Record<string, unknown> = {};
+
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        const arrayBuffer = await value.arrayBuffer();
+        result[key] = Buffer.from(arrayBuffer);
+      } else if (typeof value === 'string') {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[key] = JSON.parse(value);
+        } catch {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   async sendResponse(route: ServerRoute, response: Context, result: unknown): Promise<any> {
@@ -250,11 +294,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
           } catch (error) {
             console.error('Error parsing query params', error);
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return c.json(formatZodError(error, 'query parameters'), 400);
+            }
             return c.json(
               {
                 error: 'Invalid query parameters',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );
@@ -266,11 +313,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             params.body = await this.parseBody(route, params.body);
           } catch (error) {
             console.error('Error parsing body:', error instanceof Error ? error.message : String(error));
-            // Zod validation errors should return 400 Bad Request, not 500
+            // Zod validation errors should return 400 Bad Request with structured issues
+            if (error instanceof ZodError) {
+              return c.json(formatZodError(error, 'request body'), 400);
+            }
             return c.json(
               {
                 error: 'Invalid request body',
-                details: error instanceof Error ? error.message : 'Unknown error',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
               },
               400,
             );

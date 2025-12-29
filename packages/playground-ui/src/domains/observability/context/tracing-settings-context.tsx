@@ -10,12 +10,14 @@ export type TracingSettingsContextType = {
   setSettings: (settings: TracingSettings) => void;
   resetAll: () => void;
   settings?: TracingSettings;
+  entityType?: 'workflow' | 'agent';
 };
 
 export const TracingSettingsContext = createContext<TracingSettingsContextType>({
   setSettings: () => {},
   resetAll: () => {},
   settings: undefined,
+  entityType: undefined,
 });
 
 export interface TracingSettingsProviderProps {

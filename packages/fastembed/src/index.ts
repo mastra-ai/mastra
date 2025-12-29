@@ -1,12 +1,17 @@
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { customProvider, type EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
-import { experimental_customProvider } from '@internal/ai-sdk-v4';
+import { customProvider as customProviderV2 } from '@internal/ai-sdk-v5';
+import { customProvider as customProviderLegacy } from '@internal/ai-sdk-v4';
+import type { EmbeddingModelV3 } from '@internal/ai-v6';
+import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import type { EmbeddingModelV1 } from '@internal/ai-sdk-v4';
+import { customProvider as customProviderV3 } from '@internal/ai-v6';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
 export type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 export type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+export type { EmbeddingModel as EmbeddingModelV3 } from '@internal/ai-v6';
 
 async function getModelCachePath() {
   const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
@@ -39,7 +44,7 @@ async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' |
 }
 
 // Legacy v1 provider for backwards compatibility
-const fastEmbedLegacyProvider = experimental_customProvider({
+const fastEmbedLegacyProvider = customProviderLegacy({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
       specificationVersion: 'v1',
@@ -64,8 +69,8 @@ const fastEmbedLegacyProvider = experimental_customProvider({
   },
 });
 
-// // V2 provider for AI SDK v5 compatibility
-const fastEmbedProvider = customProvider({
+// V2 provider for AI SDK v5 compatibility
+const fastEmbedProviderV2 = customProviderV2({
   textEmbeddingModels: {
     'bge-small-en-v1.5': {
       specificationVersion: 'v2',
@@ -90,9 +95,46 @@ const fastEmbedProvider = customProvider({
   },
 });
 
-export const fastembed: EmbeddingModelV2 = Object.assign(fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`), {
-  small: fastEmbedProvider.textEmbeddingModel(`bge-small-en-v1.5`),
-  base: fastEmbedProvider.textEmbeddingModel(`bge-base-en-v1.5`),
+// V3 provider for AI SDK v6 compatibility
+const fastEmbedProviderV3 = customProviderV3({
+  embeddingModels: {
+    'bge-small-en-v1.5': {
+      specificationVersion: 'v3',
+      provider: 'fastembed',
+      modelId: 'bge-small-en-v1.5',
+      maxEmbeddingsPerCall: 256,
+      supportsParallelCalls: true,
+      async doEmbed({ values }) {
+        const result = await generateEmbeddings(values, 'BGESmallENV15');
+        return { ...result, warnings: [] };
+      },
+    },
+    'bge-base-en-v1.5': {
+      specificationVersion: 'v3',
+      provider: 'fastembed',
+      modelId: 'bge-base-en-v1.5',
+      maxEmbeddingsPerCall: 256,
+      supportsParallelCalls: true,
+      async doEmbed({ values }) {
+        const result = await generateEmbeddings(values, 'BGEBaseENV15');
+        return { ...result, warnings: [] };
+      },
+    },
+  },
+});
+
+export const fastembed: EmbeddingModelV3 & {
+  small: EmbeddingModelV3;
+  base: EmbeddingModelV3;
+  smallV2: EmbeddingModelV2<string>;
+  baseV2: EmbeddingModelV2<string>;
+  smallLegacy: EmbeddingModelV1<string>;
+  baseLegacy: EmbeddingModelV1<string>;
+} = Object.assign(fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`), {
+  small: fastEmbedProviderV3.embeddingModel(`bge-small-en-v1.5`),
+  base: fastEmbedProviderV3.embeddingModel(`bge-base-en-v1.5`),
+  smallV2: fastEmbedProviderV2.textEmbeddingModel(`bge-small-en-v1.5`),
+  baseV2: fastEmbedProviderV2.textEmbeddingModel(`bge-base-en-v1.5`),
   smallLegacy: fastEmbedLegacyProvider.textEmbeddingModel(`bge-small-en-v1.5`),
   baseLegacy: fastEmbedLegacyProvider.textEmbeddingModel(`bge-base-en-v1.5`),
 });

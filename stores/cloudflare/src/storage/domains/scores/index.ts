@@ -1,6 +1,6 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
@@ -9,7 +9,7 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
 import type { CloudflareDomainConfig } from '../../types';
 
@@ -54,14 +54,14 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return null;
     }
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -71,7 +71,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',
@@ -121,8 +121,8 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
   }
@@ -139,7 +139,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
@@ -208,7 +208,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
@@ -254,8 +254,8 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
@@ -268,7 +268,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
@@ -314,8 +314,8 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
@@ -328,7 +328,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];

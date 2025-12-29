@@ -33,7 +33,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
@@ -68,7 +68,7 @@ import type {
   DynamicAgentInstructions,
   AgentMethodType,
 } from './types';
-import { isSupportedLanguageModel, resolveThreadIdFromArgs } from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -1860,7 +1860,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               const subAgentResourceId =
                 inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
 
-              if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+              if (
+                (methodType === 'generate' || methodType === 'generateLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -1886,7 +1889,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
-              } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
+              } else if (
+                (methodType === 'stream' || methodType === 'streamLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -2692,10 +2698,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
+      entityType: EntityType.AGENT,
+      entityId: this.id,
+      entityName: this.name,
       input: options.messages,
       attributes: {
-        agentId: this.id,
-        agentName: this.name,
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
@@ -3191,7 +3198,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: 'agentic-loop',
       runId: streamOptions?.runId ?? '',
     });
