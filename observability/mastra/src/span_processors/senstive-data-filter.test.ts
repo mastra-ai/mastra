@@ -328,6 +328,45 @@ describe('Tracing', () => {
         expect(input.messages[0].content).toBe('{ email": "test@test.com" }');
       });
 
+      it('should preserve Date objects in attributes', () => {
+        const processor = new SensitiveDataFilter();
+        const testDate = new Date('2024-01-15T10:00:00.000Z');
+
+        const mockSpan = {
+          id: 'test-span-1',
+          name: 'model-generation',
+          type: SpanType.MODEL_GENERATION,
+          startTime: new Date(),
+          traceId: 'trace-123',
+          trace: { traceId: 'trace-123' } as any,
+          attributes: {
+            model: 'gpt-4',
+            completionStartTime: testDate,
+            nestedConfig: {
+              createdAt: new Date('2024-01-01'),
+              updatedAt: new Date(),
+            },
+          },
+          observabilityInstance: {} as any,
+          end: () => {},
+          error: () => {},
+          update: () => {},
+          createChildSpan: () => ({}) as any,
+        } as any;
+
+        const filtered = processor.process(mockSpan);
+        const attributes = filtered!.attributes;
+
+        // Date objects should be preserved, not converted to {}
+        expect(attributes?.completionStartTime).toBeInstanceOf(Date);
+        expect(attributes?.completionStartTime.getTime()).toBe(testDate.getTime());
+        expect(attributes?.nestedConfig?.createdAt).toBeInstanceOf(Date);
+        expect(attributes?.nestedConfig?.updatedAt).toBeInstanceOf(Date);
+
+        // Other fields should still work
+        expect(attributes?.model).toBe('gpt-4');
+      });
+
       it('should handle circular references', () => {
         const processor = new SensitiveDataFilter();
 

@@ -1,5 +1,13 @@
 # @mastra/otel-exporter
 
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Updated dependencies [[`51fec93`](https://github.com/mastra-ai/mastra/commit/51fec93ffd2f167b1247c23e5c04ed24e369ff75), [`5947fcd`](https://github.com/mastra-ai/mastra/commit/5947fcdd425531f29f9422026d466c2ee3113c93)]:
+  - @mastra/observability@1.0.0-beta.9
+  - @mastra/core@1.0.0-beta.18
+
 ## 1.0.0-beta.9
 
 ### Patch Changes

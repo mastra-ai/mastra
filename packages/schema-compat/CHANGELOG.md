@@ -1,5 +1,15 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.4
+
+### Patch Changes
+
+- Fix OpenAI structured output compatibility for fields with `.default()` values ([#11434](https://github.com/mastra-ai/mastra/pull/11434))
+
+  When using Zod schemas with `.default()` fields (e.g., `z.number().default(1)`), OpenAI's structured output API was failing with errors like `Missing '<field>' in required`. This happened because `zod-to-json-schema` doesn't include fields with defaults in the `required` array, but OpenAI requires all properties to be required.
+
+  This fix converts `.default()` fields to `.nullable()` with a transform that returns the default value when `null` is received, ensuring compatibility with OpenAI's strict mode while preserving the original default value semantics.
+
 ## 1.0.0-beta.3
 
 ### Patch Changes
