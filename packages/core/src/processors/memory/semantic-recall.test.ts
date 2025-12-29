@@ -1794,4 +1794,136 @@ describe('SemanticRecall', () => {
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('Embedder Options', () => {
+    it('should pass embedderOptions to doEmbed when configured', async () => {
+      const embedderOptions = {
+        providerOptions: {
+          google: {
+            outputDimensionality: 384,
+            taskType: 'RETRIEVAL_DOCUMENT',
+          },
+        },
+      };
+
+      const processor = new SemanticRecall({
+        storage: mockStorage,
+        vector: mockVector,
+        embedder: mockEmbedder,
+        topK: 3,
+        embedderOptions, // This option doesn't exist yet - this is what we're testing
+      });
+
+      const inputMessages: MastraDBMessage[] = [
+        {
+          id: 'msg-new',
+          role: 'user',
+          content: { format: 2, content: 'Test query', parts: [] },
+          createdAt: new Date(),
+        },
+      ];
+
+      vi.mocked(mockEmbedder.doEmbed).mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+      });
+
+      vi.mocked(mockVector.listIndexes).mockResolvedValue(['mastra_memory_text_embedding_3_small']);
+      vi.mocked(mockVector.query).mockResolvedValue([]);
+
+      const messageList = new MessageList();
+      messageList.add(inputMessages, 'input');
+
+      await processor.processInput({
+        messages: inputMessages,
+        messageList,
+        abort: vi.fn() as any,
+        requestContext,
+      });
+
+      // Verify embedder was called WITH providerOptions
+      // Currently this will fail because providerOptions is not passed through
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Test query'],
+        providerOptions: {
+          google: {
+            outputDimensionality: 384,
+            taskType: 'RETRIEVAL_DOCUMENT',
+          },
+        },
+      });
+    });
+
+    it('should pass embedderOptions during output processing (embedding generation)', async () => {
+      const embedderOptions = {
+        providerOptions: {
+          google: {
+            outputDimensionality: 768,
+          },
+        },
+      };
+
+      const localMockStorage = {
+        listMessages: vi.fn(),
+        saveMessages: vi.fn(),
+      };
+
+      const localMockEmbedder = {
+        modelId: 'gemini-embedding-001',
+        doEmbed: vi.fn().mockResolvedValue({
+          embeddings: [[0.1, 0.2, 0.3]],
+        }),
+      };
+
+      const localMockVector = {
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn(),
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        listIndexes: vi.fn().mockResolvedValue(['mastra_memory_gemini_embedding_001']),
+      };
+
+      const processor = new SemanticRecall({
+        storage: localMockStorage as any,
+        embedder: localMockEmbedder as any,
+        vector: localMockVector as any,
+        embedderOptions, // This option doesn't exist yet
+      });
+
+      const userMessage: MastraDBMessage = {
+        id: 'msg-user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Hello',
+          parts: [{ type: 'text', text: 'Hello' }],
+        },
+        createdAt: new Date('2024-01-01T10:00:00Z'),
+      };
+
+      const localRequestContext = new RequestContext();
+      localRequestContext.set('MastraMemory', {
+        thread: { id: 'thread-123' },
+        resourceId: 'user-456',
+      });
+
+      const messageList = new MessageList();
+      messageList.add([userMessage], 'input');
+
+      await processor.processOutputResult({
+        messages: [userMessage],
+        messageList,
+        abort: vi.fn() as any,
+        requestContext: localRequestContext,
+      });
+
+      // Verify embedder was called WITH providerOptions
+      expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith({
+        values: ['Hello'],
+        providerOptions: {
+          google: {
+            outputDimensionality: 768,
+          },
+        },
+      });
+    });
+  });
 });
