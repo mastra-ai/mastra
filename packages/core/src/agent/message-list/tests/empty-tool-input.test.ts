@@ -81,8 +81,6 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
         // @ts-expect-error - input field exists on StaticToolResult but not in base ToolResultPart type
         expect(toolResultPart.input).toEqual({});
       }
-    } else {
-      throw new Error('toolResultPart is not defined');
     }
   });
 
@@ -130,6 +128,7 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
     const toolResultMsg = modelMessages.find(msg => msg.role === 'tool');
 
     expect(toolResultMsg).toBeDefined();
+    expect(toolResultMsg?.content).toBeInstanceOf(Array);
 
     if (toolResultMsg && Array.isArray(toolResultMsg.content)) {
       const toolResultPart = toolResultMsg.content.find((part: any) => part.type === 'tool-result');
@@ -141,8 +140,6 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
         // @ts-expect-error - input field exists on StaticToolResult but not in base ToolResultPart type
         expect(toolResultPart.input).toEqual({ optionalParam: 'test-value' });
       }
-    } else {
-      throw new Error('toolResultPart is not defined');
     }
   });
 
@@ -226,32 +223,34 @@ describe('MessageList - Anthropic empty tool input issue (#11376)', () => {
     const toolResultMessages = modelMessages.filter(msg => msg.role === 'tool');
 
     expect(toolResultMessages).toHaveLength(2);
+    expect(toolResultMessages[0]?.content).toBeInstanceOf(Array);
+    expect(toolResultMessages[1]?.content).toBeInstanceOf(Array);
 
     // Check first tool result (with param)
     const firstResultMsg = toolResultMessages[0];
     if (firstResultMsg && Array.isArray(firstResultMsg.content)) {
       const toolResultPart = firstResultMsg.content.find((part: any) => part.type === 'tool-result');
+      expect(toolResultPart).toBeDefined();
+
       if (toolResultPart) {
         // @ts-expect-error - input field exists on StaticToolResult
         expect(toolResultPart.input).toEqual({ param1: 'value1' });
         expect(toolResultPart.toolName).toBe('tool-a');
       }
-    } else {
-      throw new Error('toolResultPart is not defined');
     }
 
     // Check second tool result (with empty object)
     const secondResultMsg = toolResultMessages[1];
     if (secondResultMsg && Array.isArray(secondResultMsg.content)) {
       const toolResultPart = secondResultMsg.content.find((part: any) => part.type === 'tool-result');
+      expect(toolResultPart).toBeDefined();
+
       // This is the critical assertion - empty object should be preserved
       if (toolResultPart) {
         // @ts-expect-error - input field exists on StaticToolResult
         expect(toolResultPart.input).toEqual({});
         expect(toolResultPart.toolName).toBe('tool-b');
       }
-    } else {
-      throw new Error('toolResultPart is not defined');
     }
   });
 });
