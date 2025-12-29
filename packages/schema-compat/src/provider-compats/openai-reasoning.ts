@@ -40,34 +40,32 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   processZodType(value: ZodTypeV4): ZodTypeV4;
   processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
     if (isOptional(z)(value)) {
-      // For OpenAI reasoning models strict mode, convert .optional() to .nullish() with transform
+      // For OpenAI reasoning models strict mode, convert .optional() to .nullable() with transform
       // The transform converts null -> undefined to match original .optional() semantics
-      // Using .nullish() instead of .nullable() to also accept undefined values (GitHub #11457)
-      // This handles cases where fields are omitted entirely rather than explicitly set to null
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
 
       if (innerType) {
         // If inner is nullable, just process and return it with transform (strips the optional wrapper)
         if (isNullable(z)(innerType)) {
           const processed = this.processZodType(innerType);
-          return processed.optional().transform((val: any) => (val === null ? undefined : val));
+          return processed.transform((val: any) => (val === null ? undefined : val));
         }
 
-        // Otherwise, process inner, make it nullish, and add transform
+        // Otherwise, process inner, make it nullable, and add transform
         const processedInner = this.processZodType(innerType);
-        return processedInner.nullish().transform((val: any) => (val === null ? undefined : val));
+        return processedInner.nullable().transform((val: any) => (val === null ? undefined : val));
       }
 
       return value;
     } else if (isNullable(z)(value)) {
       // Handle nullable: if inner is optional, strip it and add transform
-      // This converts .optional().nullable() -> .nullish() with transform
+      // This converts .optional().nullable() -> .nullable() with transform
       const innerType = '_def' in value ? value._def.innerType : (value as any)._zod?.def?.innerType;
       if (innerType && isOptional(z)(innerType)) {
         const innerInnerType = '_def' in innerType ? innerType._def.innerType : (innerType as any)._zod?.def?.innerType;
         if (innerInnerType) {
           const processedInnerInner = this.processZodType(innerInnerType);
-          return processedInnerInner.nullish().transform((val: any) => (val === null ? undefined : val));
+          return processedInnerInner.nullable().transform((val: any) => (val === null ? undefined : val));
         }
       }
       // Otherwise process inner and re-wrap with nullable (no transform - intentionally nullable)
