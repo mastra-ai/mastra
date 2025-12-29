@@ -13,43 +13,64 @@ First, extract the PR number if a URL was provided and get PR details:
 
 RUN gh pr view $PR --json headRefName,headRepository,headRepositoryOwner,number,url
 
-Note the branch name from `headRefName`.
+Extract from the JSON response:
 
-## Step 2: Fetch and Checkout the Branch
+- `headRefName`: The branch name to checkout
+- `headRepositoryOwner.login`: The fork owner (needed for pushing)
+- `headRepository.name`: The repository name
 
-Fetch the latest changes and checkout the PR branch:
+## Step 2: Check for Clean Working Directory
 
-RUN git fetch origin
-RUN git checkout <branch-name>
-RUN git pull origin <branch-name>
+Before switching branches, ensure there are no uncommitted changes:
 
-## Step 3: Run Lint and Format Fixes
+RUN git status --porcelain
+
+If there are uncommitted changes, warn the user and ask how to proceed (stash, commit, or abort).
+
+## Step 3: Fetch and Checkout the Branch
+
+Fetch the PR branch and check it out. Use the branch name from Step 1:
+
+RUN git fetch origin pull/$PR/head:<branch-name-from-step-1>
+RUN git checkout <branch-name-from-step-1>
+
+If checkout fails (e.g., branch already exists), try:
+
+RUN git checkout <branch-name-from-step-1>
+RUN git pull origin <branch-name-from-step-1> --ff-only
+
+## Step 4: Run Lint and Format Fixes
 
 Run the formatting and linting commands to auto-fix issues:
 
 RUN pnpm prettier:format
 RUN pnpm format
 
-## Step 4: Check for Changes
+## Step 5: Check for Changes
 
 Check if any files were modified by the linting/formatting:
 
 RUN git status
 
-If there are no changes, inform the user that the branch is already properly formatted and linted.
+If there are no changes, inform the user that the branch is already properly formatted and linted, then skip to Step 7.
 
-## Step 5: Commit and Push
+## Step 6: Commit and Push
 
-If there are changes, commit and push them:
+If there are changes, commit them. Only stage the modified files (not untracked files that may be local):
 
-RUN git add -A
+RUN git add -u
 RUN git commit -m "chore: fix lint and formatting issues"
-RUN git push origin <branch-name>
 
-## Step 6: Return to Original Branch
+Push to the contributor's fork using the owner from Step 1:
+
+RUN git push https://github.com/<owner-from-step-1>/<repo-name>.git HEAD:<branch-name-from-step-1>
+
+If push fails due to permissions, inform the user they may need to ask the contributor to grant push access or the contributor needs to fix lint themselves.
+
+## Step 7: Return to Original Branch
 
 Switch back to the main branch:
 
 RUN git checkout main
 
-Inform the user that the lint fixes have been pushed to the PR branch.
+Inform the user whether lint fixes were pushed or if the branch was already clean.
