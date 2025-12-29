@@ -80,8 +80,9 @@ async function executeToolCallAndRespond({
         });
 
         // Build updated messages from the response, adding the tool result
-        // Do NOT re-include the original user message to avoid storage duplicates
-        const updatedMessages = [
+        // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+        // When no threadId (stateless), include full conversation history for context
+        const newMessages = [
           ...(response.response.messages || []),
           {
             role: 'tool',
@@ -94,12 +95,16 @@ async function executeToolCallAndRespond({
               },
             ],
           },
-        ] as MessageListInput;
+        ];
+
+        const updatedMessages = threadId
+          ? newMessages
+          : [...(Array.isArray(params.messages) ? params.messages : []), ...newMessages];
 
         // @ts-ignore
         return respondFn({
           ...params,
-          messages: updatedMessages,
+          messages: updatedMessages as MessageListInput,
         });
       }
     }
@@ -1226,9 +1231,14 @@ export class Agent extends BaseResource {
                 }
 
                 // Build updated messages for the recursive call
-                // Do NOT re-include the original messages to avoid storage duplicates
-                const updatedMessages =
+                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
+                // When no threadId (stateless), include full conversation history for context
+                const newMessages =
                   lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+                const updatedMessages = processedParams.threadId
+                  ? newMessages
+                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
 
                 // Recursively call stream with updated messages
                 // This will wait for the recursive stream to complete before continuing
