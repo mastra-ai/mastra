@@ -1,6 +1,7 @@
 import { TransformStream } from 'node:stream/web';
 import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { isZodType } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
 import z4 from 'zod/v4';
@@ -147,13 +148,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * Checks if the original schema is a Zod schema with safeParse method.
    */
   protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
-    return (
-      schema !== undefined &&
-      schema !== null &&
-      typeof schema === 'object' &&
-      'safeParse' in schema &&
-      typeof schema.safeParse === 'function'
-    );
+    return isZodType(schema);
   }
 
   /**
