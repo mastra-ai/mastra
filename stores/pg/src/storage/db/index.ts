@@ -1,3 +1,4 @@
+import type { ConnectionOptions } from 'node:tls';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -16,7 +17,6 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import type { ConnectionOptions } from 'node:tls';
 import { Pool } from 'pg';
 import type { DbClient } from '../client';
 import { PoolAdapter } from '../client';

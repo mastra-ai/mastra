@@ -624,7 +624,7 @@ export function pgTests() {
         expect(poolStore.db).toBeDefined();
 
         // Clean up
-        pool.end();
+        await pool.end();
       });
     });
 

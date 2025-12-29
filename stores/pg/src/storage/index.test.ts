@@ -8,7 +8,7 @@ import {
 } from '@internal/storage-test-utils';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import { Pool } from 'pg';
-import { describe, it, expect, vi, afterAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { MemoryPG } from './domains/memory';
 import { ScoresPG } from './domains/scores';
