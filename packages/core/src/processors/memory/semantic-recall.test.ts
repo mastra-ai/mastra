@@ -1811,7 +1811,7 @@ describe('SemanticRecall', () => {
         vector: mockVector,
         embedder: mockEmbedder,
         topK: 3,
-        embedderOptions, // This option doesn't exist yet - this is what we're testing
+        embedderOptions,
       });
 
       const inputMessages: MastraDBMessage[] = [
@@ -1840,8 +1840,7 @@ describe('SemanticRecall', () => {
         requestContext,
       });
 
-      // Verify embedder was called WITH providerOptions
-      // Currently this will fail because providerOptions is not passed through
+      // Verify embedder was called with providerOptions
       expect(mockEmbedder.doEmbed).toHaveBeenCalledWith({
         values: ['Test query'],
         providerOptions: {
@@ -1885,7 +1884,7 @@ describe('SemanticRecall', () => {
         storage: localMockStorage as any,
         embedder: localMockEmbedder as any,
         vector: localMockVector as any,
-        embedderOptions, // This option doesn't exist yet
+        embedderOptions,
       });
 
       const userMessage: MastraDBMessage = {
@@ -1915,7 +1914,7 @@ describe('SemanticRecall', () => {
         requestContext: localRequestContext,
       });
 
-      // Verify embedder was called WITH providerOptions
+      // Verify embedder was called with providerOptions
       expect(localMockEmbedder.doEmbed).toHaveBeenCalledWith({
         values: ['Hello'],
         providerOptions: {
