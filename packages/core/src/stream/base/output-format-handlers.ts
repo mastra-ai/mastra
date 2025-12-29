@@ -1,6 +1,8 @@
 import { TransformStream } from 'node:stream/web';
-import { asSchema, isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
+import { isDeepEqualData, jsonSchema, parsePartialJson } from '@internal/ai-sdk-v5';
 import type { JSONSchema7, Schema } from '@internal/ai-sdk-v5';
+import { isZodType } from '@mastra/schema-compat';
+import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
 import z4 from 'zod/v4';
 import type { StructuredOutputOptions } from '../../agent/types';
@@ -146,13 +148,7 @@ abstract class BaseFormatHandler<OUTPUT extends OutputSchema = undefined> {
    * Checks if the original schema is a Zod schema with safeParse method.
    */
   protected isZodSchema(schema: unknown): schema is z3.ZodType<any, z3.ZodTypeDef, any> | z4.ZodType<any, any> {
-    return (
-      schema !== undefined &&
-      schema !== null &&
-      typeof schema === 'object' &&
-      'safeParse' in schema &&
-      typeof schema.safeParse === 'function'
-    );
+    return isZodType(schema);
   }
 
   /**
@@ -454,8 +450,9 @@ class EnumFormatHandler<OUTPUT extends OutputSchema = undefined> extends BaseFor
     let enumValues: unknown[] | undefined;
 
     if (this.isZodSchema(this.schema)) {
-      const wrappedSchema = asSchema(this.schema);
-      enumValues = wrappedSchema.jsonSchema?.enum;
+      // Use transform-safe zodToJsonSchema to avoid "Transforms cannot be represented in JSON Schema" error
+      const convertedSchema = zodToJsonSchema(this.schema as z3.ZodType<any> | z4.ZodType<any, any>);
+      enumValues = (convertedSchema as JSONSchema7)?.enum;
     } else if (typeof this.schema === 'object' && !(this.schema as Schema<any>).jsonSchema) {
       // Plain JSONSchema7
       const wrappedSchema = jsonSchema(this.schema as JSONSchema7);

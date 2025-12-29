@@ -268,6 +268,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/nano-gpt",
+          label: "NanoGPT",
+        },
+        {
+          type: "doc",
           id: "providers/nebius",
           label: "Nebius Token Factory",
         },

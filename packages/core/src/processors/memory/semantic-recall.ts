@@ -9,7 +9,7 @@ import type { MastraDBMessage } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
-import type { MastraEmbeddingModel, MastraVector } from '../../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
 
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
@@ -68,6 +68,24 @@ export interface SemanticRecallOptions {
    * Optional logger instance for structured logging
    */
   logger?: IMastraLogger;
+
+  /**
+   * Options to pass to the embedder when generating embeddings.
+   * Use this to pass provider-specific options like outputDimensionality for Google models.
+   *
+   * @example
+   * ```typescript
+   * embedderOptions: {
+   *   providerOptions: {
+   *     google: {
+   *       outputDimensionality: 768,
+   *       taskType: 'RETRIEVAL_DOCUMENT'
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  embedderOptions?: MastraEmbeddingOptions;
 }
 
 /**
@@ -109,6 +127,7 @@ export class SemanticRecall implements Processor {
   private threshold?: number;
   private indexName?: string;
   private logger?: IMastraLogger;
+  private embedderOptions?: MastraEmbeddingOptions;
 
   // LRU cache for embeddings: contentHash -> embedding vector
   private embeddingCache: LRUCache<string, number[]>;
@@ -125,6 +144,7 @@ export class SemanticRecall implements Processor {
     this.threshold = options.threshold;
     this.indexName = options.indexName;
     this.logger = options.logger;
+    this.embedderOptions = options.embedderOptions;
 
     // Initialize LRU cache for embeddings
     this.embeddingCache = new LRUCache<string, number[]>({
@@ -408,8 +428,12 @@ export class SemanticRecall implements Processor {
     }
 
     // Generate embedding if not cached
+    // Note: embedderOptions may contain providerOptions for controlling embedding behavior
+    // (e.g., outputDimensionality for Google models). The user is responsible for providing
+    // options compatible with their embedder's SDK version.
     const result = await this.embedder.doEmbed({
       values: [content],
+      ...(this.embedderOptions as any),
     });
 
     // Cache the first embedding
