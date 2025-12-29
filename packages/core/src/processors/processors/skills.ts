@@ -29,7 +29,7 @@ export interface SkillMetadata {
   /** Optional arbitrary metadata */
   metadata?: Record<string, string>;
   /** Optional space-delimited list of pre-approved tools (experimental) */
-  allowedTools?: string[];
+  // allowedTools?: string[];
 }
 
 /**
@@ -105,7 +105,8 @@ const SkillMetadataSchema = z.object({
     .optional()
     .describe('Environment requirements or compatibility notes (max 500 chars)'),
   metadata: z.record(z.string()).optional().describe('Arbitrary key-value metadata (e.g., author, version)'),
-  allowedTools: z.array(z.string()).optional().describe('Space-delimited list of pre-approved tools (experimental)'),
+  // TODO: should we implement experimental allowedTools?
+  // allowedTools: z.array(z.string()).optional().describe('Space-delimited list of pre-approved tools (experimental)'),
 });
 
 /**
@@ -149,11 +150,11 @@ function parseSkillFile(filePath: string, dirName: string, validate: boolean = t
       license: frontmatter.license,
       compatibility: frontmatter.compatibility,
       metadata: frontmatter.metadata,
-      allowedTools: Array.isArray(frontmatter.allowedTools)
-        ? frontmatter.allowedTools
-        : typeof frontmatter.allowedTools === 'string'
-          ? frontmatter.allowedTools.split(/\s+/)
-          : undefined,
+      // allowedTools: Array.isArray(frontmatter.allowedTools)
+      //   ? frontmatter.allowedTools
+      //   : typeof frontmatter.allowedTools === 'string'
+      //     ? frontmatter.allowedTools.split(/\s+/)
+      //     : undefined,
     };
 
     // Validate if enabled
@@ -248,7 +249,7 @@ export class SkillsProcessor implements Processor {
                   license: skill.license,
                   compatibility: skill.compatibility,
                   metadata: skill.metadata,
-                  allowedTools: skill.allowedTools,
+                  // allowedTools: skill.allowedTools,
                 });
               } catch (error) {
                 if (error instanceof Error) {
@@ -276,52 +277,38 @@ export class SkillsProcessor implements Processor {
     const skills = Array.from(this.skillsMetadata.values());
 
     switch (this.format) {
-      case 'xml':
-        return this.formatSkillsAsXml(skills);
-      case 'json':
-        return this.formatSkillsAsJson(skills);
-      case 'markdown':
-        return this.formatSkillsAsMarkdown(skills);
-    }
-  }
-
-  private formatSkillsAsXml(skills: SkillMetadata[]): string {
-    if (skills.length === 0) return '';
-
-    const skillsXml = skills
-      .map(
-        skill => `  <skill>
+      case 'xml': {
+        const skillsXml = skills
+          .map(
+            skill => `  <skill>
     <name>${this.escapeXml(skill.name)}</name>
     <description>${this.escapeXml(skill.description)}</description>
   </skill>`,
-      )
-      .join('\n');
+          )
+          .join('\n');
 
-    return `<available_skills>
+        return `<available_skills>
 ${skillsXml}
 </available_skills>`;
-  }
+      }
 
-  private formatSkillsAsJson(skills: SkillMetadata[]): string {
-    if (skills.length === 0) return '';
-
-    return `Available Skills:
+      case 'json': {
+        return `Available Skills:
 
 ${JSON.stringify(
   skills.map(s => ({ name: s.name, description: s.description })),
   null,
   2,
 )}`;
-  }
+      }
 
-  private formatSkillsAsMarkdown(skills: SkillMetadata[]): string {
-    if (skills.length === 0) return '';
-
-    const skillsMd = skills.map(skill => `- **${skill.name}**: ${skill.description}`).join('\n');
-
-    return `# Available Skills
+      case 'markdown': {
+        const skillsMd = skills.map(skill => `- **${skill.name}**: ${skill.description}`).join('\n');
+        return `# Available Skills
 
 ${skillsMd}`;
+      }
+    }
   }
 
   /**
@@ -331,32 +318,26 @@ ${skillsMd}`;
     const skills = Array.from(this.activatedSkills.values());
 
     switch (this.format) {
-      case 'xml':
-        return this.formatActivatedSkillsAsXml(skills);
-      case 'json':
-      case 'markdown':
-        return this.formatActivatedSkillsAsMarkdown(skills);
-    }
-  }
+      case 'xml': {
+        const skillInstructions = skills
+          .map(skill => `# Skill: ${skill.name}\n\n${skill.instructions}`)
+          .join('\n\n---\n\n');
 
-  private formatActivatedSkillsAsXml(skills: Skill[]): string {
-    const skillInstructions = skills
-      .map(skill => `# Skill: ${skill.name}\n\n${skill.instructions}`)
-      .join('\n\n---\n\n');
-
-    return `<activated_skills>
+        return `<activated_skills>
 ${skillInstructions}
 </activated_skills>`;
-  }
+      }
+      case 'json':
+      case 'markdown': {
+        const skillInstructions = skills
+          .map(skill => `# Skill: ${skill.name}\n\n${skill.instructions}`)
+          .join('\n\n---\n\n');
 
-  private formatActivatedSkillsAsMarkdown(skills: Skill[]): string {
-    const skillInstructions = skills
-      .map(skill => `# Skill: ${skill.name}\n\n${skill.instructions}`)
-      .join('\n\n---\n\n');
-
-    return `# Activated Skills
+        return `# Activated Skills
 
 ${skillInstructions}`;
+      }
+    }
   }
 
   /**
@@ -527,6 +508,7 @@ ${skillInstructions}`;
       }
     }
 
+    // TODO: Only add this tool if there are skills to activate
     // 3. Add skill tools
     let skillTools: Record<string, any> = {
       'skill-activate': this.createSkillActivateTool(),
