@@ -45,6 +45,8 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
+import Knowledge from './pages/knowledge';
+import KnowledgeNamespaceDetail from './pages/knowledge/[namespace]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -168,6 +170,9 @@ function App() {
 
                 <Route path="/mcps/:serverId" element={<McpServerPage />} />
                 <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
+
+                <Route path="/knowledge" element={<Knowledge />} />
+                <Route path="/knowledge/:namespace" element={<KnowledgeNamespaceDetail />} />
 
                 <Route path="/workflows" element={<Workflows />} />
                 <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />

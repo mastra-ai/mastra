@@ -15,6 +15,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  Knowledge,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -768,5 +769,40 @@ export class MastraClient extends BaseResource {
    */
   public getSystemPackages(): Promise<GetSystemPackagesResponse> {
     return this.request('/api/system/packages');
+  }
+
+  // ============================================================================
+  // Knowledge
+  // ============================================================================
+
+  /**
+   * Lists all knowledge namespaces
+   * @returns Promise containing list of namespaces
+   */
+  public listKnowledgeNamespaces(): Promise<import('./types').ListKnowledgeNamespacesResponse> {
+    return this.request('/api/knowledge/namespaces');
+  }
+
+  /**
+   * Creates a new knowledge namespace
+   * @param params - Namespace configuration
+   * @returns Promise containing the created namespace
+   */
+  public createKnowledgeNamespace(
+    params: import('./types').CreateKnowledgeNamespaceParams,
+  ): Promise<import('./types').KnowledgeNamespace> {
+    return this.request('/api/knowledge/namespaces', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a knowledge namespace instance for further operations
+   * @param namespace - Namespace identifier
+   * @returns Knowledge instance
+   */
+  public getKnowledge(namespace: string): Knowledge {
+    return new Knowledge(this.options, namespace);
   }
 }

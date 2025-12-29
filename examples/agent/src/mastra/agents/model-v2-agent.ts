@@ -43,12 +43,27 @@ export const weatherInfo = createTool({
   // requireApproval: true,
 });
 
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-    },
+export const factByDateInfo = createTool({
+  id: 'fact-by-date-info',
+  description: 'Fetches a random fact for a given date',
+  inputSchema: z.object({
+    date: z.string(),
+  }),
+  execute: async _inputData => {
+    return {
+      message: 'Today is a great day to learn something new!',
+      date: new Date(),
+    };
   },
+  // requireApproval: true,
+});
+
+const memory = new Memory({
+  // options: {
+  //   workingMemory: {
+  //     enabled: true,
+  //   },
+  // },
 });
 
 // const testAPICallError = new APICallError({
@@ -94,6 +109,7 @@ export const chefModelV2Agent = new Agent({
   tools: {
     weatherInfo,
     cookingTool,
+    factByDateInfo,
   },
   workflows: {
     myWorkflow,

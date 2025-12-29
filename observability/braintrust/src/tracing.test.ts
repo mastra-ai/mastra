@@ -639,6 +639,159 @@ describe('BraintrustExporter', () => {
     });
   });
 
+  /**
+   * Test for GitHub issue #11024: Date() tool parameters show up as empty objects
+   *
+   * Date objects passed to tools should be serialized as ISO strings in Braintrust traces,
+   * not as empty objects `{}`.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/11024
+   */
+  describe('Date Serialization (issue #11024)', () => {
+    it('should serialize Date objects in tool input as ISO strings', async () => {
+      const testDate = new Date('2025-01-15T10:30:00.000Z');
+
+      const toolSpan = createMockSpan({
+        id: 'tool-with-date',
+        name: 'schedule-meeting',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        input: {
+          title: 'Team standup',
+          scheduledAt: testDate,
+          options: {
+            startDate: testDate,
+            endDate: new Date('2025-01-15T11:30:00.000Z'),
+          },
+        },
+        attributes: { toolId: 'schedule-meeting' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // Verify Date objects are serialized as ISO strings, not empty objects
+      expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'tool-with-date',
+        name: 'schedule-meeting',
+        type: 'tool',
+        input: {
+          title: 'Team standup',
+          scheduledAt: '2025-01-15T10:30:00.000Z',
+          options: {
+            startDate: '2025-01-15T10:30:00.000Z',
+            endDate: '2025-01-15T11:30:00.000Z',
+          },
+        },
+        metadata: {
+          spanType: 'tool_call',
+          toolId: 'schedule-meeting',
+        },
+      });
+    });
+
+    it('should serialize Date objects in tool output as ISO strings', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-output-date',
+        name: 'get-booking',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        output: {
+          bookingId: '123',
+          confirmedAt: new Date('2025-01-15T12:00:00.000Z'),
+        },
+        attributes: { toolId: 'get-booking' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // Verify Date objects in output are serialized as ISO strings
+      expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'tool-output-date',
+        name: 'get-booking',
+        type: 'tool',
+        output: {
+          bookingId: '123',
+          confirmedAt: '2025-01-15T12:00:00.000Z',
+        },
+        metadata: {
+          spanType: 'tool_call',
+          toolId: 'get-booking',
+        },
+      });
+    });
+
+    it('should serialize Date objects in arrays', async () => {
+      const toolSpan = createMockSpan({
+        id: 'tool-date-array',
+        name: 'list-events',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        input: {
+          dates: [new Date('2025-01-15T10:00:00.000Z'), new Date('2025-01-16T10:00:00.000Z')],
+        },
+        attributes: { toolId: 'list-events' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'tool-date-array',
+        name: 'list-events',
+        type: 'tool',
+        input: {
+          dates: ['2025-01-15T10:00:00.000Z', '2025-01-16T10:00:00.000Z'],
+        },
+        metadata: {
+          spanType: 'tool_call',
+          toolId: 'list-events',
+        },
+      });
+    });
+
+    it('should serialize Date objects in metadata', async () => {
+      const testDate = new Date('2025-01-15T10:30:00.000Z');
+
+      const toolSpan = createMockSpan({
+        id: 'tool-metadata-date',
+        name: 'process-data',
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        attributes: { toolId: 'process-data' },
+        metadata: {
+          processedAt: testDate,
+          scheduledFor: new Date('2025-01-16T09:00:00.000Z'),
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      // Verify Date objects in metadata are serialized as ISO strings
+      expect(mockLogger.startSpan).toHaveBeenCalledWith({
+        spanId: 'tool-metadata-date',
+        name: 'process-data',
+        type: 'tool',
+        metadata: {
+          spanType: 'tool_call',
+          toolId: 'process-data',
+          processedAt: '2025-01-15T10:30:00.000Z',
+          scheduledFor: '2025-01-16T09:00:00.000Z',
+        },
+      });
+    });
+  });
+
   describe('Span Updates', () => {
     it('should log updates to existing spans', async () => {
       // First, start a span
