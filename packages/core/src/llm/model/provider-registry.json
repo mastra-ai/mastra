@@ -1324,7 +1324,7 @@
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
-      "models": ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"],
+      "models": ["sonar", "sonar-pro", "sonar-reasoning-pro"],
       "docUrl": "https://docs.perplexity.ai",
       "gateway": "models.dev"
     },
@@ -3125,7 +3125,7 @@
       "glm-4.7"
     ],
     "minimax-cn": ["MiniMax-M2", "MiniMax-M2.1"],
-    "perplexity": ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"],
+    "perplexity": ["sonar", "sonar-pro", "sonar-reasoning-pro"],
     "openrouter": [
       "anthropic/claude-3.5-haiku",
       "anthropic/claude-3.7-sonnet",

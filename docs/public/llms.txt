@@ -165,7 +165,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 65+ AI providers and 1538+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 65+ AI providers and 1537+ models through Mastra's model router.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
 - [Alibaba (China) | Models | Mastra](https://mastra.ai/en/models/providers/alibaba-cn): Use Alibaba (China) models with Mastra. 61 models available.
@@ -217,7 +217,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [OpenAI | Models | Mastra](https://mastra.ai/en/models/providers/openai): Use OpenAI models with Mastra. 39 models available.
 - [OpenCode Zen | Models | Mastra](https://mastra.ai/en/models/providers/opencode): Use OpenCode Zen models with Mastra. 24 models available.
 - [OVHcloud AI Endpoints | Models | Mastra](https://mastra.ai/en/models/providers/ovhcloud): Use OVHcloud AI Endpoints models with Mastra. 15 models available.
-- [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 4 models available.
+- [Perplexity | Models | Mastra](https://mastra.ai/en/models/providers/perplexity): Use Perplexity models with Mastra. 3 models available.
 - [Poe | Models | Mastra](https://mastra.ai/en/models/providers/poe): Use Poe models with Mastra. 108 models available.
 - [Requesty | Models | Mastra](https://mastra.ai/en/models/providers/requesty): Use Requesty models with Mastra. 20 models available.
 - [Scaleway | Models | Mastra](https://mastra.ai/en/models/providers/scaleway): Use Scaleway models with Mastra. 13 models available.

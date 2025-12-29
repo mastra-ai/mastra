@@ -1033,7 +1033,7 @@ export type ProviderModelsMap = {
     'glm-4.7',
   ];
   readonly 'minimax-cn': readonly ['MiniMax-M2', 'MiniMax-M2.1'];
-  readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'];
+  readonly perplexity: readonly ['sonar', 'sonar-pro', 'sonar-reasoning-pro'];
   readonly openrouter: readonly [
     'anthropic/claude-3.5-haiku',
     'anthropic/claude-3.7-sonnet',
