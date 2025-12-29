@@ -1,3 +1,4 @@
+import type { ConnectionOptions } from 'node:tls';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -16,24 +17,27 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import pgPromise from 'pg-promise';
-import type { IDatabase } from 'pg-promise';
-import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import { Pool } from 'pg';
+import type { DbClient } from '../client';
+import { PoolAdapter } from '../client';
+
+// Re-export DbClient for external use
+export type { DbClient } from '../client';
 
 /**
  * Configuration for standalone domain usage.
  * Accepts either:
- * 1. An existing pg-promise database instance
- * 2. Config to create a new client internally
+ * 1. An existing database client (Pool or PoolAdapter)
+ * 2. Config to create a new pool internally
  */
-export type PgDomainConfig = PgDomainClientConfig | PgDomainRestConfig;
+export type PgDomainConfig = PgDomainClientConfig | PgDomainPoolConfig | PgDomainRestConfig;
 
 /**
- * Pass an existing pg-promise database instance
+ * Pass an existing database client (DbClient)
  */
 export interface PgDomainClientConfig {
-  /** The pg-promise database instance */
-  client: IDatabase<{}>;
+  /** The database client */
+  client: DbClient;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
   /** When true, default indexes will not be created during initialization */
@@ -43,7 +47,21 @@ export interface PgDomainClientConfig {
 }
 
 /**
- * Pass config to create a new pg-promise client internally
+ * Pass an existing pg.Pool
+ */
+export interface PgDomainPoolConfig {
+  /** Pre-configured pg.Pool */
+  pool: Pool;
+  /** Optional schema name (defaults to 'public') */
+  schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
+}
+
+/**
+ * Pass config to create a new pg.Pool internally
  */
 export type PgDomainRestConfig = {
   /** Optional schema name (defaults to 'public') */
@@ -59,20 +77,20 @@ export type PgDomainRestConfig = {
       database: string;
       user: string;
       password: string;
-      ssl?: boolean | ISSLConfig;
+      ssl?: boolean | ConnectionOptions;
     }
   | {
       connectionString: string;
-      ssl?: boolean | ISSLConfig;
+      ssl?: boolean | ConnectionOptions;
     }
 );
 
 /**
- * Resolves PgDomainConfig to a pg-promise database instance and schema.
- * Handles creating a new client if config is provided.
+ * Resolves PgDomainConfig to a database client and schema.
+ * Handles creating a new pool if config is provided.
  */
 export function resolvePgConfig(config: PgDomainConfig): {
-  client: IDatabase<{}>;
+  client: DbClient;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
@@ -87,11 +105,36 @@ export function resolvePgConfig(config: PgDomainConfig): {
     };
   }
 
-  // Config to create new client
-  const pgp = pgPromise();
-  const client = pgp(config as any);
+  // Existing pool
+  if ('pool' in config) {
+    return {
+      client: new PoolAdapter(config.pool),
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
+  }
+
+  // Config to create new pool
+  let pool: Pool;
+  if ('connectionString' in config) {
+    pool = new Pool({
+      connectionString: config.connectionString,
+      ssl: config.ssl,
+    });
+  } else {
+    pool = new Pool({
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user,
+      password: config.password,
+      ssl: config.ssl,
+    });
+  }
+
   return {
-    client,
+    client: new PoolAdapter(pool),
     schemaName: config.schemaName,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
@@ -113,7 +156,7 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
  * Internal config for PgDB - accepts already-resolved client
  */
 export interface PgDBInternalConfig {
-  client: IDatabase<{}>;
+  client: DbClient;
   schemaName?: string;
   skipDefaultIndexes?: boolean;
 }
@@ -124,7 +167,7 @@ export interface PgDBInternalConfig {
 const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
 
 export class PgDB extends MastraBase {
-  public client: IDatabase<{}>;
+  public client: DbClient;
   public schemaName?: string;
   public skipDefaultIndexes?: boolean;
 
@@ -934,9 +977,9 @@ export class PgDB extends MastraBase {
         size: result.size || '0',
         definition: result.definition || '',
         method: result.method || 'btree',
-        scans: parseInt(result.scans) || 0,
-        tuples_read: parseInt(result.tuples_read) || 0,
-        tuples_fetched: parseInt(result.tuples_fetched) || 0,
+        scans: parseInt(String(result.scans)) || 0,
+        tuples_read: parseInt(String(result.tuples_read)) || 0,
+        tuples_fetched: parseInt(String(result.tuples_fetched)) || 0,
       };
     } catch (error) {
       throw new MastraError(
