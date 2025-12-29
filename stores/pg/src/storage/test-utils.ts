@@ -610,7 +610,7 @@ export function pgTests() {
 
     // PG-specific: pool field exposure with pre-configured pool
     describe('Pre-configured Pool Field Exposure', () => {
-      it('should expose client and pool fields with pre-configured pool', () => {
+      it('should expose client and pool fields with pre-configured pool', async () => {
         const pool = new Pool({ connectionString });
 
         const poolStore = new PostgresStore({
