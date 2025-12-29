@@ -1860,7 +1860,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               const subAgentResourceId =
                 inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
 
-              if ((methodType === 'generate' || methodType === 'generateLegacy') && supportedLanguageModelSpecifications.includes(modelVersion)) {
+              if (
+                (methodType === 'generate' || methodType === 'generateLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -1886,7 +1889,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
-              } else if ((methodType === 'stream' || methodType === 'streamLegacy') && supportedLanguageModelSpecifications.includes(modelVersion)) {
+              } else if (
+                (methodType === 'stream' || methodType === 'streamLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
