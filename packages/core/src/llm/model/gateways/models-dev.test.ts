@@ -213,7 +213,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.unknown_provider).toBeUndefined();
     });
 
-    it('should ensure URLs end with ', async () => {
+    it('should ensure URLs do not end with /chat/completions', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
