@@ -500,9 +500,8 @@ const code = await client.callTool('read_implementation', {
 
 - [x] Map all MDX topics to packages _(via per-package `docs.config.json`)_
 - [x] Handle MDX → Markdown transformation _(code blocks preserved, components stripped)_
-- [x] Integrate into build pipeline (`turbo.json`)
-- [ ] Add `docs` to all package.json `files` arrays
-- [ ] Update CI to generate docs before publish
+- [x] Add `postbuild` script to each package (per package, as needed)
+- [x] Add `docs.config.json` to each package (per package, as needed)
 
 ### Phase 3: MCP Tools Enhancement
 
