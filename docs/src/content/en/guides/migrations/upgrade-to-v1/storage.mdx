@@ -157,8 +157,8 @@ The `getThreadsByResourceId()` method has been renamed to `listThreadsByResource
 To migrate, use the memory store and rename the method call with pagination parameters.
 
 ```diff
-+ const memoryStore = await storage.getStore('memory');
 - const threads = await storage.getThreadsByResourceId({
++ const memoryStore = await storage.getStore('memory');
 + const threads = await memoryStore?.listThreadsByResourceId({
     resourceId: 'res-123',
 +   page: 0,
@@ -180,11 +180,12 @@ npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call and update pagination parameters.
+To migrate, use the workflows stores, rename the method call and update pagination parameters.
 
 ```diff
 - const runs = await storage.getWorkflowRuns({
-+ const runs = await storage.listWorkflowRuns({
++ const workflowStore = await storage.getStore('workflows');
++ const runs = await workflowStore?.listWorkflowRuns({
     fromDate,
     toDate,
 +   page: 0,
