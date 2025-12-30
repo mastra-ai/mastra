@@ -1,0 +1,33 @@
+name: Validate Docs Frontmatter
+
+on:
+  pull_request:
+    branches: [main, 0.x]
+    paths:
+      - 'docs/**/*.mdx'
+      - 'docs/scripts/validate-frontmatter.ts'
+      - '.github/workflows/validate-docs-frontmatter.yml'
+
+jobs:
+  validate:
+    name: Validate MDX frontmatter
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22.13.0
+
+      - name: Install tsx
+        run: npm install -g tsx
+
+      - name: Validate frontmatter
+        working-directory: ./docs
+        run: npx tsx scripts/validate-frontmatter.ts
+
