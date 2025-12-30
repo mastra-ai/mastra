@@ -1,0 +1,143 @@
+> Learn how to add memory to agents to store message history and maintain context across interactions.
+
+# Agent memory
+
+Agents use memory to maintain context across interactions. LLMs are stateless and don't retain information between calls, so agents need memory to track message history and recall relevant information.
+
+Mastra agents can be configured to store message history, with optional [working memory](../memory/working-memory) to maintain recent context or [semantic recall](../memory/semantic-recall) to retrieve past messages based on meaning.
+
+## When to use memory
+
+Use memory when your agent needs to maintain multi-turn conversations that reference prior exchanges, recall user preferences or facts from earlier in a session, or build context over time within a conversation thread. Skip memory for single-turn requests where each interaction is independent.
+
+## Setting up memory
+
+To enable memory in Mastra, install the `@mastra/memory` package along with a storage provider.
+
+```bash npm2yarn
+npm install @mastra/memory@beta @mastra/libsql@beta
+```
+
+## Storage providers
+
+Memory requires a storage provider to persist message history, including user messages and agent responses. For more details on available providers and how storage works in Mastra, see the [Storage](/docs/v1/memory/storage) documentation.
+
+## Configuring memory
+
+### Step
+
+Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
+
+```typescript {7-11} title="src/mastra/agents/memory-agent.ts"
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
+  memory: new Memory({
+    options: {
+      lastMessages: 20,
+    },
+  }),
+});
+```
+
+> **Note:**
+
+Visit [Memory Class](/reference/v1/memory/memory-class) for a full list of configuration options.
+
+### Step
+
+Add a storage provider to your main Mastra instance to enable memory across all configured agents.
+
+```typescript {5-8} title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: ':memory:',
+  }),
+});
+```
+
+> **Note:**
+
+Visit [libSQL Storage](/reference/v1/storage/libsql) for a full list of configuration options.
+
+Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
+
+```typescript {9-12} title="src/mastra/agents/memory-agent.ts"
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'mastra-storage',
+      url: ':memory:',
+    }),
+  }),
+});
+```
+
+## Message history
+
+Include a `memory` object with both `resource` and `thread` to track message history during agent calls.
+
+- `resource`: A stable identifier for the user or entity.
+- `thread`: An ID that isolates a specific conversation or session.
+
+These fields tell the agent where to store and retrieve context, enabling persistent, thread-aware memory across a conversation.
+
+```typescript {4-7}
+const response = await memoryAgent.generate('Remember my favorite color is blue.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'conversation-123',
+  },
+});
+```
+
+To recall information stored in memory, call the agent with the same `resource` and `thread` values used in the original conversation.
+
+```typescript {2-5}
+const response = await memoryAgent.generate("What's my favorite color?", {
+  memory: {
+    resource: 'user-123',
+    thread: 'conversation-123',
+  },
+});
+```
+
+To learn more about memory see the [Memory](../memory/overview) documentation.
+
+## Using `RequestContext`
+
+Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally select different memory or storage configurations based on the context of the request.
+
+```typescript title="src/mastra/agents/memory-agent.ts"
+export type UserTier = {
+  'user-tier': 'enterprise' | 'pro';
+};
+
+const premiumMemory = new Memory();
+
+const standardMemory = new Memory();
+
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
+  memory: ({ requestContext }) => {
+    const userTier = requestContext.get('user-tier') as UserTier['user-tier'];
+
+    return userTier === 'enterprise' ? premiumMemory : standardMemory;
+  },
+});
+```
+
+> **Note:**
+
+Visit [Request Context](/docs/v1/server/request-context) for more information.
+
+## Related
+
+- [Working Memory](../memory/working-memory)
+- [Semantic Recall](../memory/semantic-recall)
+- [Storage](../memory/storage)
+- [Request Context](/docs/v1/server/request-context)

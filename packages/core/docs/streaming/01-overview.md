@@ -1,0 +1,184 @@
+> Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced.
+
+> **Code References:**
+
+- `MastraModelOutput`: dist/stream/index.d.ts → dist/chunk-IDD63DWQ.js:3058
+- `ToolStream`: dist/tools/index.d.ts → dist/chunk-DD2VNRQM.js:4
+
+# Streaming Overview
+
+Mastra supports real-time, incremental responses from agents and workflows, allowing users to see output as it’s generated instead of waiting for completion. This is useful for chat, long-form content, multi-step workflows, or any scenario where immediate feedback matters.
+
+## Getting started
+
+Mastra's streaming API adapts based on your model version:
+
+- **`.stream()`**: For V2 models, supports **AI SDK v5** (`LanguageModelV2`).
+- **`.streamLegacy()`**: For V1 models, supports **AI SDK v4** (`LanguageModelV1`).
+
+## Streaming with agents
+
+You can pass a single string for simple prompts, an array of strings when providing multiple pieces of context, or an array of message objects with `role` and `content` for precise control over roles and conversational flows.
+
+### Using `Agent.stream()`
+
+A `textStream` breaks the response into chunks as it's generated, allowing output to stream progressively instead of arriving all at once. Iterate over the `textStream` using a `for await` loop to inspect each stream chunk.
+
+```typescript {3,7}
+const testAgent = mastra.getAgent('testAgent');
+
+const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }]);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+> **Note:**
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+### Output from `Agent.stream()`
+
+The output streams the generated response from the agent.
+
+```text
+Of course!
+To help you organize your day effectively, I need a bit more information.
+Here are some questions to consider:
+...
+```
+
+### Agent stream properties
+
+An agent stream provides access to various response properties:
+
+- **`stream.textStream`**: A readable stream that emits text chunks.
+- **`stream.text`**: Promise that resolves to the full text response.
+- **`stream.finishReason`**: The reason the agent stopped streaming.
+- **`stream.usage`**: Token usage information.
+
+### AI SDK v5 Compatibility
+
+AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an error that you are using an AI SDK v4 model you will need to upgrade your model package to the next major version.
+
+For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
+
+```typescript {2,9-12}
+const testAgent = mastra.getAgent('testAgent');
+
+const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }]);
+
+// Convert to AI SDK v5 compatible stream
+const aiSDKStream = toAISdkV5Stream(stream, { from: 'agent' });
+
+// Use with AI SDK v5 methods
+```
+
+For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
+
+```typescript {1,4}
+const messages = [{ role: 'user', content: 'Hello' }];
+const aiSDKMessages = toAISdkV5Messages(messages);
+```
+
+### Using `Agent.network()`
+
+The `network()` method enables multi-agent collaboration by executing a network loop where multiple agents can work together to handle complex tasks. The routing agent delegates tasks to appropriate sub-agents, workflows, and tools based on the conversation context.
+
+> **Note**: This method is experimental and requires memory to be configured on the agent.
+
+```typescript {3,5-7}
+const testAgent = mastra.getAgent('testAgent');
+
+const networkStream = await testAgent.network('Help me organize my day');
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+```
+
+> **Note:**
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+#### Network stream properties
+
+The network stream provides access to execution information:
+
+- **`networkStream.status`**: Promise resolving to the workflow execution status
+- **`networkStream.result`**: Promise resolving to the complete execution results
+- **`networkStream.usage`**: Promise resolving to token usage information
+
+```typescript {9-11}
+const testAgent = mastra.getAgent('testAgent');
+
+const networkStream = await testAgent.network('Research dolphins then write a report');
+
+for await (const chunk of networkStream) {
+  console.log(chunk);
+}
+
+console.log('Final status:', await networkStream.status);
+console.log('Final result:', await networkStream.result);
+console.log('Token usage:', await networkStream.usage);
+```
+
+## Streaming with workflows
+
+Streaming from a workflow returns a sequence of structured events describing the run lifecycle, rather than incremental text chunks. This event-based format makes it possible to track and respond to workflow progress in real time once a run is created using `.createRun()`.
+
+### Using `Run.stream()`
+
+The `stream()` method returns a `ReadableStream` of events directly.
+
+```typescript {3,9}
+const run = await testWorkflow.createRun();
+
+const stream = await run.stream({
+  inputData: {
+    value: 'initial data',
+  },
+});
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+> **Note:**
+
+Visit [Run.stream()](/reference/v1/streaming/workflows/stream) for more information.
+
+### Output from `Run.stream()`
+
+The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
+
+```typescript
+{
+  type: 'workflow-start',
+  runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',
+  from: 'WORKFLOW',
+  payload: {
+    stepName: 'step-1',
+    args: { value: 'initial data' },
+    stepCallId: '8e15e618-be0e-4215-a5d6-08e58c152068',
+    startedAt: 1755121710066,
+    status: 'running'
+  }
+}
+```
+
+## Workflow stream properties
+
+A workflow stream provides access to various response properties:
+
+- **`stream.status`**: The status of the workflow run.
+- **`stream.result`**: The result of the workflow run.
+- **`stream.usage`**: The total token usage of the workflow run.
+
+## Related
+
+- [Streaming events](./events)
+- [Using Agents](/docs/v1/agents/overview)
+- [Workflows overview](../workflows/overview)

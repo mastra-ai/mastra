@@ -1,0 +1,85 @@
+> Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
+
+> **Code References:**
+
+- `Tool`: dist/tools/tool.d.ts → dist/chunk-5YYAQUEF.js:88
+- `createTool`: dist/tools/index.d.ts → dist/chunk-5YYAQUEF.js:258
+- `isVercelTool`: dist/tools/index.d.ts → dist/chunk-5YYAQUEF.js:263
+
+# Using Tools
+
+Tools are functions that agents can execute to perform specific tasks or access external information. They extend an agent's capabilities beyond simple text generation, allowing interaction with APIs, databases, or other systems.
+
+Each tool typically defines:
+
+- **Inputs:** What information the tool needs to run (defined with an `inputSchema`, often using Zod).
+- **Outputs:** The structure of the data the tool returns (defined with an `outputSchema`).
+- **Execution Logic:** The code that performs the tool's action.
+- **Description:** Text that helps the agent understand what the tool does and when to use it.
+
+## Creating Tools
+
+In Mastra, you create tools using the [`createTool`](/reference/v1/tools/create-tool) function from the `@mastra/core/tools` package.
+
+```typescript title="src/mastra/tools/weatherInfo.ts"
+const getWeatherInfo = async (city: string) => {
+  // Replace with an actual API call to a weather service
+  console.log(`Fetching weather for ${city}...`);
+  // Example data structure
+  return { temperature: 20, conditions: 'Sunny' };
+};
+
+export const weatherTool = createTool({
+  id: 'Get Weather Information',
+  description: `Fetches the current weather information for a given city`,
+  inputSchema: z.object({
+    city: z.string().describe('City name'),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async inputData => {
+    console.log('Using tool to fetch weather information for', inputData.city);
+    return await getWeatherInfo(inputData.city);
+  },
+});
+```
+
+This example defines a `weatherTool` with an input schema for the city, an output schema for the weather data, and an `execute` function that contains the tool's logic.
+
+When creating tools, keep tool descriptions simple and focused on **what** the tool does and **when** to use it, emphasizing its primary use case. Technical details belong in the parameter schemas, guiding the agent on _how_ to use the tool correctly with descriptive names, clear descriptions, and explanations of default values.
+
+## Adding Tools to an Agent
+
+To make tools available to an agent, you configure them in the agent's definition. Mentioning available tools and their general purpose in the agent's system prompt can also improve tool usage. For detailed steps and examples, see the guide on [Using Tools with Agents](/docs/v1/agents/using-tools#adding-tools-to-an-agent).
+
+## Using `RequestContext`
+
+Use [RequestContext](/docs/v1/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
+
+```typescript title="src/mastra/tools/test-tool.ts"
+export type UserTier = {
+  'user-tier': 'enterprise' | 'pro';
+};
+
+const advancedTools = () => {};
+
+const baseTools = () => {};
+
+export const testTool = createTool({
+  execute: async ({ requestContext }) => {
+    const userTier = requestContext.get('user-tier') as UserTier['user-tier'];
+
+    return userTier === 'enterprise' ? advancedTools : baseTools;
+  },
+});
+```
+
+> **Note:**
+
+Visit [Request Context](/docs/v1/server/request-context) for more information.
+
+## Testing with Studio
+
+Use [Studio](/docs/v1/getting-started/studio) to test tools with different inputs, inspect execution results, and verify tool behavior.
