@@ -769,24 +769,6 @@ export class InngestRun<
     return this.streamOutput;
   }
 
-  streamVNext(
-    args: {
-      inputData?: z.input<TInput>;
-      requestContext?: RequestContext;
-      tracingContext?: TracingContext;
-      tracingOptions?: TracingOptions;
-      closeOnSuspend?: boolean;
-      initialState?: z.input<TState>;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-      perStep?: boolean;
-    } = {},
-  ): ReturnType<Run<InngestEngineType, TSteps, TState, TInput, TOutput>['stream']> {
-    return this.stream(args);
-  }
-
   timeTravelStream<TInputSchema extends z.ZodType<any>>({
     inputData,
     resumeData,

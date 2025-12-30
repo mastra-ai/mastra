@@ -1464,7 +1464,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {} });
+      const streamResult = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1603,7 +1603,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {}, perStep: true });
+      const streamResult = run.stream({ inputData: {}, perStep: true });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1718,7 +1718,7 @@ describe('Workflow', () => {
       workflow.then(step1).commit();
 
       const run = await workflow.createRun();
-      const streamResult = run.streamVNext({
+      const streamResult = run.stream({
         inputData: {},
         initialState: { value: 'test-state', otherValue: 'test-other-state' },
         outputOptions: { includeState: true },
@@ -1836,7 +1836,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRun();
 
-      let streamResult = run.streamVNext({ inputData: { input: 'test' } });
+      let streamResult = run.stream({ inputData: { input: 'test' } });
 
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-suspended') {
@@ -1848,7 +1848,7 @@ describe('Workflow', () => {
       }
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const errStreamResult = run.resumeStreamVNext({ resumeData, step: getUserInput });
+      const errStreamResult = run.resumeStream({ resumeData, step: getUserInput });
       for await (const _data of errStreamResult.fullStream) {
       }
 
@@ -1861,7 +1861,7 @@ describe('Workflow', () => {
         );
       }
 
-      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      streamResult = run.resumeStream({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
         // console.log('data===', _data);
@@ -1995,7 +1995,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRun();
 
-      let streamResult = run.streamVNext({ inputData: { input: 'test' }, closeOnSuspend: false });
+      let streamResult = run.stream({ inputData: { input: 'test' }, closeOnSuspend: false });
 
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-suspended') {
@@ -2110,7 +2110,7 @@ describe('Workflow', () => {
 
       const run = await resumableWorkflow.createRun();
 
-      let streamResult = run.streamVNext({ inputData: { input: 'test input for stream' } });
+      let streamResult = run.stream({ inputData: { input: 'test input for stream' } });
 
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
@@ -2126,7 +2126,7 @@ describe('Workflow', () => {
       let result = await streamResult.result;
 
       const resumeData = { userInput: 'test input for resumption' };
-      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      streamResult = run.resumeStream({ resumeData, step: promptAgent });
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
           expect(data.payload.output).toMatchObject({
@@ -2278,7 +2278,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun({
         runId: 'test-run-id',
       });
-      const streamResult = run.streamVNext({
+      const streamResult = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -2582,7 +2582,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun({
         runId: 'test-run-id',
       });
-      const streamResult = run.streamVNext({
+      const streamResult = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -2910,7 +2910,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {} });
+      const streamResult = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -3080,7 +3080,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {} });
+      const streamResult = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -3246,13 +3246,13 @@ describe('Workflow', () => {
       const run = await workflow.createRun({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      let streamResult = run.streamVNext({ inputData: originalInput });
+      let streamResult = run.stream({ inputData: originalInput });
 
       for await (const _data of streamResult) {
       }
 
       const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: step1 });
+      streamResult = run.resumeStream({ resumeData: resumeData as any, step: step1 });
       for await (const _data of streamResult) {
       }
 
@@ -20144,7 +20144,7 @@ describe('Workflow', () => {
 
       // Use streaming to verify workflow returns tripwire status
       const chunks: StreamEvent[] = [];
-      const streamResult = run.streamVNext({ inputData: { prompt: 'This has forbidden content' } });
+      const streamResult = run.stream({ inputData: { prompt: 'This has forbidden content' } });
 
       // Collect all chunks
       for await (const chunk of streamResult.fullStream) {

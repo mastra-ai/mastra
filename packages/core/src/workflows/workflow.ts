@@ -2590,29 +2590,6 @@ export class Run<
   }
 
   /**
-   * Starts the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  stream(
-    args: {
-      inputData?: z.input<TInput>;
-      requestContext?: RequestContext;
-      tracingContext?: TracingContext;
-      tracingOptions?: TracingOptions;
-      closeOnSuspend?: boolean;
-      initialState?: z.input<TState>;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-      perStep?: boolean;
-    } = {},
-  ): ReturnType<typeof this.streamVNext> {
-    return this.streamVNext(args);
-  }
-
-  /**
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
@@ -2653,15 +2630,7 @@ export class Run<
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
-  observeStream(): ReturnType<typeof this.observeStreamVNext> {
-    return this.observeStreamVNext();
-  }
-
-  /**
-   * Observe the workflow stream vnext
-   * @returns A readable stream of the workflow events
-   */
-  observeStreamVNext(): ReadableStream<WorkflowStreamEvent> {
+  observeStream(): ReadableStream<WorkflowStreamEvent> {
     if (!this.streamOutput) {
       return new ReadableStream<WorkflowStreamEvent>({
         pull(controller) {
@@ -2691,7 +2660,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  streamVNext({
+  stream({
     inputData,
     requestContext,
     tracingContext,
@@ -2816,49 +2785,6 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   resumeStream<TResumeSchema extends z.ZodType<any>>({
-    step,
-    resumeData,
-    requestContext,
-    tracingContext,
-    tracingOptions,
-    outputOptions,
-    perStep,
-  }: {
-    resumeData?: z.input<TResumeSchema>;
-    step?:
-      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
-        ]
-      | string
-      | string[];
-    requestContext?: RequestContext;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-  } = {}) {
-    return this.resumeStreamVNext({
-      resumeData,
-      step,
-      requestContext,
-      tracingContext,
-      tracingOptions,
-      outputOptions,
-      perStep,
-    });
-  }
-
-  /**
-   * Resumes the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  resumeStreamVNext<TResumeSchema extends z.ZodType<any>>({
     step,
     resumeData,
     requestContext,
