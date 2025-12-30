@@ -1698,6 +1698,77 @@ describe('AISdkNetworkTransformer', () => {
     });
   });
 
+  describe('transform - network-execution-event-step-finish text fallback', () => {
+    it('should extract text from result when no text part exists', () => {
+      const chunk: NetworkChunkType = {
+        type: 'network-execution-event-step-finish',
+        payload: {
+          result: 'I am a helpful assistant.',
+          task: 'Who are you?',
+          primitiveId: 'none',
+          primitiveType: 'none',
+          isComplete: true,
+        } as any,
+        runId: 'run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [],
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts).toHaveLength(1);
+      expect(result[0].parts[0]).toEqual({
+        type: 'text',
+        text: 'I am a helpful assistant.',
+        state: 'done',
+      });
+    });
+
+    it('should preserve existing text and not overwrite with result', () => {
+      const chunk: NetworkChunkType = {
+        type: 'network-execution-event-step-finish',
+        payload: {
+          result: 'This should not overwrite',
+          task: 'Who are you?',
+          primitiveId: 'none',
+          primitiveType: 'none',
+          isComplete: true,
+        } as any,
+        runId: 'run-1',
+        from: ChunkFrom.NETWORK,
+      };
+
+      const conversation: MastraUIMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: 'Streamed text',
+              state: 'streaming',
+            },
+          ],
+        },
+      ];
+
+      const result = transformer.transform({ chunk, conversation, metadata: baseMetadata });
+
+      expect(result[0].parts[0]).toEqual({
+        type: 'text',
+        text: 'Streamed text',
+        state: 'done',
+      });
+    });
+  });
+
   describe('immutability', () => {
     it('should not mutate original conversation array', () => {
       const chunk: NetworkChunkType = {

@@ -747,3 +747,102 @@ describe('AgentNetworkToAISDKTransformer', () => {
     expect(workflowStep?.task.name).toBe('test-workflow'); // From transformWorkflow
   });
 });
+
+describe('Network stream text extraction', () => {
+  it('should emit text events when routing agent handles request without delegation', async () => {
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'network-execution-event-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: { networkId: 'test-network' },
+        });
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'routing-agent',
+            runId: 'step-run-1',
+            inputData: {
+              task: 'Who are you?',
+              primitiveId: '',
+              primitiveType: 'none',
+              iteration: 0,
+              threadResourceId: 'Test Resource',
+              threadId: 'network-run-1',
+              isOneOff: false,
+            },
+          },
+        });
+        controller.enqueue({
+          type: 'routing-agent-end',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: '',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            prompt: '',
+            isComplete: true,
+            selectionReason: 'I am a helpful assistant.',
+            iteration: 0,
+            runId: 'step-run-1',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-step-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            isComplete: true,
+            iteration: 0,
+            runId: 'step-run-1',
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            status: 'finished',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const transformedStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    const textStartChunks = chunks.filter(c => c.type === 'text-start');
+    const textDeltaChunks = chunks.filter(c => c.type === 'text-delta');
+    const dataNetworkChunks = chunks.filter(c => c.type === 'data-network');
+
+    expect(dataNetworkChunks.length).toBeGreaterThan(0);
+
+    const lastNetworkChunk = dataNetworkChunks[dataNetworkChunks.length - 1];
+    expect(lastNetworkChunk.data.output).toBe('I am a helpful assistant.');
+
+    expect(textStartChunks.length).toBeGreaterThan(0);
+    expect(textDeltaChunks.length).toBeGreaterThan(0);
+
+    const textContent = textDeltaChunks.map(c => c.delta || '').join('');
+    expect(textContent).toContain('I am a helpful assistant');
+  });
+});
