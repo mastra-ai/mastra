@@ -53,6 +53,7 @@ interface MdxFile {
   title?: string;
   description?: string;
   content: string;
+  isReference: boolean;
 }
 
 interface DocTopic {
@@ -197,13 +198,15 @@ function findMdxFiles(): MdxFile[] {
         const { packages, title, description, content: body } = extractFrontmatter(content);
 
         if (packages.length > 0) {
+          const relativePath = path.relative(MDX_DOCS_DIR, entryPath);
           files.push({
             path: entryPath,
-            relativePath: path.relative(MDX_DOCS_DIR, entryPath),
+            relativePath,
             packages,
             title,
             description,
             content: body,
+            isReference: relativePath.startsWith('reference/'),
           });
         }
       }
@@ -631,9 +634,14 @@ function processDocTopic(topic: DocTopic, sourceMap: SourceMap, docsOutputDir: s
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  // Separate conceptual docs from reference docs
+  const conceptualFiles = topic.files.filter(f => !f.isReference);
+  const referenceFiles = topic.files.filter(f => f.isReference);
+
   let fileIndex = 1;
 
-  for (const file of topic.files) {
+  // Process conceptual docs as individual files
+  for (const file of conceptualFiles) {
     // Transform MDX to Markdown
     let markdown = transformMdxToMarkdown(file.content);
 
@@ -672,6 +680,40 @@ function processDocTopic(topic: DocTopic, sourceMap: SourceMap, docsOutputDir: s
     console.info(`  Generated: ${topic.id}/${outputName}`);
 
     fileIndex++;
+  }
+
+  // Collapse all reference docs into a single file
+  if (referenceFiles.length > 0) {
+    const referenceMarkdown: string[] = [];
+    referenceMarkdown.push(`# ${topic.title} API Reference\n`);
+    referenceMarkdown.push(`> API reference for ${topic.title.toLowerCase()} - ${referenceFiles.length} entries\n`);
+
+    for (const file of referenceFiles) {
+      let markdown = transformMdxToMarkdown(file.content);
+
+      // Add section header with the method/class name
+      const baseName = path.basename(file.relativePath, '.mdx');
+      const sectionTitle = file.title || baseName;
+
+      // Use h2 for each reference entry
+      referenceMarkdown.push(`\n---\n`);
+      referenceMarkdown.push(`## ${sectionTitle}\n`);
+
+      if (file.description) {
+        referenceMarkdown.push(`> ${file.description}\n`);
+      }
+
+      // Remove h1 from the content if present (we already added the title)
+      markdown = markdown.replace(/^#\s+[^\n]+\n+/, '');
+
+      referenceMarkdown.push(markdown);
+    }
+
+    const outputName = `${String(fileIndex).padStart(2, '0')}-reference.md`;
+    const outputPath = path.join(outputDir, outputName);
+
+    fs.writeFileSync(outputPath, referenceMarkdown.join('\n'), 'utf-8');
+    console.info(`  Generated: ${topic.id}/${outputName} (${referenceFiles.length} entries)`);
   }
 }
 
