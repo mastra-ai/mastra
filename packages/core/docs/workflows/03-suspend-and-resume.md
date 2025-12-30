@@ -59,6 +59,8 @@ Use `resume()` to restart a suspended workflow from the step where it paused. Pa
 ![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
 ```typescript
+import { step1 } from './workflows/test-workflow';
+
 const workflow = mastra.getWorkflow('testWorkflow');
 const run = await workflow.createRun();
 

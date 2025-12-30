@@ -33,6 +33,9 @@ Mastra includes several processors for common use cases. You can also create cus
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
 ```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { ModerationProcessor } from '@mastra/core/processors';
+
 export const moderatedAgent = new Agent({
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
@@ -87,14 +90,10 @@ Custom processors implement the `Processor` interface:
 ### Custom input processor
 
 ```typescript title="src/mastra/processors/custom-input.ts"
-
-  Processor,
-  MastraDBMessage,
-  RequestContext,
-} from "@mastra/core";
+import type { Processor, MastraDBMessage, RequestContext } from '@mastra/core';
 
 export class CustomInputProcessor implements Processor {
-  id = "custom-input";
+  id = 'custom-input';
 
   async processInput({
     messages,
@@ -106,7 +105,7 @@ export class CustomInputProcessor implements Processor {
     context: RequestContext;
   }): Promise<MastraDBMessage[]> {
     // Transform messages before they reach the LLM
-    return messages.map((msg) => ({
+    return messages.map(msg => ({
       ...msg,
       content: {
         ...msg.content,
@@ -137,6 +136,8 @@ The framework handles both return formats, so modifying system messages is optio
 To modify system messages (e.g., trim verbose prompts for smaller models), return an object with both `messages` and `systemMessages`:
 
 ```typescript title="src/mastra/processors/system-trimmer.ts"
+import type { Processor, CoreMessage, MastraDBMessage } from '@mastra/core';
+
 export class SystemTrimmer implements Processor {
   id = 'system-trimmer';
 
@@ -166,6 +167,8 @@ This is useful for:
 While `processInput` runs once at the start of agent execution, `processInputStep` runs at **each step** of the agentic loop (including tool call continuations). This enables per-step configuration changes like dynamic model switching or tool choice modifications.
 
 ```typescript title="src/mastra/processors/step-processor.ts"
+import type { Processor, ProcessInputStepArgs, ProcessInputStepResult } from '@mastra/core';
+
 export class DynamicModelProcessor implements Processor {
   id = 'dynamic-model';
 
@@ -239,14 +242,10 @@ await agent.generate({
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts"
-
-  Processor,
-  MastraDBMessage,
-  RequestContext,
-} from "@mastra/core";
+import type { Processor, MastraDBMessage, RequestContext } from '@mastra/core';
 
 export class CustomOutputProcessor implements Processor {
-  id = "custom-output";
+  id = 'custom-output';
 
   async processOutputResult({
     messages,
@@ -256,7 +255,7 @@ export class CustomOutputProcessor implements Processor {
     context: RequestContext;
   }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
-    return messages.filter((msg) => msg.role !== "system");
+    return messages.filter(msg => msg.role !== 'system');
   }
 
   async processOutputStream({
@@ -284,6 +283,9 @@ Mastra provides utility processors for common tasks:
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
 
 ```typescript {7-10}
+import { Agent } from '@mastra/core/agent';
+import { TokenLimiter } from '@mastra/core/processors';
+
 const agent = new Agent({
   name: 'my-agent',
   model: 'openai/gpt-4o',
@@ -297,6 +299,8 @@ const agent = new Agent({
 The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings for different models:
 
 ```typescript {6-9}
+import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
+
 const agent = new Agent({
   name: 'my-agent',
   inputProcessors: [
@@ -313,6 +317,9 @@ const agent = new Agent({
 Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
 
 ```typescript {7-16}
+import { Agent } from '@mastra/core/agent';
+import { ToolCallFilter, TokenLimiter } from '@mastra/core/processors';
+
 const agent = new Agent({
   name: 'my-agent',
   model: 'openai/gpt-4o',
@@ -338,6 +345,10 @@ The example above filters tool calls and limits tokens for the LLM, but these fi
 You can use Mastra workflows as processors to create complex processing pipelines with parallel execution, conditional branching, and error handling:
 
 ```typescript title="src/mastra/processors/moderation-workflow.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { ProcessorStepSchema } from '@mastra/core/processors';
+import { Agent } from '@mastra/core/agent';
+
 // Create a workflow that runs multiple checks in parallel
 const moderationWorkflow = createWorkflow({
   id: 'moderation-pipeline',
@@ -364,6 +375,8 @@ When an agent is registered with Mastra, processor workflows are automatically r
 Processors can request that the LLM retry its response with feedback. This is useful for implementing quality checks, output validation, or iterative refinement:
 
 ```typescript title="src/mastra/processors/quality-checker.ts"
+import type { Processor } from '@mastra/core';
+
 export class QualityChecker implements Processor {
   id = 'quality-checker';
 

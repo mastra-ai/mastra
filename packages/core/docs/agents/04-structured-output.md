@@ -17,6 +17,8 @@ Agents can return structured data by defining the expected output with either [Z
 Define the `output` shape using [Zod](https://zod.dev/):
 
 ```typescript
+import { z } from 'zod';
+
 const response = await testAgent.generate('Help me plan my day.', {
   structuredOutput: {
     schema: z.array(
@@ -88,6 +90,8 @@ The `response.object` will contain the structured data as defined by the schema.
 Streaming also supports structured output. The final structured object is available on `stream.fullStream` and after the stream completes on `stream.object`. Text stream chunks are still emitted, but they contain natural language text rather than structured data.
 
 ```typescript
+import { z } from 'zod';
+
 const stream = await testAgent.stream('Help me plan my day.', {
   structuredOutput: {
     schema: z.array(
@@ -118,6 +122,8 @@ for await (const chunk of stream.textStream) {
 When your main agent isn't proficient at creating structured output you can provide a `model` to `structuredOutput`. In this case, Mastra uses a second agent under the hood to extract structured data from the main agent's natural language response. This makes two LLM calls, one to generate the response and another to turn that response into the structured object, which adds some latency and cost but can improve accuracy for complex structuring tasks.
 
 ```typescript
+import { z } from 'zod';
+
 const response = await testAgent.generate('Analyze the TypeScript programming language.', {
   structuredOutput: {
     schema: z.object({
@@ -149,6 +155,8 @@ By default, Mastra passes the schema to the model provider using the `response_f
 If your model provider doesn't support `response_format`, you'll get an error from the API. When this happens, set `jsonPromptInjection: true`. This adds the schema to the system prompt instead, instructing the model to output JSON. This is less reliable than the API parameter approach.
 
 ```typescript
+import { z } from 'zod';
+
 const response = await testAgent.generate('Help me plan my day.', {
   structuredOutput: {
     schema: z.array(
@@ -182,6 +190,8 @@ const response = await agentWithTools.generate('Your prompt', {
 When schema validation fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`.
 
 ```typescript
+import { z } from 'zod';
+
 const response = await testAgent.generate('Tell me about TypeScript.', {
   structuredOutput: {
     schema: z.object({

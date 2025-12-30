@@ -13,6 +13,8 @@ This allows you to cancel long-running operations within your tools, such as net
 You access the `abortSignal` in the second parameter of the tool's `execute` function.
 
 ```typescript
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
 export const longRunningTool = createTool({
   id: "long-computation",
@@ -46,6 +48,7 @@ export const longRunningTool = createTool({
 To use this, provide an `AbortController`'s signal when calling the agent:
 
 ```typescript
+import { Agent } from '@mastra/core/agent';
 // Assume 'agent' is an Agent instance with longRunningTool configured
 
 const controller = new AbortController();
@@ -83,6 +86,9 @@ npm install ai
 Here's an example of a tool defined using the Vercel AI SDK format:
 
 ```typescript title="src/mastra/tools/vercelWeatherTool.ts"
+import { tool } from 'ai';
+import { z } from 'zod';
+
 export const vercelWeatherTool = tool({
   description: 'Fetches current weather using Vercel AI SDK format',
   parameters: z.object({
@@ -100,6 +106,10 @@ export const vercelWeatherTool = tool({
 You can then add this tool to your Mastra agent just like any other tool:
 
 ```typescript title="src/mastra/agents/mixedToolsAgent.ts"
+import { Agent } from '@mastra/core/agent';
+import { vercelWeatherTool } from '../tools/vercelWeatherTool'; // Vercel AI SDK tool
+import { mastraTool } from '../tools/mastraTool'; // Mastra createTool tool
+
 export const mixedToolsAgent = new Agent({
   id: 'mixed-tools-agent',
   name: 'Mixed Tools Agent',

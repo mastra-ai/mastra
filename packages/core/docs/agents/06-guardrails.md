@@ -20,6 +20,9 @@ Use processors for content moderation, prompt injection prevention, response san
 Import and instantiate the relevant processor class, and pass it to your agent’s configuration using either the `inputProcessors` or `outputProcessors` option:
 
 ```typescript {2,9-17} title="src/mastra/agents/moderated-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { ModerationProcessor } from '@mastra/core/processors';
+
 export const moderatedAgent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
@@ -46,6 +49,8 @@ Input processors are applied before user messages reach the language model. They
 The `UnicodeNormalizer` is an input processor that cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols, allowing the LLM to better understand user messages.
 
 ```typescript {7-10} title="src/mastra/agents/normalized-agent.ts"
+import { UnicodeNormalizer } from '@mastra/core/processors';
+
 export const normalizedAgent = new Agent({
   id: 'normalized-agent',
   name: 'Normalized Agent',
@@ -67,6 +72,8 @@ Visit [UnicodeNormalizer](/reference/v1/processors/unicode-normalizer) for a ful
 The `PromptInjectionDetector` is an input processor that scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
 ```typescript {7-12} title="src/mastra/agents/secure-agent.ts"
+import { PromptInjectionDetector } from '@mastra/core/processors';
+
 export const secureAgent = new Agent({
   id: 'secure-agent',
   name: 'Secure Agent',
@@ -90,6 +97,8 @@ Visit [PromptInjectionDetector](/reference/v1/processors/prompt-injection-detect
 The `LanguageDetector` is an input processor that detects and translates user messages into a target language, enabling multilingual support while maintaining consistent interaction. It uses an LLM to identify the language and perform the translation.
 
 ```typescript {7-12} title="src/mastra/agents/multilingual-agent.ts"
+import { LanguageDetector } from '@mastra/core/processors';
+
 export const multilingualAgent = new Agent({
   id: 'multilingual-agent',
   name: 'Multilingual Agent',
@@ -117,6 +126,8 @@ Output processors are applied after the language model generates a response, but
 The `BatchPartsProcessor` is an output processor that combines multiple stream parts before emitting them to the client. This reduces network overhead and improves the user experience by consolidating small chunks into larger batches.
 
 ```typescript {7-11} title="src/mastra/agents/batched-agent.ts"
+import { BatchPartsProcessor } from '@mastra/core/processors';
+
 export const batchedAgent = new Agent({
   id: 'batched-agent',
   name: 'Batched Agent',
@@ -139,6 +150,8 @@ Visit [BatchPartsProcessor](/reference/v1/processors/batch-parts-processor) for 
 The `TokenLimiterProcessor` is an output processor that limits the number of tokens in model responses. It helps manage cost and performance by truncating or blocking messages when the limit is exceeded.
 
 ```typescript {7-11} title="src/mastra/agents/limited-agent.ts"
+import { TokenLimiterProcessor } from '@mastra/core/processors';
+
 export const limitedAgent = new Agent({
   id: 'limited-agent',
   name: 'Limited Agent',
@@ -161,6 +174,8 @@ Visit [TokenLimiterProcessor](/reference/v1/processors/token-limiter-processor) 
 The `SystemPromptScrubber` is an output processor that detects and redacts system prompts or other internal instructions from model responses. It helps prevent unintended disclosure of prompt content or configuration details that could introduce security risks. It uses an LLM to identify and redact sensitive content based on configured detection types.
 
 ```typescript {7-16} title="src/mastra/agents/scrubbed-agent.ts"
+import { SystemPromptScrubber } from '@mastra/core/processors';
+
 const scrubbedAgent = new Agent({
   id: 'scrubbed-agent',
   name: 'Scrubbed Agent',
@@ -194,6 +209,8 @@ Hybrid processors can be applied either before messages are sent to the language
 The `ModerationProcessor` is a hybrid processor that detects inappropriate or harmful content across categories like hate, harassment, and violence. It can be used to moderate either user input or model output, depending on where it's applied. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
 
 ```typescript {7-12,15} title="src/mastra/agents/moderated-agent.ts"
+import { ModerationProcessor } from '@mastra/core/processors';
+
 export const moderatedAgent = new Agent({
   id: 'moderated-agent',
   name: 'Moderated Agent',
@@ -218,6 +235,8 @@ Visit [ModerationProcessor](/reference/v1/processors/moderation-processor) for a
 The `PIIDetector` is a hybrid processor that detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It can redact either user input or model output, depending on where it's applied. It uses an LLM to identify sensitive content based on configured detection types.
 
 ```typescript {7-14,17} title="src/mastra/agents/private-agent.ts"
+import { PIIDetector } from '@mastra/core/processors';
+
 export const privateAgent = new Agent({
   id: 'private-agent',
   name: 'Private Agent',
@@ -252,16 +271,11 @@ A typical order might be:
 The order affects behavior, so arrange processors to suit your goals.
 
 ```typescript title="src/mastra/agents/test-agent.ts"
-
-  UnicodeNormalizer,
-  ModerationProcessor,
-  PromptInjectionDetector,
-  PIIDetector,
-} from "@mastra/core/processors";
+import { UnicodeNormalizer, ModerationProcessor, PromptInjectionDetector, PIIDetector } from '@mastra/core/processors';
 
 export const testAgent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
+  id: 'test-agent',
+  name: 'Test Agent',
   inputProcessors: [
     new UnicodeNormalizer(),
     new PromptInjectionDetector(),
@@ -278,6 +292,8 @@ Many of the built-in processors support a `strategy` parameter that controls how
 Most strategies allow the request to continue without interruption. When `block` is used, the processor calls its internal `abort()` function, which immediately stops the request and prevents any subsequent processors from running.
 
 ```typescript {8} title="src/mastra/agents/private-agent.ts"
+import { PIIDetector } from '@mastra/core/processors';
+
 export const privateAgent = new Agent({
   id: 'private-agent',
   name: 'Private Agent',

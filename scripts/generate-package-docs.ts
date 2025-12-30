@@ -1,9 +1,23 @@
+#!/usr/bin/env npx tsx
+/**
+ * Shared script for generating embedded documentation for Mastra packages.
+ *
+ * Usage:
+ *   pnpm generate:docs                     # Generate for all packages with docs.config.json
+ *   pnpm generate:docs packages/core       # Generate for a specific package
+ *   pnpm generate:docs stores/libsql       # Generate for a store package
+ *
+ * Each package should have a docs.config.json file defining its documentation sources.
+ */
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const MONOREPO_ROOT = path.join(__dirname, '..');
+const MDX_DOCS_DIR = path.join(MONOREPO_ROOT, 'docs/src/content/en');
 
 // ============================================================================
 // Types
@@ -13,7 +27,6 @@ interface ExportInfo {
   types: string;
   implementation: string;
   line?: number;
-  docs?: string;
 }
 
 interface ModuleInfo {
@@ -32,59 +45,70 @@ interface DocTopic {
   id: string;
   title: string;
   sourceFiles: string[];
-  outputDir: string;
+  /** Optional code references to link to implementation (e.g., ['Agent', 'MessageList']) */
+  codeReferences?: string[];
 }
 
-// ============================================================================
-// Configuration
-// ============================================================================
+interface DocsConfig {
+  /** Skill name for Claude Skills (derived from package name if not provided) */
+  skillName?: string;
+  /** Description for Claude Skills */
+  skillDescription?: string;
+  /** Modules to analyze in dist/ for SOURCE_MAP */
+  modules?: string[];
+  /** Documentation topics */
+  topics: DocTopic[];
+}
 
-const PACKAGE_ROOT = path.join(__dirname, '..');
-const DIST_DIR = path.join(PACKAGE_ROOT, 'dist');
-const DOCS_OUTPUT_DIR = path.join(PACKAGE_ROOT, 'docs');
-const MONOREPO_ROOT = path.join(PACKAGE_ROOT, '../..');
-const MDX_DOCS_DIR = path.join(MONOREPO_ROOT, 'docs/src/content/en');
+/**
+ * Extract code references from MDX content by finding:
+ * - Import statements: import { Agent, Tool } from "@mastra/..."
+ * - Inline code references: `Agent`, `createTool()`
+ */
+function extractCodeReferencesFromContent(content: string, sourceMap: SourceMap): string[] {
+  const discovered = new Set<string>();
+  const exportNames = Object.keys(sourceMap.exports);
 
-// Topics to extract for @mastra/core
-const DOC_TOPICS: DocTopic[] = [
-  {
-    id: 'agents',
-    title: 'Agents',
-    sourceFiles: [
-      'docs/agents/overview.mdx',
-      'docs/agents/using-tools.mdx',
-      'docs/agents/agent-memory.mdx',
-      'docs/agents/structured-output.mdx',
-      'docs/agents/processors.mdx',
-      'docs/agents/guardrails.mdx',
-      'docs/agents/networks.mdx',
-    ],
-    outputDir: 'agents',
-  },
-  {
-    id: 'tools',
-    title: 'Tools',
-    sourceFiles: ['docs/tools-mcp/overview.mdx', 'docs/tools-mcp/advanced-usage.mdx'],
-    outputDir: 'tools',
-  },
-  {
-    id: 'workflows',
-    title: 'Workflows',
-    sourceFiles: [
-      'docs/workflows/overview.mdx',
-      'docs/workflows/control-flow.mdx',
-      'docs/workflows/suspend-and-resume.mdx',
-      'docs/workflows/error-handling.mdx',
-    ],
-    outputDir: 'workflows',
-  },
-  {
-    id: 'streaming',
-    title: 'Streaming',
-    sourceFiles: ['docs/streaming/overview.mdx', 'docs/streaming/events.mdx'],
-    outputDir: 'streaming',
-  },
-];
+  // 1. Parse import statements: import { Agent, Tool } from "@mastra/..."
+  const importRegex = /import\s*\{([^}]+)\}\s*from\s*["']@mastra\/[^"']+["']/g;
+  let match;
+  while ((match = importRegex.exec(content)) !== null) {
+    const names = match[1].split(',').map(n => n.trim().split(' as ')[0].trim());
+    for (const name of names) {
+      if (exportNames.includes(name)) {
+        discovered.add(name);
+      }
+    }
+  }
+
+  // 2. Find inline code references: `Agent`, `createTool`, etc.
+  const inlineCodeRegex = /`([A-Z][a-zA-Z]*)`/g;
+  while ((match = inlineCodeRegex.exec(content)) !== null) {
+    const name = match[1];
+    if (exportNames.includes(name)) {
+      discovered.add(name);
+    }
+  }
+
+  // 3. Find function calls in code blocks: new Agent(, createTool(
+  const functionCallRegex = /(?:new\s+)?([A-Z][a-zA-Z]*)\s*\(/g;
+  while ((match = functionCallRegex.exec(content)) !== null) {
+    const name = match[1];
+    if (exportNames.includes(name)) {
+      discovered.add(name);
+    }
+  }
+
+  return [...discovered];
+}
+
+function getTopicCodeReferences(topic: DocTopic, sourceMap: SourceMap, topicContent: string): [string, ExportInfo][] {
+  // Use explicit codeReferences if provided, otherwise auto-discover from content
+  const names = topic.codeReferences || extractCodeReferencesFromContent(topicContent, sourceMap);
+  return names
+    .filter(name => sourceMap.exports[name])
+    .map(name => [name, sourceMap.exports[name]] as [string, ExportInfo]);
+}
 
 // ============================================================================
 // Source Map Generator
@@ -147,9 +171,9 @@ function findExportLine(chunkPath: string, exportName: string): number | undefin
   return undefined;
 }
 
-function generateSourceMap(): SourceMap {
-  // Read package.json for version
-  const packageJson = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf-8'));
+function generateSourceMap(packageRoot: string, config: DocsConfig): SourceMap {
+  const distDir = path.join(packageRoot, 'dist');
+  const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
 
   const sourceMap: SourceMap = {
     version: packageJson.version,
@@ -158,8 +182,8 @@ function generateSourceMap(): SourceMap {
     modules: {},
   };
 
-  // Modules to analyze
-  const modules = [
+  // Default modules to analyze, can be overridden in config
+  const modules = config.modules || [
     'agent',
     'tools',
     'workflows',
@@ -176,8 +200,7 @@ function generateSourceMap(): SourceMap {
   ];
 
   for (const mod of modules) {
-    const indexPath = path.join(DIST_DIR, mod, 'index.js');
-    const typesPath = path.join(DIST_DIR, mod, 'index.d.ts');
+    const indexPath = path.join(distDir, mod, 'index.js');
 
     if (!fs.existsSync(indexPath)) {
       continue;
@@ -189,14 +212,14 @@ function generateSourceMap(): SourceMap {
     for (const [name, info] of exports) {
       chunks.add(info.chunk);
 
-      const chunkPath = path.join(DIST_DIR, info.chunk);
+      const chunkPath = path.join(distDir, info.chunk);
       const line = findExportLine(chunkPath, name);
 
       // Determine the types file
       let typesFile = `dist/${mod}/index.d.ts`;
 
       // Check if there's a more specific types file
-      const specificTypesPath = path.join(DIST_DIR, mod, `${name.toLowerCase()}.d.ts`);
+      const specificTypesPath = path.join(distDir, mod, `${name.toLowerCase()}.d.ts`);
       if (fs.existsSync(specificTypesPath)) {
         typesFile = `dist/${mod}/${name.toLowerCase()}.d.ts`;
       }
@@ -215,12 +238,12 @@ function generateSourceMap(): SourceMap {
   }
 
   // Also check root index.js for additional exports
-  const rootIndexPath = path.join(DIST_DIR, 'index.js');
+  const rootIndexPath = path.join(distDir, 'index.js');
   if (fs.existsSync(rootIndexPath)) {
     const rootExports = parseIndexExports(rootIndexPath);
     for (const [name, info] of rootExports) {
       if (!sourceMap.exports[name]) {
-        const chunkPath = path.join(DIST_DIR, info.chunk);
+        const chunkPath = path.join(distDir, info.chunk);
         const line = findExportLine(chunkPath, name);
 
         sourceMap.exports[name] = {
@@ -242,8 +265,18 @@ function generateSourceMap(): SourceMap {
 function transformMdxToMarkdown(content: string): string {
   let result = content;
 
-  // Remove import statements
+  // Step 1: Protect code blocks by replacing them with placeholders
+  const codeBlocks: string[] = [];
+  result = result.replace(/```[\s\S]*?```/g, match => {
+    codeBlocks.push(match);
+    return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+  });
+
+  // Remove import statements (only outside code blocks now)
   result = result.replace(/^import\s+.*?(?:from\s+['"].*?['"])?;?\s*$/gm, '');
+
+  // Remove export statements (only outside code blocks now)
+  result = result.replace(/^export\s+.*?(?:from\s+['"].*?['"])?;?\s*$/gm, '');
 
   // Remove MDX component tags but keep their content
   // Handle <Steps> and </Steps>
@@ -259,6 +292,20 @@ function transformMdxToMarkdown(content: string): string {
   result = result.replace(/<TabItem\s+value="([^"]+)"[^>]*>/g, '**$1:**\n');
   result = result.replace(/<\/TabItem>/g, '');
 
+  // Handle <PropertiesTable> - strip entirely (including complex nested JSX content)
+  // These components have multi-line JSX with nested objects/arrays
+  // Match from <PropertiesTable to /> (self-closing) - greedy to handle nested braces
+  result = result.replace(/<PropertiesTable\s[\s\S]*?\/>/g, '');
+  // Match paired tags
+  result = result.replace(/<PropertiesTable>[\s\S]*?<\/PropertiesTable>/g, '');
+
+  // Handle <CardGridItem> - navigation cards, strip them
+  result = result.replace(/<CardGridItem[^>]*>[\s\S]*?<\/CardGridItem>/g, '');
+  result = result.replace(/<\/?CardGrid>/g, '');
+
+  // Handle <ProviderModelsTable> - strip dynamic tables
+  result = result.replace(/<ProviderModelsTable[^>]*\/>/g, '');
+
   // Handle Docusaurus admonitions (:::tip, :::note, etc.)
   result = result.replace(/:::(tip|note|warning|caution|info)\[([^\]]*)\]/g, '> **$2**');
   result = result.replace(/:::(tip|note|warning|caution|info)/g, '> **Note:**');
@@ -271,8 +318,15 @@ function transformMdxToMarkdown(content: string): string {
     result = result.replace(/<!--[\s\S]*?-->/g, '');
   } while (result !== previousResult && result.includes('<!--'));
 
+  // Remove simple JSX expressions like {props.something} but NOT inside code blocks
+  // Only match JSX expressions that look like {identifier.property} patterns
+  result = result.replace(/\{[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_.]+\}/g, '');
+
   // Clean up extra blank lines
   result = result.replace(/\n{3,}/g, '\n\n');
+
+  // Step 2: Restore code blocks
+  result = result.replace(/__CODE_BLOCK_(\d+)__/g, (_, index) => codeBlocks[parseInt(index, 10)]);
 
   // Trim whitespace
   result = result.trim();
@@ -304,18 +358,31 @@ function extractFrontmatter(content: string): { title?: string; description?: st
 // SKILL.md Generator
 // ============================================================================
 
-function generateSkillMd(sourceMap: SourceMap): string {
+function generateSkillMd(sourceMap: SourceMap, config: DocsConfig, topics: DocTopic[]): string {
+  const packageName = sourceMap.package;
+  const skillName = config.skillName || packageName.replace('@', '').replace('/', '-') + '-docs';
+  const skillDescription =
+    config.skillDescription ||
+    `Documentation for ${packageName}. Includes links to type definitions and readable implementation code in dist/.`;
+
   const topExports = Object.entries(sourceMap.exports)
     .slice(0, 20)
     .map(([name, info]) => `  - ${name}: ${info.types}`)
     .join('\n');
 
+  const topicLinks = topics
+    .map(
+      t =>
+        `- [${t.title}](${t.id}/01-${t.sourceFiles[0]?.split('/').pop()?.replace('.mdx', '.md') || 'overview.md'}) - ${t.title}`,
+    )
+    .join('\n');
+
   return `---
-name: mastra-core-docs
-description: Documentation for @mastra/core - an AI agent framework. Use when working with Mastra agents, tools, workflows, streaming, or when the user asks about Mastra APIs. Includes links to type definitions and readable implementation code in dist/.
+name: ${skillName}
+description: ${skillDescription}
 ---
 
-# Mastra Core Documentation
+# ${packageName} Documentation
 
 > **Version**: ${sourceMap.version}
 > **Package**: ${sourceMap.package}
@@ -335,25 +402,21 @@ Each export maps to:
 
 ## Finding Documentation
 
-### For a specific export (Agent, createTool, Workflow, etc.)
+### For a specific export
 
 \`\`\`bash
 # Read the source map
-cat docs/SOURCE_MAP.json | grep -A 5 '"Agent"'
-
-# This tells you:
-# - types: dist/agent/index.d.ts
-# - implementation: dist/chunk-*.js with line number
+cat docs/SOURCE_MAP.json | grep -A 5 '"ExportName"'
 \`\`\`
 
-### For a topic (agents, tools, workflows)
+### For a topic
 
 \`\`\`bash
 # List topics
 ls docs/
 
 # Read a topic
-cat docs/agents/01-overview.md
+cat docs/<topic>/01-overview.md
 \`\`\`
 
 ## Code References Are Unminified
@@ -363,16 +426,6 @@ Mastra's compiled \`.js\` files in \`dist/\` are:
 - Preserve JSDoc comments and examples
 - Include implementation details
 
-You can read them directly:
-
-\`\`\`bash
-# See what a module exports (tells you which chunks)
-cat dist/agent/index.js
-
-# Read the implementation
-cat dist/chunk-IDD63DWQ.js | grep -A 50 "var Agent = class"
-\`\`\`
-
 ## Top Exports
 
 ${topExports}
@@ -381,17 +434,14 @@ See SOURCE_MAP.json for the complete list.
 
 ## Available Topics
 
-- [Agents](agents/01-overview.md) - Creating and using AI agents
-- [Tools](tools/01-overview.md) - Building custom tools
-- [Workflows](workflows/01-overview.md) - Orchestrating complex flows
-- [Streaming](streaming/01-overview.md) - Real-time responses
+${topicLinks}
 
 ## Using Type Definitions
 
 Type files (\`.d.ts\`) include full JSDoc documentation:
 
 \`\`\`bash
-cat dist/agent/agent.d.ts
+cat dist/<module>/<name>.d.ts
 \`\`\`
 
 ## Using Implementation Files
@@ -400,10 +450,10 @@ Implementation files show actual logic:
 
 \`\`\`bash
 # Find where exports come from
-cat dist/agent/index.js
+cat dist/<module>/index.js
 
 # Read the chunk (unminified, readable!)
-cat dist/chunk-IDD63DWQ.js
+cat dist/chunk-*.js
 \`\`\`
 `;
 }
@@ -412,8 +462,10 @@ cat dist/chunk-IDD63DWQ.js
 // README.md Generator
 // ============================================================================
 
-function generateReadme(sourceMap: SourceMap): string {
-  return `# @mastra/core Documentation
+function generateReadme(sourceMap: SourceMap, topics: DocTopic[]): string {
+  const topicList = topics.map(t => `├── ${t.id}/`).join('\n');
+
+  return `# ${sourceMap.package} Documentation
 
 > Embedded documentation for coding agents
 
@@ -427,7 +479,7 @@ cat docs/SKILL.md
 cat docs/SOURCE_MAP.json
 
 # Read topic documentation
-cat docs/agents/01-overview.md
+cat docs/<topic>/01-overview.md
 \`\`\`
 
 ## Structure
@@ -437,10 +489,7 @@ docs/
 ├── SKILL.md           # Claude Skills entry point
 ├── README.md          # This file
 ├── SOURCE_MAP.json    # Machine-readable export index
-├── agents/            # Agent documentation
-├── tools/             # Tool documentation
-├── workflows/         # Workflow documentation
-└── streaming/         # Streaming documentation
+${topicList}
 \`\`\`
 
 ## Finding Code
@@ -450,25 +499,10 @@ The SOURCE_MAP.json maps every export to its:
 - **implementation**: \`.js\` chunk file with readable source code
 - **line**: Line number in the chunk file
 
-Example:
-\`\`\`json
-{
-  "Agent": {
-    "types": "dist/agent/index.d.ts",
-    "implementation": "dist/chunk-IDD63DWQ.js",
-    "line": 15137
-  }
-}
-\`\`\`
-
 ## Key Insight
 
 Unlike most npm packages, Mastra's compiled JavaScript is **unminified** and fully readable.
-You can read the actual implementation:
-
-\`\`\`bash
-cat dist/chunk-IDD63DWQ.js | grep -A 100 "var Agent = class"
-\`\`\`
+You can read the actual implementation directly.
 
 ## Version
 
@@ -481,8 +515,8 @@ Version: ${sourceMap.version}
 // Doc Generator
 // ============================================================================
 
-function processDocTopic(topic: DocTopic, sourceMap: SourceMap): void {
-  const outputDir = path.join(DOCS_OUTPUT_DIR, topic.outputDir);
+function processDocTopic(topic: DocTopic, sourceMap: SourceMap, config: DocsConfig, docsOutputDir: string): void {
+  const outputDir = path.join(docsOutputDir, topic.id);
 
   // Create output directory
   if (!fs.existsSync(outputDir)) {
@@ -505,11 +539,13 @@ function processDocTopic(topic: DocTopic, sourceMap: SourceMap): void {
     // Transform MDX to Markdown
     let markdown = transformMdxToMarkdown(body);
 
-    // Add header with code links if this is an overview file
+    // Add header with code references if this is an overview file
+    // Auto-discovers from imports/code in the MDX, or uses explicit codeReferences from config
     if (sourceFile.includes('overview')) {
-      const topicExports = getTopicExports(topic.id, sourceMap);
-      if (topicExports.length > 0) {
-        const codeLinks = topicExports
+      const codeRefs = getTopicCodeReferences(topic, sourceMap, content);
+
+      if (codeRefs.length > 0) {
+        const codeLinks = codeRefs
           .slice(0, 5)
           .map(
             ([name, info]) =>
@@ -525,7 +561,6 @@ function processDocTopic(topic: DocTopic, sourceMap: SourceMap): void {
     if (title && !markdown.match(/^#\s/m)) {
       markdown = `# ${title}\n\n${description ? `> ${description}\n\n` : ''}${markdown}`;
     } else if (description && !markdown.includes(description)) {
-      // Just add description if title already exists
       markdown = `> ${description}\n\n${markdown}`;
     }
 
@@ -535,76 +570,116 @@ function processDocTopic(topic: DocTopic, sourceMap: SourceMap): void {
     const outputPath = path.join(outputDir, outputName);
 
     fs.writeFileSync(outputPath, markdown, 'utf-8');
-    console.log(`  Generated: ${topic.outputDir}/${outputName}`);
+    console.info(`  Generated: ${topic.id}/${outputName}`);
 
     fileIndex++;
   }
-}
-
-function getTopicExports(topicId: string, sourceMap: SourceMap): [string, ExportInfo][] {
-  const topicToExports: Record<string, string[]> = {
-    agents: ['Agent', 'MessageList', 'TripWire'],
-    tools: ['Tool', 'createTool', 'isVercelTool'],
-    workflows: ['Workflow', 'Run', 'Step', 'createStep', 'createWorkflow'],
-    streaming: ['MastraModelOutput', 'ToolStream'],
-  };
-
-  const exportNames = topicToExports[topicId] || [];
-  return exportNames
-    .filter(name => sourceMap.exports[name])
-    .map(name => [name, sourceMap.exports[name]] as [string, ExportInfo]);
 }
 
 // ============================================================================
 // Main
 // ============================================================================
 
-async function main() {
-  console.log('📚 Generating package documentation for @mastra/core\n');
+async function generateDocsForPackage(packagePath: string): Promise<void> {
+  const packageRoot = path.resolve(MONOREPO_ROOT, packagePath);
+  const configPath = path.join(packageRoot, 'docs.config.json');
+
+  if (!fs.existsSync(configPath)) {
+    console.warn(`No docs.config.json found in ${packagePath}, skipping...`);
+    return;
+  }
+
+  const config: DocsConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
+  const docsOutputDir = path.join(packageRoot, 'docs');
+
+  console.info(`\n📚 Generating documentation for ${packageJson.name}\n`);
 
   // Create docs directory
-  if (!fs.existsSync(DOCS_OUTPUT_DIR)) {
-    fs.mkdirSync(DOCS_OUTPUT_DIR, { recursive: true });
+  if (!fs.existsSync(docsOutputDir)) {
+    fs.mkdirSync(docsOutputDir, { recursive: true });
   }
 
   // Step 1: Generate SOURCE_MAP.json
-  console.log('1. Generating SOURCE_MAP.json...');
-  const sourceMap = generateSourceMap();
-  const sourceMapPath = path.join(DOCS_OUTPUT_DIR, 'SOURCE_MAP.json');
+  console.info('1. Generating SOURCE_MAP.json...');
+  const sourceMap = generateSourceMap(packageRoot, config);
+  const sourceMapPath = path.join(docsOutputDir, 'SOURCE_MAP.json');
   fs.writeFileSync(sourceMapPath, JSON.stringify(sourceMap, null, 2), 'utf-8');
-  console.log(
+  console.info(
     `   Found ${Object.keys(sourceMap.exports).length} exports across ${Object.keys(sourceMap.modules).length} modules\n`,
   );
 
   // Step 2: Generate SKILL.md
-  console.log('2. Generating SKILL.md...');
-  const skillMd = generateSkillMd(sourceMap);
-  fs.writeFileSync(path.join(DOCS_OUTPUT_DIR, 'SKILL.md'), skillMd, 'utf-8');
-  console.log('   Generated SKILL.md with Anthropic-compatible YAML frontmatter\n');
+  console.info('2. Generating SKILL.md...');
+  const skillMd = generateSkillMd(sourceMap, config, config.topics);
+  fs.writeFileSync(path.join(docsOutputDir, 'SKILL.md'), skillMd, 'utf-8');
+  console.info('   Generated SKILL.md with Anthropic-compatible YAML frontmatter\n');
 
   // Step 3: Generate README.md
-  console.log('3. Generating README.md...');
-  const readme = generateReadme(sourceMap);
-  fs.writeFileSync(path.join(DOCS_OUTPUT_DIR, 'README.md'), readme, 'utf-8');
-  console.log('   Generated README.md\n');
+  console.info('3. Generating README.md...');
+  const readme = generateReadme(sourceMap, config.topics);
+  fs.writeFileSync(path.join(docsOutputDir, 'README.md'), readme, 'utf-8');
+  console.info('   Generated README.md\n');
 
   // Step 4: Process doc topics
-  console.log('4. Processing documentation topics...');
-  for (const topic of DOC_TOPICS) {
-    console.log(`\n   Processing ${topic.title}...`);
-    processDocTopic(topic, sourceMap);
+  console.info('4. Processing documentation topics...');
+  for (const topic of config.topics) {
+    console.info(`\n   Processing ${topic.title}...`);
+    processDocTopic(topic, sourceMap, config, docsOutputDir);
   }
 
-  console.log('\n✅ Documentation generation complete!');
-  console.log(`\nOutput directory: ${DOCS_OUTPUT_DIR}`);
-  console.log('\nGenerated files:');
-  console.log('  - SKILL.md (Claude Skills entry point)');
-  console.log('  - README.md (Navigation index)');
-  console.log('  - SOURCE_MAP.json (Machine-readable code map)');
-  console.log('  - agents/*.md');
-  console.log('  - tools/*.md');
-  console.log('  - workflows/*.md');
-  console.log('  - streaming/*.md');
+  console.info(`\n✅ Documentation generation complete for ${packageJson.name}!`);
+  console.info(`   Output directory: ${docsOutputDir}`);
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+
+  if (args.length > 0) {
+    // Generate for specific package(s)
+    for (const packagePath of args) {
+      await generateDocsForPackage(packagePath);
+    }
+  } else {
+    // Discover all packages with docs.config.json in known directories
+    console.info('🔍 Discovering packages with docs.config.json...\n');
+
+    const packageDirs = ['packages', 'stores', 'voice', 'observability', 'deployers', 'client-sdks', 'auth'];
+
+    const configs: string[] = [];
+
+    for (const dir of packageDirs) {
+      const dirPath = path.join(MONOREPO_ROOT, dir);
+      if (!fs.existsSync(dirPath)) continue;
+
+      const subdirs = fs
+        .readdirSync(dirPath, { withFileTypes: true })
+        .filter(d => d.isDirectory())
+        .map(d => d.name);
+
+      for (const subdir of subdirs) {
+        const configPath = path.join(dir, subdir, 'docs.config.json');
+        const fullConfigPath = path.join(MONOREPO_ROOT, configPath);
+        if (fs.existsSync(fullConfigPath)) {
+          configs.push(path.join(dir, subdir));
+        }
+      }
+    }
+
+    if (configs.length === 0) {
+      console.info('No packages with docs.config.json found.');
+      return;
+    }
+
+    console.info(`Found ${configs.length} package(s) with documentation config:\n`);
+    for (const packagePath of configs) {
+      console.info(`  - ${packagePath}`);
+    }
+
+    for (const packagePath of configs) {
+      await generateDocsForPackage(packagePath);
+    }
+  }
 }
 
 // Run if executed directly

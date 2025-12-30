@@ -1,0 +1,53 @@
+> Monitor and debug applications with Mastra
+
+> **Code References:**
+
+- `Mastra`: dist/mastra/index.d.ts → dist/chunk-PIFBYJBA.js:160
+
+# Observability Overview
+
+Mastra provides comprehensive observability features designed specifically for AI applications. Monitor LLM operations, trace agent decisions, and debug complex workflows with specialized tools that understand AI-specific patterns.
+
+## Key Features
+
+### Tracing
+
+Specialized tracing for AI operations that captures:
+
+- **Model interactions**: Token usage, latency, prompts, and completions
+- **Agent execution**: Decision paths, tool calls, and memory operations
+- **Workflow steps**: Branching logic, parallel execution, and step outputs
+- **Automatic instrumentation**: Zero-configuration tracing with decorators
+
+## Quick Start
+
+Configure Observability in your Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { PinoLogger } from '@mastra/loggers';
+import { LibSqlStorage } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
+
+export const mastra = new Mastra({
+  logger: new PinoLogger(),
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db', // Storage is required for tracing
+  }),
+  observability: new Observability({
+    // Enables Tracing
+    default: { enabled: true },
+  }),
+});
+```
+
+With this basic setup, you will see Traces and Logs in both Studio and in Mastra Cloud.
+
+We also support various external tracing providers like MLflow, Langfuse, Braintrust, and any OpenTelemetry-compatible platform (Datadog, New Relic, SigNoz, etc.). See more about this in the [Tracing](/docs/v1/observability/tracing/overview) documentation.
+
+## What's Next?
+
+- **[Set up Tracing](/docs/v1/observability/tracing/overview)**: Configure tracing for your application
+- **[Configure Logging](/docs/v1/observability/logging)**: Add structured logging
+- **[API Reference](/reference/v1/observability/tracing/instances)**: Detailed configuration options

@@ -2,10 +2,11 @@
 
 > **Code References:**
 
-- `Workflow`: dist/workflows/workflow.d.ts → dist/chunk-IDD63DWQ.js:8213
-- `Run`: dist/workflows/index.d.ts → dist/chunk-IDD63DWQ.js:9018
 - `createStep`: dist/workflows/index.d.ts → dist/chunk-IDD63DWQ.js:7659
 - `createWorkflow`: dist/workflows/index.d.ts → dist/chunk-IDD63DWQ.js:8197
+- `cloneWorkflow`: dist/workflows/index.d.ts → dist/chunk-IDD63DWQ.js:8200
+- `Mastra`: dist/mastra/index.d.ts → dist/chunk-PIFBYJBA.js:160
+- `Workflow`: dist/workflows/workflow.d.ts → dist/chunk-IDD63DWQ.js:8213
 
 # Workflows overview
 
@@ -34,6 +35,8 @@ Steps are the building blocks of workflows. Create a step using `createStep()` w
 The `execute` function defines what the step does. Use it to call functions in your codebase, external APIs, agents, or tools.
 
 ```typescript {6,9,15} title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows';
+
 const step1 = createStep({
   id: 'step-1',
   inputSchema: z.object({
@@ -65,6 +68,8 @@ Workflow steps can also call registered agents or import and execute tools direc
 Create a workflow using `createWorkflow()` with `inputSchema` and `outputSchema` to define the data it accepts and returns. Add steps using `.then()` and complete the workflow with `.commit()`.
 
 ```typescript {9,12,15,16} title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const step1 = createStep({...});
 
@@ -154,6 +159,7 @@ export const testWorkflow = createWorkflow({
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
 
 ```typescript {6} title="src/mastra/workflows/test-workflow.ts"
+import { cloneWorkflow } from "@mastra/core/workflows";
 
 const step1 = createStep({...});
 
@@ -171,6 +177,9 @@ export const testWorkflow = createWorkflow({...})
 Register your workflow in the Mastra instance to make it available throughout your application. Once registered, it can be called from agents or tools and has access to shared resources such as logging and observability features:
 
 ```typescript {5} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra';
+import { testWorkflow } from './workflows/test-workflow';
+
 export const mastra = new Mastra({
   workflows: { testWorkflow },
 });

@@ -15,6 +15,9 @@ When creating tools, keep descriptions simple and focused on what the tool does,
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
 export const weatherTool = createTool({
   id: 'weather-tool',
   description: 'Fetches weather for a location',
@@ -42,6 +45,9 @@ To make a tool available to an agent, add it to `tools`. Mentioning available to
 An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
 
 ```typescript {11} title="src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { weatherTool } from '../tools/weather-tool';
+
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
@@ -58,6 +64,8 @@ export const weatherAgent = new Agent({
 The agent uses the tool's `inputSchema` to infer what data the tool expects. In this case, it extracts `London` as the `location` from the message and passes it to the tool's inputData parameter.
 
 ```typescript title="src/test-tool.ts"
+import { mastra } from './mastra';
+
 const agent = mastra.getAgent('weatherAgent');
 
 const result = await agent.generate("What's the weather in London?");
@@ -68,6 +76,9 @@ const result = await agent.generate("What's the weather in London?");
 When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
 
 ```typescript {7} title="src/mastra/agents/weather-agent.ts"
+import { weatherTool } from '../tools/weather-tool';
+import { activitiesTool } from '../tools/activities-tool';
+
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',

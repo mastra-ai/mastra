@@ -2,9 +2,8 @@
 
 > **Code References:**
 
-- `Tool`: dist/tools/tool.d.ts → dist/chunk-5YYAQUEF.js:88
 - `createTool`: dist/tools/index.d.ts → dist/chunk-5YYAQUEF.js:258
-- `isVercelTool`: dist/tools/index.d.ts → dist/chunk-5YYAQUEF.js:263
+- `Tool`: dist/tools/tool.d.ts → dist/chunk-5YYAQUEF.js:88
 
 # Using Tools
 
@@ -22,6 +21,9 @@ Each tool typically defines:
 In Mastra, you create tools using the [`createTool`](/reference/v1/tools/create-tool) function from the `@mastra/core/tools` package.
 
 ```typescript title="src/mastra/tools/weatherInfo.ts"
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
 const getWeatherInfo = async (city: string) => {
   // Replace with an actual API call to a weather service
   console.log(`Fetching weather for ${city}...`);

@@ -3,8 +3,7 @@
 > **Code References:**
 
 - `Agent`: dist/agent/agent.d.ts → dist/chunk-IDD63DWQ.js:15137
-- `MessageList`: dist/agent/index.d.ts → dist/chunk-QXL3F3T2.js:886
-- `TripWire`: dist/agent/index.d.ts → dist/chunk-IDD63DWQ.js:4673
+- `Mastra`: dist/mastra/index.d.ts → dist/chunk-PIFBYJBA.js:160
 
 # Using Agents
 
@@ -45,6 +44,8 @@ Mastra supports more than 600 models. Choose from the [full list](/models/v1).
 Create an agent by instantiating the `Agent` class with system `instructions` and a `model`:
 
 ```typescript title="src/mastra/agents/test-agent.ts"
+import { Agent } from '@mastra/core/agent';
+
 export const testAgent = new Agent({
   id: 'test-agent',
   name: 'Test Agent',
@@ -100,6 +101,9 @@ Visit [Agent reference](/reference/v1/agents/agent) for more information.
 Register your agent in the Mastra instance to make it available throughout your application. Once registered, it can be called from workflows, tools, or other agents, and has access to shared resources such as memory, logging, and observability features:
 
 ```typescript {5} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { testAgent } from './agents/test-agent';
+
 export const mastra = new Mastra({
   agents: { testAgent },
 });

@@ -1,0 +1,77 @@
+> Documentation for the ToolCallFilter processor in Mastra, which filters out tool calls and results from messages.
+
+# ToolCallFilter
+
+The `ToolCallFilter` is an **input processor** that filters out tool calls and their results from the message history before sending to the model. This is useful when you want to exclude specific tool interactions from context or remove all tool calls entirely.
+
+## Usage example
+
+```typescript
+import { ToolCallFilter } from '@mastra/core/processors';
+
+// Exclude all tool calls
+const filterAll = new ToolCallFilter();
+
+// Exclude specific tools by name
+const filterSpecific = new ToolCallFilter({
+  exclude: ['searchDatabase', 'sendEmail'],
+});
+```
+
+## Constructor parameters
+
+### Options
+
+## Returns
+
+## Extended usage example
+
+```typescript title="src/mastra/agents/filtered-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { ToolCallFilter } from '@mastra/core/processors';
+
+export const agent = new Agent({
+  name: 'filtered-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai:gpt-4o',
+  tools: {
+    searchDatabase,
+    sendEmail,
+    getWeather,
+  },
+  inputProcessors: [
+    // Filter out database search tool calls from context
+    // to reduce token usage while keeping other tool interactions
+    new ToolCallFilter({
+      exclude: ['searchDatabase'],
+    }),
+  ],
+});
+```
+
+## Filtering all tool calls
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { ToolCallFilter } from '@mastra/core/processors';
+
+export const agent = new Agent({
+  name: 'no-tools-context-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai:gpt-4o',
+  tools: {
+    searchDatabase,
+    sendEmail,
+  },
+  inputProcessors: [
+    // Remove all tool calls from the message history
+    // The agent can still use tools, but previous tool interactions
+    // won't be included in the context
+    new ToolCallFilter(),
+  ],
+});
+```
+
+## Related
+
+- [Guardrails](/docs/v1/agents/guardrails)

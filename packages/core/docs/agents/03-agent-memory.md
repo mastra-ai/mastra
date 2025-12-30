@@ -29,6 +29,9 @@ Memory requires a storage provider to persist message history, including user me
 Enable memory by creating a `Memory` instance and passing it to the agent’s `memory` option.
 
 ```typescript {7-11} title="src/mastra/agents/memory-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
@@ -49,6 +52,9 @@ Visit [Memory Class](/reference/v1/memory/memory-class) for a full list of confi
 Add a storage provider to your main Mastra instance to enable memory across all configured agents.
 
 ```typescript {5-8} title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core';
+import { LibSQLStore } from '@mastra/libsql';
+
 export const mastra = new Mastra({
   storage: new LibSQLStore({
     id: 'mastra-storage',
@@ -64,6 +70,10 @@ Visit [libSQL Storage](/reference/v1/storage/libsql) for a full list of configur
 Alternatively, add storage directly to an agent’s memory to keep data separate or use different providers per agent.
 
 ```typescript {9-12} title="src/mastra/agents/memory-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',

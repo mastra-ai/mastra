@@ -2,8 +2,8 @@
 
 > **Code References:**
 
-- `MastraModelOutput`: dist/stream/index.d.ts → dist/chunk-IDD63DWQ.js:3058
-- `ToolStream`: dist/tools/index.d.ts → dist/chunk-DD2VNRQM.js:4
+- `Agent`: dist/agent/agent.d.ts → dist/chunk-IDD63DWQ.js:15137
+- `Run`: dist/workflows/index.d.ts → dist/chunk-IDD63DWQ.js:9018
 
 # Streaming Overview
 
@@ -65,6 +65,8 @@ AI SDK v5 uses `LanguageModelV2` for the model providers. If you are getting an 
 For integration with AI SDK v5, use the `toAISdkV5Stream()` utility from `@mastra/ai-sdk` to convert Mastra streams to AI SDK-compatible format:
 
 ```typescript {2,9-12}
+import { toAISdkV5Stream } from '@mastra/ai-sdk';
+
 const testAgent = mastra.getAgent('testAgent');
 
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }]);
@@ -78,6 +80,8 @@ const aiSDKStream = toAISdkV5Stream(stream, { from: 'agent' });
 For converting messages to AI SDK v5 format, use the `toAISdkV5Messages()` utility from `@mastra/ai-sdk/ui`:
 
 ```typescript {1,4}
+import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+
 const messages = [{ role: 'user', content: 'Hello' }];
 const aiSDKMessages = toAISdkV5Messages(messages);
 ```

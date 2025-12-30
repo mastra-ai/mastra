@@ -1,9 +1,9 @@
 ---
 name: mastra-core-docs
-description: Documentation for @mastra/core - an AI agent framework. Use when working with Mastra agents, tools, workflows, streaming, or when the user asks about Mastra APIs. Includes links to type definitions and readable implementation code in dist/.
+description: Documentation for @mastra/core - an AI agent framework. Use when working with Mastra agents, tools, workflows, streaming, server, observability, or when the user asks about Mastra APIs. Includes links to type definitions and readable implementation code in dist/.
 ---
 
-# Mastra Core Documentation
+# @mastra/core Documentation
 
 > **Version**: 1.0.0-beta.18
 > **Package**: @mastra/core
@@ -24,25 +24,21 @@ Each export maps to:
 
 ## Finding Documentation
 
-### For a specific export (Agent, createTool, Workflow, etc.)
+### For a specific export
 
 ```bash
 # Read the source map
-cat docs/SOURCE_MAP.json | grep -A 5 '"Agent"'
-
-# This tells you:
-# - types: dist/agent/index.d.ts
-# - implementation: dist/chunk-*.js with line number
+cat docs/SOURCE_MAP.json | grep -A 5 '"ExportName"'
 ```
 
-### For a topic (agents, tools, workflows)
+### For a topic
 
 ```bash
 # List topics
 ls docs/
 
 # Read a topic
-cat docs/agents/01-overview.md
+cat docs/<topic>/01-overview.md
 ```
 
 ## Code References Are Unminified
@@ -52,16 +48,6 @@ Mastra's compiled `.js` files in `dist/` are:
 - Unminified with readable code
 - Preserve JSDoc comments and examples
 - Include implementation details
-
-You can read them directly:
-
-```bash
-# See what a module exports (tells you which chunks)
-cat dist/agent/index.js
-
-# Read the implementation
-cat dist/chunk-IDD63DWQ.js | grep -A 50 "var Agent = class"
-```
 
 ## Top Exports
 
@@ -90,17 +76,21 @@ See SOURCE_MAP.json for the complete list.
 
 ## Available Topics
 
-- [Agents](agents/01-overview.md) - Creating and using AI agents
-- [Tools](tools/01-overview.md) - Building custom tools
-- [Workflows](workflows/01-overview.md) - Orchestrating complex flows
-- [Streaming](streaming/01-overview.md) - Real-time responses
+- [Agents](agents/01-overview.md) - Agents
+- [Tools](tools/01-overview.md) - Tools
+- [Workflows](workflows/01-overview.md) - Workflows
+- [Streaming](streaming/01-overview.md) - Streaming
+- [Mastra Class](mastra/01-mastra-class.md) - Mastra Class
+- [Server](server/01-mastra-server.md) - Server
+- [Observability](observability/01-overview.md) - Observability
+- [Processors](processors/01-processor-interface.md) - Processors
 
 ## Using Type Definitions
 
 Type files (`.d.ts`) include full JSDoc documentation:
 
 ```bash
-cat dist/agent/agent.d.ts
+cat dist/<module>/<name>.d.ts
 ```
 
 ## Using Implementation Files
@@ -109,8 +99,8 @@ Implementation files show actual logic:
 
 ```bash
 # Find where exports come from
-cat dist/agent/index.js
+cat dist/<module>/index.js
 
 # Read the chunk (unminified, readable!)
-cat dist/chunk-IDD63DWQ.js
+cat dist/chunk-*.js
 ```

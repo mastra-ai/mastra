@@ -21,6 +21,16 @@ Mastra agent networks operate using these principles:
 An agent network is built around a top-level routing agent that delegates tasks to agents, workflows, and tools defined in its configuration. Memory is configured on the routing agent using the `memory` option, and `instructions` define the agent's routing behavior.
 
 ```typescript {22-23,26,29} title="src/mastra/agents/routing-agent.ts"
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+import { researchAgent } from './research-agent';
+import { writingAgent } from './writing-agent';
+
+import { cityWorkflow } from '../workflows/city-workflow';
+import { weatherTool } from '../tools/weather-tool';
+
 export const routingAgent = new Agent({
   id: 'routing-agent',
   name: 'Routing Agent',
