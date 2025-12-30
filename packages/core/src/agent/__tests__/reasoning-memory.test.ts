@@ -721,4 +721,166 @@ describe('Reasoning + Memory Integration', () => {
       expect(toolCallPart!.providerMetadata.openai.itemId).not.toBe(textItemId);
     }
   });
+
+  /**
+   * Test the full cleanup cycle with reasoning → text.
+   *
+   * This verifies that:
+   * 1. reasoning-end clears reasoning providerMetadata
+   * 2. text-start captures text providerMetadata
+   * 3. text-end clears text providerMetadata
+   * So neither reasoning nor text metadata leaks into subsequent parts.
+   */
+  it('should properly clean up providerMetadata through reasoning → text → tool call sequence', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-1234';
+    const reasoningItemId = 'rs_reasoning123';
+    const textItemId = 'msg_text123';
+
+    // Create a model that sends: reasoning → text → tool call
+    const model = new MockLanguageModelV2({
+      doGenerate: async () =>
+        ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'reasoning',
+              text: 'Let me think...',
+              providerMetadata: {
+                openai: {
+                  itemId: reasoningItemId,
+                  reasoningEncryptedContent: null,
+                },
+              },
+            },
+            {
+              type: 'text',
+              text: 'I need to check that.',
+              providerMetadata: {
+                openai: {
+                  itemId: textItemId,
+                },
+              },
+            },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_123',
+              toolName: 'test_tool',
+              args: {},
+            },
+          ],
+          warnings: [],
+        }) as any,
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'response-1',
+            modelId: 'mock-reasoning-model',
+            timestamp: new Date(0),
+          },
+          // Reasoning with its providerMetadata
+          {
+            type: 'reasoning-start',
+            id: 'reasoning-1',
+            providerMetadata: {
+              openai: {
+                itemId: reasoningItemId,
+                reasoningEncryptedContent: null,
+              },
+            },
+          },
+          {
+            type: 'reasoning-delta',
+            id: 'reasoning-1',
+            delta: 'Let me think...',
+          },
+          {
+            type: 'reasoning-end',
+            id: 'reasoning-1',
+          }, // Should clear providerOptions (reasoning metadata)
+          // Text with its OWN providerMetadata
+          {
+            type: 'text-start',
+            id: 'text-1',
+            providerMetadata: {
+              openai: {
+                itemId: textItemId,
+              },
+            },
+          }, // Should capture text metadata
+          { type: 'text-delta', id: 'text-1', delta: 'I need to check that.' },
+          { type: 'text-end', id: 'text-1' }, // Should clear providerOptions (text metadata)
+          // Tool call should NOT have either reasoning or text providerMetadata
+          {
+            type: 'tool-call',
+            toolCallId: 'call_123',
+            toolName: 'test_tool',
+            args: {},
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'full-cleanup-test',
+      name: 'Full Cleanup Test',
+      instructions: 'Test agent',
+      model,
+      memory: mockMemory,
+    });
+
+    const resp = await agent.stream('Test message', {
+      threadId,
+      resourceId,
+    });
+
+    await resp.consumeStream();
+
+    // Get stored messages
+    const dbMessages = resp.messageList.get.all.db();
+    const assistantMessages = dbMessages.filter(m => m.role === 'assistant');
+
+    // Should have 2 assistant messages: one for reasoning, one for text+tool
+    expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
+
+    // Collect all parts from all assistant messages
+    const allParts = assistantMessages.flatMap(msg => msg.content.parts);
+
+    // Find each type of part
+    const reasoningPart = allParts.find(p => p.type === 'reasoning');
+    const textPart = allParts.find(p => p.type === 'text');
+    const toolCallPart = allParts.find(p => p.type === 'tool-invocation');
+
+    expect(reasoningPart).toBeDefined();
+    expect(textPart).toBeDefined();
+    expect(toolCallPart).toBeDefined();
+
+    // Reasoning part should have reasoning providerMetadata (rs_xxx)
+    expect(reasoningPart!.providerMetadata?.openai?.itemId).toBe(reasoningItemId);
+
+    // Text part should have text providerMetadata (msg_xxx), NOT reasoning's
+    expect(textPart!.providerMetadata?.openai?.itemId).toBe(textItemId);
+    expect(textPart!.providerMetadata?.openai?.itemId).not.toBe(reasoningItemId);
+
+    // Tool call part should NOT have either reasoning or text providerMetadata
+    if (toolCallPart!.providerMetadata?.openai?.itemId) {
+      expect(toolCallPart!.providerMetadata.openai.itemId).not.toBe(reasoningItemId);
+      expect(toolCallPart!.providerMetadata.openai.itemId).not.toBe(textItemId);
+    }
+  });
 });
