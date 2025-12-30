@@ -24,7 +24,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "friendli/LGAI-EXAONE-EXAONE-4.0.1-32B"
+  model: "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B"
 });
 
 // Generate a response
@@ -48,7 +48,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "friendli/deepseek-ai-DeepSeek-R1-0528",
+    "model": "friendli/deepseek-ai/DeepSeek-R1-0528",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -60,7 +60,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "friendli/LGAI-EXAONE-EXAONE-4.0.1-32B",
+    "model": "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -96,7 +96,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "friendli/meta-llama-Llama-4-Maverick-17B-128E-Instruct",
+    "model": "friendli/meta-llama/Llama-4-Maverick-17B-128E-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -108,7 +108,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "friendli/meta-llama-Llama-4-Scout-17B-16E-Instruct",
+    "model": "friendli/meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -120,7 +120,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "friendli/Qwen-Qwen3-235B-A22B-Instruct-2507",
+    "model": "friendli/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -132,7 +132,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.8
   },
   {
-    "model": "friendli/Qwen-Qwen3-235B-A22B-Thinking-2507",
+    "model": "friendli/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -144,7 +144,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "friendli/Qwen-Qwen3-30B-A3B",
+    "model": "friendli/Qwen/Qwen3-30B-A3B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -156,7 +156,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "friendli/Qwen-Qwen3-32B",
+    "model": "friendli/Qwen/Qwen3-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -168,7 +168,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "friendli/zai-org-GLM-4.6",
+    "model": "friendli/zai-org/GLM-4.6",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -192,7 +192,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.friendli.ai/serverless/v1",
-    id: "friendli/LGAI-EXAONE-EXAONE-4.0.1-32B",
+    id: "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B",
     apiKey: process.env.FRIENDLI_TOKEN,
     headers: {
       "X-Custom-Header": "value"
@@ -210,8 +210,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "friendli/zai-org-GLM-4.6"
-      : "friendli/LGAI-EXAONE-EXAONE-4.0.1-32B";
+      ? "friendli/zai-org/GLM-4.6"
+      : "friendli/LGAI-EXAONE/EXAONE-4.0.1-32B";
   }
 });
 ```

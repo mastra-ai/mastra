@@ -1,5 +1,88 @@
 # @mastra/core
 
+## 1.0.0-beta.19
+
+### Minor Changes
+
+- Add embedderOptions support to Memory for AI SDK 5+ provider-specific embedding options ([#11462](https://github.com/mastra-ai/mastra/pull/11462))
+
+  With AI SDK 5+, embedding models no longer accept options in their constructor. Options like `outputDimensionality` for Google embedding models must now be passed when calling `embed()` or `embedMany()`. This change adds `embedderOptions` to Memory configuration to enable passing these provider-specific options.
+
+  You can now configure embedder options when creating Memory:
+
+  ```typescript
+  import { Memory } from '@mastra/core';
+  import { google } from '@ai-sdk/google';
+
+  // Before: No way to specify providerOptions
+  const memory = new Memory({
+    embedder: google.textEmbeddingModel('text-embedding-004'),
+  });
+
+  // After: Pass embedderOptions with providerOptions
+  const memory = new Memory({
+    embedder: google.textEmbeddingModel('text-embedding-004'),
+    embedderOptions: {
+      providerOptions: {
+        google: {
+          outputDimensionality: 768,
+          taskType: 'RETRIEVAL_DOCUMENT',
+        },
+      },
+    },
+  });
+  ```
+
+  This is especially important for:
+  - Google `text-embedding-004`: Control output dimensions (default 768)
+  - Google `gemini-embedding-001`: Reduce from default 3072 dimensions to avoid pgvector's 2000 dimension limit for HNSW indexes
+
+  Fixes #8248
+
+### Patch Changes
+
+- Fix Anthropic API error when tool calls have empty input objects ([#11474](https://github.com/mastra-ai/mastra/pull/11474))
+
+  Fixes issue #11376 where Anthropic models would fail with error "messages.17.content.2.tool_use.input: Field required" when a tool call in a previous step had an empty object `{}` as input.
+
+  The fix adds proper reconstruction of tool call arguments when converting messages to AIV5 model format. Tool-result parts now correctly include the `input` field from the matching tool call, which is required by Anthropic's API validation.
+
+  Changes:
+  - Added `findToolCallArgs()` helper method to search through messages and retrieve original tool call arguments
+  - Enhanced `aiV5UIMessagesToAIV5ModelMessages()` to populate the `input` field on tool-result parts
+  - Added comprehensive test coverage for empty object inputs, parameterized inputs, and multi-turn conversations
+
+- Fixed an issue where deprecated Groq models were shown during template creation. The model selection now filters out models marked as deprecated, displaying only active and supported models. ([#11445](https://github.com/mastra-ai/mastra/pull/11445))
+
+- Fix AI SDK v6 (specificationVersion: "v3") model support in sub-agent calls. Previously, when a parent agent invoked a sub-agent with a v3 model through the `agents` property, the version check only matched "v2", causing v3 models to incorrectly fall back to legacy streaming methods and throw "V2 models are not supported for streamLegacy" error. ([#11452](https://github.com/mastra-ai/mastra/pull/11452))
+
+  The fix updates version checks in `listAgentTools` and `llm-mapping-step.ts` to use the centralized `supportedLanguageModelSpecifications` array which includes both v2 and v3.
+
+  Also adds missing v3 test coverage to tool-handling.test.ts to prevent regression.
+
+- Fixed "Transforms cannot be represented in JSON Schema" error when using Zod v4 with structuredOutput ([#11466](https://github.com/mastra-ai/mastra/pull/11466))
+
+  When using schemas with `.optional()`, `.nullable()`, `.default()`, or `.nullish().default("")` patterns with `structuredOutput` and Zod v4, users would encounter an error because OpenAI schema compatibility layer adds transforms that Zod v4's native `toJSONSchema()` cannot handle.
+
+  The fix uses Mastra's transform-safe `zodToJsonSchema` function which gracefully handles transforms by using the `unrepresentable: 'any'` option.
+
+  Also exported `isZodType` utility from `@mastra/schema-compat` and updated it to detect both Zod v3 (`_def`) and Zod v4 (`_zod`) schemas.
+
+- Improved test description in ModelsDevGateway to clearly reflect the behavior being tested ([#11460](https://github.com/mastra-ai/mastra/pull/11460))
+
+- Updated dependencies [[`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`70b300e`](https://github.com/mastra-ai/mastra/commit/70b300ebc631dfc0aa14e61547fef7994adb4ea6)]:
+  - @mastra/schema-compat@1.0.0-beta.5
+
+## 1.0.0-beta.18
+
+### Patch Changes
+
+- Fixed semantic recall fetching all thread messages instead of only matched ones. ([#11435](https://github.com/mastra-ai/mastra/pull/11435))
+
+  When using `semanticRecall` with `scope: 'thread'`, the processor was incorrectly fetching all messages from the thread instead of just the semantically matched messages with their context. This caused memory to return far more messages than expected when `topK` and `messageRange` were set to small values.
+
+  Fixes #11428
+
 ## 1.0.0-beta.17
 
 ### Patch Changes

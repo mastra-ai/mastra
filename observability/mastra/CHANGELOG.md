@@ -1,5 +1,18 @@
 # @mastra/observability
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Fix SensitiveDataFilter destroying Date objects ([#11437](https://github.com/mastra-ai/mastra/pull/11437))
+
+  The `deepFilter` method now correctly preserves `Date` objects instead of converting them to empty objects `{}`. This fixes issues with downstream exporters like `BraintrustExporter` that rely on `Date` methods like `getTime()`.
+
+  Previously, `Object.keys(new Date())` returned `[]`, causing Date objects to be incorrectly converted to `{}`. The fix adds an explicit check for `Date` instances before generic object processing.
+
+- Updated dependencies [[`5947fcd`](https://github.com/mastra-ai/mastra/commit/5947fcdd425531f29f9422026d466c2ee3113c93)]:
+  - @mastra/core@1.0.0-beta.18
+
 ## 1.0.0-beta.8
 
 ### Patch Changes
