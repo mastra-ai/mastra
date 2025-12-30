@@ -846,7 +846,7 @@ export function transformNetwork(
         },
       } as const;
 
-      // Fallback: if no text events were emitted and there's result text, emit text events
+      // Fallback: emit text events from result if core didn't send routing-agent-text-* events
       if (!current.hasEmittedText && resultText && typeof resultText === 'string' && resultText.length > 0) {
         current.hasEmittedText = true;
         return [
