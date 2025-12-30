@@ -498,9 +498,9 @@ const code = await client.callTool('read_implementation', {
 
 ### Phase 2: Full Package Coverage
 
-- [ ] Map all MDX topics to packages
-- [ ] Handle MDX → Markdown transformation
-- [ ] Integrate into build pipeline (`turbo.json`)
+- [x] Map all MDX topics to packages _(via per-package `docs.config.json`)_
+- [x] Handle MDX → Markdown transformation _(code blocks preserved, components stripped)_
+- [x] Integrate into build pipeline (`turbo.json`)
 - [ ] Add `docs` to all package.json `files` arrays
 - [ ] Update CI to generate docs before publish
 
@@ -524,6 +524,7 @@ const code = await client.callTool('read_implementation', {
 
 ## References
 
+- [How to Add Embedded Docs to a Package](../../../EMBEDDED_DOCS.md)
 - [Anthropic Agent Skills Specification](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [Existing MCP Docs Server](../../../packages/mcp-docs-server/)

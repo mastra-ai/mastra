@@ -591,7 +591,7 @@ async function generateDocsForPackage(packagePath: string): Promise<void> {
 
   const config: DocsConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
   const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf-8'));
-  const docsOutputDir = path.join(packageRoot, 'docs');
+  const docsOutputDir = path.join(packageRoot, 'dist', 'docs');
 
   console.info(`\n📚 Generating documentation for ${packageJson.name}\n`);
 
