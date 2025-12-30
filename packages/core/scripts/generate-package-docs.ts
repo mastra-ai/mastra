@@ -264,8 +264,12 @@ function transformMdxToMarkdown(content: string): string {
   result = result.replace(/:::(tip|note|warning|caution|info)/g, '> **Note:**');
   result = result.replace(/:::/g, '');
 
-  // Remove HTML comments
-  result = result.replace(/<!--[\s\S]*?-->/g, '');
+  // Remove HTML comments (loop to handle nested/malformed cases)
+  let previousResult;
+  do {
+    previousResult = result;
+    result = result.replace(/<!--[\s\S]*?-->/g, '');
+  } while (result !== previousResult && result.includes('<!--'));
 
   // Clean up extra blank lines
   result = result.replace(/\n{3,}/g, '\n\n');
