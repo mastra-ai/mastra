@@ -1,8 +1,9 @@
 ---
 '@mastra/inngest': patch
+'@mastra/core': patch
 ---
 
-Add support for `retries` and `scorers` parameters across all `createStep` overloads for InngestWorkflow
+Add support for `retries` and `scorers` parameters across all `createStep` overloads.
 
 The `createStep` function now includes support for the `retries` and `scorers` fields across all step creation patterns, enabling step-level retry configuration and AI evaluation support for regular steps, agent-based steps, and tool-based steps.
 
