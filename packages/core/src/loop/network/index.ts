@@ -527,13 +527,31 @@ export async function createNetworkLoop({
 
       const object = result.object;
 
+      const isComplete = object.primitiveId === 'none' && object.primitiveType === 'none';
+
+      // When routing agent handles request itself (no delegation), emit text events
+      if (isComplete && object.selectionReason) {
+        await writer.write({
+          type: 'routing-agent-text-start',
+          payload: { runId: stepId },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+        await writer.write({
+          type: 'routing-agent-text-delta',
+          payload: { runId: stepId, text: object.selectionReason },
+          from: ChunkFrom.NETWORK,
+          runId,
+        });
+      }
+
       const endPayload = {
         task: inputData.task,
-        result: '',
+        result: isComplete ? object.selectionReason : '',
         primitiveId: object.primitiveId,
         primitiveType: object.primitiveType,
         prompt: object.prompt,
-        isComplete: object.primitiveId === 'none' && object.primitiveType === 'none',
+        isComplete,
         selectionReason: object.selectionReason,
         iteration: iterationCount,
         runId: stepId,
