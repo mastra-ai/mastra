@@ -1082,10 +1082,10 @@ describe('MastraInngestWorkflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunById(run.runId);
+      const workflowRun = await workflow.getWorkflowRunById(run.runId);
 
-      expect(executionResult?.status).toBe('paused');
-      expect(executionResult?.steps).toEqual({
+      expect(workflowRun?.status).toBe('paused');
+      expect(workflowRun?.steps).toEqual({
         step1: {
           status: 'success',
           output: { value: 'step1' },

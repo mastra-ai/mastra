@@ -129,11 +129,11 @@ export class InngestWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunById(runIdToUse, {
+    const existingRun = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 
-    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
+    if (!existingRun && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,

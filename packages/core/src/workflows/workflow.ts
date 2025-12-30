@@ -1582,17 +1582,17 @@ export class Workflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunById(runIdToUse, {
+    const existingRun = await this.getWorkflowRunById(runIdToUse, {
       withNestedWorkflows: false,
     });
 
-    // If a snapshot exists in storage, update the run's status to reflect the actual state
-    // This fixes the issue where createRun checks storage but doesn't use the snapshot data
-    if (workflowSnapshotInStorage && workflowSnapshotInStorage.status) {
-      run.workflowRunStatus = workflowSnapshotInStorage.status as WorkflowRunStatus;
+    // If a run exists in storage, update the run's status to reflect the actual state
+    // This fixes the issue where createRun checks storage but doesn't use the stored data
+    if (existingRun && existingRun.status) {
+      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
     }
 
-    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
+    if (!existingRun && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,

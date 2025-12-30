@@ -4002,10 +4002,10 @@ describe('Workflow', () => {
       });
       expect(result.status).toBe('paused');
 
-      const executionResult = await workflow.getWorkflowRunById(run.runId);
+      const workflowRun = await workflow.getWorkflowRunById(run.runId);
 
-      expect(executionResult?.status).toBe('paused');
-      expect(executionResult?.steps).toEqual({
+      expect(workflowRun?.status).toBe('paused');
+      expect(workflowRun?.steps).toEqual({
         step1: {
           status: 'success',
           output: { value: 'step1' },
@@ -6189,9 +6189,9 @@ describe('Workflow', () => {
       for await (const data of stream) {
         if (data.type === 'step-finish' && (data as any).payload.id === 'increment') {
           setTimeout(async () => {
-            const currentExecResult = await incrementWorkflow.getWorkflowRunById(run.runId);
-            expect(currentExecResult?.status).toBe('running');
-            expect(currentExecResult?.steps['final']?.status).toBe('running');
+            const currentRun = await incrementWorkflow.getWorkflowRunById(run.runId);
+            expect(currentRun?.status).toBe('running');
+            expect(currentRun?.steps['final']?.status).toBe('running');
           }, 500);
         }
       }
