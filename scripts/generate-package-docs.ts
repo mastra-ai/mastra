@@ -123,7 +123,10 @@ function getFileOrder(file: MdxFile, orderMap: Map<string, number>): number {
 
   if (parts[0] === 'docs' || parts[0] === 'reference' || parts[0] === 'guides') {
     // Remove the first part (docs/reference/guides) and .mdx extension
-    docId = parts.slice(1).join('/').replace(/\.mdx$/, '');
+    docId = parts
+      .slice(1)
+      .join('/')
+      .replace(/\.mdx$/, '');
   } else {
     docId = file.relativePath.replace(/\.mdx$/, '');
   }
@@ -490,10 +493,7 @@ function transformMdxToMarkdown(content: string): string {
 
   // Convert relative doc links to full URLs
   // Matches: [text](/docs/...) or [text](/reference/...) or [text](/guides/...)
-  result = result.replace(
-    /\]\(\/((docs|reference|guides|examples|models)\/[^)]+)\)/g,
-    '](https://mastra.ai/$1)',
-  );
+  result = result.replace(/\]\(\/((docs|reference|guides|examples|models)\/[^)]+)\)/g, '](https://mastra.ai/$1)');
 
   // Clean up extra blank lines
   result = result.replace(/\n{3,}/g, '\n\n');
