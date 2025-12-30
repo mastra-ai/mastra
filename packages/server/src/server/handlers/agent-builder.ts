@@ -261,43 +261,6 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   },
 });
 
-export const STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
-  method: 'POST',
-  path: '/api/agent-builder/:actionId/streamVNext',
-  responseType: 'stream',
-  pathParamSchema: actionIdPathParams,
-  queryParamSchema: runIdSchema,
-  bodySchema: streamAgentBuilderBodySchema,
-  responseSchema: streamResponseSchema,
-  summary: 'Stream action execution (v2)',
-  description: 'Executes an action using the v2 streaming API and streams the results in real-time',
-  tags: ['Agent Builder'],
-  handler: async ctx => {
-    const { mastra, actionId, runId, requestContext } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Streaming agent builder action (v2)', { actionId, runId });
-
-      return await workflows.STREAM_VNEXT_WORKFLOW_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-        requestContext,
-      });
-    } catch (error) {
-      logger.error('Error streaming agent builder action (v2)', { error, actionId });
-      return handleError(error, 'Error streaming agent builder action');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
 export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/start-async',
@@ -400,41 +363,6 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
       });
     } catch (error) {
       logger.error('Error observing agent builder action stream', { error, actionId });
-      return handleError(error, 'Error observing agent builder action stream');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
-export const OBSERVE_STREAM_VNEXT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
-  method: 'POST',
-  path: '/api/agent-builder/:actionId/observe-streamVNext',
-  responseType: 'stream',
-  pathParamSchema: actionIdPathParams,
-  queryParamSchema: runIdSchema,
-  responseSchema: streamResponseSchema,
-  summary: 'Observe action stream (v2)',
-  description: 'Observes and streams updates from an already running action execution using v2 streaming API',
-  tags: ['Agent Builder'],
-  handler: async ctx => {
-    const { mastra, actionId, runId } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Observing agent builder action stream (v2)', { actionId, runId });
-
-      return await workflows.OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-      });
-    } catch (error) {
-      logger.error('Error observing agent builder action stream (v2)', { error, actionId });
       return handleError(error, 'Error observing agent builder action stream');
     } finally {
       WorkflowRegistry.cleanup();

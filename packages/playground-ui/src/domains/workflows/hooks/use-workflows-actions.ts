@@ -194,7 +194,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       });
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      const stream = await run.streamVNext({
+      const stream = await run.stream({
         inputData,
         requestContext,
         closeOnSuspend: true,
@@ -277,7 +277,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       }
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      const stream = await run.observeStreamVNext();
+      const stream = await run.observeStream();
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -358,7 +358,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
         requestContext.set(key as keyof RequestContext, value);
       });
       const run = await workflow.createRun({ runId });
-      const stream = await run.resumeStreamVNext({
+      const stream = await run.resumeStream({
         step,
         resumeData,
         requestContext,

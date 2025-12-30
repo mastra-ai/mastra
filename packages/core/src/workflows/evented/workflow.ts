@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import z from 'zod';
-import type { Agent } from '../../agent';
+import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
+import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
-import type { ExecuteFunction, Step } from '../../workflows/step';
+import type { Step } from '../../workflows/step';
 import type {
   SerializedStepFlowEntry,
   WorkflowConfig,
@@ -16,6 +18,8 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  StepParams,
+  ToolStep,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
@@ -75,14 +79,6 @@ export function cloneStep<TStepId extends string>(
   };
 }
 
-function isAgent(params: any): params is Agent<any, any> {
-  return params?.component === 'AGENT';
-}
-
-function isTool(params: any): params is Tool<any, any, any> {
-  return params instanceof Tool;
-}
-
 export function createStep<
   TStepId extends string,
   TState extends z.ZodObject<any>,
@@ -90,22 +86,9 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
->(params: {
-  id: TStepId;
-  description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  execute: ExecuteFunction<
-    z.infer<TState>,
-    z.infer<TStepInput>,
-    z.infer<TStepOutput>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    EventedEngineType
-  >;
-}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+>(
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -116,6 +99,10 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any>,
+  agentOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
@@ -125,11 +112,8 @@ export function createStep<
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-    inputSchema: TSchemaIn;
-    outputSchema: TSchemaOut;
-    execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
-  },
+  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
 
 export function createStep<
@@ -141,33 +125,15 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   params:
-    | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        execute: ExecuteFunction<
-          z.infer<TState>,
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          EventedEngineType
-        >;
-      }
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
-    | (Tool<TStepInput, TStepOutput, TSuspendSchema, TResumeSchema, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (
-          input: z.infer<TStepInput>,
-          context?: ToolExecutionContext<TSuspendSchema, TResumeSchema>,
-        ) => Promise<any>;
-      }),
+    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
+  agentOrToolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
-  if (isAgent(params)) {
+  if (params instanceof Agent) {
     return {
       id: params.id,
       description: params.getDescription(),
@@ -181,6 +147,8 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
+      retries: agentOrToolOptions?.retries,
+      scorers: agentOrToolOptions?.scorers,
       execute: async ({ inputData, runId, [PUBSUB_SYMBOL]: pubsub, requestContext, abortSignal, abort }) => {
         // TODO: support stream
         let streamPromise = {} as {
@@ -241,7 +209,7 @@ export function createStep<
     };
   }
 
-  if (isTool(params)) {
+  if (params instanceof Tool) {
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
@@ -253,6 +221,8 @@ export function createStep<
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
       resumeSchema: params.resumeSchema,
+      retries: agentOrToolOptions?.retries,
+      scorers: agentOrToolOptions?.scorers,
       execute: async ({
         inputData,
         mastra,
@@ -299,6 +269,8 @@ export function createStep<
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
     execute: params.execute,
+    retries: params?.retries,
+    scorers: params.scorers,
   };
 }
 

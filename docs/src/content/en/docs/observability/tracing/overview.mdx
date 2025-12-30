@@ -637,6 +637,67 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Sampling high-volume traces
 - Enriching spans with business context
 
+## Serialization Options
+
+Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, deeply nested objects, or when you need to optimize trace storage.
+
+### Configuration
+
+Add `serializationOptions` to your observability configuration:
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        serializationOptions: {
+          maxStringLength: 2048,   // Maximum length for string values (default: 1024)
+          maxDepth: 10,            // Maximum depth for nested objects (default: 6)
+          maxArrayLength: 100,     // Maximum number of items in arrays (default: 50)
+          maxObjectKeys: 75,       // Maximum number of keys in objects (default: 50)
+        },
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Available Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `maxStringLength` | 1024 | Maximum length for string values. Longer strings are truncated. |
+| `maxDepth` | 6 | Maximum depth for nested objects. Deeper levels are omitted. |
+| `maxArrayLength` | 50 | Maximum number of items in arrays. Additional items are omitted. |
+| `maxObjectKeys` | 50 | Maximum number of keys in objects. Additional keys are omitted. |
+
+### Use Cases
+
+**Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
+
+```ts
+serializationOptions: {
+  maxStringLength: 8192,  // Capture longer text content
+  maxDepth: 12,           // Handle deeply nested JSON responses
+  maxArrayLength: 200,    // Keep more items from large lists
+}
+```
+
+**Reducing trace size for production**: Lower these values to reduce storage costs and improve performance when you don't need full payload visibility:
+
+```ts
+serializationOptions: {
+  maxStringLength: 256,   // Truncate strings aggressively
+  maxDepth: 3,            // Shallow object representation
+  maxArrayLength: 10,     // Keep only first few items
+  maxObjectKeys: 20,      // Limit object keys
+}
+```
+
+All options are optional — if not specified, they fall back to the defaults shown above.
+
 ## Retrieving Trace IDs
 
 When you execute agents or workflows with tracing enabled, the response includes a `traceId` that you can use to look up the full trace in your observability platform. This is useful for debugging, customer support, or correlating traces with other events in your system.
