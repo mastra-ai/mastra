@@ -4596,6 +4596,81 @@ describe('MastraInngestWorkflow', () => {
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
     });
+
+    it('should retry a step with step retries option, overriding the workflow retry config', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 2,
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 2,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: {
+          delay: 1, // if the delay is 0 it will default to inngest's default backoff delay
+          attempts: 4,
+        },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1.status).toBe('success');
+      expect(result.steps.step2.status).toBe('failed');
+      expect(result.status).toBe('failed');
+
+      srv.close();
+
+      expect(step1.execute).toHaveBeenCalledTimes(1);
+      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
+    });
   });
 
   describe('Interoperability (Actions)', () => {
