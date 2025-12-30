@@ -165,6 +165,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
           args: chunk.payload.args,
+          resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
     case 'tool-call-suspended':
@@ -176,6 +177,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
           suspendPayload: chunk.payload.suspendPayload,
+          resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
