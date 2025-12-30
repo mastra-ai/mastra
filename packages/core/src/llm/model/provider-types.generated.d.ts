@@ -851,10 +851,12 @@ export type ProviderModelsMap = {
     'gpt-5.1',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
     'gpt-5.2',
     'grok-code',
     'kimi-k2',
     'kimi-k2-thinking',
+    'minimax-m2.1-free',
     'qwen3-coder',
   ];
   readonly fastrouter: readonly [
@@ -1238,6 +1240,7 @@ export type ProviderModelsMap = {
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M2',
+    'hf:MiniMaxAI/MiniMax-M2.1',
     'hf:Qwen/Qwen2.5-Coder-32B-Instruct',
     'hf:Qwen/Qwen3-235B-A22B-Instruct-2507',
     'hf:Qwen/Qwen3-235B-A22B-Thinking-2507',

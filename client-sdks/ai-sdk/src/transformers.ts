@@ -527,7 +527,8 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
           );
         }
-        return output;
+        const { type, data, id } = output;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }
@@ -539,7 +540,13 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload;
+        const { type, data, id } = payload;
+
+        return {
+          type,
+          data,
+          ...(id !== undefined && { id }),
+        };
       }
       return null;
     }
@@ -845,8 +852,8 @@ export function transformNetwork(
           );
         }
 
-        const { type, data } = payload.payload;
-        return { type, data };
+        const { type, data, id } = payload.payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -854,8 +861,8 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        const { type, data } = payload.payload;
-        return { type, data };
+        const { type, data, id } = payload.payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
@@ -926,8 +933,8 @@ export function transformNetwork(
           );
         }
 
-        const { type, data } = payload;
-        return { type, data };
+        const { type, data, id } = payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }

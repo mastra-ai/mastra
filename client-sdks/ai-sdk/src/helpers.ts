@@ -165,6 +165,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
           args: chunk.payload.args,
+          resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
     case 'tool-call-suspended':
@@ -176,6 +177,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
           suspendPayload: chunk.payload.suspendPayload,
+          resumeSchema: chunk.payload.resumeSchema,
         },
       } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
@@ -468,7 +470,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
           );
         }
-        return part.output;
+        const { type, data, id } = part.output;
+        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
     }
@@ -543,7 +546,8 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
           );
         }
-        return part;
+        const { type, data, id } = part;
+        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
       }
 
       return;
