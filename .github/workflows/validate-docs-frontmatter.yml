@@ -8,6 +8,9 @@ on:
       - 'docs/scripts/validate-frontmatter.ts'
       - '.github/workflows/validate-docs-frontmatter.yml'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: Validate MDX frontmatter
