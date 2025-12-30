@@ -19,6 +19,9 @@ const __dirname = path.dirname(__filename);
 const MONOREPO_ROOT = path.join(__dirname, '..');
 const MDX_DOCS_DIR = path.join(MONOREPO_ROOT, 'docs/src/content/en');
 
+// Cache for sidebar order
+const sidebarOrderCache = new Map<string, Map<string, number>>();
+
 // Scan the entire docs folder - frontmatter determines what gets included
 
 // ============================================================================
@@ -56,6 +59,87 @@ interface DocTopic {
   id: string;
   title: string;
   files: MdxFile[];
+}
+
+// ============================================================================
+// Sidebar Order Parser
+// ============================================================================
+
+function parseSidebarOrder(sidebarPath: string): Map<string, number> {
+  const orderMap = new Map<string, number>();
+
+  if (!fs.existsSync(sidebarPath)) {
+    return orderMap;
+  }
+
+  const content = fs.readFileSync(sidebarPath, 'utf-8');
+
+  // Extract doc IDs in order using regex
+  // Matches: id: "agents/overview" or id: 'agents/overview'
+  const idRegex = /id:\s*["']([^"']+)["']/g;
+  let match;
+  let order = 0;
+
+  while ((match = idRegex.exec(content)) !== null) {
+    const docId = match[1];
+    orderMap.set(docId, order++);
+  }
+
+  return orderMap;
+}
+
+function getSidebarOrder(category: string): Map<string, number> {
+  // Check cache first
+  if (sidebarOrderCache.has(category)) {
+    return sidebarOrderCache.get(category)!;
+  }
+
+  // Determine which sidebar file to use based on category
+  let sidebarPath: string;
+
+  if (category === 'reference' || category.startsWith('reference/')) {
+    sidebarPath = path.join(MDX_DOCS_DIR, 'reference/sidebars.js');
+  } else if (category === 'guides' || category.startsWith('guides/')) {
+    sidebarPath = path.join(MDX_DOCS_DIR, 'guides/sidebars.js');
+  } else if (category === 'models' || category.startsWith('models/')) {
+    sidebarPath = path.join(MDX_DOCS_DIR, 'models/sidebars.js');
+  } else {
+    // Default to docs sidebar
+    sidebarPath = path.join(MDX_DOCS_DIR, 'docs/sidebars.js');
+  }
+
+  const orderMap = parseSidebarOrder(sidebarPath);
+  sidebarOrderCache.set(category, orderMap);
+
+  return orderMap;
+}
+
+function getFileOrder(file: MdxFile, orderMap: Map<string, number>): number {
+  // Extract the doc ID from the relative path
+  // e.g., "docs/agents/overview.mdx" -> "agents/overview"
+  const parts = file.relativePath.split('/');
+  let docId: string;
+
+  if (parts[0] === 'docs' || parts[0] === 'reference' || parts[0] === 'guides') {
+    // Remove the first part (docs/reference/guides) and .mdx extension
+    docId = parts.slice(1).join('/').replace(/\.mdx$/, '');
+  } else {
+    docId = file.relativePath.replace(/\.mdx$/, '');
+  }
+
+  // Check if we have an order for this doc
+  const order = orderMap.get(docId);
+  if (order !== undefined) {
+    return order;
+  }
+
+  // Fallback: overview/index first, then alphabetical (high number)
+  const baseName = path.basename(file.relativePath);
+  if (baseName.includes('overview') || baseName.includes('index')) {
+    return -1;
+  }
+
+  return 9999; // Put at end if not in sidebar
 }
 
 // ============================================================================
@@ -161,14 +245,24 @@ function groupFilesIntoTopics(files: MdxFile[]): DocTopic[] {
   // Convert to DocTopic array
   const topics: DocTopic[] = [];
   for (const [id, topicFiles] of topicMap) {
-    // Sort files: overview first, then alphabetically
+    // Get sidebar order for this topic
+    const firstFile = topicFiles[0];
+    const category = firstFile?.relativePath.split('/')[0] || 'docs';
+    const orderMap = getSidebarOrder(category);
+
+    // Sort files: use sidebar order if available, else overview first, then alphabetically
     topicFiles.sort((a, b) => {
+      const aOrder = getFileOrder(a, orderMap);
+      const bOrder = getFileOrder(b, orderMap);
+
+      // If both have sidebar order, use that
+      if (aOrder !== 9999 || bOrder !== 9999) {
+        return aOrder - bOrder;
+      }
+
+      // Fallback to alphabetical
       const aName = path.basename(a.relativePath);
       const bName = path.basename(b.relativePath);
-      if (aName.includes('overview')) return -1;
-      if (bName.includes('overview')) return 1;
-      if (aName.includes('index')) return -1;
-      if (bName.includes('index')) return 1;
       return aName.localeCompare(bName);
     });
 
@@ -659,10 +753,11 @@ async function generateDocsForPackage(packageName: string, packageRoot: string, 
 
   console.info(`\n📚 Generating documentation for ${packageName} (${packageFiles.length} files)\n`);
 
-  // Create docs directory
-  if (!fs.existsSync(docsOutputDir)) {
-    fs.mkdirSync(docsOutputDir, { recursive: true });
+  // Clean and create docs directory
+  if (fs.existsSync(docsOutputDir)) {
+    fs.rmSync(docsOutputDir, { recursive: true });
   }
+  fs.mkdirSync(docsOutputDir, { recursive: true });
 
   // Step 1: Generate SOURCE_MAP.json
   console.info('1. Generating SOURCE_MAP.json...');
