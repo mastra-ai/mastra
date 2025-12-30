@@ -972,12 +972,18 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../mastra
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.0.16(@opentelemetry/api@1.9.0)(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.16))(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.7(@types/node@22.13.17)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
 
   observability/arize:
     dependencies:
@@ -1055,6 +1061,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@observability/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -1138,6 +1147,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@observability/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -1181,6 +1193,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@observability/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
@@ -1383,6 +1398,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@observability/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
