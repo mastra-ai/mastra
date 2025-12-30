@@ -487,14 +487,14 @@ const code = await client.callTool('read_implementation', {
 
 ## Implementation Plan
 
-### Phase 1: Embedded Docs Foundation
+### Phase 1: Embedded Docs Foundation ✅
 
-- [ ] Create `scripts/generate-package-docs.ts`
-- [ ] Build SOURCE_MAP.json generator (analyze dist/)
-- [ ] Generate SKILL.md with Anthropic-compatible YAML frontmatter
-- [ ] Generate docs for `@mastra/core` as proof of concept
-- [ ] Test with Claude to validate Skills discovery
-- [ ] Test with direct file reading
+- [x] Create `scripts/generate-package-docs.ts`
+- [x] Build SOURCE_MAP.json generator (analyze dist/)
+- [x] Generate SKILL.md with Anthropic-compatible YAML frontmatter
+- [x] Generate docs for `@mastra/core` as proof of concept
+- [ ] Test with Claude to validate Skills discovery _(deferred)_
+- [x] Test with direct file reading
 
 ### Phase 2: Full Package Coverage
 
