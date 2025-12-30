@@ -666,8 +666,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 ?.reduce(
                   (acc, part) => {
                     if (
-                      part.type === 'data-tool-call-suspended' ||
-                      (part.type === 'data-tool-call-approval' && !(part.data as any).resumed)
+                      (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                      !(part.data as any).resumed
                     ) {
                       acc[(part.data as any).toolName] = part.data;
                     }
