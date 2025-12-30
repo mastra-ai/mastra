@@ -112,6 +112,9 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       });
     }
 
+    // Only reset reasoning state for truly unexpected chunk types.
+    // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
+    // so we must allow text-start to pass through without clearing reasoningDeltas.
     if (
       chunk.type !== 'reasoning-start' &&
       chunk.type !== 'reasoning-delta' &&
@@ -119,6 +122,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       chunk.type !== 'redacted-reasoning' &&
       chunk.type !== 'reasoning-signature' &&
       chunk.type !== 'response-metadata' &&
+      chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
       runState.setState({
