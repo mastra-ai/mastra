@@ -6036,50 +6036,51 @@ export const agent = new Agent({
 
 ## Querying Messages
 
-Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
+Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system.
 
-```typescript 
+Storage in Mastra uses domain-specific stores. To access message operations, first get the memory store:
+
+```typescript
+// Get the memory store from storage
+const storage = mastra.getStorage();
+const memoryStore = await storage.getStore('memory');
+
 // Get messages for a thread with pagination
-const result = await mastra
-  .getStorage()
-  .listMessages({
-    threadId: "your-thread-id",
-    page: 0,
-    perPage: 50
-  });
+const result = await memoryStore?.listMessages({
+  threadId: "your-thread-id",
+  page: 0,
+  perPage: 50
+});
 
-console.log(result.messages); // MastraDBMessage[]
-console.log(result.total); // Total count
-console.log(result.hasMore); // Whether more pages exist
+console.log(result?.messages); // MastraDBMessage[]
+console.log(result?.total); // Total count
+console.log(result?.hasMore); // Whether more pages exist
 
 // Get messages from multiple threads at once
-const multiThreadResult = await mastra
-  .getStorage()
-  .listMessages({
-    threadId: ["thread-1", "thread-2", "thread-3"],
-    page: 0,
-    perPage: 100
-  });
+const multiThreadResult = await memoryStore?.listMessages({
+  threadId: ["thread-1", "thread-2", "thread-3"],
+  page: 0,
+  perPage: 100
+});
 
 // Get messages by their IDs
-const messages = await mastra
-  .getStorage()
-  .listMessagesById({ messageIds: messageIdArr });
+const messages = await memoryStore?.listMessagesById({ messageIds: messageIdArr });
 ```
 
 The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
-```typescript 
+```typescript
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
-const result = await mastra
-  .getStorage()
-  .listMessages({ threadId: "your-thread-id" });
+const storage = mastra.getStorage();
+const memoryStore = await storage.getStore('memory');
+
+const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
 
 // Convert to AI SDK v5 UIMessage format for UI rendering
-const uiMessages = toAISdkV5Messages(result.messages);
+const uiMessages = toAISdkV5Messages(result?.messages ?? []);
 ```
 
 
@@ -30229,7 +30230,7 @@ All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`
 To migrate, update all pagination parameters from `offset/limit` to `page/perPage`. Note that `page` is 0-indexed.
 
 ```diff
-  storage.listMessages({
+  memoryStore.listMessages({
     threadId: 'thread-123',
 -   offset: 0,
 -   limit: 20,
@@ -30245,18 +30246,20 @@ The `getMessagesPaginated()` method has been replaced with `listMessages()`. The
 To migrate, rename the method and update pagination parameters. You can now use `perPage: false` to fetch all records.
 
 ```diff
++ const memoryStore = await storage.getStore('memory');
++
   // Paginated
 - const result = await storage.getMessagesPaginated({
-+ const result = await storage.listMessages({
++ const result = await memoryStore?.listMessages({
     threadId: 'thread-123',
 -   offset: 0,
 -   limit: 20,
 +   page: 0,
 +   perPage: 20,
   });
-  
+
   // Fetch all records (no pagination limit)
-+ const allMessages = await storage.listMessages({
++ const allMessages = await memoryStore?.listMessages({
 +   threadId: 'thread-123',
 +   page: 0,
 +   perPage: false,
@@ -30318,11 +30321,12 @@ To migrate, call `getStore()` with the domain name, then call methods on the ret
 
 The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call and update pagination parameters.
+To migrate, use the memory store and rename the method call with pagination parameters.
 
 ```diff
 - const threads = await storage.getThreadsByResourceId({
-+ const threads = await storage.listThreadsByResourceId({
++ const memoryStore = await storage.getStore('memory');
++ const threads = await memoryStore?.listThreadsByResourceId({
     resourceId: 'res-123',
 +   page: 0,
 +   perPage: 20,
@@ -30343,11 +30347,12 @@ npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call and update pagination parameters.
+To migrate, use the workflows stores, rename the method call and update pagination parameters.
 
 ```diff
 - const runs = await storage.getWorkflowRuns({
-+ const runs = await storage.listWorkflowRuns({
++ const workflowStore = await storage.getStore('workflows');
++ const runs = await workflowStore?.listWorkflowRuns({
     fromDate,
     toDate,
 +   page: 0,
@@ -30369,11 +30374,12 @@ npx @mastra/codemod@beta v1/storage-list-workflow-runs .
 
 The `getMessagesById()` method has been renamed to `listMessagesById()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call.
+To migrate, use the memory store and rename the method call.
 
 ```diff
++ const memoryStore = await storage.getStore('memory');
 - const result = await storage.getMessagesById({
-+ const result = await storage.listMessagesById({
++ const result = await memoryStore?.listMessagesById({
     messageIds: ['msg-1', 'msg-2'],
   });
 ```
@@ -30392,20 +30398,22 @@ npx @mastra/codemod@beta v1/storage-list-messages-by-id .
 
 The `getMessages()` and `saveMessages()` methods have changed signatures and return types. Format overloads have been removed, and the methods now always work with `MastraDBMessage`. This change simplifies the API by removing format variations.
 
-To migrate, remove format parameters and update code to work with the consistent return type.
+To migrate, use the memory store, remove format parameters, and update code to work with the consistent return type.
 
 ```diff
++ const memoryStore = await storage.getStore('memory');
++
   // Always returns { messages: MastraDBMessage[] }
 - const v1Messages = await storage.getMessages({ threadId, format: 'v1' });
 - const v2Messages = await storage.getMessages({ threadId, format: 'v2' });
-+ const result = await storage.getMessages({ threadId });
-+ const messages = result.messages; // MastraDBMessage[]
-  
++ const result = await memoryStore?.getMessages({ threadId });
++ const messages = result?.messages; // MastraDBMessage[]
+
   // SaveMessages always uses MastraDBMessage
 - await storage.saveMessages({ messages: v1Messages, format: 'v1' });
 - await storage.saveMessages({ messages: v2Messages, format: 'v2' });
-+ const result = await storage.saveMessages({ messages: mastraDBMessages });
-+ const saved = result.messages; // MastraDBMessage[]
++ const saveResult = await memoryStore?.saveMessages({ messages: mastraDBMessages });
++ const saved = saveResult?.messages; // MastraDBMessage[]
 ```
 
 ### Vector store API from positional to named arguments
@@ -30532,16 +30540,17 @@ To migrate, update method names from `getScores` to `listScoresByScorerId` and r
 
 Non-paginated storage functions have been removed in favor of paginated versions. All list operations now use pagination, though you can fetch all records with `perPage: false`. This change provides consistency across the API and prevents accidental loading of large datasets.
 
-To migrate, use paginated methods. For fetching all records, use `perPage: false`.
+To migrate, use paginated methods via domain stores. For fetching all records, use `perPage: false`.
 
 ```diff
 - // Non-paginated direct access
 - const messages = await storage.getMessages({ threadId });
 
-+ // Use paginated methods
-+ const result = await storage.listMessages({ threadId, page: 0, perPage: 20 });
++ // Use paginated methods via domain stores
++ const memoryStore = await storage.getStore('memory');
++ const result = await memoryStore?.listMessages({ threadId, page: 0, perPage: 20 });
 + // Or fetch all
-+ const allMessages = await storage.listMessages({
++ const allMessages = await memoryStore?.listMessages({
 +   threadId,
 +   page: 0,
 +   perPage: false,
@@ -33201,7 +33210,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 65+ AI providers and 1538+ models through Mastra's model router."
+description: "Access 65+ AI providers and 1540+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33214,7 +33223,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1538 models from 65 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1540 models from 65 providers through a single API.
 
 ## Features
 
@@ -42820,7 +42829,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/ollama-cloud.svg"
     />    <CardGridItem
       title="OpenCode Zen"
-      description="25 models"
+      description="26 models"
       href="/models/v1/providers/opencode"
       logo="https://models.dev/logos/opencode.svg"
     />    <CardGridItem
@@ -42865,7 +42874,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/submodel.svg"
     />    <CardGridItem
       title="Synthetic"
-      description="25 models"
+      description="26 models"
       href="/models/v1/providers/synthetic"
       logo="https://models.dev/logos/synthetic.svg"
     />    <CardGridItem
@@ -47944,7 +47953,7 @@ For detailed provider-specific documentation, see the [AI SDK OpenAI provider do
 
 ---
 title: "OpenCode Zen | Models | Mastra"
-description: "Use OpenCode Zen models with Mastra. 25 models available."
+description: "Use OpenCode Zen models with Mastra. 26 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -47954,7 +47963,7 @@ description: "Use OpenCode Zen models with Mastra. 25 models available."
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode Zen logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Zen
 [EN] Source: https://mastra.ai/en/models/providers/opencode
 
-Access 25 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 26 OpenCode Zen models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Zen documentation](https://opencode.ai/docs/zen).
 
@@ -48219,6 +48228,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 1.25,
     "outputCost": 10
+  },
+  {
+    "model": "opencode/gpt-5.1-codex-mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 400000,
+    "maxOutput": 128000,
+    "inputCost": 0.25,
+    "outputCost": 2
   },
   {
     "model": "opencode/gpt-5.2",
@@ -52802,7 +52823,7 @@ const agent = new Agent({
 
 ---
 title: "Synthetic | Models | Mastra"
-description: "Use Synthetic models with Mastra. 25 models available."
+description: "Use Synthetic models with Mastra. 26 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -52812,7 +52833,7 @@ description: "Use Synthetic models with Mastra. 25 models available."
 # <img src="https://models.dev/logos/synthetic.svg" alt="Synthetic logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Synthetic
 [EN] Source: https://mastra.ai/en/models/providers/synthetic
 
-Access 25 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
+Access 26 Synthetic models through Mastra's model router. Authentication is handled automatically using the `SYNTHETIC_API_KEY` environment variable.
 
 Learn more in the [Synthetic documentation](https://synthetic.new/pricing).
 
@@ -53015,6 +53036,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 196608,
     "maxOutput": 131000,
+    "inputCost": 0.55,
+    "outputCost": 2.19
+  },
+  {
+    "model": "synthetic/hf:MiniMaxAI/MiniMax-M2.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 204800,
+    "maxOutput": 131072,
     "inputCost": 0.55,
     "outputCost": 2.19
   },
