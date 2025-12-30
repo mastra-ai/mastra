@@ -59,7 +59,7 @@ const om = new ObservationalMemory({
     model: 'google/gemini-2.5-flash',
   },
   reflector: {
-    observationThreshold: BUFFERING_CONFIG.reflector.reflectionThreshold,
+    reflectionThreshold: BUFFERING_CONFIG.reflector.reflectionThreshold,
     bufferEvery: BUFFERING_CONFIG.reflector.bufferEvery,
     model: 'google/gemini-2.5-flash',
   },
