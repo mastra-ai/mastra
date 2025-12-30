@@ -9,15 +9,15 @@
 import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
-import { BaseExporter } from '@mastra/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
+import { BaseExporter, TrackingExporter } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
 import { formatUsageMetrics } from './metrics';
+import type { BaseTraceData, TrackingExporterConfig } from '@mastra/observability';
 
 const MASTRA_TRACE_ID_METADATA_KEY = 'mastra-trace-id';
 
-export interface BraintrustExporterConfig extends BaseExporterConfig {
+export interface BraintrustExporterConfig extends TrackingExporterConfig {
   /**
    * Optional Braintrust logger instance.
    * When provided, enables integration with Braintrust contexts such as:
@@ -37,12 +37,13 @@ export interface BraintrustExporterConfig extends BaseExporterConfig {
   tuningParameters?: Record<string, any>;
 }
 
-type SpanData = {
+type BraintrustRoot = {
   logger: Logger<true> | Span; // Braintrust logger (for root spans) or external span
-  spans: Map<string, Span>; // Maps span.id to Braintrust span
-  activeIds: Set<string>; // Tracks started (non-event) spans not yet ended, including root
   isExternal: boolean; // True if logger is an external span from logger.traced() or Eval()
 };
+
+type BraintrustSpan = Span;
+type BraintrustEvent = Span;
 
 // Default span type for all spans
 const DEFAULT_SPAN_TYPE = 'task';
@@ -61,10 +62,13 @@ function mapSpanType(spanType: SpanType): 'llm' | 'score' | 'function' | 'eval' 
   return (SPAN_TYPE_EXCEPTIONS[spanType] as any) ?? DEFAULT_SPAN_TYPE;
 }
 
-export class BraintrustExporter extends BaseExporter {
+export class BraintrustExporter extends TrackingExporter<
+  BraintrustRoot,
+  BraintrustSpan,
+  BraintrustEvent,
+  BraintrustExporterConfig
+> {
   name = 'braintrust';
-  private traceMap = new Map<string, SpanData>();
-  private config: BraintrustExporterConfig;
 
   // Flags and logger for context-aware mode
   private useProvidedLogger: boolean;
@@ -77,7 +81,6 @@ export class BraintrustExporter extends BaseExporter {
       // Use provided logger - enables Braintrust context integration
       this.useProvidedLogger = true;
       this.providedLogger = config.braintrustLogger;
-      this.config = config;
     } else {
       // Validate apiKey for creating loggers per trace
       if (!config.apiKey) {
@@ -87,7 +90,6 @@ export class BraintrustExporter extends BaseExporter {
         return;
       }
       this.useProvidedLogger = false;
-      this.config = config;
     }
   }
 
