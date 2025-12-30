@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-chroma-docs",
+  "skillDescription": "Documentation for @mastra/chroma - chroma storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/vectors/chroma.mdx"]
+    }
+  ]
+}

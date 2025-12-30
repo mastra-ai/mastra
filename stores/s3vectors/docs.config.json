@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-s3vectors-docs",
+  "skillDescription": "Documentation for @mastra/s3vectors - s3vectors storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/vectors/s3vectors.mdx"]
+    }
+  ]
+}

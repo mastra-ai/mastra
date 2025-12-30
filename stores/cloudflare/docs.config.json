@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-cloudflare-docs",
+  "skillDescription": "Documentation for @mastra/cloudflare - cloudflare storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/storage/cloudflare.mdx"]
+    }
+  ]
+}

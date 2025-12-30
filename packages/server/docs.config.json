@@ -1,0 +1,30 @@
+{
+  "skillName": "mastra-server-docs",
+  "skillDescription": "Documentation for @mastra/server - HTTP server, API routes, middleware, and adapters for AI agents.",
+  "topics": [
+    {
+      "id": "server",
+      "title": "Server",
+      "sourceFiles": [
+        "docs/server/mastra-server.mdx",
+        "docs/server/custom-api-routes.mdx",
+        "docs/server/middleware.mdx",
+        "docs/server/request-context.mdx",
+        "docs/server/server-adapters.mdx",
+        "docs/server/custom-adapters.mdx",
+        "docs/server/mastra-client.mdx"
+      ]
+    },
+    {
+      "id": "server-reference",
+      "title": "Server API Reference",
+      "sourceFiles": [
+        "reference/server/mastra-server.mdx",
+        "reference/server/create-route.mdx",
+        "reference/server/routes.mdx",
+        "reference/server/hono-adapter.mdx",
+        "reference/server/express-adapter.mdx"
+      ]
+    }
+  ]
+}

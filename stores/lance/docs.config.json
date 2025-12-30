@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-lance-docs",
+  "skillDescription": "Documentation for @mastra/lance - lance storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/storage/lance.mdx", "reference/vectors/lance.mdx"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-mssql-docs",
+  "skillDescription": "Documentation for @mastra/mssql - mssql storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/storage/mssql.mdx"]
+    }
+  ]
+}

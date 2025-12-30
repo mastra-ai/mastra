@@ -1,0 +1,31 @@
+{
+  "skillName": "mastra-auth-docs",
+  "skillDescription": "Documentation for @mastra/auth - authentication providers for AI agents (Auth0, Clerk, Firebase, Supabase, WorkOS).",
+  "topics": [
+    {
+      "id": "auth",
+      "title": "Authentication",
+      "sourceFiles": [
+        "docs/server/auth/index.mdx",
+        "docs/server/auth/jwt.mdx",
+        "docs/server/auth/auth0.mdx",
+        "docs/server/auth/clerk.mdx",
+        "docs/server/auth/firebase.mdx",
+        "docs/server/auth/supabase.mdx",
+        "docs/server/auth/workos.mdx"
+      ]
+    },
+    {
+      "id": "auth-reference",
+      "title": "Auth API Reference",
+      "sourceFiles": [
+        "reference/auth/jwt.mdx",
+        "reference/auth/auth0.mdx",
+        "reference/auth/clerk.mdx",
+        "reference/auth/firebase.mdx",
+        "reference/auth/supabase.mdx",
+        "reference/auth/workos.mdx"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-couchbase-docs",
+  "skillDescription": "Documentation for @mastra/couchbase - couchbase storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/vectors/couchbase.mdx"]
+    }
+  ]
+}

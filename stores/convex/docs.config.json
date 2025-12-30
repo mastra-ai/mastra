@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-convex-docs",
+  "skillDescription": "Documentation for @mastra/convex - convex storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/storage/convex.mdx", "reference/vectors/convex.mdx"]
+    }
+  ]
+}

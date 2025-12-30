@@ -1,0 +1,32 @@
+{
+  "skillName": "mastra-rag-docs",
+  "skillDescription": "Documentation for @mastra/rag - chunking, embedding, retrieval, and graph RAG for AI agents.",
+  "topics": [
+    {
+      "id": "rag",
+      "title": "RAG",
+      "sourceFiles": [
+        "docs/rag/overview.mdx",
+        "docs/rag/chunking-and-embedding.mdx",
+        "docs/rag/retrieval.mdx",
+        "docs/rag/graph-rag.mdx",
+        "docs/rag/vector-databases.mdx"
+      ]
+    },
+    {
+      "id": "rag-reference",
+      "title": "RAG API Reference",
+      "sourceFiles": [
+        "reference/rag/chunk.mdx",
+        "reference/rag/document.mdx",
+        "reference/rag/embeddings.mdx",
+        "reference/rag/extract-params.mdx",
+        "reference/rag/metadata-filters.mdx",
+        "reference/rag/rerank.mdx",
+        "reference/rag/rerankWithScorer.mdx",
+        "reference/rag/graph-rag.mdx",
+        "reference/rag/database-config.mdx"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "skillName": "mastra-voice-cloudflare-docs",
+  "skillDescription": "Documentation for @mastra/voice-cloudflare - cloudflare voice provider for Mastra.",
+  "topics": [
+    {
+      "id": "voice",
+      "title": "Voice",
+      "sourceFiles": [
+        "docs/voice/overview.mdx",
+        "docs/voice/text-to-speech.mdx",
+        "docs/voice/speech-to-text.mdx",
+        "docs/voice/speech-to-speech.mdx",
+        "reference/voice/mastra-voice.mdx",
+        "reference/voice/cloudflare.mdx"
+      ]
+    }
+  ]
+}

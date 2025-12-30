@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/pg",
     "build:watch": "pnpm build --watch",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",

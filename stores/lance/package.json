@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/lance",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

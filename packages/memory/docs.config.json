@@ -1,0 +1,50 @@
+{
+  "skillName": "mastra-memory-docs",
+  "skillDescription": "Documentation for @mastra/memory - message history, semantic recall, working memory, and processors for AI agents.",
+  "topics": [
+    {
+      "id": "memory",
+      "title": "Memory",
+      "sourceFiles": [
+        "docs/memory/overview.mdx",
+        "docs/memory/message-history.mdx",
+        "docs/memory/semantic-recall.mdx",
+        "docs/memory/working-memory.mdx",
+        "docs/memory/memory-processors.mdx",
+        "docs/memory/storage.mdx"
+      ]
+    },
+    {
+      "id": "memory-reference",
+      "title": "Memory API Reference",
+      "sourceFiles": [
+        "reference/memory/memory-class.mdx",
+        "reference/memory/createThread.mdx",
+        "reference/memory/getThreadById.mdx",
+        "reference/memory/listThreadsByResourceId.mdx",
+        "reference/memory/deleteMessages.mdx",
+        "reference/memory/query.mdx",
+        "reference/memory/recall.mdx"
+      ]
+    },
+    {
+      "id": "processors",
+      "title": "Processors",
+      "sourceFiles": [
+        "reference/processors/processor-interface.mdx",
+        "reference/processors/token-limiter-processor.mdx",
+        "reference/processors/message-history-processor.mdx",
+        "reference/processors/semantic-recall-processor.mdx",
+        "reference/processors/working-memory-processor.mdx",
+        "reference/processors/tool-call-filter.mdx",
+        "reference/processors/batch-parts-processor.mdx",
+        "reference/processors/language-detector.mdx",
+        "reference/processors/moderation-processor.mdx",
+        "reference/processors/pii-detector.mdx",
+        "reference/processors/prompt-injection-detector.mdx",
+        "reference/processors/system-prompt-scrubber.mdx",
+        "reference/processors/unicode-normalizer.mdx"
+      ]
+    }
+  ]
+}

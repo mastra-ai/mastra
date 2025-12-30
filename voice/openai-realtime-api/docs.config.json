@@ -1,0 +1,18 @@
+{
+  "skillName": "mastra-voice-openai-realtime-api-docs",
+  "skillDescription": "Documentation for @mastra/voice-openai-realtime-api - openai-realtime-api voice provider for Mastra.",
+  "topics": [
+    {
+      "id": "voice",
+      "title": "Voice",
+      "sourceFiles": [
+        "docs/voice/overview.mdx",
+        "docs/voice/text-to-speech.mdx",
+        "docs/voice/speech-to-text.mdx",
+        "docs/voice/speech-to-speech.mdx",
+        "reference/voice/mastra-voice.mdx",
+        "reference/voice/openai-realtime.mdx"
+      ]
+    }
+  ]
+}

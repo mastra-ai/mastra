@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-loggers-docs",
+  "skillDescription": "Documentation for @mastra/loggers - logging utilities for Mastra applications.",
+  "topics": [
+    {
+      "id": "logging",
+      "title": "Logging",
+      "sourceFiles": ["reference/logging/pino-logger.mdx"]
+    }
+  ]
+}

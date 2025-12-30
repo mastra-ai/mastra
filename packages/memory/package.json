@@ -25,6 +25,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/memory",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",

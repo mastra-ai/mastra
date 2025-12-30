@@ -1,0 +1,28 @@
+{
+  "skillName": "mastra-deployer-docs",
+  "skillDescription": "Documentation for @mastra/deployer - deployment to Vercel, Netlify, Cloudflare, and other providers.",
+  "topics": [
+    {
+      "id": "deployment",
+      "title": "Deployment",
+      "sourceFiles": [
+        "docs/deployment/overview.mdx",
+        "docs/deployment/mastra-server.mdx",
+        "docs/deployment/cloud-providers.mdx",
+        "docs/deployment/web-framework.mdx",
+        "docs/deployment/monorepo.mdx",
+        "docs/deployment/workflow-runners.mdx"
+      ]
+    },
+    {
+      "id": "deployer-reference",
+      "title": "Deployer API Reference",
+      "sourceFiles": [
+        "reference/deployer/deployer.mdx",
+        "reference/deployer/vercel.mdx",
+        "reference/deployer/netlify.mdx",
+        "reference/deployer/cloudflare.mdx"
+      ]
+    }
+  ]
+}

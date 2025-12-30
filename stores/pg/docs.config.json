@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-pg-docs",
+  "skillDescription": "Documentation for @mastra/pg - pg storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/storage/postgresql.mdx", "reference/vectors/pg.mdx"]
+    }
+  ]
+}

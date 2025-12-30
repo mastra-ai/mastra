@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-cli-docs",
+  "skillDescription": "Documentation for @mastra/cli - command-line interface for Mastra projects.",
+  "topics": [
+    {
+      "id": "cli",
+      "title": "CLI Reference",
+      "sourceFiles": ["reference/cli/mastra.mdx", "reference/cli/create-mastra.mdx"]
+    }
+  ]
+}

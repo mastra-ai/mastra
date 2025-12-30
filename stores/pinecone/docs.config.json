@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-pinecone-docs",
+  "skillDescription": "Documentation for @mastra/pinecone - pinecone storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/vectors/pinecone.mdx"]
+    }
+  ]
+}

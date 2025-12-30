@@ -23,7 +23,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts && pnpx tsx ../../scripts/generate-package-docs.ts packages/cli",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",

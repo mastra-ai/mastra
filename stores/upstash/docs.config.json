@@ -1,0 +1,15 @@
+{
+  "skillName": "mastra-upstash-docs",
+  "skillDescription": "Documentation for @mastra/upstash - upstash storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": [
+        "reference/storage/overview.mdx",
+        "reference/storage/upstash.mdx",
+        "reference/vectors/upstash.mdx"
+      ]
+    }
+  ]
+}

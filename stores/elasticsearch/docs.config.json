@@ -1,0 +1,11 @@
+{
+  "skillName": "mastra-elasticsearch-docs",
+  "skillDescription": "Documentation for @mastra/elasticsearch - elasticsearch storage/vector provider for Mastra.",
+  "topics": [
+    {
+      "id": "storage",
+      "title": "Storage",
+      "sourceFiles": ["reference/storage/overview.mdx", "reference/vectors/elasticsearch.mdx"]
+    }
+  ]
+}

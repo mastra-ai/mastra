@@ -1,0 +1,22 @@
+{
+  "skillName": "mastra-client-js-docs",
+  "skillDescription": "Documentation for @mastra/client-js - JavaScript client SDK for Mastra APIs.",
+  "topics": [
+    {
+      "id": "client",
+      "title": "Client SDK",
+      "sourceFiles": [
+        "reference/client-js/mastra-client.mdx",
+        "reference/client-js/agents.mdx",
+        "reference/client-js/tools.mdx",
+        "reference/client-js/workflows.mdx",
+        "reference/client-js/memory.mdx",
+        "reference/client-js/vectors.mdx",
+        "reference/client-js/logs.mdx",
+        "reference/client-js/observability.mdx",
+        "reference/client-js/telemetry.mdx",
+        "reference/client-js/error-handling.mdx"
+      ]
+    }
+  ]
+}
