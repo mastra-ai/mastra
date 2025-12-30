@@ -602,4 +602,123 @@ describe('Reasoning + Memory Integration', () => {
 
     expect(resp2.text).toBe('Hello! How can I help you?');
   });
+
+  /**
+   * Test that text-end properly clears providerOptions to prevent leaking.
+   *
+   * This ensures that when we have multiple message parts (e.g., text followed by tool call),
+   * the text's providerMetadata doesn't leak into the subsequent part.
+   */
+  it('should clear text providerMetadata after text-end to prevent leaking', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-1234';
+    const textItemId = 'msg_text123';
+
+    // Create a model that sends text with providerMetadata, then a tool call
+    const model = new MockLanguageModelV2({
+      doGenerate: async () =>
+        ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'text',
+              text: 'Let me check that for you.',
+              providerMetadata: {
+                openai: {
+                  itemId: textItemId,
+                },
+              },
+            },
+            {
+              type: 'tool-call' as const,
+              toolCallId: 'call_123',
+              toolName: 'test_tool',
+              args: {},
+            },
+          ],
+          warnings: [],
+        }) as any,
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          {
+            type: 'stream-start',
+            warnings: [],
+          },
+          {
+            type: 'response-metadata',
+            id: 'response-1',
+            modelId: 'mock-model',
+            timestamp: new Date(0),
+          },
+          // Text with providerMetadata
+          {
+            type: 'text-start',
+            id: 'text-1',
+            providerMetadata: {
+              openai: {
+                itemId: textItemId,
+              },
+            },
+          },
+          { type: 'text-delta', id: 'text-1', delta: 'Let me check that for you.' },
+          { type: 'text-end', id: 'text-1' }, // This should clear providerOptions
+          // Tool call should NOT have text's providerMetadata
+          {
+            type: 'tool-call',
+            toolCallId: 'call_123',
+            toolName: 'test_tool',
+            args: {},
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'text-end-cleanup-test',
+      name: 'Text End Cleanup Test',
+      instructions: 'Test agent',
+      model,
+      memory: mockMemory,
+    });
+
+    const resp = await agent.stream('Test message', {
+      threadId,
+      resourceId,
+    });
+
+    await resp.consumeStream();
+
+    // Get stored messages
+    const dbMessages = resp.messageList.get.all.db();
+    const assistantMessage = dbMessages.find(m => m.role === 'assistant');
+    expect(assistantMessage).toBeDefined();
+
+    const parts = assistantMessage!.content.parts;
+
+    // Find text and tool-call parts
+    const textPart = parts.find(p => p.type === 'text');
+    const toolCallPart = parts.find(p => p.type === 'tool-invocation');
+
+    expect(textPart).toBeDefined();
+    expect(toolCallPart).toBeDefined();
+
+    // Text part should have its providerMetadata
+    expect(textPart!.providerMetadata?.openai?.itemId).toBe(textItemId);
+
+    // Tool call part should NOT have text's providerMetadata
+    // (it should either have its own or none at all)
+    if (toolCallPart!.providerMetadata?.openai?.itemId) {
+      expect(toolCallPart!.providerMetadata.openai.itemId).not.toBe(textItemId);
+    }
+  });
 });
