@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
 import {
   createStorageErrorId,
+  filterByDateRange,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -401,22 +402,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       }
 
       // Apply date range filter
-      if (filter?.dateRange) {
-        const dateRange = filter.dateRange;
-        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => {
-          const createdAt = new Date(msg.createdAt).getTime();
-          if (dateRange.start) {
-            const startTime =
-              dateRange.start instanceof Date ? dateRange.start.getTime() : new Date(dateRange.start).getTime();
-            if (createdAt < startTime) return false;
-          }
-          if (dateRange.end) {
-            const endTime = dateRange.end instanceof Date ? dateRange.end.getTime() : new Date(dateRange.end).getTime();
-            if (createdAt > endTime) return false;
-          }
-          return true;
-        });
-      }
+      allThreadMessages = filterByDateRange(
+        allThreadMessages,
+        (msg: MastraDBMessage) => new Date(msg.createdAt),
+        filter?.dateRange,
+      );
 
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {

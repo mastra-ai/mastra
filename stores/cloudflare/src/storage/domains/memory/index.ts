@@ -12,6 +12,7 @@ import type {
 import {
   createStorageErrorId,
   ensureDate,
+  filterByDateRange,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
@@ -833,15 +834,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       }
 
       // Filter thread messages by dateRange if specified
-      const dateRange = filter?.dateRange;
-      if (dateRange) {
-        filteredThreadMessages = filteredThreadMessages.filter(msg => {
-          const messageDate = new Date(msg.createdAt);
-          if (dateRange.start && messageDate < new Date(dateRange.start)) return false;
-          if (dateRange.end && messageDate > new Date(dateRange.end)) return false;
-          return true;
-        });
-      }
+      filteredThreadMessages = filterByDateRange(
+        filteredThreadMessages,
+        msg => new Date(msg.createdAt),
+        filter?.dateRange,
+      );
 
       // Get total count for pagination
       const total = filteredThreadMessages.length;
