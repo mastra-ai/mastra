@@ -1192,3 +1192,194 @@ describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () 
     });
   });
 });
+
+describe('validateToolInput - Built-in Object Preservation (GitHub #11502)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11502
+  // The convertUndefinedToNull function was treating Date objects as plain objects
+  // and recursively processing them, which resulted in empty objects {} since Date
+  // objects have no enumerable properties. This broke z.coerce.date() validation.
+  // The fix preserves built-in object types (Date, RegExp, Error) so they pass
+  // through validation correctly.
+
+  it('should preserve Date objects when validating z.coerce.date() schemas', () => {
+    const schema = z.object({
+      startDate: z.coerce.date(),
+      endDate: z.coerce.date(),
+    });
+
+    const startDate = new Date('2024-01-01T00:00:00Z');
+    const endDate = new Date('2024-12-31T23:59:59Z');
+
+    const input = {
+      startDate,
+      endDate,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      startDate: expect.any(Date),
+      endDate: expect.any(Date),
+    });
+    expect((result.data as any).startDate.toISOString()).toBe('2024-01-01T00:00:00.000Z');
+    expect((result.data as any).endDate.toISOString()).toBe('2024-12-31T23:59:59.000Z');
+  });
+
+  it('should handle ISO string dates with z.coerce.date()', () => {
+    const schema = z.object({
+      startDate: z.coerce.date(),
+      endDate: z.coerce.date(),
+    });
+
+    const input = {
+      startDate: '2024-01-01T00:00:00.000Z',
+      endDate: '2024-12-31T23:59:59.000Z',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      startDate: expect.any(Date),
+      endDate: expect.any(Date),
+    });
+    expect((result.data as any).startDate.toISOString()).toBe('2024-01-01T00:00:00.000Z');
+    expect((result.data as any).endDate.toISOString()).toBe('2024-12-31T23:59:59.000Z');
+  });
+
+  it('should preserve Date objects in nested structures', () => {
+    const schema = z.object({
+      query: z.string(),
+      params: z.object({
+        startDate: z.coerce.date(),
+        endDate: z.coerce.date(),
+        tags: z.array(z.string()).optional(),
+      }),
+    });
+
+    const input = {
+      query: 'SELECT * FROM users',
+      params: {
+        startDate: new Date('2024-01-01T00:00:00Z'),
+        endDate: new Date('2024-12-31T23:59:59Z'),
+        tags: ['active'],
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).params.startDate).toBeInstanceOf(Date);
+    expect((result.data as any).params.endDate).toBeInstanceOf(Date);
+  });
+
+  it('should preserve Date objects with optional fields', () => {
+    // For truly optional dates that accept both Date and undefined, pass the Date
+    // object or omit the field entirely (don't pass undefined, as it gets converted to null)
+    const schema = z.object({
+      startDate: z.coerce.date(),
+      endDate: z.coerce.date().optional(),
+    });
+
+    // Test 1: With a Date object in optional field
+    const input1 = {
+      startDate: new Date('2024-01-01T00:00:00Z'),
+      endDate: new Date('2024-12-31T23:59:59Z'),
+    };
+
+    const result1 = validateToolInput(schema, input1);
+
+    expect(result1.error).toBeUndefined();
+    expect((result1.data as any).startDate).toBeInstanceOf(Date);
+    expect((result1.data as any).endDate).toBeInstanceOf(Date);
+
+    // Test 2: With ISO string in optional field
+    const input2 = {
+      startDate: new Date('2024-01-01T00:00:00Z'),
+      endDate: '2024-12-31T23:59:59.000Z',
+    };
+
+    const result2 = validateToolInput(schema, input2);
+
+    expect(result2.error).toBeUndefined();
+    expect((result2.data as any).startDate).toBeInstanceOf(Date);
+    expect((result2.data as any).endDate).toBeInstanceOf(Date);
+  });
+
+  it('should preserve RegExp objects', () => {
+    const schema = z.object({
+      pattern: z.instanceof(RegExp),
+      text: z.string(),
+    });
+
+    const pattern = /test-\d+/;
+    const input = {
+      pattern,
+      text: 'test-123',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).pattern).toBeInstanceOf(RegExp);
+    expect((result.data as any).pattern).toBe(pattern);
+  });
+
+  it('should preserve Error objects', () => {
+    const schema = z.object({
+      error: z.instanceof(Error).optional(),
+      message: z.string(),
+    });
+
+    const error = new Error('Test error');
+    const input = {
+      error,
+      message: 'Something went wrong',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).error).toBeInstanceOf(Error);
+    expect((result.data as any).error.message).toBe('Test error');
+  });
+
+  it('should handle Date objects in arrays', () => {
+    const schema = z.object({
+      dates: z.array(z.coerce.date()),
+    });
+
+    const input = {
+      dates: [new Date('2024-01-01T00:00:00Z'), new Date('2024-12-31T23:59:59Z')],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).dates).toHaveLength(2);
+    expect((result.data as any).dates[0]).toBeInstanceOf(Date);
+    expect((result.data as any).dates[1]).toBeInstanceOf(Date);
+  });
+
+  it('should handle mixed Date objects and ISO strings', () => {
+    const schema = z.object({
+      date1: z.coerce.date(),
+      date2: z.coerce.date(),
+      date3: z.coerce.date(),
+    });
+
+    const input = {
+      date1: new Date('2024-01-01T00:00:00Z'),
+      date2: '2024-06-15T12:00:00.000Z',
+      date3: new Date('2024-12-31T23:59:59Z'),
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect((result.data as any).date1).toBeInstanceOf(Date);
+    expect((result.data as any).date2).toBeInstanceOf(Date);
+    expect((result.data as any).date3).toBeInstanceOf(Date);
+  });
+});

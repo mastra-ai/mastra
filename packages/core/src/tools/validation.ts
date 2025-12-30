@@ -116,7 +116,13 @@ function convertUndefinedToNull(input: unknown): unknown {
     return input.map(convertUndefinedToNull);
   }
 
-  // It's an object - recursively process all properties
+  // Preserve built-in object types that should not be recursively processed
+  // (Date, RegExp, Error, etc.) - fixes #11502
+  if (input instanceof Date || input instanceof RegExp || input instanceof Error) {
+    return input;
+  }
+
+  // It's a plain object - recursively process all properties
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
     result[key] = convertUndefinedToNull(value);
