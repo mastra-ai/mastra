@@ -43,20 +43,13 @@ Create a `docs.config.json` file in your package root:
 | `topics[].sourceFiles`    | Yes      | MDX files from `docs/src/content/en/`                       |
 | `topics[].codeReferences` | No       | Override auto-discovered code references                    |
 
-### Step 2: Add `docs` to `package.json` files array
-
-```json
-{
-  "files": ["dist", "CHANGELOG.md", "./**/*.d.ts", "docs"]
-}
-```
-
-### Step 3: Add `generate:docs` script
+### Step 2: Add `postbuild` script
 
 ```json
 {
   "scripts": {
-    "generate:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/memory"
+    "build": "your-existing-build-command",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/memory"
   }
 }
 ```
@@ -66,25 +59,18 @@ Adjust the path based on your package location:
 - `packages/memory` → `../../scripts/generate-package-docs.ts packages/memory`
 - `stores/libsql` → `../../scripts/generate-package-docs.ts stores/libsql`
 
-### Step 4: Run generation
+The `postbuild` script runs automatically after every `pnpm build`.
+
+### Step 3: Build and verify
 
 ```bash
-# From package directory
-pnpm generate:docs
-
-# Or from monorepo root
-pnpm --filter @mastra/memory generate:docs
-
-# Or generate for all packages with configs
-pnpm generate:docs
+pnpm build
 ```
 
-### Step 5: Verify output
-
-Check the generated files:
+Check the generated files in `dist/docs/`:
 
 ```
-your-package/docs/
+your-package/dist/docs/
 ├── SKILL.md           # Claude Skills entry point
 ├── README.md          # Navigation index
 ├── SOURCE_MAP.json    # Machine-readable export index
@@ -119,14 +105,13 @@ To specify exact code references, add `codeReferences` to a topic:
 
 ## Build Pipeline Integration
 
-The `generate:docs` task is configured in `turbo.json`:
+Docs generation is integrated via npm's `postbuild` hook:
 
 ```json
 {
-  "generate:docs": {
-    "dependsOn": ["build"],
-    "outputs": ["docs/**"],
-    "inputs": ["docs.config.json", "../../docs/src/content/en/**/*.mdx"]
+  "scripts": {
+    "build": "your-build-command",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/your-package"
   }
 }
 ```
@@ -134,7 +119,8 @@ The `generate:docs` task is configured in `turbo.json`:
 This ensures:
 
 - Docs are generated **after** build (so `dist/` exists for SOURCE_MAP)
-- Output is cached based on config and MDX changes
+- Runs automatically on every build
+- No separate command needed
 
 ## Example: @mastra/core
 
@@ -155,13 +141,13 @@ See `packages/core/docs.config.json` for a complete example with 8 topics:
 
 ```bash
 # Read the skill overview
-cat node_modules/@mastra/core/docs/SKILL.md
+cat node_modules/@mastra/core/dist/docs/SKILL.md
 
 # Get the source map
-cat node_modules/@mastra/core/docs/SOURCE_MAP.json
+cat node_modules/@mastra/core/dist/docs/SOURCE_MAP.json
 
 # Read a topic
-cat node_modules/@mastra/core/docs/agents/01-overview.md
+cat node_modules/@mastra/core/dist/docs/agents/01-overview.md
 
 # Jump to implementation
 cat node_modules/@mastra/core/dist/chunk-IDD63DWQ.js | grep -A 50 "var Agent = class"

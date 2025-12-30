@@ -6,11 +6,6 @@
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
       "env": ["RAPID_API_KEY", "ANTHROPIC_API_KEY"]
     },
-    "generate:docs": {
-      "dependsOn": ["build"],
-      "outputs": ["dist/docs/**"],
-      "inputs": ["docs.config.json", "../../docs/src/content/en/**/*.mdx"]
-    },
     "lint": {
       "dependsOn": []
     },
