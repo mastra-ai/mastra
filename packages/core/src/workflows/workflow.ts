@@ -400,9 +400,11 @@ export function createStep<
       execute: async ({
         inputData,
         requestContext,
+        tracingContext,
       }: {
         inputData: z.infer<typeof ProcessorStepSchema>;
         requestContext: RequestContext;
+        tracingContext?: TracingContext;
       }): Promise<ProcessorStepOutput> => {
         // Cast to output type for easier property access - the discriminated union
         // ensures type safety at the schema level, but inside the execute function
@@ -442,6 +444,7 @@ export function createStep<
           abort,
           retryCount: retryCount ?? 0,
           requestContext,
+          tracingContext,
         };
 
         // Pass-through data that should flow to the next processor in a chain
@@ -490,16 +493,24 @@ export function createStep<
                 });
               }
 
+              // Create PROCESSOR_RUN span for this processor
+              const currentSpan = tracingContext?.currentSpan;
+              const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+              const processorSpan = parentSpan?.createChildSpan({
+                type: SpanType.PROCESSOR_RUN,
+                name: `input processor: ${processor.id}`,
+                entityType: EntityType.INPUT_PROCESSOR,
+                entityId: processor.id,
+                entityName: processor.name,
+                attributes: {
+                  processorType: 'input',
+                },
+                input: messages,
+              });
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
-
-              const result = await processor.processInput({
-                ...baseContext,
-                messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
-                systemMessages: (systemMessages ?? []) as CoreMessage[],
-              });
 
               // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
               const applyMessages = (msgs: MastraDBMessage[]) => {
@@ -521,37 +532,58 @@ export function createStep<
                 }
               };
 
-              if (result instanceof MessageList) {
-                // Validate same instance
-                if (result !== passThrough.messageList) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
-                  });
+              try {
+                const result = await processor.processInput({
+                  ...baseContext,
+                  tracingContext: processorSpan ? { currentSpan: processorSpan } : tracingContext,
+                  messages: messages as MastraDBMessage[],
+                  messageList: passThrough.messageList,
+                  systemMessages: (systemMessages ?? []) as CoreMessage[],
+                });
+
+                if (result instanceof MessageList) {
+                  // Validate same instance
+                  if (result !== passThrough.messageList) {
+                    throw new MastraError({
+                      category: ErrorCategory.USER,
+                      domain: ErrorDomain.MASTRA_WORKFLOW,
+                      id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                      text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                    });
+                  }
+                  const output = {
+                    ...passThrough,
+                    messages: result.get.all.db(),
+                    systemMessages: result.getAllSystemMessages(),
+                  };
+                  processorSpan?.end({ output });
+                  return output;
+                } else if (Array.isArray(result)) {
+                  // Processor returned an array of messages
+                  applyMessages(result as MastraDBMessage[]);
+                  const output = { ...passThrough, messages: result };
+                  processorSpan?.end({ output });
+                  return output;
+                } else if (result && 'messages' in result && 'systemMessages' in result) {
+                  // Processor returned { messages, systemMessages }
+                  const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                  applyMessages(typedResult.messages);
+                  passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                  const output = {
+                    ...passThrough,
+                    messages: typedResult.messages,
+                    systemMessages: typedResult.systemMessages,
+                  };
+                  processorSpan?.end({ output });
+                  return output;
                 }
-                return {
-                  ...passThrough,
-                  messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
-                };
-              } else if (Array.isArray(result)) {
-                // Processor returned an array of messages
-                applyMessages(result as MastraDBMessage[]);
-                return { ...passThrough, messages: result };
-              } else if (result && 'messages' in result && 'systemMessages' in result) {
-                // Processor returned { messages, systemMessages }
-                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                applyMessages(typedResult.messages);
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
-                return {
-                  ...passThrough,
-                  messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
-                };
+                const output = { ...passThrough, messages };
+                processorSpan?.end({ output });
+                return output;
+              } catch (error) {
+                processorSpan?.error({ error: error as Error, endSpan: true });
+                throw error;
               }
-              return { ...passThrough, messages };
             }
             return { ...passThrough, messages };
           }
@@ -637,15 +669,24 @@ export function createStep<
                 });
               }
 
+              // Create PROCESSOR_RUN span for this processor
+              const currentSpan = tracingContext?.currentSpan;
+              const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+              const processorSpan = parentSpan?.createChildSpan({
+                type: SpanType.PROCESSOR_RUN,
+                name: `output processor: ${processor.id}`,
+                entityType: EntityType.OUTPUT_PROCESSOR,
+                entityId: processor.id,
+                entityName: processor.name,
+                attributes: {
+                  processorType: 'output',
+                },
+                input: messages,
+              });
+
               // Create source checker before processing to preserve message sources
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
-
-              const result = await processor.processOutputResult({
-                ...baseContext,
-                messages: messages as MastraDBMessage[],
-                messageList: passThrough.messageList,
-              });
 
               // Helper to apply messages to messageList (mirrors runner.applyMessagesToMessageList)
               const applyMessages = (msgs: MastraDBMessage[]) => {
@@ -667,37 +708,57 @@ export function createStep<
                 }
               };
 
-              if (result instanceof MessageList) {
-                // Validate same instance
-                if (result !== passThrough.messageList) {
-                  throw new MastraError({
-                    category: ErrorCategory.USER,
-                    domain: ErrorDomain.MASTRA_WORKFLOW,
-                    id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
-                    text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
-                  });
+              try {
+                const result = await processor.processOutputResult({
+                  ...baseContext,
+                  tracingContext: processorSpan ? { currentSpan: processorSpan } : tracingContext,
+                  messages: messages as MastraDBMessage[],
+                  messageList: passThrough.messageList,
+                });
+
+                if (result instanceof MessageList) {
+                  // Validate same instance
+                  if (result !== passThrough.messageList) {
+                    throw new MastraError({
+                      category: ErrorCategory.USER,
+                      domain: ErrorDomain.MASTRA_WORKFLOW,
+                      id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+                      text: `Processor ${processor.id} returned a MessageList instance other than the one passed in. Use the messageList argument instead.`,
+                    });
+                  }
+                  const output = {
+                    ...passThrough,
+                    messages: result.get.all.db(),
+                    systemMessages: result.getAllSystemMessages(),
+                  };
+                  processorSpan?.end({ output });
+                  return output;
+                } else if (Array.isArray(result)) {
+                  // Processor returned an array of messages
+                  applyMessages(result as MastraDBMessage[]);
+                  const output = { ...passThrough, messages: result };
+                  processorSpan?.end({ output });
+                  return output;
+                } else if (result && 'messages' in result && 'systemMessages' in result) {
+                  // Processor returned { messages, systemMessages }
+                  const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                  applyMessages(typedResult.messages);
+                  passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
+                  const output = {
+                    ...passThrough,
+                    messages: typedResult.messages,
+                    systemMessages: typedResult.systemMessages,
+                  };
+                  processorSpan?.end({ output });
+                  return output;
                 }
-                return {
-                  ...passThrough,
-                  messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
-                };
-              } else if (Array.isArray(result)) {
-                // Processor returned an array of messages
-                applyMessages(result as MastraDBMessage[]);
-                return { ...passThrough, messages: result };
-              } else if (result && 'messages' in result && 'systemMessages' in result) {
-                // Processor returned { messages, systemMessages }
-                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
-                applyMessages(typedResult.messages);
-                passThrough.messageList.replaceAllSystemMessages(typedResult.systemMessages);
-                return {
-                  ...passThrough,
-                  messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
-                };
+                const output = { ...passThrough, messages };
+                processorSpan?.end({ output });
+                return output;
+              } catch (error) {
+                processorSpan?.error({ error: error as Error, endSpan: true });
+                throw error;
               }
-              return { ...passThrough, messages };
             }
             return { ...passThrough, messages };
           }

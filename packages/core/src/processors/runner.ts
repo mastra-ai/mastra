@@ -33,8 +33,19 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
   public streamParts: ChunkType<OUTPUT>[] = [];
   public span?: Span<SpanType.PROCESSOR_RUN>;
 
-  constructor(options: { processorName: string; tracingContext?: TracingContext; processorIndex?: number }) {
-    const { processorName, tracingContext, processorIndex } = options;
+  constructor(options: {
+    processorName: string;
+    tracingContext?: TracingContext;
+    processorIndex?: number;
+    skipSpanCreation?: boolean;
+  }) {
+    const { processorName, tracingContext, processorIndex, skipSpanCreation } = options;
+
+    // Skip span creation for internal processor workflows (they create spans in the processor step)
+    if (skipSpanCreation) {
+      return;
+    }
+
     const currentSpan = tracingContext?.currentSpan;
 
     // Find the AGENT_RUN span by walking up the parent chain
@@ -182,20 +193,26 @@ export class ProcessorRunner {
 
       // Handle workflow as processor
       if (isProcessorWorkflow(processorOrWorkflow)) {
+        // For "combined" processor workflows (type === 'processor'), skip span creation here
+        // The processor steps inside the workflow will create their own PROCESSOR_RUN spans
+        const isInternalProcessorWorkflow = processorOrWorkflow.type === 'processor';
+
         const currentSpan = tracingContext?.currentSpan;
         const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-        const processorSpan = parentSpan?.createChildSpan({
-          type: SpanType.PROCESSOR_RUN,
-          name: `output processor workflow: ${processorOrWorkflow.id}`,
-          entityType: EntityType.OUTPUT_PROCESSOR,
-          entityId: processorOrWorkflow.id,
-          entityName: processorOrWorkflow.name,
-          attributes: {
-            processorType: 'output',
-            processorIndex: index,
-          },
-          input: processableMessages,
-        });
+        const processorSpan = isInternalProcessorWorkflow
+          ? undefined
+          : parentSpan?.createChildSpan({
+              type: SpanType.PROCESSOR_RUN,
+              name: `output processor workflow: ${processorOrWorkflow.id}`,
+              entityType: EntityType.OUTPUT_PROCESSOR,
+              entityId: processorOrWorkflow.id,
+              entityName: processorOrWorkflow.name,
+              attributes: {
+                processorType: 'output',
+                processorIndex: index,
+              },
+              input: processableMessages,
+            });
 
         try {
           await this.executeWorkflowAsProcessor(
@@ -333,6 +350,10 @@ export class ProcessorRunner {
         if (isProcessorWorkflow(processorOrWorkflow)) {
           if (!processedPart) continue;
 
+          // For "combined" processor workflows (type === 'processor'), skip span creation here
+          // The processor steps inside the workflow will create their own PROCESSOR_RUN spans
+          const isInternalProcessorWorkflow = processorOrWorkflow.type === 'processor';
+
           // Get or create state for this workflow
           const workflowId = processorOrWorkflow.id;
           let state = processorStates.get(workflowId);
@@ -341,6 +362,7 @@ export class ProcessorRunner {
               processorName: workflowId,
               tracingContext,
               processorIndex: index,
+              skipSpanCreation: isInternalProcessorWorkflow,
             });
             processorStates.set(workflowId, state);
           }
@@ -544,20 +566,26 @@ export class ProcessorRunner {
 
       // Handle workflow as processor
       if (isProcessorWorkflow(processorOrWorkflow)) {
+        // For "combined" processor workflows (type === 'processor'), skip span creation here
+        // The processor steps inside the workflow will create their own PROCESSOR_RUN spans
+        const isInternalProcessorWorkflow = processorOrWorkflow.type === 'processor';
+
         const currentSpan = tracingContext?.currentSpan;
         const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-        const processorSpan = parentSpan?.createChildSpan({
-          type: SpanType.PROCESSOR_RUN,
-          name: `input processor workflow: ${processorOrWorkflow.id}`,
-          entityType: EntityType.INPUT_PROCESSOR,
-          entityId: processorOrWorkflow.id,
-          entityName: processorOrWorkflow.name,
-          attributes: {
-            processorType: 'input',
-            processorIndex: index,
-          },
-          input: processableMessages,
-        });
+        const processorSpan = isInternalProcessorWorkflow
+          ? undefined
+          : parentSpan?.createChildSpan({
+              type: SpanType.PROCESSOR_RUN,
+              name: `input processor workflow: ${processorOrWorkflow.id}`,
+              entityType: EntityType.INPUT_PROCESSOR,
+              entityId: processorOrWorkflow.id,
+              entityName: processorOrWorkflow.name,
+              attributes: {
+                processorType: 'input',
+                processorIndex: index,
+              },
+              input: processableMessages,
+            });
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
@@ -782,20 +810,26 @@ export class ProcessorRunner {
 
       // Handle workflow as processor with inputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
+        // For "combined" processor workflows (type === 'processor'), skip span creation here
+        // The processor steps inside the workflow will create their own PROCESSOR_RUN spans
+        const isInternalProcessorWorkflow = processorOrWorkflow.type === 'processor';
+
         const currentSpan = tracingContext?.currentSpan;
         const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-        const processorSpan = parentSpan?.createChildSpan({
-          type: SpanType.PROCESSOR_RUN,
-          name: `input step processor workflow: ${processorOrWorkflow.id}`,
-          entityType: EntityType.INPUT_PROCESSOR,
-          entityId: processorOrWorkflow.id,
-          entityName: processorOrWorkflow.name,
-          attributes: {
-            processorType: 'input',
-            processorIndex: index,
-          },
-          input: { messages: processableMessages, stepNumber },
-        });
+        const processorSpan = isInternalProcessorWorkflow
+          ? undefined
+          : parentSpan?.createChildSpan({
+              type: SpanType.PROCESSOR_RUN,
+              name: `input step processor workflow: ${processorOrWorkflow.id}`,
+              entityType: EntityType.INPUT_PROCESSOR,
+              entityId: processorOrWorkflow.id,
+              entityName: processorOrWorkflow.name,
+              attributes: {
+                processorType: 'input',
+                processorIndex: index,
+              },
+              input: { messages: processableMessages, stepNumber },
+            });
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
@@ -1009,20 +1043,26 @@ export class ProcessorRunner {
 
       // Handle workflow as processor with outputStep phase
       if (isProcessorWorkflow(processorOrWorkflow)) {
+        // For "combined" processor workflows (type === 'processor'), skip span creation here
+        // The processor steps inside the workflow will create their own PROCESSOR_RUN spans
+        const isInternalProcessorWorkflow = processorOrWorkflow.type === 'processor';
+
         const currentSpan = tracingContext?.currentSpan;
         const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-        const processorSpan = parentSpan?.createChildSpan({
-          type: SpanType.PROCESSOR_RUN,
-          name: `output step processor workflow: ${processorOrWorkflow.id}`,
-          entityType: EntityType.OUTPUT_PROCESSOR,
-          entityId: processorOrWorkflow.id,
-          entityName: processorOrWorkflow.name,
-          attributes: {
-            processorType: 'output',
-            processorIndex: index,
-          },
-          input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
-        });
+        const processorSpan = isInternalProcessorWorkflow
+          ? undefined
+          : parentSpan?.createChildSpan({
+              type: SpanType.PROCESSOR_RUN,
+              name: `output step processor workflow: ${processorOrWorkflow.id}`,
+              entityType: EntityType.OUTPUT_PROCESSOR,
+              entityId: processorOrWorkflow.id,
+              entityName: processorOrWorkflow.name,
+              attributes: {
+                processorType: 'output',
+                processorIndex: index,
+              },
+              input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
+            });
 
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
