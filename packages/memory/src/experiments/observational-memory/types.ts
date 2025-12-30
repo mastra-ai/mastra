@@ -246,40 +246,4 @@ export interface ReflectorResult {
   suggestedContinuation?: string;
 }
 
-/**
- * Configuration for memory collapsing (graceful decay).
- * Older observation sections are collapsed into summaries
- * while recent sections remain fully expanded.
- */
-export interface CollapseConfig {
-  /**
-   * Whether to enable automatic collapsing.
-   * @default true
-   */
-  enabled?: boolean;
 
-  /**
-   * Minimum number of children in a section before it can be collapsed.
-   * @default 5
-   */
-  minChildrenToCollapse?: number;
-
-  /**
-   * Number of most recent top-level sections to keep fully expanded.
-   * @default 2
-   */
-  keepRecentSections?: number;
-
-  /**
-   * Number of child items to keep visible after collapse (shown at end).
-   * @default 5
-   */
-  keepLastChildren?: number;
-
-  /**
-   * Regex patterns for sections that should never be collapsed.
-   * For example, you might want to keep "Current Task" sections always visible.
-   * @default [/Current Task/i]
-   */
-  excludePatterns?: RegExp[];
-}

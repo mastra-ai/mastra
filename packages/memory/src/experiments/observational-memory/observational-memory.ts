@@ -4,8 +4,6 @@ import type { MastraModelConfig } from '@mastra/core/llm';
 import type { Processor, ProcessInputArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
-import { collapseObservations } from './collapser';
-import type { CollapsedSection } from './collapser';
 import {
   buildObserverSystemPrompt,
   buildObserverPrompt,
@@ -26,7 +24,6 @@ import type {
   ModelSettings,
   ProviderOptions,
   ObservationFocus,
-  CollapseConfig,
 } from './types';
 
 /**
@@ -85,12 +82,7 @@ export interface ObservationalMemoryConfig {
    */
   resourceScope?: boolean;
 
-  /**
-   * Configuration for memory collapsing (graceful decay).
-   * When enabled, older observation sections are collapsed into summaries
-   * while recent sections remain fully expanded.
-   */
-  collapse?: CollapseConfig;
+
 
   /**
    * Debug callback for observation events.
@@ -120,13 +112,7 @@ interface ResolvedReflectorConfig {
   providerOptions: ProviderOptions;
 }
 
-interface ResolvedCollapseConfig {
-  enabled: boolean;
-  minChildrenToCollapse: number;
-  keepRecentSections: number;
-  keepLastChildren: number;
-  excludePatterns: RegExp[];
-}
+
 
 /**
  * Default configuration values matching the spec
@@ -229,14 +215,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private resourceScope: boolean;
   private observerConfig: ResolvedObserverConfig;
   private reflectorConfig: ResolvedReflectorConfig;
-  private collapseConfig: ResolvedCollapseConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
-
-  /**
-   * Store collapsed sections for retrieval.
-   * Key is recordId, value is array of collapsed sections.
-   */
-  private collapsedSectionsCache: Map<string, CollapsedSection[]> = new Map();
 
   /** Internal Observer agent - created lazily */
   private observerAgent?: Agent;
@@ -285,15 +264,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           config.reflector?.modelSettings?.maxOutputTokens ?? DEFAULTS.reflector.modelSettings.maxOutputTokens,
       },
       providerOptions: config.reflector?.providerOptions ?? DEFAULTS.reflector.providerOptions,
-    };
-
-    // Resolve collapse config with defaults
-    this.collapseConfig = {
-      enabled: config.collapse?.enabled ?? true,
-      minChildrenToCollapse: config.collapse?.minChildrenToCollapse ?? 5,
-      keepRecentSections: config.collapse?.keepRecentSections ?? 2,
-      keepLastChildren: config.collapse?.keepLastChildren ?? 5,
-      excludePatterns: config.collapse?.excludePatterns ?? [/Current Task/i],
     };
 
     this.tokenCounter = new TokenCounter();
@@ -719,7 +689,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   /**
    * Format observations for injection into context.
-   * Applies collapsing and token optimization before presenting to the Actor.
+   * Applies token optimization before presenting to the Actor.
    *
    * In resource scope mode, filters continuity messages to only show
    * the message for the current thread.
@@ -729,32 +699,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     suggestedContinuation?: string,
     currentThreadId?: string,
     threadContinuityMessages?: Record<string, string>,
-    recordId?: string,
   ): string {
-    let processedObservations = observations;
-
-    // Apply collapsing if enabled
-    if (this.collapseConfig.enabled) {
-      const collapseResult = collapseObservations(observations, {
-        minChildrenToCollapse: this.collapseConfig.minChildrenToCollapse,
-        keepRecentCount: this.collapseConfig.keepRecentSections,
-        keepLastChildren: this.collapseConfig.keepLastChildren,
-        excludePatterns: this.collapseConfig.excludePatterns,
-      });
-
-      processedObservations = collapseResult.text;
-
-      // Cache collapsed sections for potential retrieval
-      if (recordId && collapseResult.collapsedSections.length > 0) {
-        this.collapsedSectionsCache.set(recordId, collapseResult.collapsedSections);
-        console.info(
-          `[OM] Collapsed ${collapseResult.collapsedSections.length} sections, saved ${collapseResult.tokensSaved} tokens`,
-        );
-      }
-    }
-
     // Optimize observations to save tokens
-    const optimized = optimizeObservationsForContext(processedObservations);
+    const optimized = optimizeObservationsForContext(observations);
 
     let content = `<observational_memory>
 ${optimized}
@@ -837,7 +784,6 @@ ${continuityMessage}
         record.suggestedContinuation,
         threadId, // Current thread for continuity message filtering
         record.threadContinuityMessages, // Per-thread continuity messages (resource scope)
-        record.id, // Record ID for caching collapsed sections
       );
       console.log(`[OM processInput] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.resourceScope) {
@@ -1309,36 +1255,4 @@ ${continuityMessage}
     return this.reflectorConfig;
   }
 
-  /**
-   * Get current collapse configuration
-   */
-  getCollapseConfig(): ResolvedCollapseConfig {
-    return this.collapseConfig;
-  }
-
-  /**
-   * Get collapsed sections for a specific record.
-   * Returns the cached collapsed sections that can be expanded if needed.
-   */
-  getCollapsedSections(recordId: string): CollapsedSection[] {
-    return this.collapsedSectionsCache.get(recordId) ?? [];
-  }
-
-  /**
-   * Expand a collapsed section by ID.
-   * Returns the original full content of the collapsed section.
-   *
-   * @param recordId - The record ID
-   * @param sectionId - The 4-character hex ID of the collapsed section
-   * @returns The original content or null if not found
-   */
-  expandCollapsedSection(recordId: string, sectionId: string): string | null {
-    const sections = this.collapsedSectionsCache.get(recordId);
-    if (!sections) return null;
-
-    const section = sections.find(s => s.id === sectionId);
-    if (!section) return null;
-
-    return section.originalContent;
-  }
 }
