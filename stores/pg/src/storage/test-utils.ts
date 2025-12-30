@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import type { PostgresStoreConfig } from '../shared/config';
 import { PgDB } from './db';
 import { MemoryPG } from './domains/memory';
-import { PostgresStore } from '.';
+import { exportSchemas, PostgresStore } from '.';
 
 export const TEST_CONFIG: PostgresStoreConfig = {
   id: 'test-postgres-store',
@@ -659,6 +659,61 @@ export function pgTests() {
           await pool.query('DROP SCHEMA IF EXISTS domain_test_schema CASCADE');
           await pool.end();
         }
+      });
+    });
+
+    describe('Schema Export', () => {
+      it('should export schema for public schema', () => {
+        const schema = exportSchemas();
+
+        expect(schema).toContain('CREATE TABLE IF NOT EXISTS');
+        expect(schema).toContain('mastra_threads');
+        expect(schema).toContain('mastra_messages');
+        expect(schema).toContain('mastra_workflow_snapshot');
+        expect(schema).toContain('mastra_scorers');
+        expect(schema).toContain('mastra_ai_spans');
+        expect(schema).toContain('mastra_traces');
+        expect(schema).toContain('mastra_resources');
+        expect(schema).toContain('mastra_agents');
+      });
+
+      it('should export schema with custom schema name', () => {
+        const schema = exportSchemas('my_custom_schema');
+
+        expect(schema).toContain('CREATE SCHEMA IF NOT EXISTS "my_custom_schema"');
+        expect(schema).toContain('"my_custom_schema"."mastra_threads"');
+        expect(schema).toContain('"my_custom_schema"."mastra_messages"');
+
+        // Verify constraint names include the schema prefix
+        expect(schema).toContain('my_custom_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
+        expect(schema).toContain('my_custom_schema_mastra_ai_spans_traceid_spanid_pk');
+      });
+
+      it('should generate SQL with correct constraints', () => {
+        const schema = exportSchemas();
+
+        expect(schema).toContain('createdAtZ" TIMESTAMPTZ DEFAULT NOW()');
+        expect(schema).toContain('updatedAtZ" TIMESTAMPTZ DEFAULT NOW()');
+        expect(schema).toContain('mastra_workflow_snapshot_workflow_name_run_id_key');
+        expect(schema).toContain('UNIQUE (workflow_name, run_id)');
+        expect(schema).toContain('mastra_ai_spans_traceid_spanid_pk');
+        expect(schema).toContain('PRIMARY KEY ("traceId", "spanId")');
+      });
+
+      it('should reject invalid schema names', () => {
+        // Schema names with special characters should throw an error
+        expect(() => exportSchemas('my-schema')).toThrow('Invalid schema name');
+        expect(() => exportSchemas('123schema')).toThrow('Invalid schema name');
+        expect(() => exportSchemas('schema with spaces')).toThrow('Invalid schema name');
+      });
+
+      it('should accept valid schema names with underscores', () => {
+        const schema = exportSchemas('my_schema');
+
+        // Valid schema name should work
+        expect(schema).toContain('"my_schema"."mastra_threads"');
+        expect(schema).toContain('my_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
+        expect(schema).toContain('my_schema_mastra_ai_spans_traceid_spanid_pk');
       });
     });
   });
