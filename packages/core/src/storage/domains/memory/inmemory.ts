@@ -11,7 +11,7 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '../../types';
-import { safelyParseJSON } from '../../utils';
+import { filterByDateRange, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
 
@@ -124,18 +124,7 @@ export class InMemoryMemory extends MemoryStorage {
     });
 
     // Apply date filtering
-    if (filter?.dateRange) {
-      const { start: from, end: to } = filter.dateRange;
-      threadMessages = threadMessages.filter((msg: any) => {
-        const msgDate = new Date(msg.createdAt);
-        const fromDate = from ? new Date(from) : null;
-        const toDate = to ? new Date(to) : null;
-
-        if (fromDate && msgDate < fromDate) return false;
-        if (toDate && msgDate > toDate) return false;
-        return true;
-      });
-    }
+    threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
 
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {

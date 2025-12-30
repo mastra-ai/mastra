@@ -204,14 +204,16 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        conditions.push(`"createdAt" >= ?`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} ?`);
         queryParams.push(
           filter.dateRange.start instanceof Date ? filter.dateRange.start.toISOString() : filter.dateRange.start,
         );
       }
 
       if (filter?.dateRange?.end) {
-        conditions.push(`"createdAt" <= ?`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} ?`);
         queryParams.push(
           filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : filter.dateRange.end,
         );
