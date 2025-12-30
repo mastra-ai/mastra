@@ -1,6 +1,6 @@
 import type { UsageStats } from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
-import { formatUsageMetrics } from './tracing';
+import { formatUsageMetrics } from './metrics';
 
 describe('formatUsageMetrics', () => {
   it('should extract basic tokens', () => {

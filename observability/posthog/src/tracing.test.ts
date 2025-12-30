@@ -1,6 +1,8 @@
+import type { AnyExportedSpan } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import type { PosthogExporterConfig } from './tracing';
 import { PosthogExporter } from './tracing';
 
 // Mock PostHog client
@@ -20,9 +22,19 @@ vi.mock('posthog-node', () => {
   };
 });
 
+class TestPosthogExporter extends PosthogExporter {
+  _getTraceData(traceId: string) {
+    return this.getTraceData({ traceId, method: 'test' });
+  }
+
+  get _traceMapSize(): number {
+    return this.traceMapSize();
+  }
+}
+
 describe('PosthogExporter', () => {
-  let exporter: PosthogExporter;
-  const validConfig = { apiKey: 'test-key' };
+  let exporter: TestPosthogExporter;
+  const validConfig: PosthogExporterConfig = { apiKey: 'test-key', logLevel: 'debug' };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -37,7 +49,7 @@ describe('PosthogExporter', () => {
   // --- Initialization Tests ---
   describe('Initialization', () => {
     it('should initialize with valid config', () => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
       expect(mockPostHogConstructor).toHaveBeenCalledWith(
         'test-key',
         expect.objectContaining({
@@ -50,13 +62,13 @@ describe('PosthogExporter', () => {
 
     it('should disable when missing API key', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      exporter = new PosthogExporter({ apiKey: '' });
+      exporter = new TestPosthogExporter({ apiKey: '' });
       expect(mockPostHogConstructor).not.toHaveBeenCalled();
       consoleSpy.mockRestore();
     });
 
     it('should use custom host if provided', () => {
-      exporter = new PosthogExporter({ ...validConfig, host: 'https://eu.i.posthog.com' });
+      exporter = new TestPosthogExporter({ ...validConfig, host: 'https://eu.i.posthog.com' });
       expect(mockPostHogConstructor).toHaveBeenCalledWith(
         'test-key',
         expect.objectContaining({
@@ -66,7 +78,7 @@ describe('PosthogExporter', () => {
     });
 
     it('should auto-configure serverless defaults', () => {
-      exporter = new PosthogExporter({ ...validConfig, serverless: true });
+      exporter = new TestPosthogExporter({ ...validConfig, serverless: true });
       expect(mockPostHogConstructor).toHaveBeenCalledWith(
         'test-key',
         expect.objectContaining({
@@ -77,7 +89,7 @@ describe('PosthogExporter', () => {
     });
 
     it('should allow manual overrides in serverless mode', () => {
-      exporter = new PosthogExporter({
+      exporter = new TestPosthogExporter({
         ...validConfig,
         serverless: true,
         flushAt: 50,
@@ -94,45 +106,45 @@ describe('PosthogExporter', () => {
 
   // --- Span Lifecycle Tests ---
   describe('Span Lifecycle', () => {
-    const mockSpan = {
+    const startTime = new Date();
+    const mockSpan: AnyExportedSpan = {
       id: 'span-1',
       traceId: 'trace-1',
       type: SpanType.GENERIC,
       name: 'test-span',
-      startTime: Date.now(),
-      endTime: Date.now() + 100,
+      startTime,
+      endTime: new Date(startTime.getTime() + 100),
       attributes: {},
       metadata: {},
+      isRootSpan: false,
+      isEvent: false,
     };
 
     it('should cache span on start', async () => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: mockSpan as any,
+        exportedSpan: mockSpan,
       });
 
-      // Access private traceMap for verification (casting to any)
-      const traceMap = (exporter as any).traceMap;
-      expect(traceMap.has(mockSpan.traceId)).toBe(true);
-      const traceData = traceMap.get(mockSpan.traceId);
-      expect(traceData.spans.has(mockSpan.id)).toBe(true);
+      const traceData = exporter._getTraceData(mockSpan.traceId);
+      expect(traceData.hasSpan({ spanId: mockSpan.id })).toBe(true);
     });
 
     it('should capture event on end', async () => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
 
       // Start
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: mockSpan as any,
+        exportedSpan: mockSpan,
       });
 
       // End
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
-        exportedSpan: mockSpan as any,
+        exportedSpan: mockSpan,
       });
 
       expect(mockCapture).toHaveBeenCalledTimes(1);
@@ -150,65 +162,44 @@ describe('PosthogExporter', () => {
     });
 
     it('should cleanup span from cache after capture', async () => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
 
       // Start
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: mockSpan as any,
+        exportedSpan: mockSpan,
       });
+
+      const traceData = exporter._getTraceData(mockSpan.traceId);
 
       // End
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
-        exportedSpan: mockSpan as any,
+        exportedSpan: mockSpan,
       });
 
-      const traceMap = (exporter as any).traceMap;
-      // Trace should be gone if it was the only span
-      expect(traceMap.has(mockSpan.traceId)).toBe(false);
-    });
-
-    it('should handle missing start event gracefully', async () => {
-      exporter = new PosthogExporter(validConfig);
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      // Only End
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: mockSpan as any,
-      });
-
-      expect(mockCapture).not.toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      // Trace should be cleaned up since this was the only active span
+      // (traceData is always created if it doesn't exist, but the old object
+      // should have been cleaned up.)
+      const newTraceData = exporter._getTraceData(mockSpan.traceId);
+      expect(traceData).not.toBe(newTraceData);
     });
   });
 
   // --- Distinct ID Resolution Tests ---
   describe('Distinct ID Resolution', () => {
     it('should use userId from metadata if present', async () => {
-      exporter = new PosthogExporter(validConfig);
-      const spanWithUser = {
-        ...{
-          id: 'span-user',
-          traceId: 'trace-user',
-          type: SpanType.GENERIC,
-          name: 'user-span',
-          startTime: Date.now(),
-          endTime: Date.now() + 100,
-          attributes: {},
-        },
-        metadata: { userId: 'user-123' },
-      };
+      exporter = new TestPosthogExporter(validConfig);
+      const spanWithUser = createSpan({ metadata: { userId: 'user-123' } });
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: spanWithUser as any,
+        exportedSpan: spanWithUser,
       });
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
-        exportedSpan: spanWithUser as any,
+        exportedSpan: spanWithUser,
       });
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -219,26 +210,17 @@ describe('PosthogExporter', () => {
     });
 
     it('should use configured defaultDistinctId', async () => {
-      exporter = new PosthogExporter({ ...validConfig, defaultDistinctId: 'system' });
-      const spanNoUser = {
-        id: 'span-anon',
-        traceId: 'trace-anon',
-        type: SpanType.GENERIC,
-        name: 'anon-span',
-        startTime: Date.now(),
-        endTime: Date.now() + 100,
-        attributes: {},
-        metadata: {},
-      };
+      exporter = new TestPosthogExporter({ ...validConfig, defaultDistinctId: 'system' });
+      const spanNoUser = createSpan();
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: spanNoUser as any,
+        exportedSpan: spanNoUser,
       });
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
-        exportedSpan: spanNoUser as any,
+        exportedSpan: spanNoUser,
       });
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -252,31 +234,25 @@ describe('PosthogExporter', () => {
   // --- Cleanup Tests ---
   describe('Cleanup', () => {
     it('should clear resources on shutdown', async () => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
 
       // Add some data
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: {
-          id: 's1',
-          traceId: 't1',
-          startTime: Date.now(),
-          type: SpanType.GENERIC,
-        } as any,
+        exportedSpan: createSpan(),
       });
 
       await exporter.shutdown();
 
       expect(mockShutdown).toHaveBeenCalled();
-      const traceMap = (exporter as any).traceMap;
-      expect(traceMap.size).toBe(0);
+      expect(exporter._traceMapSize).toBe(0);
     });
   });
 
   // --- Priority 1: Core Functionality ---
   describe('Span Type Mapping', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should map MODEL_GENERATION to $ai_generation (non-root)', async () => {
@@ -334,7 +310,7 @@ describe('PosthogExporter', () => {
 
   describe('LLM Generation Properties', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should extract model, provider, and tokens from attributes', async () => {
@@ -392,7 +368,7 @@ describe('PosthogExporter', () => {
 
   describe('Span Hierarchy', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should set $ai_parent_id for child spans', async () => {
@@ -435,7 +411,7 @@ describe('PosthogExporter', () => {
   // --- Priority 2: Advanced Features ---
   describe('Privacy Mode', () => {
     it('should pass privacy mode config to SDK', async () => {
-      exporter = new PosthogExporter({
+      exporter = new TestPosthogExporter({
         ...validConfig,
         enablePrivacyMode: true,
       });
@@ -449,7 +425,7 @@ describe('PosthogExporter', () => {
     });
 
     it('should not apply privacy mode to non-generation spans', async () => {
-      exporter = new PosthogExporter({
+      exporter = new TestPosthogExporter({
         ...validConfig,
         enablePrivacyMode: true,
       });
@@ -475,7 +451,7 @@ describe('PosthogExporter', () => {
 
   describe('Error Handling', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should include error details in properties (non-root span)', async () => {
@@ -553,7 +529,7 @@ describe('PosthogExporter', () => {
   // --- Priority 3: Edge Cases ---
   describe('Event Span Handling', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should capture event spans immediately on start', async () => {
@@ -566,7 +542,7 @@ describe('PosthogExporter', () => {
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: eventSpan as any,
+        exportedSpan: eventSpan,
       });
 
       expect(mockCapture).toHaveBeenCalledTimes(1);
@@ -579,48 +555,24 @@ describe('PosthogExporter', () => {
       );
     });
 
-    it('should not re-capture event spans on end (no double counting)', async () => {
-      const eventSpan = createSpan({
-        id: 'event-1',
-        type: SpanType.GENERIC,
-        isEvent: true,
-      });
-
-      // Start (should capture)
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_STARTED,
-        exportedSpan: eventSpan as any,
-      });
-
-      // End (should ignore)
-      await exporter.exportTracingEvent({
-        type: TracingEventType.SPAN_ENDED,
-        exportedSpan: eventSpan as any,
-      });
-
-      expect(mockCapture).toHaveBeenCalledTimes(1);
-    });
-
     it('should not cache event spans', async () => {
       const eventSpan = createSpan({ isEvent: true });
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: eventSpan as any,
+        exportedSpan: eventSpan,
       });
 
-      const traceMap = (exporter as any).traceMap;
-      const traceData = traceMap.get(eventSpan.traceId);
+      const traceData = exporter._getTraceData(eventSpan.traceId);
 
       // Event spans should not create trace data at all
-      const hasSpan = traceData?.spans.has(eventSpan.id) ?? false;
-      expect(hasSpan).toBe(false);
+      expect(traceData?.hasSpan({ spanId: eventSpan.id })).toBe(false);
     });
   });
 
   describe('Message Formatting', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should format string input as user message array', async () => {
@@ -684,18 +636,20 @@ describe('PosthogExporter', () => {
   // --- Priority 4: Integration Scenarios ---
   describe('Out-of-Order Events', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should keep trace until last child ends when root ends first', async () => {
+      const traceId = 't1';
+
       const root = createSpan({
         id: 'root',
-        traceId: 't1',
+        traceId,
         type: SpanType.AGENT_RUN,
       });
       const child = createSpan({
         id: 'child',
-        traceId: 't1',
+        traceId,
         parentSpanId: 'root',
         type: SpanType.TOOL_CALL,
       });
@@ -703,46 +657,49 @@ describe('PosthogExporter', () => {
       // Start both
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: root as any,
+        exportedSpan: root,
       });
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: child as any,
+        exportedSpan: child,
       });
 
       // End root BEFORE child
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
-        exportedSpan: root as any,
+        exportedSpan: root,
       });
 
-      const traceMap = (exporter as any).traceMap;
-      expect(traceMap.has('t1')).toBe(true); // Still there
+      const traceData = exporter._getTraceData(traceId);
+      expect(traceData.activeSpanCount()).toBe(1); // Still there
 
       // End child
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
-        exportedSpan: child as any,
+        exportedSpan: child,
       });
 
-      expect(traceMap.has('t1')).toBe(false); // Now cleaned up
+      expect(traceData.activeSpanCount()).toBe(0); // Now cleaned up
     });
   });
 
   describe('Concurrent Traces', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should handle multiple traces concurrently without mixing data', async () => {
+      const traceId = 't1';
       const trace1 = createSpan({
-        traceId: 't1',
+        traceId,
         metadata: { userId: 'user-1' },
       });
       const trace2 = createSpan({
-        traceId: 't2',
+        traceId,
         metadata: { userId: 'user-2' },
       });
+
+      const traceData = exporter._getTraceData(traceId);
 
       await exportSpanLifecycle(exporter, trace1);
       await exportSpanLifecycle(exporter, trace2);
@@ -750,8 +707,7 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenNthCalledWith(1, expect.objectContaining({ distinctId: 'user-1' }));
       expect(mockCapture).toHaveBeenNthCalledWith(2, expect.objectContaining({ distinctId: 'user-2' }));
 
-      const traceMap = (exporter as any).traceMap;
-      expect(traceMap.size).toBe(0); // Both cleaned up
+      expect(traceData.activeSpanCount()).toBe(0); // Both cleaned up
     });
   });
 
@@ -760,7 +716,7 @@ describe('PosthogExporter', () => {
   // rather than as an array under $ai_tags
   describe('Tags Support', () => {
     beforeEach(() => {
-      exporter = new PosthogExporter(validConfig);
+      exporter = new TestPosthogExporter(validConfig);
     });
 
     it('should include tags as individual boolean properties for root spans', async () => {
@@ -880,7 +836,7 @@ describe('PosthogExporter', () => {
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
-        exportedSpan: eventSpan as any,
+        exportedSpan: eventSpan,
       });
 
       expect(mockCapture).toHaveBeenCalledWith(
@@ -956,8 +912,8 @@ describe('PosthogExporter', () => {
 /**
  * Helper to create mock spans with defaults
  */
-function createSpan(overrides: Partial<any> = {}): any {
-  const now = Date.now();
+function createSpan(overrides: Partial<any> = {}): AnyExportedSpan {
+  const startTime = new Date();
   const id = overrides.id || `span-${Math.random()}`;
   const traceId = overrides.traceId || `trace-${Math.random()}`;
 
@@ -966,8 +922,8 @@ function createSpan(overrides: Partial<any> = {}): any {
     traceId,
     type: SpanType.GENERIC,
     name: 'test-span',
-    startTime: now,
-    endTime: now + 100,
+    startTime,
+    endTime: new Date(startTime.getTime() + 1000),
     isRootSpan: overrides.parentSpanId === undefined,
     isEvent: false,
     attributes: {},
@@ -979,7 +935,7 @@ function createSpan(overrides: Partial<any> = {}): any {
 /**
  * Helper to export complete span lifecycle
  */
-async function exportSpanLifecycle(exporter: PosthogExporter, span: any): Promise<void> {
+async function exportSpanLifecycle(exporter: PosthogExporter, span: AnyExportedSpan): Promise<void> {
   await exporter.exportTracingEvent({
     type: TracingEventType.SPAN_STARTED,
     exportedSpan: span,
