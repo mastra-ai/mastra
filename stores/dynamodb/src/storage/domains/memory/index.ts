@@ -408,11 +408,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           if (dateRange.start) {
             const startTime =
               dateRange.start instanceof Date ? dateRange.start.getTime() : new Date(dateRange.start).getTime();
-            if (createdAt < startTime) return false;
+            // Use exclusive comparison if startExclusive is true, otherwise inclusive
+            if (dateRange.startExclusive ? createdAt <= startTime : createdAt < startTime) return false;
           }
           if (dateRange.end) {
             const endTime = dateRange.end instanceof Date ? dateRange.end.getTime() : new Date(dateRange.end).getTime();
-            if (createdAt > endTime) return false;
+            // Use exclusive comparison if endExclusive is true, otherwise inclusive
+            if (dateRange.endExclusive ? createdAt >= endTime : createdAt > endTime) return false;
           }
           return true;
         });

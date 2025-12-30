@@ -197,11 +197,19 @@ export class MemoryConvex extends MemoryStorage {
     }
 
     if (filter?.dateRange) {
-      const { start, end } = filter.dateRange;
+      const { start, end, startExclusive, endExclusive } = filter.dateRange;
       rows = rows.filter(row => {
         const created = new Date(row.createdAt).getTime();
-        if (start && created < start.getTime()) return false;
-        if (end && created > end.getTime()) return false;
+        if (start) {
+          const startTime = start.getTime();
+          // Use exclusive comparison if startExclusive is true
+          if (startExclusive ? created <= startTime : created < startTime) return false;
+        }
+        if (end) {
+          const endTime = end.getTime();
+          // Use exclusive comparison if endExclusive is true
+          if (endExclusive ? created >= endTime : created > endTime) return false;
+        }
         return true;
       });
     }

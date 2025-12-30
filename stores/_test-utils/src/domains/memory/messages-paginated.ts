@@ -542,6 +542,201 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         'threadId must be a non-empty string or array of non-empty strings',
       );
     });
+
+    it('should support cursor-based pagination to handle new messages during session', async () => {
+      // This test demonstrates the problem with offset-based pagination when new messages
+      // are added during a chat session (infinite scroll scenario).
+      //
+      // Scenario:
+      // 1. User loads first page of messages (newest first)
+      // 2. User sends new messages while viewing
+      // 3. User scrolls up to load older messages
+      // 4. With offset-based pagination, some messages get skipped
+      // 5. With cursor-based pagination (using dateRange.end with endExclusive), all messages are retrieved correctly
+      const thread = createSampleThread();
+      await memoryStorage.saveThread({ thread });
+      resetRole();
+
+      // Create 10 initial messages with distinct timestamps
+      const baseTime = Date.now();
+      for (let i = 1; i <= 10; i++) {
+        const message = createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: `Message ${i}` },
+          createdAt: new Date(baseTime + i * 1000),
+        });
+        await memoryStorage.saveMessages({ messages: [message] });
+      }
+
+      // User loads first page (5 newest messages, DESC order)
+      // Should get messages 10, 9, 8, 7, 6
+      const page1 = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 5,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+
+      expect(page1.messages).toHaveLength(5);
+      expect(page1.messages.map(m => m.content.content)).toEqual([
+        'Message 10',
+        'Message 9',
+        'Message 8',
+        'Message 7',
+        'Message 6',
+      ]);
+
+      // User sends 2 new messages while viewing (simulating chat activity)
+      for (let i = 11; i <= 12; i++) {
+        const message = createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: `Message ${i}` },
+          createdAt: new Date(baseTime + i * 1000),
+        });
+        await memoryStorage.saveMessages({ messages: [message] });
+      }
+
+      // Now there are 12 messages total
+
+      // PROBLEM: Offset-based pagination (page 1) now skips messages
+      // page=1 with perPage=5 means OFFSET 5, which skips the first 5 rows
+      // But the first 5 rows are now: 12, 11, 10, 9, 8
+      // So page 1 returns: 7, 6, 5, 4, 3 (SKIPPED message 8!)
+      const page2Offset = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 5,
+        page: 1,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+
+      // This demonstrates the bug - message 8 was in page 1, but now it's skipped
+      // because 2 new messages pushed it beyond offset 5
+      const offsetContents = page2Offset.messages.map(m => m.content.content);
+
+      // SOLUTION: Use cursor-based pagination with dateRange and endExclusive
+      // Use the oldest message from page 1 as a cursor
+      const oldestFromPage1 = page1.messages[page1.messages.length - 1]!;
+      const page2Cursor = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 5,
+        page: 0,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+        filter: {
+          // Get messages older than the oldest we've seen (exclusive)
+          // endExclusive: true means we use < instead of <=, avoiding duplicates
+          dateRange: { end: oldestFromPage1.createdAt, endExclusive: true },
+        },
+      });
+
+      const cursorContents = page2Cursor.messages.map(m => m.content.content);
+
+      // The cursor-based approach correctly gets the next batch of messages
+      // starting from where we left off (Message 5 and older, excluding Message 6)
+      // With endExclusive: true, we don't get Message 6 again (no overlap)
+      expect(cursorContents).toEqual(['Message 5', 'Message 4', 'Message 3', 'Message 2', 'Message 1']);
+
+      // Verify that offset-based skipped Message 8 (it was in page 1 but now
+      // falls outside the offset window due to new messages)
+      // - Offset page 1 saw: 10, 9, 8, 7, 6
+      // - After new messages, offset page 2 sees: 7, 6, 5, 4, 3
+      // - Message 8 is missing from the user's view!
+      expect(offsetContents).not.toContain('Message 8');
+
+      // With cursor-based pagination:
+      // - No duplicates (endExclusive excludes Message 6)
+      // - No gaps (we get exactly the next 5 messages)
+      expect(cursorContents).not.toContain('Message 6'); // excluded by endExclusive
+      expect(cursorContents).toContain('Message 5');
+      expect(cursorContents).toContain('Message 1');
+    });
+
+    it('should support exclusive date range filtering for both start and end', async () => {
+      const thread = createSampleThread();
+      await memoryStorage.saveThread({ thread });
+      resetRole();
+
+      // Create 5 messages with distinct timestamps
+      const baseTime = Date.now();
+      const timestamps: Date[] = [];
+      for (let i = 1; i <= 5; i++) {
+        const timestamp = new Date(baseTime + i * 1000);
+        timestamps.push(timestamp);
+        const message = createSampleMessageV2({
+          threadId: thread.id,
+          content: { content: `Message ${i}` },
+          createdAt: timestamp,
+        });
+        await memoryStorage.saveMessages({ messages: [message] });
+      }
+
+      // Test inclusive range (default) - should include both boundaries
+      const inclusiveResult = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 10,
+        page: 0,
+        filter: {
+          dateRange: {
+            start: timestamps[1], // Message 2's timestamp
+            end: timestamps[3], // Message 4's timestamp
+          },
+        },
+      });
+
+      expect(inclusiveResult.messages.map(m => m.content.content).sort()).toEqual([
+        'Message 2',
+        'Message 3',
+        'Message 4',
+      ]);
+
+      // Test exclusive start - should exclude Message 2
+      const exclusiveStartResult = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 10,
+        page: 0,
+        filter: {
+          dateRange: {
+            start: timestamps[1], // Message 2's timestamp
+            end: timestamps[3], // Message 4's timestamp
+            startExclusive: true,
+          },
+        },
+      });
+
+      expect(exclusiveStartResult.messages.map(m => m.content.content).sort()).toEqual(['Message 3', 'Message 4']);
+
+      // Test exclusive end - should exclude Message 4
+      const exclusiveEndResult = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 10,
+        page: 0,
+        filter: {
+          dateRange: {
+            start: timestamps[1], // Message 2's timestamp
+            end: timestamps[3], // Message 4's timestamp
+            endExclusive: true,
+          },
+        },
+      });
+
+      expect(exclusiveEndResult.messages.map(m => m.content.content).sort()).toEqual(['Message 2', 'Message 3']);
+
+      // Test both exclusive - should exclude both boundaries
+      const bothExclusiveResult = await memoryStorage.listMessages({
+        threadId: thread.id,
+        perPage: 10,
+        page: 0,
+        filter: {
+          dateRange: {
+            start: timestamps[1], // Message 2's timestamp
+            end: timestamps[3], // Message 4's timestamp
+            startExclusive: true,
+            endExclusive: true,
+          },
+        },
+      });
+
+      expect(bothExclusiveResult.messages.map(m => m.content.content)).toEqual(['Message 3']);
+    });
   });
 
   describe('listMessagesById', () => {

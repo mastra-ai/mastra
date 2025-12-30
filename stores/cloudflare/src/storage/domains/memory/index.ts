@@ -836,9 +836,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const dateRange = filter?.dateRange;
       if (dateRange) {
         filteredThreadMessages = filteredThreadMessages.filter(msg => {
-          const messageDate = new Date(msg.createdAt);
-          if (dateRange.start && messageDate < new Date(dateRange.start)) return false;
-          if (dateRange.end && messageDate > new Date(dateRange.end)) return false;
+          const messageTime = new Date(msg.createdAt).getTime();
+          if (dateRange.start) {
+            const startTime = new Date(dateRange.start).getTime();
+            // Use exclusive comparison if startExclusive is true
+            if (dateRange.startExclusive ? messageTime <= startTime : messageTime < startTime) return false;
+          }
+          if (dateRange.end) {
+            const endTime = new Date(dateRange.end).getTime();
+            // Use exclusive comparison if endExclusive is true
+            if (dateRange.endExclusive ? messageTime >= endTime : messageTime > endTime) return false;
+          }
           return true;
         });
       }

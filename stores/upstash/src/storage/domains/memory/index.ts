@@ -645,12 +645,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const dateRange = filter?.dateRange;
       if (dateRange?.start) {
         const fromDate = dateRange.start;
-        messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() >= fromDate.getTime());
+        if (dateRange.startExclusive) {
+          messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() > fromDate.getTime());
+        } else {
+          messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() >= fromDate.getTime());
+        }
       }
 
       if (dateRange?.end) {
         const toDate = dateRange.end;
-        messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() <= toDate.getTime());
+        if (dateRange.endExclusive) {
+          messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() < toDate.getTime());
+        } else {
+          messagesData = messagesData.filter(msg => new Date(msg.createdAt).getTime() <= toDate.getTime());
+        }
       }
 
       // Determine sort field and direction, default to ASC (oldest first)

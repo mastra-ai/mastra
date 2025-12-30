@@ -125,14 +125,16 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Apply date filtering
     if (filter?.dateRange) {
-      const { start: from, end: to } = filter.dateRange;
+      const { start: from, end: to, startExclusive, endExclusive } = filter.dateRange;
       threadMessages = threadMessages.filter((msg: any) => {
-        const msgDate = new Date(msg.createdAt);
-        const fromDate = from ? new Date(from) : null;
-        const toDate = to ? new Date(to) : null;
+        const msgTime = new Date(msg.createdAt).getTime();
+        const fromTime = from ? new Date(from).getTime() : null;
+        const toTime = to ? new Date(to).getTime() : null;
 
-        if (fromDate && msgDate < fromDate) return false;
-        if (toDate && msgDate > toDate) return false;
+        // Use exclusive comparison if startExclusive is true, otherwise inclusive
+        if (fromTime !== null && (startExclusive ? msgTime <= fromTime : msgTime < fromTime)) return false;
+        // Use exclusive comparison if endExclusive is true, otherwise inclusive
+        if (toTime !== null && (endExclusive ? msgTime >= toTime : msgTime > toTime)) return false;
         return true;
       });
     }

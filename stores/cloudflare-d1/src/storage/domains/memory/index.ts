@@ -694,14 +694,16 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (dateRange?.start) {
         const startDate =
           dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
-        query += ` AND createdAt >= ?`;
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        query += ` AND createdAt ${startOp} ?`;
         queryParams.push(startDate);
       }
 
       if (dateRange?.end) {
         const endDate =
           dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
-        query += ` AND createdAt <= ?`;
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        query += ` AND createdAt ${endOp} ?`;
         queryParams.push(endDate);
       }
 
@@ -741,14 +743,16 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (dateRange?.start) {
         const startDate =
           dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
-        countQuery += ` AND createdAt >= ?`;
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} ?`;
         countParams.push(startDate);
       }
 
       if (dateRange?.end) {
         const endDate =
           dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
-        countQuery += ` AND createdAt <= ?`;
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
       }
 
