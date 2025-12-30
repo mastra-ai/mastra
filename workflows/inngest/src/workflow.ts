@@ -188,9 +188,8 @@ export class InngestWorkflow<
       return this.function;
     }
 
-    // Always set function-level retries to 0
-    // Retries are handled at the step level via executeStepWithRetry, which uses either
-    // step.retries or retryConfig.attempts (step.retries takes precedence).
+    // Always set function-level retries to 0, since retries are handled at the step level via executeStepWithRetry
+    // which uses either step.retries or retryConfig.attempts (step.retries takes precedence).
     // step.retries is not accessible at function level, so we handle retries manually in executeStepWithRetry.
     // This is why we set retries to 0 here.
     this.function = this.inngest.createFunction(
