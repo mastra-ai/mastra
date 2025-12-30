@@ -5717,6 +5717,73 @@ describe('Workflow', () => {
 
       await mastra.stopEventEngine();
     });
+
+    it('should retry a step with step retries option, overriding the workflow retry config', async () => {
+      let err: Error | undefined;
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 5,
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn().mockImplementation(() => {
+          err = new Error('Step failed');
+          throw err;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 5,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { delay: 200, attempts: 10 },
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startEventEngine();
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step2).toMatchObject({
+        // Change to toMatchObject
+        status: 'failed',
+        // error: err?.stack ?? err, // REMOVE THIS LINE
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      // Errors are hydrated back to Error instances with preserved properties
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.name).toBe('Error');
+      expect((result.steps.step2 as any)?.error.message).toBe('Step failed');
+      expect(step1.execute).toHaveBeenCalledTimes(1);
+      expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+
+      await mastra.stopEventEngine();
+    });
   });
 
   describe('Interoperability (Actions)', () => {
