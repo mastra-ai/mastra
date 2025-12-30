@@ -16,15 +16,16 @@ Documentation is driven by **frontmatter in MDX files**. When you add a `package
 
 ```yaml
 ---
-title: "Memory Overview"
+title: 'Memory Overview'
 description: "Learn about Mastra's memory system"
 packages:
-  - "@mastra/memory"
-  - "@mastra/core"
+  - '@mastra/memory'
+  - '@mastra/core'
 ---
 ```
 
 The `generate-package-docs.ts` script:
+
 1. Scans all MDX files in `docs/src/content/en/`
 2. Filters files by the `packages` frontmatter field
 3. Groups files into topics based on folder structure
@@ -38,10 +39,10 @@ Edit the relevant MDX files in `docs/src/content/en/` and add the `packages` fie
 
 ```yaml
 ---
-title: "Your Doc Title"
-description: "Description here"
+title: 'Your Doc Title'
+description: 'Description here'
 packages:
-  - "@mastra/your-package"
+  - '@mastra/your-package'
 ---
 ```
 
@@ -59,6 +60,7 @@ A file can belong to multiple packages - just list them all.
 ```
 
 Adjust the path based on your package location:
+
 - `packages/memory` → `../../scripts/generate-package-docs.ts`
 - `stores/libsql` → `../../scripts/generate-package-docs.ts`
 
@@ -85,11 +87,11 @@ your-package/dist/docs/
 
 Topics are automatically derived from the folder structure:
 
-| MDX Path | Topic |
-|----------|-------|
-| `reference/memory/overview.mdx` | `memory` |
-| `docs/agents/overview.mdx` | `agents` |
-| `reference/workflows/step.mdx` | `workflows` |
+| MDX Path                        | Topic       |
+| ------------------------------- | ----------- |
+| `reference/memory/overview.mdx` | `memory`    |
+| `docs/agents/overview.mdx`      | `agents`    |
+| `reference/workflows/step.mdx`  | `workflows` |
 
 Files within a topic are sorted: `overview` and `index` files come first, then alphabetically.
 
