@@ -623,36 +623,202 @@ describe('Observer Agent Helpers', () => {
       expect(result.observations).toContain('🟡 User prefers examples');
     });
 
-    it('should extract continuation hint from cohesion phrases', () => {
+    it('should extract continuation hint from XML suggested-response tag', () => {
       const output = `
+<observations>
 - 🔴 User asked about React [topic_discussed]
+</observations>
 
-The assistant can maintain cohesion by "Let me show you an example..."
+<current-task>
+Helping user understand React hooks
+</current-task>
+
+<suggested-response>
+Let me show you an example...
+</suggested-response>
       `;
 
       const result = parseObserverOutput(output);
       expect(result.suggestedContinuation).toContain('Let me show you an example');
     });
 
-    it('should extract continuation hint from start reply phrase', () => {
+    it('should handle XML format with all sections', () => {
       const output = `
+<observations>
 - 🔴 Observation here
+</observations>
 
-Start the next reply with: "Here's the implementation..."
+<current-task>
+Working on implementation
+</current-task>
+
+<suggested-response>
+Here's the implementation...
+</suggested-response>
       `;
 
       const result = parseObserverOutput(output);
       expect(result.suggestedContinuation).toBeDefined();
+      expect(result.observations).toContain('🔴 Observation here');
+      expect(result.observations).toContain('Working on implementation');
     });
 
     it('should handle output without continuation hint', () => {
       const output = '- 🔴 Simple observation';
       const result = parseObserverOutput(output);
 
-      // Now adds default Current Task if missing
+      // Now adds default Current Task if missing (in XML format)
       expect(result.observations).toContain('- 🔴 Simple observation');
-      expect(result.observations).toContain('**Current Task:**');
+      expect(result.observations).toContain('<current-task>');
       expect(result.suggestedContinuation).toBeUndefined();
+    });
+
+    // Edge case tests for XML parsing robustness
+    describe('XML parsing edge cases', () => {
+      it('should handle malformed XML with unclosed tags by using fallback', () => {
+        const output = `<observations>
+- 🔴 User preference noted
+- 🟡 Some context
+`;
+        // No closing tag - should fall back to extracting list items
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('🔴 User preference noted');
+        expect(result.observations).toContain('🟡 Some context');
+      });
+
+      it('should handle empty XML tags gracefully', () => {
+        const output = `<observations></observations>
+
+<current-task></current-task>
+
+<suggested-response></suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        // Empty observations should trigger fallback or be empty
+        // Current task should still be added if missing content
+        expect(result.observations).toBeDefined();
+      });
+
+      it('should handle code blocks containing < characters', () => {
+        const output = `<observations>
+- 🔴 User is working on React component
+- 🟡 Code example discussed: \`const x = a < b ? a : b;\`
+- 🔴 User prefers arrow functions: \`const fn = () => {}\`
+</observations>
+
+<current-task>
+Help user with conditional rendering
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User is working on React component');
+        expect(result.observations).toContain('a < b');
+        expect(result.observations).toContain('Help user with conditional rendering');
+      });
+
+      it('should NOT capture inline <observations> tags that appear mid-line', () => {
+        const output = `<observations>
+- 🔴 User asked about XML parsing
+- 🟡 Mentioned that <observations> tags are used for memory
+- 🔴 User wants to understand the format
+</observations>
+
+<current-task>
+Explain the <observations> tag format to user
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        // The actual observations should be captured
+        expect(result.observations).toContain('User asked about XML parsing');
+        // The inline mention of <observations> should be preserved as content, not parsed as a tag
+        expect(result.observations).toContain('<observations> tags are used for memory');
+        // Current task should include the inline tag mention
+        expect(result.observations).toContain('Explain the <observations> tag format');
+      });
+
+      it('should NOT capture inline <current-task> tags that appear mid-line', () => {
+        const output = `<observations>
+- 🔴 User discussed the <current-task> section format
+- 🟡 User wants to know how <current-task> is parsed
+</observations>
+
+<current-task>
+Help user understand memory XML structure
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('<current-task> section format');
+        expect(result.observations).toContain('Help user understand memory XML structure');
+      });
+
+      it('should NOT capture inline <suggested-response> tags that appear mid-line', () => {
+        const output = `<observations>
+- 🔴 User asked about <suggested-response> usage
+</observations>
+
+<current-task>
+Explain <suggested-response> tag purpose
+</current-task>
+
+<suggested-response>
+The <suggested-response> tag helps maintain conversation flow
+</suggested-response>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User asked about <suggested-response> usage');
+        expect(result.suggestedContinuation).toContain('<suggested-response> tag helps maintain');
+      });
+
+      it('should handle nested code blocks with XML-like content', () => {
+        const output = `<observations>
+- 🔴 User is building an XML parser
+- 🟡 Example code discussed:
+  \`\`\`javascript
+  const xml = '<observations>test</observations>';
+  const parsed = parseXml(xml);
+  \`\`\`
+</observations>
+
+<current-task>
+Help user implement XML parsing
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        expect(result.observations).toContain('User is building an XML parser');
+        expect(result.observations).toContain('Help user implement XML parsing');
+      });
+
+      it('should NOT be truncated by inline closing tags like </observations>', () => {
+        const output = `<observations>
+- 🔴 User mentioned that </observations> ends the section
+- 🟡 User also discussed </current-task> syntax
+- 🔴 Important: preserve all content
+</observations>
+
+<current-task>
+Help user understand XML tag boundaries
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        // Should NOT be truncated at the inline </observations>
+        expect(result.observations).toContain('User mentioned that </observations> ends the section');
+        expect(result.observations).toContain('Important: preserve all content');
+        expect(result.observations).toContain('Help user understand XML tag boundaries');
+      });
+
+      it('should NOT be truncated by inline closing </current-task> tag', () => {
+        const output = `<observations>
+- 🔴 User info here
+</observations>
+
+<current-task>
+User asked about </current-task> parsing and how it works
+</current-task>`;
+
+        const result = parseObserverOutput(output);
+        // Should capture the full current-task content
+        expect(result.observations).toContain('User asked about </current-task> parsing');
+      });
     });
   });
 
@@ -740,17 +906,68 @@ describe('Reflector Agent Helpers', () => {
       expect(result.observations).toContain('Completed auth implementation');
     });
 
-    it('should extract continuation hint', () => {
+    it('should extract continuation hint from XML suggested-response tag', () => {
       const output = `
+<observations>
 - 🔴 Observations here
+</observations>
 
-<continuation>
+<current-task>
+Building the chart component
+</current-task>
+
+<suggested-response>
 Start by implementing the chart component...
-</continuation>
+</suggested-response>
       `;
 
       const result = parseReflectorOutput(output);
       expect(result.suggestedContinuation).toContain('implementing the chart component');
+    });
+
+    // Edge case tests for XML parsing robustness
+    describe('XML parsing edge cases', () => {
+      it('should handle malformed XML with unclosed tags by using fallback', () => {
+        const output = `<observations>
+- 🔴 User preference noted
+- 🟡 Some context
+`;
+        // No closing tag - should fall back to extracting list items
+        const result = parseReflectorOutput(output);
+        expect(result.observations).toContain('🔴 User preference noted');
+      });
+
+      it('should NOT be truncated by inline closing tags like </observations>', () => {
+        const output = `<observations>
+- 🔴 User mentioned that </observations> ends the section
+- 🟡 User also discussed </current-task> syntax
+- 🔴 Important: preserve all content
+</observations>
+
+<current-task>
+Help user understand XML tag boundaries
+</current-task>`;
+
+        const result = parseReflectorOutput(output);
+        // Should NOT be truncated at the inline </observations>
+        expect(result.observations).toContain('User mentioned that </observations> ends the section');
+        expect(result.observations).toContain('Important: preserve all content');
+      });
+
+      it('should handle code blocks with XML-like content', () => {
+        const output = `<observations>
+- 🔴 User is building an XML parser
+- 🟡 Example: \`const xml = '<observations>test</observations>';\`
+</observations>
+
+<current-task>
+Help user implement XML parsing
+</current-task>`;
+
+        const result = parseReflectorOutput(output);
+        expect(result.observations).toContain('User is building an XML parser');
+        expect(result.observations).toContain('Help user implement XML parsing');
+      });
     });
   });
 
@@ -1617,27 +1834,23 @@ import { hasCurrentTaskSection, extractCurrentTask } from '../observer-agent';
 
 describe('Current Task Validation', () => {
   describe('hasCurrentTaskSection', () => {
-    it('should detect **Current Task:** format', () => {
-      const observations = `- 🔴 User preference
+    it('should detect <current-task> XML tag', () => {
+      const observations = `<observations>
+- 🔴 User preference
 - 🟡 Some task
+</observations>
 
-**Current Task:** Implement the login feature`;
-
-      expect(hasCurrentTaskSection(observations)).toBe(true);
-    });
-
-    it('should detect **Current Task** (without colon)', () => {
-      const observations = `**Current Task**
-The user wants to refactor the API`;
+<current-task>
+Implement the login feature
+</current-task>`;
 
       expect(hasCurrentTaskSection(observations)).toBe(true);
     });
 
-    it('should detect ## Current Task header', () => {
-      const observations = `- Observations here
-
-## Current Task
-Working on documentation`;
+    it('should detect <current-task> tag case-insensitively', () => {
+      const observations = `<Current-Task>
+The user wants to refactor the API
+</Current-Task>`;
 
       expect(hasCurrentTaskSection(observations)).toBe(true);
     });
@@ -1649,33 +1862,32 @@ Working on documentation`;
 
       expect(hasCurrentTaskSection(observations)).toBe(false);
     });
-
-    it('should be case insensitive', () => {
-      const observations = `**current task:** Something`;
-      expect(hasCurrentTaskSection(observations)).toBe(true);
-    });
   });
 
   describe('extractCurrentTask', () => {
-    it('should extract task content after **Current Task:**', () => {
-      const observations = `- 🔴 User info
+    it('should extract task content from XML current-task tag', () => {
+      const observations = `<observations>
+- 🔴 User info
+- 🟡 Follow up
+</observations>
 
-**Current Task:** Implement user authentication with OAuth2
-
-- 🟡 Follow up`;
+<current-task>
+Implement user authentication with OAuth2
+</current-task>`;
 
       const task = extractCurrentTask(observations);
       expect(task).toBe('Implement user authentication with OAuth2');
     });
 
     it('should handle multiline task description', () => {
-      const observations = `**Current Task:** Complete the dashboard feature
+      const observations = `<current-task>
+Complete the dashboard feature
 with all the charts and graphs
-
-**Next Steps:**`;
+</current-task>`;
 
       const task = extractCurrentTask(observations);
       expect(task).toContain('Complete the dashboard feature');
+      expect(task).toContain('charts and graphs');
     });
 
     it('should return null when no current task', () => {
@@ -1693,21 +1905,26 @@ with all the charts and graphs
 
       const result = parseObserverOutput(output);
 
-      // Should have added a default Current Task
-      expect(result.observations).toContain('**Current Task:**');
+      // Should have added a default Current Task (in XML format)
+      expect(result.observations).toContain('<current-task>');
     });
 
-    it('should not modify if Current Task already present', () => {
-      const output = `- 🔴 User asked about React
+    it('should not modify if Current Task already present (XML format)', () => {
+      const output = `<observations>
+- 🔴 User asked about React
+</observations>
 
-**Current Task:** Help user set up React project`;
+<current-task>
+Help user set up React project
+</current-task>`;
 
       const result = parseObserverOutput(output);
 
       // Should not have duplicated
-      const matches = result.observations.match(/Current Task/gi);
-      expect(matches?.length).toBe(1);
+      const matches = result.observations.match(/current-task/gi);
+      expect(matches?.length).toBe(2); // opening and closing tags
     });
+
   });
 });
 
@@ -1986,15 +2203,21 @@ describe('LongMemEval End-to-End Test (Question e47becba)', () => {
 
   describe('Observer Output Parsing', () => {
     it('should correctly parse ideal observer output for this question', () => {
-      // This is what an ideal observer output should look like for this question
-      const idealObserverOutput = `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
+      // This is what an ideal observer output should look like for this question (XML format)
+      const idealObserverOutput = `<observations>
+- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
 - 🟡 **Employment:** User started a new job and is adjusting to 9-to-5 schedule [personal_fact]
 - 🟡 **Task Management:** User is trying Todoist and Trello for task organization [user_preference]
 - 🟡 **Organization Needs:** User needs help with paperwork, documentation, and expense tracking [task]
+</observations>
 
-**Current Task:** Help user with personal expense tracking app recommendations.
+<current-task>
+Help user with personal expense tracking app recommendations.
+</current-task>
 
-The assistant can maintain cohesion by starting with "For personal expense tracking..."`;
+<suggested-response>
+For personal expense tracking...
+</suggested-response>`;
 
       const result = parseObserverOutput(idealObserverOutput);
 
@@ -2017,8 +2240,8 @@ The assistant can maintain cohesion by starting with "For personal expense track
 
       const result = parseObserverOutput(incompleteOutput);
 
-      // Should have added Current Task
-      expect(result.observations).toContain('**Current Task:**');
+      // Should have added Current Task (in XML format)
+      expect(result.observations).toContain('<current-task>');
       // Key fact must still be present
       expect(result.observations).toContain('Business Administration');
     });

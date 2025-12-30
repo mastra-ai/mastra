@@ -125,49 +125,56 @@ ACTIONABLE INSIGHTS:
 - What needs follow-up or clarification
 - User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
 
-Output format (markdown list):
+=== OUTPUT FORMAT ===
+
+Your output MUST use XML tags to structure the response. This allows the system to properly parse and manage memory over time.
+
+<observations>
+Put all observations here as a markdown list:
 - 🔴 [High priority: explicit preferences, critical context, goals achieved, milestones] [labels]
 - 🟡 [Medium priority: project details, learned information] [labels]
 - 🟢 [Low priority: minor preferences, uncertain observations] [labels]
 
-IMPORTANT: Include dates/times in observations when relevant for temporal context. For example:
+Include dates/times when relevant:
 - 🔴 **User Profile (2025-12-04):** User prefers direct answers [user_preference]
 - 🟡 **Task Started (2025-12-04 14:30 PST):** User asked to implement feature X [current_project, goal]
-- 🟡 **Completed (2025-12-04 15:45 PST):** Feature X implementation finished [goal_achieved, milestone]
 
-This helps the agent understand when things happened and track progress over time.
-
-For observations that are all related to the same action, group the observations by indenting the sub observations under the parent observeration with a tab and an arrow (->). For example if the agent is working and calls multiple tools, the observations about those multiple tool calls should each be sub observations of a parent observation.
-
-rough example:
+Group related observations by indenting sub-observations:
 - 🟡 Agent is working on x [task, tool_use]
   - -> 🟡 agent executed y to view z file [labels]
   - -> 🟡 (next tool observation)
-  - -> 🟡 (next tool observation)
-  - -> 🟡 (next tool observation)
-  - -> 🟡 (etc)
-- 🟡 Agent finished working on x an learned y and z [task, tool_use]
+- 🟡 Agent finished working on x and learned y and z [task, tool_use]
+</observations>
 
-The reason for grouping observervations via indentation, is these observations will later be condensed into a single observation as the memory fades into the past. Make sure you group related observations so this system works well and the memories can gracefully decay. format the observations so that you're properly grouping multiple actions into an overarching observation. Do not group single observations under a parent observation, only group if there are 3 or more observations to group.
+<current-task>
+State the current task(s) explicitly. Can be single or multiple:
+- Primary: What the agent is currently working on
+- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
 
-Guidelines:
+If the agent started doing something without user approval, note that it's off-task.
+</current-task>
+
+<suggested-response>
+Hint for the agent's immediate next message. Examples:
+- "I've updated the navigation model. Let me walk you through the changes..."
+- "The assistant should wait for the user to respond before continuing."
+- Call the view tool on src/example.ts to continue debugging.
+</suggested-response>
+
+=== GUIDELINES ===
+
 - Be specific enough for the assistant to act on
 - Good: "User prefers short, direct answers without lengthy explanations"
 - Bad: "User stated a preference" (too vague)
 - Add 1 to 5 observations per exchange
-- Use terse language to save tokens. The sentences should be dense without unnecessary words, while maintaining necessary information. When the agent is taking actions, don't skip over making observations about what was accomplished, it's important for the agent to remember what they did.
-- Do not add observations unless they meaningfully contribute to the memory system. In other words do not add repetitive observations that have already been observed. For example if the agent is re-iterating previous observations to the user, do not re-observe them, instead add an observation that the X memory was re-iterated to the user.
-- If the agent calls tools, make sure you make observations about what was called and what the result was. List which tools were called, why, and what was learned from calling them. For example if the agent ran a file search, make note of any relevant files that were found and any other useful information that is relevant.
-- When observing files, if there are specific parts where you see the line number, and it would be useful to know the line number, make an observation.
-- If the agent does research or exploration and then responds with a larger explanation, make sure to observe what was communicated, so that the agent doesn't forget it.
-- Do not repeat observations that are already in the observation list. All observations past and present will be available to the agent, so there's no need to re-iterate them.
+- Use terse language to save tokens. Sentences should be dense without unnecessary words.
+- Do not add repetitive observations that have already been observed.
+- If the agent calls tools, observe what was called, why, and what was learned.
+- When observing files with line numbers, include the line number if useful.
+- If the agent provides a detailed response, observe the contents so it could be repeated.
 - Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- If you make an observation about part of a file, make sure you observe the path to the file on disk if it hasn't already been observed in existing observations.
-- Observe what the agent is doing, but remember that the point of observing is for the agent to remember later - making observations about how it's doing something is not as important as what it's doing, why it's doing it, and what the result is. The observations will be used by the agent to continue the conversation in the next interaction immediately following your observations. For example when observing a summary an agent has made, observing the quality of the summary is not as important as observing the contents of the summary. Observing that the agent is able to do x is not as important as observing what the agent learned or communicated by doing x. Do not make observations about the assistants ability to effectively do something, observe WHAT it was they did, and WHAT that means for needing to remember the interaction. Do not say things like "the assistant showcased an ability to extract information", that is not what this memory system is about.
-- If the assistant provides a detailed response, make sure you observe the contents of what what communicated, so that the observations about the response would be enough to repeat the exact same response.
-- If the final assistant message ends with a question or a follow up task or goal, make sure you add this to the end of your observations, so the agent knows exactly how to continue the conversation from the end of your observations.
-- If the user provides a detailed message make sure you observe all the important details from that message so the agent doesn't forget later when all it has is the observations you've made. If the user has a problem, observe all the details from it.
-- If the user provides specific artifacts like code snippets, ensure you retain observations that would allow the agent to remember everything about what was presented.
+- Observe WHAT the agent did and WHAT it means, not HOW well it did it.
+- If the user provides detailed messages or code snippets, observe all important details.
 
 Common labels to use:
 - user_preference, communication_style, learning_style
@@ -179,10 +186,7 @@ Common labels to use:
 
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
-In addition to observations, make sure you add a section at the bottom saying explicitly what the current task is - if the task is something the assistant started doing on its own without the user approving or suggesting it, make sure you observe that the agent is currently off task and should explain what it's doing to the user so they can get aligned again. The only tasks the agent should be doing are tasks directly related to something the user asked the assistant to do and minor sub-tasks that are needed to achieve the main task. Since the observations are the assistants only memory, it needs to know directly what it's currently doing, how to continue, and what to do next.
-Note that the user messages are extremely important. The most recent user message (near the end of the conversation) should be given very high priority. If the user asks a question or gives a new task to do right now, it should be clear in the observations that the next steps are what the user wanted. Other next steps are lower priority, we are interacting with the user primarily! If the assistant needs to answer a question or follow up with the user based on the most recent user message, make it clear that the assistant should pause after responding to give the user a chance to reply, before continuing to the following next steps. If the assistant is still working on fulfilling this request, observe that that is the case and make sure the agent knows how and when to reply.
-
-Finally it can be very helpful to give the agent a hint on what it's immediate first message should be when reviewing these reflections. eg should the agent call a specific tool? or should they respond with some text. If it's a text response, keep it terse and just hint to them how to respond, ex: "The assistant can maintain cohesion by starting the next reply with "[some sentence the agent would've said next]...". Keep this sentence short and let them continue from your suggested starting point.`;
+User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;
 }
 
 /**
@@ -292,39 +296,113 @@ export function buildObserverPrompt(
 }
 
 /**
- * Parse the Observer's output to extract observations and continuity message.
- * Also validates that a Current Task section is present.
+ * Parse the Observer's output to extract observations, current task, and suggested response.
+ * Uses XML tag parsing for structured extraction.
  */
 export function parseObserverOutput(output: string): ObserverResult {
-  // Look for the continuity/cohesion hint
-  const cohesionMatch = output.match(
-    /(?:assistant can maintain cohesion by|continue with|start.*?reply with)[:\s]*["']?([^"'\n]+)["']?/i,
-  );
+  const parsed = parseMemorySectionXml(output);
 
-  let suggestedContinuation: string | undefined;
-  if (cohesionMatch) {
-    suggestedContinuation = cohesionMatch[1]?.trim();
-  }
+  // Build the observations string with current-task appended
+  let observations = parsed.observations || '';
 
-  // Validate and potentially add Current Task section if missing
-  let observations = output.trim();
-  if (!hasCurrentTaskSection(observations)) {
-    console.warn('[OM Observer] Warning: Observations missing "Current Task" section. Adding default.');
-    observations += '\n\n**Current Task:** Continue based on the most recent user message.';
+  // Append current-task as a markdown section if present
+  if (parsed.currentTask) {
+    observations += `\n<current-task>\n${parsed.currentTask}\n</current-task>`;
+  } else {
+    console.warn('[OM Observer] Warning: Observations missing <current-task> section. Adding default.');
+    observations += '\n<current-task>\nContinue based on the most recent user message.\n</current-task>';
   }
 
   return {
     observations,
-    suggestedContinuation,
+    suggestedContinuation: parsed.suggestedResponse || undefined,
     rawOutput: output,
   };
 }
 
 /**
+ * Parsed result from XML memory section
+ */
+interface ParsedMemorySection {
+  observations: string;
+  currentTask: string;
+  suggestedResponse: string;
+}
+
+/**
+ * Parse XML tags from observer/reflector output.
+ * Extracts content from <observations>, <current-task>, and <suggested-response> tags.
+ */
+export function parseMemorySectionXml(content: string): ParsedMemorySection {
+  const result: ParsedMemorySection = {
+    observations: '',
+    currentTask: '',
+    suggestedResponse: '',
+  };
+
+  // Extract <observations> content (supports multiple blocks)
+  // Tags must be at the start of a line (with optional leading whitespace) to avoid
+  // capturing inline mentions like "User discussed <observations> tags"
+  const observationsRegex = /^[ \t]*<observations>([\s\S]*?)^[ \t]*<\/observations>/gim;
+  const observationsMatches = [...content.matchAll(observationsRegex)];
+  if (observationsMatches.length > 0) {
+    result.observations = observationsMatches
+      .map(m => m[1]?.trim() ?? '')
+      .filter(Boolean)
+      .join('\n');
+  } else {
+    // Fallback: if no XML tags, extract list items from raw content
+    // This handles cases where the LLM doesn't follow the XML format exactly
+    result.observations = extractListItemsOnly(content);
+  }
+
+  // Extract <current-task> content (first match only)
+  // Tags must be at the start of a line to avoid capturing inline mentions
+  const currentTaskMatch = content.match(/^[ \t]*<current-task>([\s\S]*?)^[ \t]*<\/current-task>/im);
+  if (currentTaskMatch?.[1]) {
+    result.currentTask = currentTaskMatch[1].trim();
+  }
+
+  // Extract <suggested-response> content (first match only)
+  // Tags must be at the start of a line to avoid capturing inline mentions
+  const suggestedResponseMatch = content.match(/^[ \t]*<suggested-response>([\s\S]*?)^[ \t]*<\/suggested-response>/im);
+  if (suggestedResponseMatch?.[1]) {
+    result.suggestedResponse = suggestedResponseMatch[1].trim();
+  }
+
+  return result;
+}
+
+/**
+ * Fallback: Extract only list items from content when XML tags are missing.
+ * Preserves nested list items (indented with spaces/tabs).
+ */
+function extractListItemsOnly(content: string): string {
+  const lines = content.split('\n');
+  const listLines: string[] = [];
+
+  for (const line of lines) {
+    // Match lines that start with list markers (-, *, or numbered)
+    // Allow leading whitespace for nested items
+    if (/^\s*[-*]\s/.test(line) || /^\s*\d+\.\s/.test(line)) {
+      listLines.push(line);
+    }
+  }
+
+  return listLines.join('\n').trim();
+}
+
+/**
  * Check if observations contain a Current Task section.
+ * Supports both XML format and legacy markdown format.
  */
 export function hasCurrentTaskSection(observations: string): boolean {
-  // Look for various forms of "Current Task" header
+  // Check for XML format first
+  if (/<current-task>/i.test(observations)) {
+    return true;
+  }
+
+  // Legacy markdown patterns
   const currentTaskPatterns = [
     /\*\*Current Task:?\*\*/i,
     /^Current Task:/im,
@@ -339,10 +417,9 @@ export function hasCurrentTaskSection(observations: string): boolean {
  * Extract the Current Task content from observations.
  */
 export function extractCurrentTask(observations: string): string | null {
-  // Match "**Current Task:** content until next section or end"
-  const match = observations.match(/\*\*Current Task:?\*\*:?\s*(.+?)(?=\n\n|\n\*\*|\n##|$)/is);
-  if (match?.[1]) {
-    return match[1].trim();
+  const xmlMatch = observations.match(/<current-task>([\s\S]*?)<\/current-task>/i);
+  if (xmlMatch?.[1]) {
+    return xmlMatch[1].trim();
   }
   return null;
 }
