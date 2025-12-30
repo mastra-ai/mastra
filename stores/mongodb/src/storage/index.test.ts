@@ -3,8 +3,11 @@ import {
   createClientAcceptanceTests,
   createConfigValidationTests,
   createDomainDirectTests,
+  createStoreIndexTests,
+  createDomainIndexTests,
 } from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
+import { TABLE_THREADS } from '@mastra/core/storage';
 import { MongoClient } from 'mongodb';
 import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
@@ -167,15 +170,17 @@ describe('MongoDBStore connectorHandler Operations', () => {
       updatedAt: new Date(),
     };
 
-    const savedThread = await store.saveThread({ thread });
-    expect(savedThread.id).toBe(thread.id);
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+    const savedThread = await memoryStore?.saveThread({ thread });
+    expect(savedThread?.id).toBe(thread.id);
 
-    const retrievedThread = await store.getThreadById({ threadId: thread.id });
+    const retrievedThread = await memoryStore?.getThreadById({ threadId: thread.id });
     expect(retrievedThread).toBeDefined();
     expect(retrievedThread?.title).toBe('Test Thread');
 
     // Clean up
-    await store.deleteThread({ threadId: thread.id });
+    await memoryStore?.deleteThread({ threadId: thread.id });
     await store.close();
     await client.close();
   });
@@ -251,7 +256,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB Document Flexibility', () => {
     beforeEach(async () => {
-      await store.stores.memory.dangerouslyClearAll();
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
     });
 
     it('should handle flexible document schemas with complex nested metadata', async () => {
@@ -276,11 +283,13 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should handle this flexible schema without issues
-      const saved = await store.saveThread({ thread });
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      const saved = await memoryStore?.saveThread({ thread });
       expect(saved).toBeTruthy();
-      expect(saved.id).toBe(thread.id);
+      expect(saved?.id).toBe(thread.id);
 
-      const retrieved = await store.getThreadById({ threadId: thread.id });
+      const retrieved = await memoryStore?.getThreadById({ threadId: thread.id });
       expect(retrieved).toBeTruthy();
       expect(retrieved?.metadata).toMatchObject({
         customField: 'custom value',
@@ -308,9 +317,11 @@ describe('MongoDB Specific Tests', () => {
         updatedAt: new Date(),
       };
 
-      await store.saveThread({ thread });
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.saveThread({ thread });
 
-      const retrieved = await store.getThreadById({ threadId: thread.id });
+      const retrieved = await memoryStore?.getThreadById({ threadId: thread.id });
       expect(retrieved).toBeTruthy();
       expect((retrieved?.metadata as any)?.geoLocation?.coordinates).toEqual([-122.4194, 37.7749]);
       expect((retrieved?.metadata as any)?.tags).toEqual(['ai', 'mongodb', 'flexible']);
@@ -319,14 +330,18 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB JSON/JSONB Field Handling', () => {
     beforeEach(async () => {
-      await store.stores.memory.dangerouslyClearAll();
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
     });
 
     it('should handle complex JSON structures in message content', async () => {
       // First create a thread
       const threadId = `thread-json-test-${Date.now()}`;
       const resourceId = 'resource-json-test';
-      await store.saveThread({
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.saveThread({
         thread: {
           id: threadId,
           resourceId,
@@ -378,10 +393,12 @@ describe('MongoDB Specific Tests', () => {
       };
 
       // MongoDB should handle this complex nested structure naturally
-      const result = await store.saveMessages({ messages: [complexMessage] });
-      expect(result.messages).toHaveLength(1);
+      expect(memoryStore).toBeDefined();
+      const result = await memoryStore?.saveMessages({ messages: [complexMessage] });
+      expect(result?.messages).toHaveLength(1);
 
-      const { messages } = await store.listMessagesById({ messageIds: [messageId] });
+      const messagesResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const messages = messagesResult?.messages ?? [];
       expect(messages).toHaveLength(1);
       expect(messages[0]?.content).toBeDefined();
     });
@@ -422,7 +439,9 @@ describe('MongoDB Specific Tests', () => {
 
   describe('MongoDB Span Operations with Complex Data', () => {
     beforeEach(async () => {
-      await store.stores.observability!.dangerouslyClearAll();
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+      await observabilityStore?.dangerouslyClearAll();
     });
 
     it('should handle Span creation with MongoDB-specific nested attributes', async () => {
@@ -478,10 +497,13 @@ describe('MongoDB Specific Tests', () => {
         error: null,
       };
 
-      await expect(store.createSpan(span)).resolves.not.toThrow();
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+
+      await expect(observabilityStore?.createSpan({ span: span as any })).resolves.not.toThrow();
 
       // Verify the span was created
-      const trace = await store.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace({ traceId });
       expect(trace).toBeTruthy();
       expect(trace?.spans).toHaveLength(1);
       expect(trace?.spans[0]?.spanId).toBe(spanId);
@@ -513,7 +535,9 @@ describe('MongoDB Specific Tests', () => {
         links: null,
       };
 
-      await store.createSpan(initialSpan);
+      const observabilityStore = await store.getStore('observability');
+      expect(observabilityStore).toBeDefined();
+      await observabilityStore?.createSpan({ span: initialSpan as any });
 
       // Update with complex nested data
       const updates = {
@@ -546,7 +570,7 @@ describe('MongoDB Specific Tests', () => {
       };
 
       await expect(
-        store.updateSpan({
+        observabilityStore?.updateSpan({
           spanId,
           traceId,
           updates,
@@ -554,9 +578,152 @@ describe('MongoDB Specific Tests', () => {
       ).resolves.not.toThrow();
 
       // Verify updates were applied
-      const trace = await store.getTrace(traceId);
+      const trace = await observabilityStore?.getTrace({ traceId });
       expect(trace?.spans[0]?.output).toBeDefined();
       expect(trace?.spans[0]?.endedAt).toBeDefined();
     });
   });
+});
+
+// Helper to check if a MongoDB index exists in a collection
+const mongoIndexExists = async (dbName: string, namePattern: string): Promise<boolean> => {
+  const client = new MongoClient(TEST_CONFIG.url!);
+  try {
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection(TABLE_THREADS);
+    const indexes = await collection.indexes();
+    return indexes.some((idx: { name?: string }) => idx.name?.toLowerCase().includes(namePattern.toLowerCase()));
+  } catch {
+    // Collection may not exist if skipDefaultIndexes is true
+    return false;
+  } finally {
+    await client.close();
+  }
+};
+
+// Store-level index configuration tests
+// Uses unique database names to avoid index collision between tests
+const storeTestId = Math.floor(Date.now() / 1000) % 100000;
+let currentStoreTestDbName = '';
+
+createStoreIndexTests({
+  storeName: 'MongoDBStore',
+  createDefaultStore: () => {
+    currentStoreTestDbName = `idx_s_${storeTestId}_d`;
+    return new MongoDBStore({
+      id: 'mongodb-idx-default',
+      url: TEST_CONFIG.url!,
+      dbName: currentStoreTestDbName,
+    });
+  },
+  createStoreWithSkipDefaults: () => {
+    currentStoreTestDbName = `idx_s_${storeTestId}_s`;
+    return new MongoDBStore({
+      id: 'mongodb-idx-skip',
+      url: TEST_CONFIG.url!,
+      dbName: currentStoreTestDbName,
+      skipDefaultIndexes: true,
+    });
+  },
+  createStoreWithCustomIndexes: indexes => {
+    currentStoreTestDbName = `idx_s_${storeTestId}_c`;
+    return new MongoDBStore({
+      id: 'mongodb-idx-custom',
+      url: TEST_CONFIG.url!,
+      dbName: currentStoreTestDbName,
+      indexes: indexes.map(idx => ({
+        collection: (idx as any).collection || TABLE_THREADS,
+        keys: { [(idx as any).columns?.[0] || 'title']: 1 },
+        options: { name: idx.name },
+      })),
+    });
+  },
+  createStoreWithInvalidTable: indexes => {
+    currentStoreTestDbName = `idx_s_${storeTestId}_i`;
+    return new MongoDBStore({
+      id: 'mongodb-idx-invalid',
+      url: TEST_CONFIG.url!,
+      dbName: currentStoreTestDbName,
+      indexes: indexes.map(idx => ({
+        collection: (idx as any).collection || 'nonexistent_collection_xyz',
+        keys: { [(idx as any).columns?.[0] || 'id']: 1 },
+        options: { name: idx.name },
+      })),
+    });
+  },
+  indexExists: (_store, pattern) => mongoIndexExists(currentStoreTestDbName, pattern),
+  defaultIndexPattern: 'resourceid',
+  customIndexName: 'custom_mongo_test_idx',
+  customIndexDef: {
+    name: 'custom_mongo_test_idx',
+    collection: TABLE_THREADS,
+    columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_collection_idx',
+    collection: 'nonexistent_collection_xyz',
+    columns: ['id'],
+  },
+});
+
+// Domain-level index configuration tests (using MemoryStorageMongoDB as representative)
+// Uses unique database names to avoid index collision between tests
+const domainTestId = (Math.floor(Date.now() / 1000) % 100000) + 1;
+let currentDomainTestDbName = '';
+
+createDomainIndexTests({
+  domainName: 'MemoryStorageMongoDB',
+  createDefaultDomain: () => {
+    currentDomainTestDbName = `idx_d_${domainTestId}_d`;
+    return new MemoryStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: currentDomainTestDbName,
+    });
+  },
+  createDomainWithSkipDefaults: () => {
+    currentDomainTestDbName = `idx_d_${domainTestId}_s`;
+    return new MemoryStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: currentDomainTestDbName,
+      skipDefaultIndexes: true,
+    });
+  },
+  createDomainWithCustomIndexes: indexes => {
+    currentDomainTestDbName = `idx_d_${domainTestId}_c`;
+    return new MemoryStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: currentDomainTestDbName,
+      indexes: indexes.map(idx => ({
+        collection: (idx as any).collection || TABLE_THREADS,
+        keys: { [(idx as any).columns?.[0] || 'title']: 1 },
+        options: { name: idx.name },
+      })),
+    });
+  },
+  createDomainWithInvalidTable: indexes => {
+    currentDomainTestDbName = `idx_d_${domainTestId}_i`;
+    return new MemoryStorageMongoDB({
+      url: TEST_CONFIG.url!,
+      dbName: currentDomainTestDbName,
+      indexes: indexes.map(idx => ({
+        collection: (idx as any).collection || 'nonexistent_collection_xyz',
+        keys: { [(idx as any).columns?.[0] || 'id']: 1 },
+        options: { name: idx.name },
+      })),
+    });
+  },
+  indexExists: (_domain, pattern) => mongoIndexExists(currentDomainTestDbName, pattern),
+  defaultIndexPattern: 'resourceid',
+  customIndexName: 'custom_memory_mongo_idx',
+  customIndexDef: {
+    name: 'custom_memory_mongo_idx',
+    collection: TABLE_THREADS,
+    columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_domain_collection_idx',
+    collection: 'nonexistent_collection_xyz',
+    columns: ['id'],
+  },
 });

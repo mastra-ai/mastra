@@ -585,6 +585,10 @@ export type WorkflowStreamEvent =
       payload: {};
     })
   | (BaseChunkType & {
+      type: 'workflow-paused';
+      payload: {};
+    })
+  | (BaseChunkType & {
       type: 'workflow-step-start';
       id: string;
       payload: {

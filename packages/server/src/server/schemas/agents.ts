@@ -368,7 +368,7 @@ export const generateSpeechBodySchema = z.object({
  * Body schema for transcribing speech
  */
 export const transcribeSpeechBodySchema = z.object({
-  audioData: z.any(), // Buffer
+  audio: z.any(), // Buffer
   options: z.record(z.string(), z.any()).optional(),
 });
 

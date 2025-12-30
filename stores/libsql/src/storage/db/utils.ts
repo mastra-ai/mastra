@@ -1,7 +1,7 @@
 import type { InValue } from '@libsql/client';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
-import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
@@ -222,38 +222,6 @@ function buildDateRangeCondition(
     condition: conditions.join(' AND '),
     args,
   };
-}
-
-type DateRangeFilter = {
-  startAt?: string;
-  endAt?: string;
-};
-
-/**
- * Converts pagination date range to where clause date range format
- * @param dateRange - The date range from pagination
- * @param columnName - The timestamp column to filter on (defaults to 'createdAt')
- * @returns Object with the date range filter, or empty object if no date range
- */
-export function buildDateRangeFilter(
-  dateRange?: PaginationArgs['dateRange'],
-  columnName: string = 'createdAt',
-): Record<string, DateRangeFilter> {
-  if (!dateRange?.start && !dateRange?.end) {
-    return {};
-  }
-
-  const filter: DateRangeFilter = {};
-
-  if (dateRange.start) {
-    filter.startAt = new Date(dateRange.start).toISOString();
-  }
-
-  if (dateRange.end) {
-    filter.endAt = new Date(dateRange.end).toISOString();
-  }
-
-  return { [columnName]: filter };
 }
 
 /**

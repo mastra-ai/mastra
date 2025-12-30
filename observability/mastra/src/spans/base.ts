@@ -13,6 +13,7 @@ import type {
   TraceState,
   IModelSpanTracker,
   AIModelGenerationSpan,
+  EntityType,
 } from '@mastra/core/observability';
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
@@ -127,6 +128,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public metadata?: Record<string, any>;
   public tags?: string[];
   public traceState?: TraceState;
+  /** Entity type that created the span (e.g., agent, workflow) */
+  public entityType?: EntityType;
+  /** Entity ID that created the span */
+  public entityId?: string;
+  /** Entity name that created the span */
+  public entityName?: string;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
 
@@ -143,6 +150,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
+    // Entity identification
+    this.entityType = options.entityType;
+    this.entityId = options.entityId;
+    this.entityName = options.entityName;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -226,6 +237,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       traceId: this.traceId,
       name: this.name,
       type: this.type,
+      entityType: this.entityType,
+      entityId: this.entityId,
+      entityName: this.entityName,
       attributes: this.attributes,
       metadata: this.metadata,
       startTime: this.startTime,

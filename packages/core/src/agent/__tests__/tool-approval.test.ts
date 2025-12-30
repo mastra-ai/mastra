@@ -7,7 +7,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
-import { getOpenAIModel } from './mock-model';
+import { convertArrayToReadableStream, getOpenAIModel, MockLanguageModelV2 } from './mock-model';
 
 const mockStorage = new InMemoryStore();
 
@@ -218,11 +218,82 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           },
         });
 
+        // Create a mock model that handles tool calls
+        let callCount = 0;
+        const mockModel = new MockLanguageModelV2({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              // First call: return tool call for findUserTool
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'findUserTool',
+                    input: '{"name":"Dero Israel"}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            } else if (callCount === 2) {
+              // Second call: return tool call for findUserTool with resumeData: { approved: true }
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-2',
+                    toolName: 'findUserTool',
+                    input: '{"name":"Dero Israel", "resumeData": { "approved": true }}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            } else {
+              // Second call (after approval): return text response
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'User name is Dero Israel' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            }
+          },
+        });
+
         const userAgent = new Agent({
           id: 'user-agent',
           name: 'User Agent',
           instructions: 'You are an agent that can get list of users using findUserTool.',
-          model: openaiModel,
+          model: mockModel,
           tools: { findUserTool },
           memory: new MockMemory(),
           defaultOptions: {

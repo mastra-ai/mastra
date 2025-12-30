@@ -48,7 +48,7 @@ export function createTestModelsV3({
     { type: 'text-end', id: 'text-1' },
     {
       type: 'finish',
-      finishReason: 'stop',
+      finishReason: { unified: 'stop', raw: 'stop' },
       usage: testUsageV3,
       providerMetadata: {
         testProvider: { testKey: 'testValue' },
@@ -67,7 +67,7 @@ export function createTestModelsV3({
     doStream: async () => ({ stream, request, response, warnings }),
     doGenerate: async () => ({
       content: [{ type: 'text' as const, text: 'Hello, world!' }],
-      finishReason: 'stop',
+      finishReason: { unified: 'stop', raw: 'stop' },
       usage: testUsageV3,
       warnings,
       request,
@@ -112,7 +112,7 @@ export const modelWithSourcesV3 = new MockLanguageModelV3({
       },
       {
         type: 'finish',
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: testUsageV3,
       },
     ]),
@@ -137,7 +137,7 @@ export const modelWithSourcesV3 = new MockLanguageModelV3({
         providerMetadata: { provider: { custom: 'value2' } },
       },
     ],
-    finishReason: 'stop',
+    finishReason: { unified: 'stop', raw: 'stop' },
     usage: testUsageV3,
     warnings: [],
   }),
@@ -161,7 +161,7 @@ export const modelWithFilesV3 = new MockLanguageModelV3({
       },
       {
         type: 'finish',
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: testUsageV3,
       },
     ]),
@@ -180,7 +180,7 @@ export const modelWithFilesV3 = new MockLanguageModelV3({
         mediaType: 'image/jpeg',
       },
     ],
-    finishReason: 'stop',
+    finishReason: { unified: 'stop', raw: 'stop' },
     usage: testUsageV3,
     warnings: [],
   }),
@@ -300,7 +300,7 @@ export const modelWithReasoningV3 = new MockLanguageModelV3({
       { type: 'text-end', id: 'text-1' },
       {
         type: 'finish',
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: testUsageV3,
       },
     ]),
@@ -313,7 +313,7 @@ export const modelWithReasoningV3 = new MockLanguageModelV3({
       },
       { type: 'text' as const, text: 'Hi there!' },
     ],
-    finishReason: 'stop',
+    finishReason: { unified: 'stop', raw: 'stop' },
     usage: testUsageV3,
     warnings: [],
     response: {

@@ -14,9 +14,9 @@
   "dependencies": {
     "zod": "^3",
     "typescript": "^5.8.3",
-    "@ai-sdk/openai": "3.0.0-beta.96",
-    "@ai-sdk/provider": "3.0.0-beta.26",
-    "ai": "^6.0.0-beta.149",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/provider": "^3.0.0",
+    "ai": "^6.0.1",
     "@mastra/client-js": "beta",
     "@mastra/core": "beta",
     "@mastra/evals": "beta",
@@ -25,7 +25,8 @@
     "@mastra/mcp": "beta",
     "@mastra/memory": "beta",
     "@mastra/observability": "beta",
-    "@mastra/voice-openai": "beta"
+    "@mastra/voice-openai": "beta",
+    "@mastra/ai-sdk": "beta"
   },
   "devDependencies": {
     "mastra": "beta",
@@ -42,6 +43,7 @@
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/observability": "link:../../observability/mastra",
       "@mastra/evals": "link:../../packages/evals",
+      "@mastra/ai-sdk": "link:../../client-sdks/ai-sdk",
       "mastra": "link:../../packages/cli"
     }
   },

@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   createStorageErrorId,
@@ -10,10 +10,10 @@ import {
   safelyParseJSON,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 /**
  * MongoDB-specific score row transformation.
@@ -27,25 +27,78 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class ScoresStorageMongoDB extends ScoresStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_SCORERS] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (ScoresStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
   }
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
   }
 
+  /**
+   * Returns default index definitions for the scores domain collections.
+   * These indexes optimize common query patterns for score lookups.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_SCORERS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_SCORERS, keys: { scorerId: 1 } },
+      { collection: TABLE_SCORERS, keys: { runId: 1 } },
+      { collection: TABLE_SCORERS, keys: { entityId: 1, entityType: 1 } },
+      { collection: TABLE_SCORERS, keys: { traceId: 1, spanId: 1 } },
+      { collection: TABLE_SCORERS, keys: { createdAt: -1 } },
+      { collection: TABLE_SCORERS, keys: { source: 1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
   async init(): Promise<void> {
-    const collection = await this.getCollection(TABLE_SCORERS);
-    await collection.createIndex({ id: 1 }, { unique: true });
-    await collection.createIndex({ scorerId: 1 });
-    await collection.createIndex({ runId: 1 });
-    await collection.createIndex({ entityId: 1, entityType: 1 });
-    await collection.createIndex({ traceId: 1, spanId: 1 });
-    await collection.createIndex({ createdAt: -1 });
-    await collection.createIndex({ source: 1 });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -77,7 +130,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let validatedScore: ValidatedSaveScorePayload;
+    let validatedScore: SaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -87,7 +140,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',
@@ -167,7 +220,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -242,7 +295,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -305,7 +358,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -368,7 +421,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);

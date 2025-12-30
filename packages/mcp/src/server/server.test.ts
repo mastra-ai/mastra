@@ -187,6 +187,7 @@ describe('MCPServer', () => {
       expect(server.name).toBe('TestServer');
       expect(server.version).toBe('1.0.0');
       expect(server.description).toBeUndefined();
+      expect(server.instructions).toBeUndefined();
       expect(server.repository).toBeUndefined();
       // MCPServerBase stores releaseDate as string, compare directly or re-parse
       expect(server.releaseDate).toBe(mockDateISO);
@@ -222,6 +223,33 @@ describe('MCPServer', () => {
       expect(server.packageCanonical).toBe('npm');
       expect(server.packages).toEqual(packages);
       expect(server.remotes).toEqual(remotes);
+    });
+
+    it('should initialize with instructions when provided', () => {
+      const instructions = 'You are a helpful assistant. Use the available tools to help users.';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        instructions,
+      };
+      const server = new MCPServer(customConfig);
+
+      expect(server.instructions).toBe(instructions);
+    });
+
+    it('should pass instructions to underlying SDK Server', () => {
+      const instructions = 'You are a weather assistant with access to real-time weather data.';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        instructions,
+      };
+      const server = new MCPServer(customConfig);
+
+      // Access the underlying SDK Server
+      const sdkServer = server.getServer();
+
+      // Check that the SDK Server was initialized with instructions
+      // @ts-ignore - accessing private property for testing
+      expect(sdkServer._instructions).toBe(instructions);
     });
   });
 

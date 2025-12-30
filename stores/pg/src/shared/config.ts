@@ -1,18 +1,13 @@
 import type { ConnectionOptions } from 'node:tls';
-import type { ClientConfig } from 'pg';
-import type * as pg from 'pg';
-import type pgPromise from 'pg-promise';
-import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import type { CreateIndexOptions } from '@mastra/core/storage';
+import type { ClientConfig, Pool, PoolConfig } from 'pg';
 
 /**
- * Generic PostgreSQL configuration type.
- * @template SSLType - The SSL configuration type (ISSLConfig for pg-promise, ConnectionOptions for pg)
+ * Base configuration options shared across PostgreSQL configs.
  */
-export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
+export interface PostgresBaseConfig {
   id: string;
   schemaName?: string;
-  max?: number;
-  idleTimeoutMillis?: number;
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    * This is useful for CI/CD pipelines where you want to:
@@ -33,113 +28,147 @@ export type PostgresConfig<SSLType = ISSLConfig | ConnectionOptions> = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
-} & (
-  | {
-      host: string;
-      port: number;
-      database: string;
-      user: string;
-      password: string;
-      ssl?: boolean | SSLType;
-    }
-  | {
-      connectionString: string;
-      ssl?: boolean | SSLType;
-    }
-  // Support Cloud SQL Connector & pg ClientConfig
-  | ClientConfig
-);
+  /**
+   * When true, default indexes will not be created during initialization.
+   * This is useful when:
+   * 1. You want to manage indexes separately or use custom indexes only
+   * 2. Default indexes don't match your query patterns
+   * 3. You want to reduce initialization time in development
+   *
+   * @default false
+   */
+  skipDefaultIndexes?: boolean;
+  /**
+   * Custom indexes to create during initialization.
+   * These indexes are created in addition to default indexes (unless skipDefaultIndexes is true).
+   *
+   * Each index must specify which table it belongs to. The store will route each index
+   * to the appropriate domain based on the table name.
+   *
+   * @example
+   * ```typescript
+   * const store = new PostgresStore({
+   *   connectionString: '...',
+   *   indexes: [
+   *     { name: 'my_threads_type_idx', table: 'mastra_threads', columns: ['metadata->>\'type\''] },
+   *     { name: 'my_messages_status_idx', table: 'mastra_messages', columns: ['metadata->>\'status\''] },
+   *   ],
+   * });
+   * ```
+   */
+  indexes?: CreateIndexOptions[];
+}
 
 /**
- * PostgreSQL configuration for PostgresStore (uses pg-promise with ISSLConfig)
- *
- * Accepts either:
- * - A pre-configured pg-promise client: `{ id, client, schemaName? }`
- * - Connection string: `{ id, connectionString, ... }`
- * - Host/port config: `{ id, host, port, database, user, password, ... }`
- * - Cloud SQL connector config: `{ id, stream, ... }`
+ * Connection string configuration.
  */
-export type PostgresStoreConfig =
-  | PostgresConfig<ISSLConfig>
-  | {
-      id: string;
-      /**
-       * Pre-configured pg-promise database client.
-       * Use this when you need to configure the client before initialization,
-       * e.g., to add pool listeners or set connection-level settings.
-       *
-       * @example
-       * ```typescript
-       * import pgPromise from 'pg-promise';
-       *
-       * const pgp = pgPromise();
-       * const client = pgp({ connectionString: '...' });
-       *
-       * // Custom setup before using
-       * client.$pool.on('connect', async (poolClient) => {
-       *   await poolClient.query('SET ROLE my_role;');
-       * });
-       *
-       * const store = new PostgresStore({ id: 'my-store', client });
-       * ```
-       */
-      client: pgPromise.IDatabase<{}>;
-      schemaName?: string;
-      disableInit?: boolean;
-    };
+export interface ConnectionStringConfig extends PostgresBaseConfig {
+  connectionString: string;
+  ssl?: boolean | ConnectionOptions;
+  max?: number;
+  idleTimeoutMillis?: number;
+}
 
 /**
- * PostgreSQL configuration for PgVector (uses pg with ConnectionOptions)
+ * Host-based configuration.
  */
-export type PgVectorConfig = PostgresConfig<ConnectionOptions> & {
-  pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-};
-
-export const isConnectionStringConfig = <SSLType>(
-  cfg: PostgresConfig<SSLType>,
-): cfg is PostgresConfig<SSLType> & { connectionString: string; ssl?: boolean | SSLType } => {
-  return 'connectionString' in cfg;
-};
-
-export const isHostConfig = <SSLType>(
-  cfg: PostgresConfig<SSLType>,
-): cfg is PostgresConfig<SSLType> & {
+export interface HostConfig extends PostgresBaseConfig {
   host: string;
   port: number;
   database: string;
   user: string;
   password: string;
-  ssl?: boolean | SSLType;
-} => {
+  ssl?: boolean | ConnectionOptions;
+  max?: number;
+  idleTimeoutMillis?: number;
+}
+
+/**
+ * Pre-configured pg.Pool configuration.
+ */
+export interface PoolInstanceConfig extends PostgresBaseConfig {
+  /**
+   * Pre-configured pg.Pool instance.
+   * Use this for direct control over the connection pool, or for
+   * integration with libraries that expect a pg.Pool.
+   *
+   * @example
+   * ```typescript
+   * import { Pool } from 'pg';
+   *
+   * const pool = new Pool({ connectionString: '...' });
+   * const store = new PostgresStore({ id: 'my-store', pool });
+   *
+   * // Use store.pool for other libraries that need a pg.Pool
+   * ```
+   */
+  pool: Pool;
+}
+
+/**
+ * PostgreSQL configuration for PostgresStore.
+ *
+ * Accepts either:
+ * - A pre-configured pg.Pool: `{ id, pool, schemaName? }`
+ * - Connection string: `{ id, connectionString, ... }`
+ * - Host/port config: `{ id, host, port, database, user, password, ... }`
+ * - Cloud SQL connector config: `{ id, stream, ... }` (via pg.ClientConfig)
+ */
+export type PostgresStoreConfig =
+  | PoolInstanceConfig
+  | ConnectionStringConfig
+  | HostConfig
+  | (PostgresBaseConfig & ClientConfig);
+
+/**
+ * PostgreSQL configuration for PgVector (uses pg with ConnectionOptions)
+ */
+export type PgVectorConfig = (ConnectionStringConfig | HostConfig | (PostgresBaseConfig & ClientConfig)) & {
+  pgPoolOptions?: Omit<PoolConfig, 'connectionString'>;
+};
+
+/**
+ * Type guard for pre-configured pg.Pool config
+ */
+export const isPoolConfig = (cfg: PostgresStoreConfig): cfg is PoolInstanceConfig => {
+  return 'pool' in cfg;
+};
+
+/**
+ * Type guard for connection string config
+ */
+export const isConnectionStringConfig = (cfg: PostgresStoreConfig): cfg is ConnectionStringConfig => {
+  return 'connectionString' in cfg && typeof cfg.connectionString === 'string';
+};
+
+/**
+ * Type guard for host-based config
+ */
+export const isHostConfig = (cfg: PostgresStoreConfig): cfg is HostConfig => {
   return 'host' in cfg && 'database' in cfg && 'user' in cfg && 'password' in cfg;
 };
 
-export const isCloudSqlConfig = <SSLType>(
-  cfg: PostgresConfig<SSLType>,
-): cfg is PostgresConfig<SSLType> & ClientConfig => {
+/**
+ * Type guard for Cloud SQL connector config
+ */
+export const isCloudSqlConfig = (cfg: PostgresStoreConfig): cfg is PostgresBaseConfig & ClientConfig => {
   return 'stream' in cfg || ('password' in cfg && typeof cfg.password === 'function');
 };
 
 /**
- * Type guard for pre-configured client config (PostgresStore only)
+ * Validate PostgresStore configuration.
  */
-export const isClientConfig = (
-  cfg: PostgresStoreConfig,
-): cfg is { id: string; client: pgPromise.IDatabase<{}>; schemaName?: string; disableInit?: boolean } => {
-  return 'client' in cfg;
-};
-
 export const validateConfig = (name: string, config: PostgresStoreConfig) => {
   if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
     throw new Error(`${name}: id must be provided and cannot be empty.`);
   }
 
-  // Client config: user provides pre-configured pg-promise client
-  if (isClientConfig(config)) {
-    if (!config.client) {
-      throw new Error(`${name}: client must be provided when using client config.`);
+  // Pool config: user provides pre-configured pg.Pool
+  if (isPoolConfig(config)) {
+    if (!config.pool) {
+      throw new Error(`${name}: pool must be provided when using pool config.`);
     }
-    return; // Valid client config
+    return; // Valid pool config
   }
 
   if (isConnectionStringConfig(config)) {
@@ -165,7 +194,7 @@ export const validateConfig = (name: string, config: PostgresStoreConfig) => {
     }
   } else {
     throw new Error(
-      `${name}: invalid config. Provide either {client}, {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with \`stream\`).`,
+      `${name}: invalid config. Provide either {pool}, {connectionString}, {host,port,database,user,password}, or a pg ClientConfig (e.g., Cloud SQL connector with \`stream\`).`,
     );
   }
 };

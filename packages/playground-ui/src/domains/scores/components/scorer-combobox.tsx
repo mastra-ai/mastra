@@ -14,8 +14,6 @@ export interface ScorerComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  contentClassName?: string;
 }
 
 export function ScorerCombobox({
@@ -26,8 +24,6 @@ export function ScorerCombobox({
   emptyText = 'No scorers found.',
   className,
   disabled = false,
-  buttonClassName = 'h-8',
-  contentClassName,
 }: ScorerComboboxProps) {
   const { data: scorers = {}, isLoading, isError, error } = useScorers();
   const { navigate, paths } = useLinkComponent();
@@ -62,8 +58,7 @@ export function ScorerCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      buttonClassName={buttonClassName}
-      contentClassName={contentClassName}
+      variant="ghost"
     />
   );
 }

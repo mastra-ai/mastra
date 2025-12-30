@@ -35,5 +35,8 @@
 		"@types/node": "22.13.17",
 		"tsx": "^4.19.3",
 		"typescript": "^5.8.2"
+	},
+	"dependencies": {
+		"vite": "^7.3.0"
 	}
 }

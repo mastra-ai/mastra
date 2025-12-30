@@ -1,12 +1,9 @@
+import type { ConnectionOptions } from 'node:tls';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_THREADS,
-  TABLE_MESSAGES,
-  TABLE_TRACES,
-  TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_SCHEMAS,
   getSqlType,
@@ -20,34 +17,59 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import pgPromise from 'pg-promise';
-import type { IDatabase } from 'pg-promise';
-import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
+import { Pool } from 'pg';
+import type { DbClient } from '../client';
+import { PoolAdapter } from '../client';
+
+// Re-export DbClient for external use
+export type { DbClient } from '../client';
 
 /**
  * Configuration for standalone domain usage.
  * Accepts either:
- * 1. An existing pg-promise database instance
- * 2. Config to create a new client internally
+ * 1. An existing database client (Pool or PoolAdapter)
+ * 2. Config to create a new pool internally
  */
-export type PgDomainConfig = PgDomainClientConfig | PgDomainRestConfig;
+export type PgDomainConfig = PgDomainClientConfig | PgDomainPoolConfig | PgDomainRestConfig;
 
 /**
- * Pass an existing pg-promise database instance
+ * Pass an existing database client (DbClient)
  */
 export interface PgDomainClientConfig {
-  /** The pg-promise database instance */
-  client: IDatabase<{}>;
+  /** The database client */
+  client: DbClient;
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 }
 
 /**
- * Pass config to create a new pg-promise client internally
+ * Pass an existing pg.Pool
+ */
+export interface PgDomainPoolConfig {
+  /** Pre-configured pg.Pool */
+  pool: Pool;
+  /** Optional schema name (defaults to 'public') */
+  schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
+}
+
+/**
+ * Pass config to create a new pg.Pool internally
  */
 export type PgDomainRestConfig = {
   /** Optional schema name (defaults to 'public') */
   schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
 } & (
   | {
       host: string;
@@ -55,34 +77,69 @@ export type PgDomainRestConfig = {
       database: string;
       user: string;
       password: string;
-      ssl?: boolean | ISSLConfig;
+      ssl?: boolean | ConnectionOptions;
     }
   | {
       connectionString: string;
-      ssl?: boolean | ISSLConfig;
+      ssl?: boolean | ConnectionOptions;
     }
 );
 
 /**
- * Resolves PgDomainConfig to a pg-promise database instance and schema.
- * Handles creating a new client if config is provided.
+ * Resolves PgDomainConfig to a database client and schema.
+ * Handles creating a new pool if config is provided.
  */
-export function resolvePgConfig(config: PgDomainConfig): { client: IDatabase<{}>; schemaName?: string } {
+export function resolvePgConfig(config: PgDomainConfig): {
+  client: DbClient;
+  schemaName?: string;
+  skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
+} {
   // Existing client
   if ('client' in config) {
-    return { client: config.client, schemaName: config.schemaName };
+    return {
+      client: config.client,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
   }
 
-  // Config to create new client
-  const pgp = pgPromise();
-  const client = pgp(config as any);
-  return { client, schemaName: config.schemaName };
-}
+  // Existing pool
+  if ('pool' in config) {
+    return {
+      client: new PoolAdapter(config.pool),
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
+  }
 
-/**
- * @deprecated Use PgDomainConfig instead. This type is kept for backwards compatibility.
- */
-export type PgDBConfig = PgDomainClientConfig;
+  // Config to create new pool
+  let pool: Pool;
+  if ('connectionString' in config) {
+    pool = new Pool({
+      connectionString: config.connectionString,
+      ssl: config.ssl,
+    });
+  } else {
+    pool = new Pool({
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user,
+      password: config.password,
+      ssl: config.ssl,
+    });
+  }
+
+  return {
+    client: new PoolAdapter(pool),
+    schemaName: config.schemaName,
+    skipDefaultIndexes: config.skipDefaultIndexes,
+    indexes: config.indexes,
+  };
+}
 
 function getSchemaName(schema?: string) {
   return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
@@ -95,19 +152,136 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
+function mapToSqlType(type: StorageColumn['type']): string {
+  switch (type) {
+    case 'uuid':
+      return 'UUID';
+    case 'boolean':
+      return 'BOOLEAN';
+    default:
+      return getSqlType(type);
+  }
+}
+
+function generateTableSQL({
+  tableName,
+  schema,
+  schemaName,
+}: {
+  tableName: TABLE_NAMES;
+  schema: Record<string, StorageColumn>;
+  schemaName?: string;
+}): string {
+  const timeZColumns = Object.entries(schema)
+    .filter(([_, def]) => def.type === 'timestamp')
+    .map(([name]) => {
+      const parsedName = parseSqlIdentifier(name, 'column name');
+      return `"${parsedName}Z" TIMESTAMPTZ DEFAULT NOW()`;
+    });
+
+  const columns = Object.entries(schema).map(([name, def]) => {
+    const parsedName = parseSqlIdentifier(name, 'column name');
+    const constraints = [];
+    if (def.primaryKey) constraints.push('PRIMARY KEY');
+    if (!def.nullable) constraints.push('NOT NULL');
+    return `"${parsedName}" ${mapToSqlType(def.type)} ${constraints.join(' ')}`;
+  });
+
+  const finalColumns = [...columns, ...timeZColumns].join(',\n');
+  // Sanitize schema name before using it in constraint names to ensure valid SQL identifiers
+  const parsedSchemaName = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+  const constraintPrefix = parsedSchemaName ? `${parsedSchemaName}_` : '';
+  const quotedSchemaName = getSchemaName(schemaName);
+
+  const sql = `
+            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })} (
+              ${finalColumns}
+            );
+            ${
+              tableName === TABLE_WORKFLOW_SNAPSHOT
+                ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+              ) AND NOT EXISTS (
+                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
+                UNIQUE (workflow_name, run_id);
+              END IF;
+            END $$;
+            `
+                : ''
+            }
+          ${
+            tableName === TABLE_SPANS
+              ? `
+            DO $$ BEGIN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_ai_spans_traceid_spanid_pk'
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                ADD CONSTRAINT ${constraintPrefix}mastra_ai_spans_traceid_spanid_pk
+                PRIMARY KEY ("traceId", "spanId");
+              END IF;
+            END $$;
+            `
+              : ''
+          }
+          `;
+
+  return sql;
+}
+
+/**
+ * Exports the Mastra database schema as SQL DDL statements.
+ * Does not require a database connection.
+ */
+export function exportSchemas(schemaName?: string): string {
+  const statements: string[] = [];
+
+  // Add schema creation if needed
+  if (schemaName) {
+    const quotedSchemaName = getSchemaName(schemaName);
+    statements.push(`-- Create schema if it doesn't exist`);
+    statements.push(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName};`);
+    statements.push('');
+  }
+
+  // Generate SQL for all tables
+  for (const [tableName, schema] of Object.entries(TABLE_SCHEMAS)) {
+    statements.push(`-- Table: ${tableName}`);
+    const sql = generateTableSQL({
+      tableName: tableName as TABLE_NAMES,
+      schema,
+      schemaName,
+    });
+    statements.push(sql.trim());
+    statements.push('');
+  }
+
+  return statements.join('\n');
+}
+
 /**
  * Internal config for PgDB - accepts already-resolved client
  */
 export interface PgDBInternalConfig {
-  client: IDatabase<{}>;
+  client: DbClient;
   schemaName?: string;
+  skipDefaultIndexes?: boolean;
 }
 
+// Static map to track schema setup across all PgDB instances
+// Key: schemaName, Value: { promise, complete }
+// This prevents race conditions when multiple domains try to create the same schema concurrently
+const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
+
 export class PgDB extends MastraBase {
-  public client: IDatabase<{}>;
+  public client: DbClient;
   public schemaName?: string;
-  private setupSchemaPromise: Promise<void> | null = null;
-  private schemaSetupComplete: boolean | undefined = undefined;
+  public skipDefaultIndexes?: boolean;
 
   constructor(config: PgDBInternalConfig) {
     super({
@@ -117,6 +291,7 @@ export class PgDB extends MastraBase {
 
     this.client = config.client;
     this.schemaName = config.schemaName;
+    this.skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -187,14 +362,21 @@ export class PgDB extends MastraBase {
   }
 
   private async setupSchema() {
-    if (!this.schemaName || this.schemaSetupComplete) {
+    if (!this.schemaName) {
       return;
     }
 
-    const schemaName = getSchemaName(this.schemaName);
+    // Use static registry to coordinate schema setup across all PgDB instances
+    let registryEntry = schemaSetupRegistry.get(this.schemaName);
+    if (registryEntry?.complete) {
+      return;
+    }
 
-    if (!this.setupSchemaPromise) {
-      this.setupSchemaPromise = (async () => {
+    const quotedSchemaName = getSchemaName(this.schemaName);
+
+    if (!registryEntry?.promise) {
+      const schemaNameCapture = this.schemaName;
+      const setupPromise = (async () => {
         try {
           const schemaExists = await this.client.oneOrNone(
             `
@@ -203,46 +385,41 @@ export class PgDB extends MastraBase {
                   WHERE schema_name = $1
                 )
               `,
-            [this.schemaName],
+            [schemaNameCapture],
           );
 
           if (!schemaExists?.exists) {
             try {
-              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-              this.logger.info(`Schema "${this.schemaName}" created successfully`);
+              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName}`);
+              this.logger.info(`Schema "${schemaNameCapture}" created successfully`);
             } catch (error) {
-              this.logger.error(`Failed to create schema "${this.schemaName}"`, { error });
+              this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
               throw new Error(
-                `Unable to create schema "${this.schemaName}". This requires CREATE privilege on the database. ` +
+                `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
                   `Either create the schema manually or grant CREATE privilege to the user.`,
               );
             }
           }
 
-          this.schemaSetupComplete = true;
-          this.logger.debug(`Schema "${schemaName}" is ready for use`);
+          // Mark as complete in the registry
+          const entry = schemaSetupRegistry.get(schemaNameCapture);
+          if (entry) {
+            entry.complete = true;
+          }
+          this.logger.debug(`Schema "${quotedSchemaName}" is ready for use`);
         } catch (error) {
-          this.schemaSetupComplete = undefined;
-          this.setupSchemaPromise = null;
+          // On error, clear the registry entry so retry is possible
+          schemaSetupRegistry.delete(schemaNameCapture);
           throw error;
-        } finally {
-          this.setupSchemaPromise = null;
         }
       })();
+
+      // Register the promise immediately so concurrent callers can await it
+      schemaSetupRegistry.set(this.schemaName, { promise: setupPromise, complete: false });
+      registryEntry = schemaSetupRegistry.get(this.schemaName);
     }
 
-    await this.setupSchemaPromise;
-  }
-
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'uuid':
-        return 'UUID';
-      case 'boolean':
-        return 'BOOLEAN';
-      default:
-        return getSqlType(type);
-    }
+    await registryEntry!.promise;
   }
 
   protected getDefaultValue(type: StorageColumn['type']): string {
@@ -288,7 +465,19 @@ export class PgDB extends MastraBase {
     try {
       const schemaName = getSchemaName(this.schemaName);
       const tableNameWithSchema = getTableName({ indexName: tableName, schemaName });
-      await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+
+      // Check if table exists before truncating (handles case where init failed)
+      const tableExists = await this.client.oneOrNone<{ exists: boolean }>(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = $1 AND table_name = $2
+        )`,
+        [this.schemaName || 'mastra', tableName],
+      );
+
+      if (tableExists?.exists) {
+        await this.client.none(`TRUNCATE TABLE ${tableNameWithSchema} CASCADE`);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -316,51 +505,11 @@ export class PgDB extends MastraBase {
         .filter(([_, def]) => def.type === 'timestamp')
         .map(([name]) => name);
 
-      const timeZColumns = Object.entries(schema)
-        .filter(([_, def]) => def.type === 'timestamp')
-        .map(([name]) => {
-          const parsedName = parseSqlIdentifier(name, 'column name');
-          return `"${parsedName}Z" TIMESTAMPTZ DEFAULT NOW()`;
-        });
-
-      const columns = Object.entries(schema).map(([name, def]) => {
-        const parsedName = parseSqlIdentifier(name, 'column name');
-        const constraints = [];
-        if (def.primaryKey) constraints.push('PRIMARY KEY');
-        if (!def.nullable) constraints.push('NOT NULL');
-        return `"${parsedName}" ${this.getSqlType(def.type)} ${constraints.join(' ')}`;
-      });
-
       if (this.schemaName) {
         await this.setupSchema();
       }
 
-      const finalColumns = [...columns, ...timeZColumns].join(',\n');
-      const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
-      const schemaName = getSchemaName(this.schemaName);
-
-      const sql = `
-            CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName })} (
-              ${finalColumns}
-            );
-            ${
-              tableName === TABLE_WORKFLOW_SNAPSHOT
-                ? `
-            DO $$ BEGIN
-              IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
-              ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE indexname = '${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key'
-              ) THEN
-                ALTER TABLE ${getTableName({ indexName: tableName, schemaName })}
-                ADD CONSTRAINT ${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key
-                UNIQUE (workflow_name, run_id);
-              END IF;
-            END $$;
-            `
-                : ''
-            }
-          `;
+      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName });
 
       await this.client.none(sql);
 
@@ -370,8 +519,10 @@ export class PgDB extends MastraBase {
         ifNotExists: timeZColumnNames,
       });
 
+      // Set up timestamp triggers and run migrations for Spans table
       if (tableName === TABLE_SPANS) {
         await this.setupTimestampTriggers(tableName);
+        await this.migrateSpansTable();
       }
     } catch (error) {
       throw new MastraError(
@@ -428,6 +579,69 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+        if (!columnExists) {
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = mapToSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+          await this.client.none(alterSql);
+          this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+
+          // For timestamp columns, also add the timezone-aware version
+          // This matches the behavior in alterTable()
+          if (sqlType === 'TIMESTAMP') {
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${columnName}Z' to ${fullTableName}`);
+          }
+        }
+      }
+
+      // Also add timezone columns for any existing timestamp columns that don't have them yet
+      // This handles the case where timestamp columns existed but their *Z counterparts don't
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        if (columnDef.type === 'timestamp') {
+          const tzColumnName = `${columnName}Z`;
+          const tzColumnExists = await this.hasColumn(TABLE_SPANS, tzColumnName);
+          if (!tzColumnExists) {
+            const parsedTzColumnName = parseSqlIdentifier(tzColumnName, 'column name');
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedTzColumnName}" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${tzColumnName}' to ${fullTableName}`);
+          }
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -443,19 +657,20 @@ export class PgDB extends MastraBase {
       for (const columnName of ifNotExists) {
         if (schema[columnName]) {
           const columnDef = schema[columnName];
-          const sqlType = this.getSqlType(columnDef.type);
-          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = mapToSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
           await this.client.none(alterSql);
 
           if (sqlType === 'TIMESTAMP') {
-            const alterSql =
+            const timestampZSql =
               `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
-            await this.client.none(alterSql);
+            await this.client.none(timestampZSql);
           }
 
           this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
@@ -759,75 +974,6 @@ export class PgDB extends MastraBase {
     }
   }
 
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-    return [
-      {
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'createdAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'createdAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
-        table: TABLE_TRACES,
-        columns: ['name', 'startTime DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
-        table: TABLE_SCORERS,
-        columns: ['traceId', 'spanId', 'createdAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['traceId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['parentSpanId', 'startedAt DESC'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_SPANS,
-        columns: ['name'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['spanType', 'startedAt DESC'],
-      },
-    ];
-  }
-
-  async createAutomaticIndexes(): Promise<void> {
-    try {
-      const indexes = this.getAutomaticIndexDefinitions();
-
-      for (const indexOptions of indexes) {
-        try {
-          await this.createIndex(indexOptions);
-        } catch (error) {
-          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'CREATE_AUTOMATIC_INDEXES', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
     try {
       const schemaName = this.schemaName || 'public';
@@ -877,9 +1023,9 @@ export class PgDB extends MastraBase {
         size: result.size || '0',
         definition: result.definition || '',
         method: result.method || 'btree',
-        scans: parseInt(result.scans) || 0,
-        tuples_read: parseInt(result.tuples_read) || 0,
-        tuples_fetched: parseInt(result.tuples_fetched) || 0,
+        scans: parseInt(String(result.scans)) || 0,
+        tuples_read: parseInt(String(result.tuples_read)) || 0,
+        tuples_fetched: parseInt(String(result.tuples_fetched)) || 0,
       };
     } catch (error) {
       throw new MastraError(

@@ -749,7 +749,7 @@ export class MessageList {
           if (c.type === `tool-result`)
             return {
               type: 'tool-result',
-              input: {}, // TODO: we need to find the tool call here and add the input from it
+              input: this.findToolCallArgs(c.toolCallId),
               output: c.output,
               toolCallId: c.toolCallId,
               toolName: c.toolName,
@@ -991,7 +991,7 @@ export class MessageList {
     );
   }
 
-  private static mastraDBMessageToAIV4UIMessage(m: MastraDBMessage): UIMessageWithMetadata {
+  static mastraDBMessageToAIV4UIMessage(m: MastraDBMessage): UIMessageWithMetadata {
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]
@@ -3190,20 +3190,44 @@ export class MessageList {
 
     // Restore message-level providerOptions from metadata.providerMetadata
     // This preserves providerOptions through the DB → UI → Model conversion
+    // Also add input field to tool-result parts (fixes issue #11376)
     return result.map((modelMsg, index) => {
       const uiMsg = preprocessed[index];
+
+      // Handle providerOptions restoration
+      let updatedMsg = modelMsg;
       if (
         uiMsg?.metadata &&
         typeof uiMsg.metadata === 'object' &&
         'providerMetadata' in uiMsg.metadata &&
         uiMsg.metadata.providerMetadata
       ) {
-        return {
+        updatedMsg = {
           ...modelMsg,
           providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
         } satisfies AIV5Type.ModelMessage;
       }
-      return modelMsg;
+
+      // Add input field to tool-result parts by finding the matching tool-call
+      // This is required for Anthropic API which validates that tool-result has matching input
+      if (updatedMsg.role === 'tool' && Array.isArray(updatedMsg.content)) {
+        updatedMsg = {
+          ...updatedMsg,
+          content: updatedMsg.content.map(part => {
+            if (part.type === 'tool-result') {
+              // Add the input field from the matching tool-call
+              // Type assertion is safe here as we're adding a required field for Anthropic compatibility
+              return {
+                ...part,
+                input: this.findToolCallArgs(part.toolCallId),
+              } as typeof part & { input: Record<string, unknown> };
+            }
+            return part;
+          }),
+        } as AIV5Type.ModelMessage;
+      }
+
+      return updatedMsg;
     });
   }
 
@@ -3406,5 +3430,47 @@ export class MessageList {
       }
     }
     return key;
+  }
+
+  /**
+   * Finds the tool call args for a given toolCallId by searching through messages.
+   * This is used to reconstruct the input field when converting tool-result parts to StaticToolResult.
+   *
+   * @param toolCallId - The ID of the tool call to find args for
+   * @returns The args object from the matching tool call, or an empty object if not found
+   */
+  private findToolCallArgs(toolCallId: string): Record<string, unknown> {
+    // Search through all messages in reverse order (most recent first) for better performance
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (!msg || msg.role !== 'assistant') {
+        continue;
+      }
+
+      // Check both content.parts (v2 format) and toolInvocations (legacy format)
+      if (msg.content.parts) {
+        // Look for tool-invocation with matching toolCallId (can be in 'call' or 'result' state)
+        const toolCallPart = msg.content.parts.find(
+          p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === toolCallId,
+        );
+
+        if (toolCallPart && toolCallPart.type === 'tool-invocation') {
+          // Return the args even if it's undefined or empty object
+          return toolCallPart.toolInvocation.args || {};
+        }
+      }
+
+      // Also check toolInvocations array (AIV4 format)
+      if (msg.content.toolInvocations) {
+        const toolInvocation = msg.content.toolInvocations.find(inv => inv.toolCallId === toolCallId);
+
+        if (toolInvocation) {
+          return toolInvocation.args || {};
+        }
+      }
+    }
+
+    // If not found in DB messages, return empty object
+    return {};
   }
 }

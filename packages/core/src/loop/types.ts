@@ -1,5 +1,12 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { CallSettings, IdGenerator, StopCondition, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
+import type {
+  CallSettings,
+  IdGenerator,
+  StopCondition as StopConditionV5,
+  ToolChoice,
+  ToolSet,
+} from '@internal/ai-sdk-v5';
+import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import z from 'zod';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
@@ -28,6 +35,8 @@ import type {
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
+
+type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
 
 export type StreamInternal = {
   now?: () => number;
@@ -92,7 +101,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSc
   inputProcessors?: InputProcessorOrWorkflow[];
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
-  stopWhen?: StopCondition<NoInfer<TOOLS>> | Array<StopCondition<NoInfer<TOOLS>>>;
+  stopWhen?: StopCondition | Array<StopCondition>;
   maxSteps?: number;
   _internal?: StreamInternal;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;

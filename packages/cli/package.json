@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.0.0-beta.11",
+  "version": "1.0.0-beta.12",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -58,6 +58,7 @@
     "execa": "^9.6.1",
     "fs-extra": "^11.3.2",
     "get-port": "^7.1.0",
+    "local-pkg": "^1.1.2",
     "picocolors": "^1.1.1",
     "posthog-node": "5.17.2",
     "prettier": "^3.7.4",

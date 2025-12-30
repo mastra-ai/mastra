@@ -44,7 +44,7 @@ if (!deploymentUrl || !adminKey) {
     ...(storageFunction ? { storageFunction } : {}),
   });
 
-  createTestSuite(store);
+  createTestSuite(store, { listScoresBySpan: false });
 
   // Pre-configured client acceptance tests
   createClientAcceptanceTests({
@@ -99,6 +99,61 @@ if (!deploymentUrl || !adminKey) {
     });
   });
 }
+
+// Schema sync tests - ensure Convex schema matches core TABLE_SCHEMAS
+// This test verifies that the hardcoded schema in @mastra/convex/schema stays in sync
+// with the canonical schema definitions in @mastra/core/storage
+describe('Convex Schema Sync', () => {
+  it('mastraThreadsTable should include all fields from TABLE_SCHEMAS[TABLE_THREADS]', async () => {
+    // Import the core schema - this defines the canonical field list
+    const { TABLE_SCHEMAS, TABLE_THREADS } = await import('@mastra/core/storage');
+    // Import the Convex schema - this is what users actually use
+    const { mastraThreadsTable } = await import('../schema');
+
+    const coreThreadSchema = TABLE_SCHEMAS[TABLE_THREADS];
+    const coreFields = Object.keys(coreThreadSchema);
+
+    // Get the Convex table validator to check its fields
+    // The validator is stored internally in the table definition
+    const convexValidator = (mastraThreadsTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    // Check that all core fields exist in Convex schema
+    const missingFields = coreFields.filter(field => !convexFields.includes(field));
+
+    expect(missingFields).toEqual([]);
+  });
+
+  it('mastraMessagesTable should include all fields from TABLE_SCHEMAS[TABLE_MESSAGES]', async () => {
+    const { TABLE_SCHEMAS, TABLE_MESSAGES } = await import('@mastra/core/storage');
+    const { mastraMessagesTable } = await import('../schema');
+
+    const coreSchema = TABLE_SCHEMAS[TABLE_MESSAGES];
+    const coreFields = Object.keys(coreSchema);
+
+    const convexValidator = (mastraMessagesTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    const missingFields = coreFields.filter(field => !convexFields.includes(field));
+
+    expect(missingFields).toEqual([]);
+  });
+
+  it('mastraResourcesTable should include all fields from TABLE_SCHEMAS[TABLE_RESOURCES]', async () => {
+    const { TABLE_SCHEMAS, TABLE_RESOURCES } = await import('@mastra/core/storage');
+    const { mastraResourcesTable } = await import('../schema');
+
+    const coreSchema = TABLE_SCHEMAS[TABLE_RESOURCES];
+    const coreFields = Object.keys(coreSchema);
+
+    const convexValidator = (mastraResourcesTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    const missingFields = coreFields.filter(field => !convexFields.includes(field));
+
+    expect(missingFields).toEqual([]);
+  });
+});
 
 // Configuration validation tests (run even without credentials)
 createConfigValidationTests({

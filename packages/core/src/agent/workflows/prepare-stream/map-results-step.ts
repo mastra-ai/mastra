@@ -131,7 +131,10 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
     if (options.structuredOutput?.model) {
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+      const structuredProcessor = new StructuredOutputProcessor({
+        ...options.structuredOutput,
+        logger: capabilities.logger,
+      });
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
