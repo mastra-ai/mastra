@@ -266,12 +266,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
-        query.createdAt = { ...query.createdAt, [startOp]: filter.dateRange.start };
+        query.createdAt = { ...query.createdAt, [startOp]: formatDateForMongoDB(filter.dateRange.start) };
       }
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
-        query.createdAt = { ...query.createdAt, [endOp]: filter.dateRange.end };
+        query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
       // Get total count

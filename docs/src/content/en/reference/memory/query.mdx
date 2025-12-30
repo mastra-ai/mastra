@@ -65,9 +65,9 @@ await memory?.query({ threadId: "user-123" });
     },
     {
       name: "filter",
-      type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }",
+      type: "{ dateRange?: { start?: Date; end?: Date } }",
       description:
-        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).",
+        "Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date.",
       isOptional: true,
     },
     {
