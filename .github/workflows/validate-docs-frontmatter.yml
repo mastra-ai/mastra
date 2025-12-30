@@ -4,9 +4,9 @@ on:
   pull_request:
     branches: [main, 0.x]
     paths:
-      - 'docs/**/*.mdx'
-      - 'docs/scripts/validate-frontmatter.ts'
-      - '.github/workflows/validate-docs-frontmatter.yml'
+      - "docs/**/*.mdx"
+      - "docs/scripts/validate-frontmatter.ts"
+      - ".github/workflows/validate-docs-frontmatter.yml"
 
 permissions:
   contents: read
@@ -22,13 +22,10 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          node-version: 22.13.0
-
-      - name: Install tsx
-        run: npm install -g tsx
+          install-dependencies: false
 
       - name: Validate frontmatter
         working-directory: ./docs
