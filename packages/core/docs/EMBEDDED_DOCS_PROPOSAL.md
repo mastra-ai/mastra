@@ -505,12 +505,12 @@ const code = await client.callTool('read_implementation', {
 
 ### Phase 3: MCP Tools Enhancement
 
-- [ ] Add embedded docs tools to `@mastra/mcp-docs-server`
-- [ ] Implement `list_installed_packages`
-- [ ] Implement `read_source_map`
-- [ ] Implement `find_export`
-- [ ] Implement `read_implementation`
-- [ ] Implement `search_embedded_docs`
+- [x] Add embedded docs tools to `@mastra/mcp-docs-server`
+- [x] Implement `listInstalledMastraPackages`
+- [x] Implement `readMastraSourceMap`
+- [x] Implement `findMastraExport`
+- [x] Implement `readMastraEmbeddedDocs`
+- [x] Implement `searchMastraEmbeddedDocs`
 
 ### Phase 4: Refinement
 
