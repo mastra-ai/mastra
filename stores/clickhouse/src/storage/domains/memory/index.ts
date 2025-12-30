@@ -255,7 +255,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        dataQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        dataQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         dataParams.fromDate = startDate;
       }
 
@@ -264,7 +265,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        dataQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        dataQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         dataParams.toDate = endDate;
       }
 
@@ -313,7 +315,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        countQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         countParams.fromDate = startDate;
       }
 
@@ -322,7 +325,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        countQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
       }
 

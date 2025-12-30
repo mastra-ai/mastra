@@ -78,6 +78,18 @@ export type StorageListMessagesInput = {
     dateRange?: {
       start?: Date;
       end?: Date;
+      /**
+       * When true, excludes the start date from results (uses > instead of >=).
+       * Useful for cursor-based pagination to avoid duplicates.
+       * @default false
+       */
+      startExclusive?: boolean;
+      /**
+       * When true, excludes the end date from results (uses < instead of <=).
+       * Useful for cursor-based pagination to avoid duplicates.
+       * @default false
+       */
+      endExclusive?: boolean;
     };
   };
   orderBy?: StorageOrderBy<'createdAt'>;

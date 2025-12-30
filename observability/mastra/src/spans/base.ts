@@ -18,7 +18,8 @@ import type {
 
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import { ModelSpanTracker } from '../model-tracing';
-import { deepClean } from './serialization';
+import { deepClean, mergeSerializationOptions } from './serialization';
+import type { DeepCleanOptions } from './serialization';
 
 /**
  * Determines if a span type should be considered internal based on flags.
@@ -136,12 +137,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityName?: string;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
+  /** Deep clean options for serialization */
+  protected deepCleanOptions: DeepCleanOptions;
 
   constructor(options: CreateSpanOptions<TType>, observabilityInstance: ObservabilityInstance) {
+    // Get serialization options from observability instance config
+    const serializationOptions = observabilityInstance.getConfig().serializationOptions;
+    this.deepCleanOptions = mergeSerializationOptions(serializationOptions);
+
     this.name = options.name;
     this.type = options.type;
-    this.attributes = deepClean(options.attributes) || ({} as SpanTypeMap[TType]);
-    this.metadata = deepClean(options.metadata);
+    this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
+    this.metadata = deepClean(options.metadata, this.deepCleanOptions);
     this.parent = options.parent;
     this.startTime = new Date();
     this.observabilityInstance = observabilityInstance;
@@ -158,9 +165,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (this.isEvent) {
       // Event spans don't have endTime or input.
       // Event spans are immediately emitted by the BaseObservability class via the end() event.
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     } else {
-      this.input = deepClean(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
   }
 

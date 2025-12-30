@@ -629,12 +629,14 @@ export class MemoryPG extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        conditions.push(`"createdAt" >= $${paramIndex++}`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
-        conditions.push(`"createdAt" <= $${paramIndex++}`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
 

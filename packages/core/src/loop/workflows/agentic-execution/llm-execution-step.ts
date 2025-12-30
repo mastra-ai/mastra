@@ -112,6 +112,9 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       });
     }
 
+    // Only reset reasoning state for truly unexpected chunk types.
+    // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
+    // so we must allow text-start to pass through without clearing reasoningDeltas.
     if (
       chunk.type !== 'reasoning-start' &&
       chunk.type !== 'reasoning-delta' &&
@@ -119,6 +122,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       chunk.type !== 'redacted-reasoning' &&
       chunk.type !== 'reasoning-signature' &&
       chunk.type !== 'response-metadata' &&
+      chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
       runState.setState({
@@ -640,16 +644,42 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         if (autoResumeSuspendedTools) {
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-          const suspendedToolsMessage = assistantMessages.find(
-            message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
-          );
+          const suspendedToolsMessage = assistantMessages.find(message => {
+            const pendingOrSuspendedTools =
+              message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals;
+            if (pendingOrSuspendedTools) {
+              return true;
+            }
+            const dataToolSuspendedParts = message.content.parts?.filter(
+              part =>
+                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                !(part.data as any).resumed,
+            );
+            if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+              return true;
+            }
+            return false;
+          });
 
           if (suspendedToolsMessage) {
             const metadata = suspendedToolsMessage.content.metadata;
-            const suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
-              string,
-              any
-            >;
+            let suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<string, any>;
+            if (!suspendedToolObj) {
+              suspendedToolObj = suspendedToolsMessage.content.parts
+                ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
+                ?.reduce(
+                  (acc, part) => {
+                    if (
+                      (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                      !(part.data as any).resumed
+                    ) {
+                      acc[(part.data as any).toolName] = part.data;
+                    }
+                    return acc;
+                  },
+                  {} as Record<string, any>,
+                );
+            }
             const suspendedTools = Object.values(suspendedToolObj);
             if (suspendedTools.length > 0) {
               inputMessages = inputMessages.map((message, index) => {
