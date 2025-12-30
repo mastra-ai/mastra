@@ -264,3 +264,57 @@ export function serializeDate(date: Date | string | undefined): string | undefin
   const dateObj = ensureDate(date);
   return dateObj?.toISOString();
 }
+
+/**
+ * Date range filter configuration for in-memory filtering operations.
+ */
+export interface DateRangeFilter {
+  start?: Date | string;
+  end?: Date | string;
+  startExclusive?: boolean;
+  endExclusive?: boolean;
+}
+
+/**
+ * Filter an array of items by date range. Used by in-memory storage adapters.
+ *
+ * This provides a consistent implementation of date range filtering with
+ * support for inclusive/exclusive bounds across all storage adapters.
+ *
+ * @param items - Array of items to filter
+ * @param getCreatedAt - Function to extract the createdAt date from an item
+ * @param dateRange - Optional date range filter configuration
+ * @returns Filtered array of items
+ *
+ * @example
+ * ```ts
+ * const filtered = filterByDateRange(
+ *   messages,
+ *   (msg) => new Date(msg.createdAt),
+ *   { start: new Date('2024-01-01'), startExclusive: true }
+ * );
+ * ```
+ */
+export function filterByDateRange<T>(items: T[], getCreatedAt: (item: T) => Date, dateRange?: DateRangeFilter): T[] {
+  if (!dateRange) return items;
+
+  let result = items;
+
+  if (dateRange.start) {
+    const startTime = ensureDate(dateRange.start)!.getTime();
+    result = result.filter(item => {
+      const itemTime = getCreatedAt(item).getTime();
+      return dateRange.startExclusive ? itemTime > startTime : itemTime >= startTime;
+    });
+  }
+
+  if (dateRange.end) {
+    const endTime = ensureDate(dateRange.end)!.getTime();
+    result = result.filter(item => {
+      const itemTime = getCreatedAt(item).getTime();
+      return dateRange.endExclusive ? itemTime < endTime : itemTime <= endTime;
+    });
+  }
+
+  return result;
+}

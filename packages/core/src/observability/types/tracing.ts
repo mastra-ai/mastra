@@ -894,6 +894,33 @@ export type TracingProperties = {
 // ============================================================================
 
 /**
+ * Options for controlling serialization of span data.
+ * These options control how input, output, and attributes are cleaned before export.
+ */
+export interface SerializationOptions {
+  /**
+   * Maximum length for string values
+   * @default 1024
+   */
+  maxStringLength?: number;
+  /**
+   * Maximum depth for nested objects
+   * @default 6
+   */
+  maxDepth?: number;
+  /**
+   * Maximum number of items in arrays
+   * @default 50
+   */
+  maxArrayLength?: number;
+  /**
+   * Maximum number of keys in objects
+   * @default 50
+   */
+  maxObjectKeys?: number;
+}
+
+/**
  * Configuration for a single observability instance
  */
 export interface ObservabilityInstanceConfig {
@@ -917,6 +944,11 @@ export interface ObservabilityInstanceConfig {
    * Supports dot notation for nested values.
    */
   requestContextKeys?: string[];
+  /**
+   * Options for controlling serialization of span data (input/output/attributes).
+   * Use these to customize truncation limits for large payloads.
+   */
+  serializationOptions?: SerializationOptions;
 }
 
 /**

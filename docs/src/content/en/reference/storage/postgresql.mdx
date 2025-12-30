@@ -234,48 +234,56 @@ for await (const chunk of stream.textStream) {
 
 ## Index Management
 
-PostgreSQL storage provides comprehensive index management capabilities to optimize query performance.
+PostgreSQL storage provides index management to optimize query performance.
 
-### Automatic Performance Indexes
+### Default Indexes
 
-PostgreSQL storage automatically creates composite indexes during initialization for common query patterns:
+PostgreSQL storage creates composite indexes during initialization for common query patterns:
 
 - `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt DESC)
 - `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt DESC)
-- `mastra_traces_name_starttime_idx`: (name, startTime DESC)
-- `mastra_evals_agent_name_created_at_idx`: (agent_name, created_at DESC)
+- `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt DESC)
+- `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt DESC)
+- `mastra_ai_spans_name_startedat_idx`: (name, startedAt DESC)
+- `mastra_ai_spans_scope_startedat_idx`: (scope, startedAt DESC)
+- `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt DESC)
 
-These indexes significantly improve performance for filtered queries with sorting.
+These indexes improve performance for filtered queries with sorting, including `dateRange` filters on message queries.
 
-### Creating Custom Indexes
+### Configuring Indexes
 
-Create additional indexes to optimize specific query patterns:
+You can control index creation via constructor options:
 
 ```typescript
-// Basic index for common queries
-await storage.createIndex({
-  name: "idx_threads_resource",
-  table: "mastra_threads",
-  columns: ["resourceId"],
+import { PostgresStore } from "@mastra/pg";
+
+// Skip default indexes (manage indexes separately)
+const store = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  skipDefaultIndexes: true,
 });
 
-// Composite index with sort order for filtering + sorting
-await storage.createIndex({
-  name: "idx_messages_composite",
-  table: "mastra_messages",
-  columns: ["thread_id", "createdAt DESC"],
-});
-
-// GIN index for JSONB columns (fast JSON queries)
-await storage.createIndex({
-  name: "idx_traces_attributes",
-  table: "mastra_traces",
-  columns: ["attributes"],
-  method: "gin",
+// Add custom indexes during initialization
+const storeWithCustomIndexes = new PostgresStore({
+  id: 'pg-storage',
+  connectionString: process.env.DATABASE_URL,
+  indexes: [
+    {
+      name: "idx_threads_metadata_type",
+      table: "mastra_threads",
+      columns: ["metadata->>'type'"],
+    },
+    {
+      name: "idx_messages_status",
+      table: "mastra_messages",
+      columns: ["metadata->>'status'"],
+    },
+  ],
 });
 ```
 
-For more advanced use cases, you can also use:
+For advanced index types, you can specify additional options:
 
 - `unique: true` for unique constraints
 - `where: 'condition'` for partial indexes
@@ -351,66 +359,48 @@ For more advanced use cases, you can also use:
   ]}
 />
 
-### Managing Indexes
-
-List and monitor existing indexes:
-
-```typescript
-// List all indexes
-const allIndexes = await storage.listIndexes();
-console.log(allIndexes);
-// [
-//   {
-//     name: 'mastra_threads_pkey',
-//     table: 'mastra_threads',
-//     columns: ['id'],
-//     unique: true,
-//     size: '16 KB',
-//     definition: 'CREATE UNIQUE INDEX...'
-//   },
-//   ...
-// ]
-
-// List indexes for specific table
-const threadIndexes = await storage.listIndexes("mastra_threads");
-
-// Get detailed statistics for an index
-const stats = await storage.describeIndex("idx_threads_resource");
-console.log(stats);
-// {
-//   name: 'idx_threads_resource',
-//   table: 'mastra_threads',
-//   columns: ['resourceId', 'createdAt'],
-//   unique: false,
-//   size: '128 KB',
-//   definition: 'CREATE INDEX idx_threads_resource...',
-//   method: 'btree',
-//   scans: 1542,           // Number of index scans
-//   tuples_read: 45230,    // Tuples read via index
-//   tuples_fetched: 12050  // Tuples fetched via index
-// }
-
-// Drop an index
-await storage.dropIndex("idx_threads_status");
-```
-
 ### Schema-Specific Indexes
 
-When using custom schemas, indexes are created with schema prefixes:
+When using custom schemas, index names are prefixed with the schema name:
 
 ```typescript
 const storage = new PostgresStore({
   id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
   schemaName: "custom_schema",
+  indexes: [
+    {
+      name: "idx_threads_status",
+      table: "mastra_threads",
+      columns: ["status"],
+    },
+  ],
 });
 
 // Creates index as: custom_schema_idx_threads_status
-await storage.createIndex({
-  name: "idx_threads_status",
-  table: "mastra_threads",
-  columns: ["status"],
-});
+```
+
+### Managing Indexes via SQL
+
+For advanced index management (listing, dropping, analyzing), use direct SQL queries via the `db` accessor:
+
+```typescript
+// List indexes for a table
+const indexes = await storage.db.any(`
+  SELECT indexname, indexdef
+  FROM pg_indexes
+  WHERE tablename = 'mastra_messages'
+`);
+
+// Drop an index
+await storage.db.none('DROP INDEX IF EXISTS idx_my_custom_index');
+
+// Analyze index usage
+const stats = await storage.db.one(`
+  SELECT idx_scan, idx_tup_read
+  FROM pg_stat_user_indexes
+  WHERE indexrelname = 'mastra_messages_thread_id_createdat_idx'
+`);
 ```
 
 ### Index Types and Use Cases
