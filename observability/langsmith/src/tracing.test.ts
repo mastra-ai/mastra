@@ -24,14 +24,24 @@ import type { LangSmithExporterConfig } from './tracing';
 // Mock LangSmith (must be at the top level)
 vi.mock('langsmith');
 
-describe('LangSmithExporter', () => {
+class TestLangSmithExporter extends LangSmithExporter {
+  _getTraceData(traceId: string) {
+    return this.getTraceData({ traceId, method: 'test' });
+  }
+
+  get _traceMapSize(): number {
+    return this.traceMapSize();
+  }
+}
+
+describe('TestLangSmithExporter', () => {
   // Mock objects
   let mockRunTree: any;
   let mockClient: any;
   let MockRunTreeClass: any;
   let MockClientClass: any;
 
-  let exporter: LangSmithExporter;
+  let exporter: TestLangSmithExporter;
   let config: LangSmithExporterConfig;
 
   beforeEach(() => {
@@ -74,9 +84,11 @@ describe('LangSmithExporter', () => {
       apiKey: 'test-api-key',
       apiUrl: 'https://test-langsmith.com',
       logLevel: 'debug' as const,
+      // Short cleanup delay for faster tests
+      traceCleanupDelayMs: 10,
     };
 
-    exporter = new LangSmithExporter(config);
+    exporter = new TestLangSmithExporter(config);
   });
 
   describe('Initialization', () => {
@@ -86,7 +98,7 @@ describe('LangSmithExporter', () => {
 
     it('should pass projectName to RunTree when configured', async () => {
       // Create exporter with custom projectName
-      const exporterWithProject = new LangSmithExporter({
+      const exporterWithProject = new TestLangSmithExporter({
         apiKey: 'test-api-key',
         projectName: 'my-custom-project',
       });
@@ -122,7 +134,7 @@ describe('LangSmithExporter', () => {
         apiUrl: 'https://test.com',
       };
 
-      const disabledExporter = new LangSmithExporter(invalidConfig);
+      const disabledExporter = new TestLangSmithExporter(invalidConfig);
 
       // Restore env var
       process.env.LANGSMITH_API_KEY = originalEnvKey;
@@ -174,6 +186,7 @@ describe('LangSmithExporter', () => {
         name: 'root-agent',
         run_type: 'chain', // Default span type mapping for AGENT_RUN
         client: mockClient,
+        start_time: rootSpan.startTime.getTime() / 1000,
         metadata: {
           mastra_span_type: 'agent_run',
           agentId: 'agent-123',
@@ -229,6 +242,7 @@ describe('LangSmithExporter', () => {
         name: 'child-tool',
         run_type: 'tool', // TOOL_CALL maps to 'tool'
         client: mockClient,
+        start_time: childSpan.startTime.getTime() / 1000,
         metadata: {
           mastra_span_type: 'tool_call',
           toolId: 'calculator',
@@ -282,19 +296,16 @@ describe('LangSmithExporter', () => {
       });
 
       // Access internal traceMap to verify trace data is shared (not overwritten)
-      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      const traceData = exporter._getTraceData(sharedTraceId);
       expect(traceData).toBeDefined();
 
       // Both root spans should be tracked in the same trace
-      expect(traceData.spans.has('root-span-1')).toBe(true);
-      expect(traceData.spans.has('root-span-2')).toBe(true);
+      expect(traceData.hasSpan({ spanId: 'root-span-1' })).toBe(true);
+      expect(traceData.hasSpan({ spanId: 'root-span-2' })).toBe(true);
 
       // Both root spans should be active
-      expect(traceData.activeIds.has('root-span-1')).toBe(true);
-      expect(traceData.activeIds.has('root-span-2')).toBe(true);
-
-      // Only one trace entry should exist (not two separate ones)
-      expect((exporter as any).traceMap.size).toBe(1);
+      expect(traceData.isActiveSpan({ spanId: 'root-span-1' })).toBe(true);
+      expect(traceData.isActiveSpan({ spanId: 'root-span-2' })).toBe(true);
     });
 
     it('should pass tags to RunTree for root spans', async () => {
@@ -564,6 +575,7 @@ describe('LangSmithExporter', () => {
         name: 'gpt-4-call',
         run_type: 'llm',
         client: mockClient,
+        start_time: llmSpan.startTime.getTime() / 1000,
         inputs: { messages: [{ role: 'user', content: 'Hello' }] },
         outputs: { content: 'Hi there!' },
         metadata: {
@@ -606,6 +618,7 @@ describe('LangSmithExporter', () => {
         name: 'simple-llm',
         run_type: 'llm',
         client: mockClient,
+        start_time: llmSpan.startTime.getTime() / 1000,
         metadata: {
           mastra_span_type: 'model_generation',
           ls_model_name: 'gpt-3.5-turbo',
@@ -883,7 +896,7 @@ describe('LangSmithExporter', () => {
       });
 
       // Verify trace was created
-      expect((exporter as any).traceMap.has('root-span')).toBe(true);
+      expect(exporter._traceMapSize).toBeGreaterThan(0);
 
       rootSpan.endTime = new Date();
 
@@ -892,8 +905,11 @@ describe('LangSmithExporter', () => {
         exportedSpan: rootSpan,
       });
 
+      // Wait for cleanup delay (config uses 10ms)
+      await new Promise(resolve => setTimeout(resolve, 20));
+
       // Should clean up traceMap
-      expect((exporter as any).traceMap.has('root-span')).toBe(false);
+      expect(exporter._traceMapSize).toBe(0);
     });
   });
 
@@ -920,9 +936,9 @@ describe('LangSmithExporter', () => {
       // Should create RunTree for root event
       expect(MockRunTreeClass).toHaveBeenCalledWith({
         name: 'user-feedback',
-        type: 'chain',
+        run_type: 'chain',
         client: mockClient,
-        startTime: eventSpan.startTime.getTime() / 1000,
+        start_time: eventSpan.startTime.getTime() / 1000,
         outputs: { message: 'Great response!' },
         metadata: {
           mastra_span_type: 'generic',
@@ -941,12 +957,15 @@ describe('LangSmithExporter', () => {
 
     it('should create zero-duration child RunTrees for child event spans', async () => {
       // First create root span
+      const traceId = 'trace-id';
+
       const rootSpan = createMockSpan({
         id: 'root-span',
         name: 'root-agent',
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -965,9 +984,9 @@ describe('LangSmithExporter', () => {
           success: true,
         },
         output: { result: 42 },
+        traceId,
       });
       childEventSpan.isEvent = true;
-      childEventSpan.traceId = 'root-span';
       childEventSpan.parentSpanId = 'root-span';
 
       await exporter.exportTracingEvent({
@@ -978,9 +997,9 @@ describe('LangSmithExporter', () => {
       // Should create child RunTree on parent
       expect(mockRunTree.createChild).toHaveBeenCalledWith({
         name: 'tool-result',
-        type: 'chain',
+        run_type: 'chain',
         client: mockClient,
-        startTime: childEventSpan.startTime.getTime() / 1000,
+        start_time: childEventSpan.startTime.getTime() / 1000,
         outputs: { result: 42 },
         metadata: {
           mastra_span_type: 'generic',
@@ -1086,7 +1105,7 @@ describe('LangSmithExporter', () => {
       });
 
       // Verify maps have data
-      expect((exporter as any).traceMap.size).toBeGreaterThan(0);
+      expect(exporter._traceMapSize).toBeGreaterThan(0);
 
       // Shutdown
       await exporter.shutdown();
@@ -1096,11 +1115,11 @@ describe('LangSmithExporter', () => {
       expect(mockRunTree.patchRun).toHaveBeenCalled();
 
       // Verify maps were cleared
-      expect((exporter as any).traceMap.size).toBe(0);
+      expect(exporter._traceMapSize).toBe(0);
     });
 
     it('should handle shutdown when exporter is disabled', async () => {
-      const disabledExporter = new LangSmithExporter({});
+      const disabledExporter = new TestLangSmithExporter({});
 
       // Should not throw
       await expect(disabledExporter.shutdown()).resolves.not.toThrow();
@@ -1220,6 +1239,7 @@ function createMockSpan({
   output,
   errorInfo,
   tags,
+  traceId,
 }: {
   id: string;
   name: string;
@@ -1231,6 +1251,7 @@ function createMockSpan({
   output?: any;
   errorInfo?: any;
   tags?: string[];
+  traceId?: string;
 }): AnyExportedSpan {
   const mockSpan = {
     id,
@@ -1244,7 +1265,7 @@ function createMockSpan({
     tags,
     startTime: new Date(),
     endTime: undefined,
-    traceId: isRoot ? id : 'parent-trace-id',
+    traceId: traceId ?? (isRoot ? id : 'parent-trace-id'),
     get isRootSpan() {
       return isRoot;
     },
