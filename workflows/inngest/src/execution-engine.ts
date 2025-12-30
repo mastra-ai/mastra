@@ -13,7 +13,6 @@ import type {
   TimeTravelExecutionParams,
   WorkflowResult,
 } from '@mastra/core/workflows';
-import { RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext } from 'inngest';
 import { InngestWorkflow } from './workflow';
 
@@ -85,43 +84,52 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       runId: string;
     },
   ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
-    try {
-      // Pass retry config to wrapDurableOperation so RetryAfterError is thrown INSIDE step.run()
-      const result = await this.wrapDurableOperation(stepId, runStep, { delay: params.delay });
-      return { ok: true, result };
-    } catch (e) {
-      // After step-level retries exhausted, extract failure from error cause
-      const cause = (e as any)?.cause;
-      if (cause?.status === 'failed') {
-        params.stepSpan?.error({
-          error: e,
-          attributes: { status: 'failed' },
-        });
-        // Ensure cause.error is an Error instance
-        if (cause.error && !(cause.error instanceof Error)) {
-          cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
-        }
-        return { ok: false, error: cause };
+    for (let i = 0; i < params.retries + 1; i++) {
+      if (i > 0 && params.delay) {
+        await new Promise(resolve => setTimeout(resolve, params.delay));
       }
+      try {
+        //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
+        const result = await this.wrapDurableOperation(stepId, runStep);
+        return { ok: true, result };
+      } catch (e) {
+        if (i === params.retries) {
+          // After step-level retries exhausted, extract failure from error cause
+          const cause = (e as any)?.cause;
+          if (cause?.status === 'failed') {
+            params.stepSpan?.error({
+              error: e,
+              attributes: { status: 'failed' },
+            });
+            // Ensure cause.error is an Error instance
+            if (cause.error && !(cause.error instanceof Error)) {
+              cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
+            }
+            return { ok: false, error: cause };
+          }
 
-      // Fallback for other errors - preserve the original error instance
-      const errorInstance = getErrorFromUnknown(e, {
-        serializeStack: false,
-        fallbackMessage: 'Unknown step execution error',
-      });
-      params.stepSpan?.error({
-        error: errorInstance,
-        attributes: { status: 'failed' },
-      });
-      return {
-        ok: false,
-        error: {
-          status: 'failed',
-          error: errorInstance,
-          endedAt: Date.now(),
-        },
-      };
+          // Fallback for other errors - preserve the original error instance
+          const errorInstance = getErrorFromUnknown(e, {
+            serializeStack: false,
+            fallbackMessage: 'Unknown step execution error',
+          });
+          params.stepSpan?.error({
+            error: errorInstance,
+            attributes: { status: 'failed' },
+          });
+          return {
+            ok: false,
+            error: {
+              status: 'failed',
+              error: errorInstance,
+              endedAt: Date.now(),
+            },
+          };
+        }
+      }
     }
+    // Should never reach here, but TypeScript needs it
+    return { ok: false, error: { status: 'failed', error: new Error('Unknown error'), endedAt: Date.now() } };
   }
 
   /**
@@ -143,31 +151,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * If retryConfig is provided, throws RetryAfterError INSIDE step.run() to trigger
    * Inngest's step-level retry mechanism (not function-level retry).
    */
-  async wrapDurableOperation<T>(
-    operationId: string,
-    operationFn: () => Promise<T>,
-    retryConfig?: { delay: number },
-  ): Promise<T> {
+  async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
     return this.inngestStep.run(operationId, async () => {
       try {
         return await operationFn();
       } catch (e) {
-        if (retryConfig) {
-          // Throw RetryAfterError INSIDE step.run() to trigger step-level retry
-          // Preserve the original error instance with all its properties
-          const errorInstance = getErrorFromUnknown(e, {
-            serializeStack: false,
-            fallbackMessage: 'Unknown step execution error',
-          });
-          throw new RetryAfterError(errorInstance.message, retryConfig.delay, {
-            cause: {
-              status: 'failed',
-              error: errorInstance,
-              endedAt: Date.now(),
-            },
-          });
-        }
-        throw e; // Re-throw if no retry config
+        throw e;
       }
     }) as Promise<T>;
   }
