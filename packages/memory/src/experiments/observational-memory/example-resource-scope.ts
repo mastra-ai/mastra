@@ -34,11 +34,11 @@ const om = new ObservationalMemory({
   storage,
   resourceScope: true, // 🔑 This enables cross-thread memory!
   observer: {
-    historyThreshold: 100,
+    observationThreshold: 100,
     model: 'google/gemini-2.5-flash',
   },
   reflector: {
-    observationThreshold: 2000,
+    reflectionThreshold: 2000,
     model: 'google/gemini-2.5-flash',
   },
 });

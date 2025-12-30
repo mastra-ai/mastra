@@ -105,7 +105,7 @@ export interface ObservationalMemoryConfig {
  */
 interface ResolvedObserverConfig {
   model: MastraModelConfig;
-  historyThreshold: number | ThresholdRange;
+  observationThreshold: number | ThresholdRange;
   bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
@@ -114,7 +114,7 @@ interface ResolvedObserverConfig {
 
 interface ResolvedReflectorConfig {
   model: MastraModelConfig;
-  observationThreshold: number | ThresholdRange;
+  reflectionThreshold: number | ThresholdRange;
   bufferEvery?: number;
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
@@ -134,7 +134,7 @@ interface ResolvedCollapseConfig {
 const DEFAULTS = {
   observer: {
     model: 'google/gemini-2.5-flash',
-    historyThreshold: 10_000,
+    observationThreshold: 10_000,
     modelSettings: {
       temperature: 0.3,
       maxOutputTokens: 100_000,
@@ -149,7 +149,7 @@ const DEFAULTS = {
   },
   reflector: {
     model: 'google/gemini-2.5-flash',
-    observationThreshold: 30_000,
+    reflectionThreshold: 30_000,
     modelSettings: {
       temperature: 0, // Use 0 for maximum consistency in reflections
       maxOutputTokens: 100_000,
@@ -203,13 +203,13 @@ const BUFFERING_WAIT_TIMEOUT = 60_000; // 60 seconds
  *   storage,
  *   observer: {
  *     model: 'google/gemini-2.5-flash',
- *     historyThreshold: 10_000, // or { min: 8_000, max: 15_000 }
+ *     observationThreshold: 10_000, // or { min: 8_000, max: 15_000 }
  *     bufferEvery: 4_000,
  *     modelSettings: { temperature: 0.3 },
  *   },
  *   reflector: {
  *     model: 'google/gemini-2.5-flash',
- *     observationThreshold: 30_000,
+ *     reflectionThreshold: 30_000,
  *     bufferEvery: 15_000,
  *   },
  * });
@@ -263,7 +263,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Resolve observer config with defaults
     this.observerConfig = {
       model: config.observer?.model ?? DEFAULTS.observer.model,
-      historyThreshold: config.observer?.historyThreshold ?? DEFAULTS.observer.historyThreshold,
+      observationThreshold: config.observer?.observationThreshold ?? DEFAULTS.observer.observationThreshold,
       bufferEvery: config.observer?.bufferEvery,
       modelSettings: {
         temperature: config.observer?.modelSettings?.temperature ?? DEFAULTS.observer.modelSettings.temperature,
@@ -277,7 +277,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     // Resolve reflector config with defaults
     this.reflectorConfig = {
       model: config.reflector?.model ?? DEFAULTS.reflector.model,
-      observationThreshold: config.reflector?.observationThreshold ?? DEFAULTS.reflector.observationThreshold,
+      reflectionThreshold: config.reflector?.reflectionThreshold ?? DEFAULTS.reflector.reflectionThreshold,
       bufferEvery: config.reflector?.bufferEvery,
       modelSettings: {
         temperature: config.reflector?.modelSettings?.temperature ?? DEFAULTS.reflector.modelSettings.temperature,
@@ -316,17 +316,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Validate that bufferEvery is less than the threshold
    */
   private validateBufferConfig(): void {
-    const observerThreshold = this.getMaxThreshold(this.observerConfig.historyThreshold);
+    const observerThreshold = this.getMaxThreshold(this.observerConfig.observationThreshold);
     if (this.observerConfig.bufferEvery && this.observerConfig.bufferEvery >= observerThreshold) {
       throw new Error(
-        `observer.bufferEvery (${this.observerConfig.bufferEvery}) must be less than historyThreshold (${observerThreshold})`,
+        `observer.bufferEvery (${this.observerConfig.bufferEvery}) must be less than observationThreshold (${observerThreshold})`,
       );
     }
 
-    const reflectorThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    const reflectorThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
     if (this.reflectorConfig.bufferEvery && this.reflectorConfig.bufferEvery >= reflectorThreshold) {
       throw new Error(
-        `reflector.bufferEvery (${this.reflectorConfig.bufferEvery}) must be less than observationThreshold (${reflectorThreshold})`,
+        `reflector.bufferEvery (${this.reflectorConfig.bufferEvery}) must be less than reflectionThreshold (${reflectorThreshold})`,
       );
     }
   }
@@ -450,9 +450,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private shouldObserve(messageTokens: number, observationTokens: number = 0): boolean {
     const threshold = this.calculateDynamicThreshold(
-      this.observerConfig.historyThreshold,
+      this.observerConfig.observationThreshold,
       observationTokens,
-      this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+      this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
     );
     return messageTokens > threshold;
   }
@@ -461,7 +461,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Check if we need to trigger reflection.
    */
   private shouldReflect(observationTokens: number): boolean {
-    const threshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    const threshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
     return observationTokens > threshold;
   }
 
@@ -485,9 +485,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Check if we've crossed bufferEvery but not the main threshold
     const mainThreshold = this.calculateDynamicThreshold(
-      this.observerConfig.historyThreshold,
+      this.observerConfig.observationThreshold,
       observationTokens,
-      this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+      this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
     );
 
     return messageTokens >= bufferEvery && messageTokens < mainThreshold;
@@ -504,7 +504,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     if (this.reflectionBuffering.has(recordId)) return false;
 
     // Check if we've crossed bufferEvery but not the main threshold
-    const mainThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    const mainThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
 
     return observationTokens >= bufferEvery && observationTokens < mainThreshold;
   }
@@ -935,7 +935,7 @@ ${continuityMessage}
     console.log(
       `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, ` +
         `SessionTokens: ${currentSessionTokens}, PendingTokens: ${pendingTokens}, TotalPending: ${totalPendingTokens}, ` +
-        `Threshold: ${this.getMaxThreshold(this.observerConfig.historyThreshold)}`,
+        `Threshold: ${this.getMaxThreshold(this.observerConfig.observationThreshold)}`,
     );
 
     // ═══════════════════════════════════════════════════════════════════
@@ -958,9 +958,9 @@ ${continuityMessage}
     // Use totalPendingTokens to trigger observation when accumulated across sessions
     // ═══════════════════════════════════════════════════════════════════
     const threshold = this.calculateDynamicThreshold(
-      this.observerConfig.historyThreshold,
+      this.observerConfig.observationThreshold,
       currentObservationTokens,
-      this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+      this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
     );
     const shouldObserveNow = this.shouldObserve(totalPendingTokens, currentObservationTokens);
     console.log(
@@ -969,9 +969,9 @@ ${continuityMessage}
 
     if (shouldObserveNow) {
       const threshold = this.calculateDynamicThreshold(
-        this.observerConfig.historyThreshold,
+        this.observerConfig.observationThreshold,
         currentObservationTokens,
-        this.getMaxThreshold(this.reflectorConfig.observationThreshold),
+        this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
       );
 
       console.log(`[OM] History threshold exceeded (${totalPendingTokens} > ${threshold})`);
@@ -1148,7 +1148,7 @@ ${continuityMessage}
       return;
     }
 
-    const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.observationThreshold);
+    const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
     console.log(`[OM] Observation threshold exceeded (${observationTokens} > ${reflectThreshold})`);
 
     // Check for buffered reflection

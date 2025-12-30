@@ -35,12 +35,12 @@ const messageHistory = new MessageHistory({
 const om = new ObservationalMemory({
   storage,
   observer: {
-    historyThreshold: 300, // Main threshold - must observe at this point
+    observationThreshold: 300, // Main threshold - must observe at this point
     bufferEvery: 150, // Start buffering at 150 tokens (proactive!)
     model: 'google/gemini-2.5-flash',
   },
   reflector: {
-    observationThreshold: 2000,
+    reflectionThreshold: 2000,
     bufferEvery: 1000, // Start reflection buffering at 1000 tokens
     model: 'google/gemini-2.5-flash',
   },
@@ -109,7 +109,7 @@ async function showState(label: string) {
 async function main() {
   console.log('═'.repeat(80));
   console.log('⚡ ASYNC BUFFERING DEMO');
-  console.log('   bufferEvery: 150 tokens | historyThreshold: 300 tokens');
+  console.log('   bufferEvery: 150 tokens | observationThreshold: 300 tokens');
   console.log('═'.repeat(80));
 
   // ═══════════════════════════════════════════════════════════════════════════

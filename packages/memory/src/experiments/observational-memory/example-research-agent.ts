@@ -42,11 +42,11 @@ const om = new ObservationalMemory({
   storage,
   resourceScope: false, // Single thread for this example
   observer: {
-    historyThreshold: 200, // Low threshold - research generates lots of tokens
+    observationThreshold: 200, // Low threshold - research generates lots of tokens
     model: 'google/gemini-2.5-flash',
   },
   reflector: {
-    observationThreshold: 2500,
+    reflectionThreshold: 2500,
     model: 'google/gemini-2.5-flash',
   },
 });

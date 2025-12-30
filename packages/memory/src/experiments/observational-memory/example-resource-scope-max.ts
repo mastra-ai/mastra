@@ -39,11 +39,11 @@ const om = new ObservationalMemory({
   storage,
   resourceScope: true,
   observer: {
-    historyThreshold: 150, // Low threshold to trigger observations quickly
+    observationThreshold: 150, // Low threshold to trigger observations quickly
     model: 'google/gemini-2.5-flash',
   },
   reflector: {
-    observationThreshold: 3000, // Higher to accumulate cross-thread observations
+    reflectionThreshold: 3000, // Higher to accumulate cross-thread observations
     model: 'google/gemini-2.5-flash',
   },
 });
@@ -484,7 +484,7 @@ async function main() {
     console.log('   Some facts may need more conversation to be observed.');
   } else {
     console.log('\n⚠️ Resource-scoped OM needs tuning.');
-    console.log('   Try lowering historyThreshold or adding more messages.');
+    console.log('   Try lowering observationThreshold or adding more messages.');
   }
 
   console.log('\n' + '═'.repeat(80));

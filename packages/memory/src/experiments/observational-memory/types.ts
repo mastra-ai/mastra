@@ -5,12 +5,12 @@ import type { MastraModelConfig } from '@mastra/core/llm';
  *
  * Simple form:
  * ```ts
- * historyThreshold: 10_000
+ * observationThreshold: 10_000
  * ```
  *
  * Range form (dynamic threshold based on observation space):
  * ```ts
- * historyThreshold: { min: 8_000, max: 15_000 }
+ * observationThreshold: { min: 8_000, max: 15_000 }
  * ```
  */
 export type ThresholdRange = {
@@ -131,12 +131,12 @@ export interface ObserverConfig {
    *
    * @default 10000
    */
-  historyThreshold?: number | ThresholdRange;
+  observationThreshold?: number | ThresholdRange;
 
   /**
    * Buffer observations in background every N tokens.
    * This prevents blocking when threshold is hit.
-   * Must be less than historyThreshold (or historyThreshold.max).
+   * Must be less than observationThreshold (or observationThreshold.max).
    *
    * When enabled, observations are created asynchronously at intervals
    * and only activated when the threshold is reached.
@@ -202,12 +202,12 @@ export interface ReflectorConfig {
    *
    * @default 30000
    */
-  observationThreshold?: number | ThresholdRange;
+  reflectionThreshold?: number | ThresholdRange;
 
   /**
    * Buffer reflections in background every N tokens.
    * This prevents blocking when threshold is hit.
-   * Must be less than observationThreshold (or observationThreshold.max).
+   * Must be less than reflectionThreshold (or reflectionThreshold.max).
    */
   bufferEvery?: number;
 

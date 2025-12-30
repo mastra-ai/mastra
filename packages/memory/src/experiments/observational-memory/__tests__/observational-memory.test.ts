@@ -71,8 +71,8 @@ describe('Storage Operations', () => {
         resourceId,
         scope: 'thread',
         config: {
-          observer: { historyThreshold: 10000, model: 'test-model' },
-          reflector: { observationThreshold: 20000, model: 'test-model' },
+          observer: { observationThreshold: 10000, model: 'test-model' },
+          reflector: { reflectionThreshold: 20000, model: 'test-model' },
         },
       });
 
@@ -1091,11 +1091,11 @@ describe('ObservationalMemory Integration', () => {
     om = new ObservationalMemory({
       storage,
       observer: {
-        historyThreshold: 500, // Low threshold for testing
+        observationThreshold: 500, // Low threshold for testing
         model: 'test-model',
       },
       reflector: {
-        observationThreshold: 1000,
+        reflectionThreshold: 1000,
         model: 'test-model',
       },
     });
@@ -1941,11 +1941,11 @@ describe('ObservationalMemory with Collapsing', () => {
     om = new ObservationalMemory({
       storage,
       observer: {
-        historyThreshold: 500,
+        observationThreshold: 500,
         model: 'test-model',
       },
       reflector: {
-        observationThreshold: 1000,
+        reflectionThreshold: 1000,
         model: 'test-model',
       },
       collapse: {
@@ -2463,11 +2463,11 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         observer: {
           model: 'google/gemini-2.5-flash',
           // Use threshold range like the benchmark
-          historyThreshold: { min: 4000, max: 6000 },
+          observationThreshold: { min: 4000, max: 6000 },
         },
         reflector: {
           model: 'google/gemini-2.5-flash',
-          observationThreshold: { min: 12000, max: 18000 },
+          reflectionThreshold: { min: 12000, max: 18000 },
         },
         resourceScope: true, // Cross-session memory - critical for LongMemEval
       });
@@ -2624,11 +2624,11 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         storage,
         observer: {
           model: 'google/gemini-2.5-flash',
-          historyThreshold: 500, // Low threshold to trigger on each session
+          observationThreshold: 500, // Low threshold to trigger on each session
         },
         reflector: {
           model: 'google/gemini-2.5-flash',
-          observationThreshold: 100000, // Won't trigger
+          reflectionThreshold: 100000, // Won't trigger
         },
         resourceScope: true,
       });
@@ -2763,11 +2763,11 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         storage,
         observer: {
           model: 'google/gemini-2.5-flash',
-          historyThreshold: 100000, // Won't trigger
+          observationThreshold: 100000, // Won't trigger
         },
         reflector: {
           model: 'google/gemini-2.5-flash',
-          observationThreshold: 100000,
+          reflectionThreshold: 100000,
         },
         resourceScope: true,
       });

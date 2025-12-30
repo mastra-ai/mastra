@@ -23,11 +23,11 @@ import { TokenCounter } from './token-counter';
 
 const BUFFERING_CONFIG = {
   observer: {
-    historyThreshold: 80, // Must observe at 80 tokens (LOW for testing!)
+    observationThreshold: 80, // Must observe at 80 tokens (LOW for testing!)
     bufferEvery: 40, // Start buffering at 40 tokens (50%)
   },
   reflector: {
-    observationThreshold: 800, // Reflect at 800 tokens
+    reflectionThreshold: 800, // Reflect at 800 tokens
     bufferEvery: 400, // Start reflection buffering at 400
   },
 };
@@ -54,12 +54,12 @@ const messageHistory = new MessageHistory({
 const om = new ObservationalMemory({
   storage,
   observer: {
-    historyThreshold: BUFFERING_CONFIG.observer.historyThreshold,
+    observationThreshold: BUFFERING_CONFIG.observer.observationThreshold,
     bufferEvery: BUFFERING_CONFIG.observer.bufferEvery,
     model: 'google/gemini-2.5-flash',
   },
   reflector: {
-    observationThreshold: BUFFERING_CONFIG.reflector.observationThreshold,
+    observationThreshold: BUFFERING_CONFIG.reflector.reflectionThreshold,
     bufferEvery: BUFFERING_CONFIG.reflector.bufferEvery,
     model: 'google/gemini-2.5-flash',
   },
@@ -129,7 +129,7 @@ async function chat(message: string, label: string): Promise<void> {
 
   console.log(`\n📤 [${label}] "${message.slice(0, 70)}${message.length > 70 ? '...' : ''}"`);
   console.log(
-    `   📊 Before: ${stateBefore.msgTokens} msg tokens, threshold=${BUFFERING_CONFIG.observer.historyThreshold}`,
+    `   📊 Before: ${stateBefore.msgTokens} msg tokens, threshold=${BUFFERING_CONFIG.observer.observationThreshold}`,
   );
 
   await agent.generate(message, {
@@ -186,9 +186,9 @@ async function showDetailedState(label: string) {
   console.log(`\n${'─'.repeat(60)}`);
   console.log(`📊 STATE: ${label}`);
   console.log(`${'─'.repeat(60)}`);
-  console.log(`   Message tokens:     ${state.msgTokens} / ${BUFFERING_CONFIG.observer.historyThreshold} threshold`);
+  console.log(`   Message tokens:     ${state.msgTokens} / ${BUFFERING_CONFIG.observer.observationThreshold} threshold`);
   console.log(
-    `   Observation tokens: ${state.obsTokens} / ${BUFFERING_CONFIG.reflector.observationThreshold} reflect threshold`,
+    `   Observation tokens: ${state.obsTokens} / ${BUFFERING_CONFIG.reflector.reflectionThreshold} reflect threshold`,
   );
   console.log(`   Buffered obs:       ${state.hasBufferedObs ? '✅ READY' : '❌ none'}`);
   console.log(`   Buffered reflect:   ${state.hasBufferedRef ? '✅ READY' : '❌ none'}`);
@@ -198,21 +198,21 @@ async function showDetailedState(label: string) {
   console.log(`   Reflections:        ${state.reflectionCount}`);
 
   // Progress bars
-  const obsProgress = Math.min(100, Math.round((state.msgTokens / BUFFERING_CONFIG.observer.historyThreshold) * 100));
+  const obsProgress = Math.min(100, Math.round((state.msgTokens / BUFFERING_CONFIG.observer.observationThreshold) * 100));
   const bufferProgress = Math.min(100, Math.round((state.msgTokens / BUFFERING_CONFIG.observer.bufferEvery) * 100));
   const reflectProgress = Math.min(
     100,
-    Math.round((state.obsTokens / BUFFERING_CONFIG.reflector.observationThreshold) * 100),
+    Math.round((state.obsTokens / BUFFERING_CONFIG.reflector.reflectionThreshold) * 100),
   );
 
   console.log(
     `\n   Buffer trigger:  [${'█'.repeat(Math.floor(bufferProgress / 5))}${'░'.repeat(20 - Math.floor(bufferProgress / 5))}] ${bufferProgress}% (${BUFFERING_CONFIG.observer.bufferEvery} tokens)`,
   );
   console.log(
-    `   Observe trigger: [${'█'.repeat(Math.floor(obsProgress / 5))}${'░'.repeat(20 - Math.floor(obsProgress / 5))}] ${obsProgress}% (${BUFFERING_CONFIG.observer.historyThreshold} tokens)`,
+    `   Observe trigger: [${'█'.repeat(Math.floor(obsProgress / 5))}${'░'.repeat(20 - Math.floor(obsProgress / 5))}] ${obsProgress}% (${BUFFERING_CONFIG.observer.observationThreshold} tokens)`,
   );
   console.log(
-    `   Reflect trigger: [${'█'.repeat(Math.floor(reflectProgress / 5))}${'░'.repeat(20 - Math.floor(reflectProgress / 5))}] ${reflectProgress}% (${BUFFERING_CONFIG.reflector.observationThreshold} tokens)`,
+    `   Reflect trigger: [${'█'.repeat(Math.floor(reflectProgress / 5))}${'░'.repeat(20 - Math.floor(reflectProgress / 5))}] ${reflectProgress}% (${BUFFERING_CONFIG.reflector.reflectionThreshold} tokens)`,
   );
 }
 
@@ -238,10 +238,10 @@ async function main() {
   console.log('═'.repeat(80));
   console.log(`\n📋 Configuration:`);
   console.log(
-    `   Observer: bufferEvery=${BUFFERING_CONFIG.observer.bufferEvery}, threshold=${BUFFERING_CONFIG.observer.historyThreshold}`,
+    `   Observer: bufferEvery=${BUFFERING_CONFIG.observer.bufferEvery}, threshold=${BUFFERING_CONFIG.observer.observationThreshold}`,
   );
   console.log(
-    `   Reflector: bufferEvery=${BUFFERING_CONFIG.reflector.bufferEvery}, threshold=${BUFFERING_CONFIG.reflector.observationThreshold}`,
+    `   Reflector: bufferEvery=${BUFFERING_CONFIG.reflector.bufferEvery}, threshold=${BUFFERING_CONFIG.reflector.reflectionThreshold}`,
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -250,7 +250,7 @@ async function main() {
   console.log('\n' + '▓'.repeat(80));
   console.log('📚 PHASE 1: Building to buffer threshold (40 tokens)');
   console.log(`   Buffer at: ${BUFFERING_CONFIG.observer.bufferEvery} tokens`);
-  console.log(`   Observe at: ${BUFFERING_CONFIG.observer.historyThreshold} tokens`);
+  console.log(`   Observe at: ${BUFFERING_CONFIG.observer.observationThreshold} tokens`);
   console.log('▓'.repeat(80));
 
   await chat("Hi! I'm Morgan Chen, a 32-year-old product manager at Stripe.", '1.1');
