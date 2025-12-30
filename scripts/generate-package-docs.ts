@@ -437,6 +437,9 @@ function generateSourceMap(packageRoot: string): SourceMap {
 function transformMdxToMarkdown(content: string): string {
   let result = content;
 
+  // Remove 'copy' attribute from code fences (MDX-specific) - do this before protection
+  result = result.replace(/```(\w+)\s+copy/g, '```$1');
+
   // Step 1: Protect code blocks by replacing them with placeholders
   const codeBlocks: string[] = [];
   result = result.replace(/```[\s\S]*?```/g, match => {
