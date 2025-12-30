@@ -10,9 +10,24 @@ Below is a guide for reference documentation on a function. They illustrate `Par
 
 ---
 
-## 1. Title and Brief Description
+## 1. Frontmatter
 
-Start each reference page with a clear title and a short paragraph describing what the function, class, or feature does and why a user might need it.
+Start each reference page with frontmatter including `title`, `description`, and `packages`:
+
+```yaml
+---
+title: "Reference: MyFunction | Category"
+description: "Documentation for the MyFunction utility in Mastra"
+packages:
+  - "@mastra/core"
+---
+```
+
+The `packages` field is required for reference docs - it enables embedded documentation generation so coding agents can access these docs from `node_modules`. List all packages that this documentation is relevant to.
+
+## 2. Title and Brief Description
+
+After the frontmatter, add a clear heading and a short paragraph describing what the function, class, or feature does and why a user might need it.
 
 ```markdown
 # MyFunction Reference
@@ -22,7 +37,7 @@ The MyFunction utility in Mastra allows you to transform data before passing it 
 
 ---
 
-## 2. Usage Example
+## 3. Usage Example
 
 Provide a concise usage example or code snippet that shows how to import and use this function or feature in a typical Mastra project.
 
@@ -39,7 +54,7 @@ const result = MyFunction({
 
 ---
 
-## 3. Parameters
+## 4. Parameters
 
 Under a “Parameters” heading, list the function’s input parameters, including any nested properties. Use the <PropertiesTable> component to provide structured information about each parameter, such as its type, whether it’s optional, and default values.
 
@@ -87,7 +102,7 @@ If the `options` object has its own properties, you can create a separate <Prope
 
 ---
 
-## 4. Returns
+## 5. Returns
 
 If your function (or class method) returns a value, create a “Returns” heading. Briefly describe what the function returns and use <PropertiesTable> if the returned object has additional properties.
 
@@ -111,7 +126,7 @@ If your function (or class method) returns a value, create a “Returns” headi
 />
 ```
 
-## 5. Additional Notes or Examples
+## 6. Additional Notes or Examples
 
 If there are advanced use cases, edge cases, or performance considerations, add them in a separate section. Consider referencing relevant files or sections of code if they provide additional clarity.
 
@@ -133,7 +148,7 @@ export async function transformDataSync(data: string) {
 ```
 ````
 
-## 6. Cross-Link to Related Docs
+## 7. Cross-Link to Related Docs
 
 Where possible, link to any other relevant references—like other methods or classes that work closely with the feature. This helps users discover related functionality.
 
