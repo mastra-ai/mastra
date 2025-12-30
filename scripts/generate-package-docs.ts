@@ -485,6 +485,13 @@ function transformMdxToMarkdown(content: string): string {
   // Remove JSX expressions like {props.something}
   result = result.replace(/\{[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z0-9_.]+\}/g, '');
 
+  // Convert relative doc links to full URLs
+  // Matches: [text](/docs/...) or [text](/reference/...) or [text](/guides/...)
+  result = result.replace(
+    /\]\(\/((docs|reference|guides|examples|models)\/[^)]+)\)/g,
+    '](https://mastra.ai/$1)',
+  );
+
   // Clean up extra blank lines
   result = result.replace(/\n{3,}/g, '\n\n');
 
