@@ -1,6 +1,6 @@
 import { SpanType } from '@mastra/core/observability';
 import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
-import pgPromise from 'pg-promise';
+import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PgDB } from './db';
 import { TEST_CONFIG, connectionString } from './test-utils';
@@ -14,17 +14,18 @@ describe('PostgreSQL Spans Table Migration', () => {
   const testSchema = `migration_test_schema_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   let migrationStore: PostgresStore;
   let dbOps: PgDB;
+  let adminPool: Pool;
 
   beforeAll(async () => {
-    // Use a temp connection to set up schema
-    const tempPgp = pgPromise();
-    const tempDb = tempPgp(connectionString);
+    // Use a temp pool to set up schema
+    adminPool = new Pool({ connectionString });
+    const client = await adminPool.connect();
 
     try {
-      await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
-      await tempDb.none(`CREATE SCHEMA ${testSchema}`);
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      await client.query(`CREATE SCHEMA ${testSchema}`);
     } finally {
-      tempPgp.end();
+      client.release();
     }
 
     migrationStore = new PostgresStore({
@@ -41,14 +42,12 @@ describe('PostgreSQL Spans Table Migration', () => {
   afterAll(async () => {
     await migrationStore?.close();
 
-    // Use a temp connection to clean up
-    const tempPgp = pgPromise();
-    const tempDb = tempPgp(connectionString);
-
+    const client = await adminPool.connect();
     try {
-      await tempDb.none(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+      await client.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
     } finally {
-      tempPgp.end();
+      client.release();
+      await adminPool.end();
     }
   }, 30000); // 30 second timeout for cleanup
 
@@ -231,34 +230,34 @@ describe('PostgreSQL Spans Table Migration', () => {
     expect(Number(countAfter.count)).toBe(2);
 
     // Query the root span and verify all original data is preserved
-    const rootSpan = await migrationStore.db.oneOrNone(
+    const rootSpan = await migrationStore.db.oneOrNone<Record<string, unknown>>(
       `SELECT * FROM ${testSchema}.${TABLE_SPANS} WHERE "spanId" = $1`,
       ['test-span-migration-1'],
     );
     expect(rootSpan).not.toBeNull();
-    expect(rootSpan.traceId).toBe('test-trace-migration-1');
-    expect(rootSpan.name).toBe('Pre-migration Span');
-    expect(rootSpan.spanType).toBe('agent_run');
-    expect(rootSpan.parentSpanId).toBeNull();
-    expect(rootSpan.attributes).toEqual({ key: 'value' });
-    expect(rootSpan.metadata).toEqual({ custom: 'data' });
-    expect(rootSpan.input).toEqual({ message: 'hello' });
-    expect(rootSpan.output).toEqual({ result: 'success' });
+    expect(rootSpan!.traceId).toBe('test-trace-migration-1');
+    expect(rootSpan!.name).toBe('Pre-migration Span');
+    expect(rootSpan!.spanType).toBe('agent_run');
+    expect(rootSpan!.parentSpanId).toBeNull();
+    expect(rootSpan!.attributes).toEqual({ key: 'value' });
+    expect(rootSpan!.metadata).toEqual({ custom: 'data' });
+    expect(rootSpan!.input).toEqual({ message: 'hello' });
+    expect(rootSpan!.output).toEqual({ result: 'success' });
 
     // Query child span
-    const childSpan = await migrationStore.db.oneOrNone(
+    const childSpan = await migrationStore.db.oneOrNone<Record<string, unknown>>(
       `SELECT * FROM ${testSchema}.${TABLE_SPANS} WHERE "spanId" = $1`,
       ['test-span-migration-2'],
     );
     expect(childSpan).not.toBeNull();
-    expect(childSpan.parentSpanId).toBe('test-span-migration-1');
-    expect(childSpan.name).toBe('Child Span Before Migration');
+    expect(childSpan!.parentSpanId).toBe('test-span-migration-1');
+    expect(childSpan!.name).toBe('Child Span Before Migration');
 
     // Step 7: Verify new columns have NULL values for existing data (since they didn't exist before)
-    expect(rootSpan.entityType).toBeNull();
-    expect(rootSpan.entityId).toBeNull();
-    expect(rootSpan.userId).toBeNull();
-    expect(rootSpan.environment).toBeNull();
+    expect(rootSpan!.entityType).toBeNull();
+    expect(rootSpan!.entityId).toBeNull();
+    expect(rootSpan!.userId).toBeNull();
+    expect(rootSpan!.environment).toBeNull();
 
     // Step 8: Verify we can insert new data with the new columns
     await migrationStore.db.none(
@@ -280,14 +279,14 @@ describe('PostgreSQL Spans Table Migration', () => {
       ],
     );
 
-    const newSpan = await migrationStore.db.oneOrNone(
+    const newSpan = await migrationStore.db.oneOrNone<Record<string, unknown>>(
       `SELECT * FROM ${testSchema}.${TABLE_SPANS} WHERE "spanId" = $1`,
       ['test-span-migration-3'],
     );
     expect(newSpan).not.toBeNull();
-    expect(newSpan.entityType).toBe('workflow');
-    expect(newSpan.entityId).toBe('workflow-123');
-    expect(newSpan.environment).toBe('production');
+    expect(newSpan!.entityType).toBe('workflow');
+    expect(newSpan!.entityId).toBe('workflow-123');
+    expect(newSpan!.environment).toBe('production');
   }, 30000); // 30 second timeout
 
   it('should add timezone columns (startedAtZ, endedAtZ, etc.) during migration', async () => {
@@ -352,7 +351,7 @@ describe('PostgreSQL Spans Table Migration', () => {
     await dbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
     // Step 5: Verify timezone columns DON'T exist after migration (this is the bug!)
-    const tzColumnsAfter = await migrationStore.db.manyOrNone(`
+    const tzColumnsAfter = await migrationStore.db.manyOrNone<{ column_name: string }>(`
       SELECT column_name FROM information_schema.columns
       WHERE table_schema = '${testSchema}' 
         AND table_name = '${TABLE_SPANS}' 
@@ -363,7 +362,7 @@ describe('PostgreSQL Spans Table Migration', () => {
     // This assertion SHOULD FAIL in the current implementation because migrateSpansTable doesn't create the *Z columns
     // After the fix, this should pass
     expect(tzColumnsAfter.length, 'Expected all 4 timezone columns to exist after migration').toBe(4);
-    expect(tzColumnsAfter.map((r: any) => r.column_name)).toEqual([
+    expect(tzColumnsAfter.map((r: { column_name: string }) => r.column_name)).toEqual([
       'createdAtZ',
       'endedAtZ',
       'startedAtZ',
@@ -388,11 +387,11 @@ describe('PostgreSQL Spans Table Migration', () => {
     });
 
     // Verify the span was created successfully
-    const createdSpan = await migrationStore.db.oneOrNone(
+    const createdSpan = await migrationStore.db.oneOrNone<Record<string, unknown>>(
       `SELECT * FROM ${testSchema}.${TABLE_SPANS} WHERE "spanId" = $1`,
       ['span-tz-2'],
     );
     expect(createdSpan).not.toBeNull();
-    expect(createdSpan.name).toBe('Test Span After Migration');
+    expect(createdSpan!.name).toBe('Test Span After Migration');
   }, 30000); // 30 second timeout
 });
