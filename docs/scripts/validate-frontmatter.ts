@@ -42,7 +42,10 @@ function extractFrontMatter(content: string): FrontMatter | null {
   for (const line of lines) {
     // Check for array item (starts with "  - ")
     if (inArray && line.match(/^\s+-\s+/)) {
-      const value = line.replace(/^\s+-\s+/, "").trim().replace(/^["']|["']$/g, "");
+      const value = line
+        .replace(/^\s+-\s+/, "")
+        .trim()
+        .replace(/^["']|["']$/g, "");
       currentArray.push(value);
       continue;
     }
@@ -100,7 +103,10 @@ function requiresPackages(relativePath: string): boolean {
   return true;
 }
 
-function validatePackagesField(packages: unknown): { valid: boolean; details?: string } {
+function validatePackagesField(packages: unknown): {
+  valid: boolean;
+  details?: string;
+} {
   if (packages === undefined) {
     return { valid: false, details: "packages field is missing" };
   }
@@ -115,10 +121,16 @@ function validatePackagesField(packages: unknown): { valid: boolean; details?: s
 
   for (const pkg of packages) {
     if (typeof pkg !== "string") {
-      return { valid: false, details: `packages must contain strings, found: ${typeof pkg}` };
+      return {
+        valid: false,
+        details: `packages must contain strings, found: ${typeof pkg}`,
+      };
     }
     if (!PACKAGE_PATTERN.test(pkg)) {
-      return { valid: false, details: `invalid package name: "${pkg}" (must match @mastra/*)` };
+      return {
+        valid: false,
+        details: `invalid package name: "${pkg}" (must match @mastra/*)`,
+      };
     }
   }
 
@@ -150,7 +162,9 @@ async function validateMDXFiles(sourceDir: string): Promise<{
       // Only process .mdx files
       if (!entry.name.endsWith(".mdx")) continue;
 
-      const relativePath = path.relative(sourceDir, fullPath).replaceAll("\\", "/");
+      const relativePath = path
+        .relative(sourceDir, fullPath)
+        .replaceAll("\\", "/");
 
       // Skip files that don't require packages frontmatter
       if (!requiresPackages(relativePath)) {
@@ -192,7 +206,7 @@ async function validateMDXFiles(sourceDir: string): Promise<{
         }
       } catch (error) {
         console.error(
-          `Error processing file ${fullPath}: ${error instanceof Error ? error.message : error}`
+          `Error processing file ${fullPath}: ${error instanceof Error ? error.message : error}`,
         );
       }
     }
@@ -223,7 +237,9 @@ async function main() {
   if (missingErrors.length > 0) {
     console.log("❌ Missing 'packages' field:");
     for (const error of missingErrors) {
-      console.log(`  - ${error.file}${error.details ? ` (${error.details})` : ""}`);
+      console.log(
+        `  - ${error.file}${error.details ? ` (${error.details})` : ""}`,
+      );
     }
     console.log();
   }
@@ -231,7 +247,9 @@ async function main() {
   if (invalidErrors.length > 0) {
     console.log("❌ Invalid 'packages' value:");
     for (const error of invalidErrors) {
-      console.log(`  - ${error.file}${error.details ? ` (${error.details})` : ""}`);
+      console.log(
+        `  - ${error.file}${error.details ? ` (${error.details})` : ""}`,
+      );
     }
     console.log();
   }
@@ -247,7 +265,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("Unhandled error:", error instanceof Error ? error.message : error);
+  console.error(
+    "Unhandled error:",
+    error instanceof Error ? error.message : error,
+  );
   process.exit(1);
 });
-
