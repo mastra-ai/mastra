@@ -1956,6 +1956,9 @@ export class Workflow<
   /**
    * Converts an in-memory Run to a WorkflowState for API responses.
    * Used as a fallback when storage is not available.
+   *
+   * Note: createdAt/updatedAt are set to current time since in-memory runs
+   * don't persist timestamps. These are approximate values.
    */
   #getInMemoryRunAsWorkflowState(runId: string): WorkflowState | null {
     const inMemoryRun = this.#runs.get(runId);
@@ -2059,12 +2062,6 @@ export class Workflow<
 
     // Clean up undefined values if field filtering is active
     if (fields && fields.length > 0) {
-      // Remove metadata fields if not requested
-      if (!includeMetadata) {
-        // Keep runId and workflowName as they're always needed for identification
-      }
-
-      // Remove undefined optional fields
       if (result.result === undefined) delete result.result;
       if (result.error === undefined) delete result.error;
       if (result.payload === undefined) delete result.payload;
