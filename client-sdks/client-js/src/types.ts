@@ -286,6 +286,13 @@ export type ListMemoryThreadsResponse = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
+export interface GetMemoryThreadByIdParams {
+  threadId: string;
+  resourceId: string;
+}
+
+export type GetMemoryThreadByIdResponse = StorageThreadType;
+
 export interface GetMemoryConfigParams {
   agentId: string;
   requestContext?: RequestContext | Record<string, any>;

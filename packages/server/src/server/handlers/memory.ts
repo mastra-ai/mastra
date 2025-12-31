@@ -10,6 +10,7 @@ import {
   getMemoryConfigQuerySchema,
   listThreadsQuerySchema,
   getThreadByIdQuerySchema,
+  getThreadByIdDirectQuerySchema,
   listMessagesQuerySchema,
   getWorkingMemoryQuerySchema,
   getMemoryStatusNetworkQuerySchema,
@@ -232,6 +233,43 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       const thread = await memory.getThreadById({ threadId: threadId! });
       if (!thread) {
         throw new HTTPException(404, { message: 'Thread not found' });
+      }
+
+      return thread;
+    } catch (error) {
+      return handleError(error, 'Error getting thread');
+    }
+  },
+});
+
+export const GET_THREAD_BY_ID_DIRECT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId/direct',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: getThreadByIdDirectQuerySchema,
+  responseSchema: getThreadByIdResponseSchema,
+  summary: 'Get thread by ID (direct storage access)',
+  description:
+    'Returns details for a specific conversation thread using direct storage access. Requires resourceId for authorization.',
+  tags: ['Memory'],
+  handler: async ({ mastra, threadId, resourceId }) => {
+    try {
+      validateBody({ threadId, resourceId });
+
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(400, { message: 'Storage is not initialized' });
+      }
+
+      const thread = await storage.getThreadById({ threadId: threadId! });
+      if (!thread) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+
+      // Verify the thread belongs to the specified resource
+      if (thread.resourceId !== resourceId) {
+        throw new HTTPException(403, { message: 'Thread does not belong to the specified resource' });
       }
 
       return thread;
