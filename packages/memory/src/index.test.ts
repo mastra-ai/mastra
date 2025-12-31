@@ -1,5 +1,4 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { StorageThreadType } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Memory } from './index';
