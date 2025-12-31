@@ -13,7 +13,7 @@ interface CFRoute {
   custom_domain?: boolean;
 }
 
-interface CFAssets {
+export interface CFAssets {
   directory: string;
   binding?: string;
   run_worker_first?: boolean | string[];
