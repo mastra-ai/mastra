@@ -887,11 +887,14 @@ export function getAgentMemoryTests({
       expect(systemMessages.length).toBeLessThanOrEqual(2);
 
       // For v6 Response API format, user/assistant messages from previous turns may be item_references
+      // item_reference objects only have {type, id} - no role metadata available
       if (isV6ResponseApiFormat) {
-        // Should have at least 1 user message (current question) plus item_references for history
-        expect(userMessages.length + itemReferences.length).toBeGreaterThanOrEqual(2);
-        // The assistant message from the first turn may be an item_reference
-        expect(assistantMessages.length + itemReferences.length).toBeGreaterThanOrEqual(1);
+        // Must have at least 1 direct user message (the current question being asked)
+        expect(userMessages.length).toBeGreaterThanOrEqual(1);
+        // Total user + assistant + item_references should be at least 3:
+        // (first user question + assistant response + second user question)
+        // Some of these may be inline messages, others may be item_references
+        expect(userMessages.length + assistantMessages.length + itemReferences.length).toBeGreaterThanOrEqual(3);
       } else {
         // Should have 2 user messages (first question + second question)
         expect(userMessages.length).toBe(2);
