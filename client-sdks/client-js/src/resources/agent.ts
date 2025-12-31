@@ -1082,7 +1082,7 @@ export class Agent extends BaseResource {
             step += 1;
 
             // reset the current text and reasoning parts
-            currentTextPart = chunk.payload.stepResult.isContinued ? currentTextPart : undefined;
+            currentTextPart = chunk.payload?.stepResult?.isContinued ? currentTextPart : undefined;
             currentReasoningPart = undefined;
             currentReasoningTextDetail = undefined;
 
@@ -1091,8 +1091,8 @@ export class Agent extends BaseResource {
           }
 
           case 'finish': {
-            finishReason = chunk.payload.stepResult.reason;
-            if (chunk.payload.usage != null) {
+            finishReason = chunk.payload?.stepResult?.reason;
+            if (chunk.payload?.usage != null) {
               // usage = calculateLanguageModelUsage(value.usage);
               usage = chunk.payload.usage;
             }
