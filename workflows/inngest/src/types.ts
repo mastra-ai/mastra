@@ -16,8 +16,8 @@ export type InngestFlowCronConfig<
   TInputData extends z.ZodType<any> = z.ZodType<any>,
   TInitialState extends z.ZodObject<any> = z.ZodObject<any>,
 > = Pick<InngestCreateFunctionEventConfig, 'cron'> & {
-  inputData?: TInputData;
-  initialState?: TInitialState;
+  inputData?: z.infer<TInputData>;
+  initialState?: z.infer<TInitialState>;
 };
 
 // Union type for Inngest workflows with flow control
