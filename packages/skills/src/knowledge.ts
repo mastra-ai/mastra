@@ -9,7 +9,14 @@ import type {
 } from '@mastra/core/knowledge';
 import type { MastraVector } from '@mastra/core/vector';
 
-import { BM25Index, type BM25Config, type TokenizeOptions, type BM25SearchResult } from './bm25';
+import {
+  BM25Index,
+  tokenize,
+  findLineRange,
+  type BM25Config,
+  type TokenizeOptions,
+  type BM25SearchResult,
+} from './bm25';
 
 /** Default prefix for static knowledge artifacts */
 export const STATIC_PREFIX = 'static';
@@ -571,14 +578,21 @@ export class Knowledge implements MastraKnowledge {
 
     const results = state.bm25Index.search(query, topK, minScore);
 
+    // Tokenize query for line range finding
+    const queryTokens = tokenize(query, this.#bm25Config?.tokenize);
+
     return results.map(result => {
       // Extract metadata, excluding internal fields
       const { key: _key, type: _type, ...restMetadata } = result.metadata ?? {};
+
+      // Find line range where query terms appear
+      const lineRange = findLineRange(result.content, queryTokens, this.#bm25Config?.tokenize);
 
       return {
         key: result.id,
         content: result.content,
         score: result.score,
+        lineRange,
         metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
         scoreDetails: {
           bm25: result.score,
@@ -614,6 +628,9 @@ export class Knowledge implements MastraKnowledge {
       filter: filter as any,
     });
 
+    // Tokenize query for line range finding
+    const queryTokens = tokenize(query, this.#bm25Config?.tokenize);
+
     // Transform results and apply minScore filter
     const searchResults: KnowledgeSearchResult[] = [];
 
@@ -630,10 +647,14 @@ export class Knowledge implements MastraKnowledge {
         // Extract metadata, excluding internal fields
         const { key: _key, text: _text, type: _type, namespace: _ns, ...restMetadata } = result.metadata ?? {};
 
+        // Find line range where query terms appear
+        const lineRange = findLineRange(content, queryTokens, this.#bm25Config?.tokenize);
+
         searchResults.push({
           key,
           content,
           score: result.score,
+          lineRange,
           metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
           scoreDetails: {
             vector: result.score,

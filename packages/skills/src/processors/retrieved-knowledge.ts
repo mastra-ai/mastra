@@ -4,6 +4,7 @@ import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs } from 
 import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
+import { extractLines } from '../bm25';
 import type { Knowledge, SearchMode, SearchOptions } from '../knowledge';
 
 /**
@@ -427,6 +428,7 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
             key: r.key,
             score: r.score,
             preview: r.content.substring(0, 300) + (r.content.length > 300 ? '...' : ''),
+            lineRange: r.lineRange,
             metadata: r.metadata,
           })),
         };
@@ -443,17 +445,32 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
 
     return createTool({
       id: 'knowledge-read',
-      description: 'Read the full content of a document from the knowledge base by its key.',
+      description:
+        'Read content of a document from the knowledge base. Optionally specify line range to read a portion.',
       inputSchema: z.object({
         key: z.string().describe('The document key to read'),
+        startLine: z
+          .number()
+          .optional()
+          .describe('Starting line number (1-indexed). If omitted, starts from the beginning.'),
+        endLine: z
+          .number()
+          .optional()
+          .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
       }),
-      execute: async ({ key }) => {
+      execute: async ({ key, startLine, endLine }) => {
         try {
-          const content = await knowledge.get(namespace, key);
+          const fullContent = await knowledge.get(namespace, key);
+
+          // Extract lines if range specified
+          const result = extractLines(fullContent, startLine, endLine);
+
           return {
             success: true,
             key,
-            content,
+            content: result.content,
+            lines: result.lines,
+            totalLines: result.totalLines,
           };
         } catch (error) {
           return {

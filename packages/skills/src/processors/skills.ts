@@ -4,6 +4,7 @@ import { BaseProcessor } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import type { MastraSkills } from '@mastra/core/skills';
 
+import { extractLines } from '../bm25';
 import { Skills, type SkillsBM25Config } from '../skills';
 import type { SkillFormat, Skill } from '../types';
 
@@ -362,12 +363,21 @@ ${skillInstructions}`;
 
     return createTool({
       id: 'skill-read-reference',
-      description: 'Read a reference file from an activated skill',
+      description:
+        'Read a reference file from an activated skill. Optionally specify line range to read a portion of the file.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
         referencePath: z.string().describe('Path to the reference file (relative to references/ directory)'),
+        startLine: z
+          .number()
+          .optional()
+          .describe('Starting line number (1-indexed). If omitted, starts from the beginning.'),
+        endLine: z
+          .number()
+          .optional()
+          .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
       }),
-      execute: async ({ skillName, referencePath }) => {
+      execute: async ({ skillName, referencePath, startLine, endLine }) => {
         // Check if skill is activated
         if (!this.activatedSkills.has(skillName)) {
           return {
@@ -377,9 +387,9 @@ ${skillInstructions}`;
         }
 
         // Get reference content
-        const content = skills.getReference(skillName, referencePath);
+        const fullContent = skills.getReference(skillName, referencePath);
 
-        if (content === undefined) {
+        if (fullContent === undefined) {
           const availableRefs = skills.getReferences(skillName);
           return {
             success: false,
@@ -387,9 +397,14 @@ ${skillInstructions}`;
           };
         }
 
+        // Extract lines if range specified
+        const result = extractLines(fullContent, startLine, endLine);
+
         return {
           success: true,
-          content,
+          content: result.content,
+          lines: result.lines,
+          totalLines: result.totalLines,
         };
       },
     });
@@ -403,12 +418,21 @@ ${skillInstructions}`;
 
     return createTool({
       id: 'skill-read-script',
-      description: 'Read a script file from an activated skill. Scripts contain executable code that can be run.',
+      description:
+        'Read a script file from an activated skill. Scripts contain executable code. Optionally specify line range.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
         scriptPath: z.string().describe('Path to the script file (relative to scripts/ directory)'),
+        startLine: z
+          .number()
+          .optional()
+          .describe('Starting line number (1-indexed). If omitted, starts from the beginning.'),
+        endLine: z
+          .number()
+          .optional()
+          .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
       }),
-      execute: async ({ skillName, scriptPath }) => {
+      execute: async ({ skillName, scriptPath, startLine, endLine }) => {
         // Check if skill is activated
         if (!this.activatedSkills.has(skillName)) {
           return {
@@ -418,9 +442,9 @@ ${skillInstructions}`;
         }
 
         // Get script content
-        const content = skills.getScript(skillName, scriptPath);
+        const fullContent = skills.getScript(skillName, scriptPath);
 
-        if (content === undefined) {
+        if (fullContent === undefined) {
           const availableScripts = skills.getScripts(skillName);
           return {
             success: false,
@@ -428,9 +452,14 @@ ${skillInstructions}`;
           };
         }
 
+        // Extract lines if range specified
+        const result = extractLines(fullContent, startLine, endLine);
+
         return {
           success: true,
-          content,
+          content: result.content,
+          lines: result.lines,
+          totalLines: result.totalLines,
         };
       },
     });
@@ -524,12 +553,21 @@ ${skillInstructions}`;
 
         return {
           success: true,
-          results: results.map((r: { skillName: string; source: string; score: number; content: string }) => ({
-            skillName: r.skillName,
-            source: r.source,
-            score: r.score,
-            preview: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
-          })),
+          results: results.map(
+            (r: {
+              skillName: string;
+              source: string;
+              score: number;
+              content: string;
+              lineRange?: { start: number; end: number };
+            }) => ({
+              skillName: r.skillName,
+              source: r.source,
+              score: r.score,
+              preview: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
+              lineRange: r.lineRange,
+            }),
+          ),
         };
       },
     });

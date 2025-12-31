@@ -70,14 +70,17 @@ export {
   type SkillValidationResult,
 } from './schemas';
 
-// BM25 (for advanced use cases)
+// BM25 and line utilities (for advanced use cases)
 export {
   BM25Index,
   tokenize,
+  findLineRange,
+  extractLines,
   DEFAULT_STOPWORDS,
   type BM25Config,
   type BM25Document,
   type BM25SearchResult,
   type BM25IndexData,
   type TokenizeOptions,
+  type LineRange,
 } from './bm25';

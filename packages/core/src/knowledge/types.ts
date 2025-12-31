@@ -61,6 +61,13 @@ export interface KnowledgeSearchResult {
   score: number;
   /** Additional metadata stored with the artifact */
   metadata?: Record<string, unknown>;
+  /** Line range where query terms were found (if available) */
+  lineRange?: {
+    /** Starting line number (1-indexed) */
+    start: number;
+    /** Ending line number (1-indexed, inclusive) */
+    end: number;
+  };
   /** Score breakdown for hybrid search */
   scoreDetails?: {
     /** Vector similarity score (0-1) */

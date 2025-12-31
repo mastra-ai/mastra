@@ -45,6 +45,16 @@ export interface BM25Document {
 }
 
 /**
+ * Line range indicating where content was found
+ */
+export interface LineRange {
+  /** Starting line number (1-indexed) */
+  start: number;
+  /** Ending line number (1-indexed, inclusive) */
+  end: number;
+}
+
+/**
  * Result from a BM25 search
  */
 export interface BM25SearchResult {
@@ -56,6 +66,8 @@ export interface BM25SearchResult {
   score: number;
   /** Optional metadata */
   metadata?: Record<string, unknown>;
+  /** Line range where query terms were found (if computed) */
+  lineRange?: LineRange;
 }
 
 /**
@@ -146,6 +158,88 @@ export function tokenize(text: string, options: TokenizeOptions = {}): string[] 
   });
 
   return tokens;
+}
+
+/**
+ * Find the line range where query terms appear in content.
+ * Returns the range spanning from the first to the last line containing any query term.
+ *
+ * @param content - The document content
+ * @param queryTerms - Tokenized query terms to find
+ * @param options - Tokenization options (should match indexing options)
+ * @returns LineRange if terms found, undefined otherwise
+ */
+export function findLineRange(
+  content: string,
+  queryTerms: string[],
+  options: TokenizeOptions = {},
+): LineRange | undefined {
+  if (queryTerms.length === 0) return undefined;
+
+  const lines = content.split('\n');
+  const opts = { ...DEFAULT_TOKENIZE_OPTIONS, ...options };
+
+  // Normalize query terms for matching
+  const normalizedTerms = new Set(queryTerms.map(t => (opts.lowercase ? t.toLowerCase() : t)));
+
+  let firstMatchLine: number | undefined;
+  let lastMatchLine: number | undefined;
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineTokens = tokenize(lines[i]!, options);
+
+    // Check if any query term appears in this line
+    for (const token of lineTokens) {
+      if (normalizedTerms.has(token)) {
+        const lineNum = i + 1; // 1-indexed
+        if (firstMatchLine === undefined) {
+          firstMatchLine = lineNum;
+        }
+        lastMatchLine = lineNum;
+        break; // Found a match on this line, move to next line
+      }
+    }
+  }
+
+  if (firstMatchLine !== undefined && lastMatchLine !== undefined) {
+    return { start: firstMatchLine, end: lastMatchLine };
+  }
+
+  return undefined;
+}
+
+/**
+ * Extract lines from content by line range.
+ *
+ * @param content - The document content
+ * @param startLine - Starting line number (1-indexed)
+ * @param endLine - Ending line number (1-indexed, inclusive)
+ * @returns Object with extracted content and metadata
+ */
+export function extractLines(
+  content: string,
+  startLine?: number,
+  endLine?: number,
+): {
+  content: string;
+  lines: { start: number; end: number };
+  totalLines: number;
+} {
+  const allLines = content.split('\n');
+  const totalLines = allLines.length;
+
+  // Default to full content
+  const start = Math.max(1, startLine ?? 1);
+  const end = Math.min(totalLines, endLine ?? totalLines);
+
+  // Extract the requested range (convert to 0-indexed)
+  const extractedLines = allLines.slice(start - 1, end);
+
+  return {
+    content: extractedLines.join('\n'),
+    lines: { start, end },
+    totalLines,
+  };
 }
 
 /**

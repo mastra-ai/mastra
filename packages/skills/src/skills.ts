@@ -4,7 +4,7 @@ import matter from 'gray-matter';
 
 import type { MastraVector } from '@mastra/core/vector';
 
-import { BM25Index, type BM25Config, type TokenizeOptions, type BM25SearchResult } from './bm25';
+import { BM25Index, tokenize, findLineRange, type BM25Config, type TokenizeOptions } from './bm25';
 import { validateSkillMetadata, parseAllowedTools } from './schemas';
 import type {
   Skill,
@@ -98,6 +98,9 @@ export class Skills implements MastraSkills {
   /** BM25 index for searching */
   #bm25Index: BM25Index;
 
+  /** Tokenization options for BM25 (stored for line range finding) */
+  #tokenizeOptions?: TokenizeOptions;
+
   /** Vector index configuration (optional) */
   #indexConfig?: SkillsIndexConfig;
 
@@ -118,8 +121,9 @@ export class Skills implements MastraSkills {
     this.paths = Array.isArray(config.paths) ? config.paths : [config.paths];
     this.validateOnLoad = config.validateOnLoad ?? true;
 
-    // Initialize BM25 index
-    this.#bm25Index = new BM25Index(options?.bm25?.bm25, options?.bm25?.tokenize);
+    // Initialize BM25 index and store tokenize options
+    this.#tokenizeOptions = options?.bm25?.tokenize;
+    this.#bm25Index = new BM25Index(options?.bm25?.bm25, this.#tokenizeOptions);
 
     // Store index config if provided
     if (options?.index) {
@@ -227,6 +231,9 @@ export class Skills implements MastraSkills {
     const expandedTopK = skillNames ? topK * 3 : topK;
     const bm25Results = this.#bm25Index.search(query, expandedTopK, minScore);
 
+    // Tokenize query once for line range finding
+    const queryTokens = tokenize(query, this.#tokenizeOptions);
+
     const results: SkillSearchResult[] = [];
 
     for (const result of bm25Results) {
@@ -243,11 +250,15 @@ export class Skills implements MastraSkills {
         continue;
       }
 
+      // Find line range where query terms appear
+      const lineRange = findLineRange(result.content, queryTokens, this.#tokenizeOptions);
+
       results.push({
         skillName: metadata.skillName,
         source: metadata.source,
         content: result.content,
         score: result.score,
+        lineRange,
         scoreDetails: { bm25: result.score },
       });
 
@@ -289,6 +300,9 @@ export class Skills implements MastraSkills {
       topK: expandedTopK,
     });
 
+    // Tokenize query for line range finding
+    const queryTokens = tokenize(query, this.#tokenizeOptions);
+
     const results: SkillSearchResult[] = [];
 
     for (const result of vectorResults) {
@@ -313,11 +327,15 @@ export class Skills implements MastraSkills {
         continue;
       }
 
+      // Find line range where query terms appear
+      const lineRange = findLineRange(content, queryTokens, this.#tokenizeOptions);
+
       results.push({
         skillName,
         source,
         content,
         score: result.score,
+        lineRange,
         scoreDetails: { vector: result.score },
       });
 

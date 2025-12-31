@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { BM25Index, tokenize, DEFAULT_STOPWORDS } from './bm25';
+import { BM25Index, tokenize, findLineRange, extractLines, DEFAULT_STOPWORDS } from './bm25';
 
 describe('tokenize', () => {
   it('should tokenize text into words', () => {
@@ -291,5 +291,129 @@ describe('DEFAULT_STOPWORDS', () => {
   it('should not contain content words', () => {
     expect(DEFAULT_STOPWORDS.has('machine')).toBe(false);
     expect(DEFAULT_STOPWORDS.has('learning')).toBe(false);
+  });
+});
+
+describe('findLineRange', () => {
+  const multilineContent = `This is the first line
+Second line has machine learning
+Third line is empty
+Fourth line has deep learning
+Fifth line has neural networks
+Sixth line ends the document`;
+
+  it('should find line range for single term', () => {
+    const range = findLineRange(multilineContent, ['machine']);
+    expect(range).toEqual({ start: 2, end: 2 });
+  });
+
+  it('should find line range spanning multiple lines', () => {
+    const range = findLineRange(multilineContent, ['learning']);
+    // 'learning' appears on lines 2 and 4
+    expect(range).toEqual({ start: 2, end: 4 });
+  });
+
+  it('should find line range for multiple query terms', () => {
+    const range = findLineRange(multilineContent, ['machine', 'neural']);
+    // 'machine' on line 2, 'neural' on line 5
+    expect(range).toEqual({ start: 2, end: 5 });
+  });
+
+  it('should return undefined for empty query terms', () => {
+    const range = findLineRange(multilineContent, []);
+    expect(range).toBeUndefined();
+  });
+
+  it('should return undefined for no matches', () => {
+    const range = findLineRange(multilineContent, ['quantum', 'computing']);
+    expect(range).toBeUndefined();
+  });
+
+  it('should handle single line content', () => {
+    const range = findLineRange('just one line with test content', ['test']);
+    expect(range).toEqual({ start: 1, end: 1 });
+  });
+
+  it('should respect tokenization options', () => {
+    const content = 'Line with TEST word\nAnother line with test';
+    // With lowercase: true (default), both lines match
+    const rangeDefault = findLineRange(content, ['test']);
+    expect(rangeDefault).toEqual({ start: 1, end: 2 });
+
+    // With lowercase: false, only exact case matches
+    const rangeNoLower = findLineRange(content, ['test'], { lowercase: false });
+    expect(rangeNoLower).toEqual({ start: 2, end: 2 });
+  });
+
+  it('should handle empty content', () => {
+    const range = findLineRange('', ['test']);
+    expect(range).toBeUndefined();
+  });
+});
+
+describe('extractLines', () => {
+  const content = `Line 1
+Line 2
+Line 3
+Line 4
+Line 5`;
+
+  it('should extract all lines when no range specified', () => {
+    const result = extractLines(content);
+    expect(result.content).toBe(content);
+    expect(result.lines).toEqual({ start: 1, end: 5 });
+    expect(result.totalLines).toBe(5);
+  });
+
+  it('should extract specific line range', () => {
+    const result = extractLines(content, 2, 4);
+    expect(result.content).toBe('Line 2\nLine 3\nLine 4');
+    expect(result.lines).toEqual({ start: 2, end: 4 });
+    expect(result.totalLines).toBe(5);
+  });
+
+  it('should extract from start line to end', () => {
+    const result = extractLines(content, 3);
+    expect(result.content).toBe('Line 3\nLine 4\nLine 5');
+    expect(result.lines).toEqual({ start: 3, end: 5 });
+    expect(result.totalLines).toBe(5);
+  });
+
+  it('should extract from beginning to end line', () => {
+    const result = extractLines(content, undefined, 2);
+    expect(result.content).toBe('Line 1\nLine 2');
+    expect(result.lines).toEqual({ start: 1, end: 2 });
+    expect(result.totalLines).toBe(5);
+  });
+
+  it('should handle single line extraction', () => {
+    const result = extractLines(content, 3, 3);
+    expect(result.content).toBe('Line 3');
+    expect(result.lines).toEqual({ start: 3, end: 3 });
+  });
+
+  it('should clamp start line to 1', () => {
+    const result = extractLines(content, -5, 2);
+    expect(result.lines.start).toBe(1);
+    expect(result.content).toBe('Line 1\nLine 2');
+  });
+
+  it('should clamp end line to total lines', () => {
+    const result = extractLines(content, 4, 100);
+    expect(result.lines.end).toBe(5);
+    expect(result.content).toBe('Line 4\nLine 5');
+  });
+
+  it('should handle single line content', () => {
+    const result = extractLines('Single line');
+    expect(result.content).toBe('Single line');
+    expect(result.lines).toEqual({ start: 1, end: 1 });
+    expect(result.totalLines).toBe(1);
+  });
+
+  it('should handle empty content', () => {
+    const result = extractLines('');
+    expect(result.content).toBe('');
+    expect(result.totalLines).toBe(1); // Empty string splits to ['']
   });
 });
