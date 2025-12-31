@@ -162,7 +162,11 @@ const response = await testAgent.generate("Analyze the TypeScript programming la
 console.log(response.object);
 ```
 
-## Response format
+## LLM Structured Output support
+
+Structured output support varies across LLM's due to the model itself. There are various workarounds provided to be able to use the full range of features supported for structured output, mainly returning structured output, tool calling, and the combination of the two.
+
+### `jsonPromptInjection`
 
 By default, Mastra passes the schema to the model provider using the `response_format` API parameter. Most model providers have built-in support for this, which reliably enforces the schema.
 
@@ -199,6 +203,50 @@ const response = await agentWithTools.generate("Your prompt", {
 });
 ```
 :::
+
+### Using a separate structuring model
+
+When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
+
+```typescript
+const response = await testAgent.generate("Tell me about TypeScript.", {
+  structuredOutput: {
+    schema: yourSchema
+    model: 'openai/gpt-4o'
+  }
+});
+```
+
+### Multi-step approach with `prepareStep`
+
+For models that don't support tools and structured outputs together, you can use `prepareStep` to handle them in separate steps.
+
+```typescript
+const result = await agent.stream("weather in vancouver?", {
+  prepareStep: async ({ stepNumber }) => {
+    if (stepNumber === 0) {
+      return {
+        model: "anthropic/claude-sonnet-4-20250514",
+        tools: {
+          weatherTool,
+        },
+        toolChoice: "required",
+      };
+    }
+    return {
+      model: "anthropic/claude-sonnet-4-20250514",
+      tools: undefined,
+      structuredOutput: {
+        schema: z.object({
+          temperature: z.number(),
+          humidity: z.number(),
+          windSpeed: z.number(),
+        }),
+      },
+    };
+  },
+});
+```
 
 ## Error handling
 
