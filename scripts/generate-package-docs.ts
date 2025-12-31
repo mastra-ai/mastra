@@ -322,6 +322,12 @@ function findExportLine(chunkPath: string, exportName: string): number | undefin
     return undefined;
   }
 
+  // Make sure it's a file, not a directory
+  const stat = fs.statSync(chunkPath);
+  if (!stat.isFile()) {
+    return undefined;
+  }
+
   const content = fs.readFileSync(chunkPath, 'utf-8');
   const lines = content.split('\n');
 
