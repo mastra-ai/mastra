@@ -31,7 +31,10 @@
   },
   "author": "",
   "license": "Apache-2.0",
-  "dependencies": {},
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "zod": "^3.24.5"
+  },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },

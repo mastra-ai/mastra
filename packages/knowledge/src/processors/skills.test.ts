@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { describe, it, expect, beforeAll } from 'vitest';
-import { MessageList } from '../../agent/message-list';
+import { MessageList } from '@mastra/core/agent';
 import { SkillsProcessor } from './skills';
 
 const FIXTURES_PATH = join(__dirname, '__fixtures__', 'skills');

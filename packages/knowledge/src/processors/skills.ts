@@ -2,8 +2,8 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import path, { join } from 'node:path';
 import matter from 'gray-matter';
 import z from 'zod';
-import type { ProcessInputStepArgs, Processor } from '..';
-import { createTool } from '../../tools';
+import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
+import { createTool } from '@mastra/core/tools';
 
 // =========================================================================
 // Types and Interfaces

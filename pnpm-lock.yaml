@@ -1986,9 +1986,6 @@ importers:
       dotenv:
         specifier: ^16.6.1
         version: 16.6.1
-      gray-matter:
-        specifier: ^4.0.3
-        version: 4.0.3
       hono:
         specifier: ^4.10.5
         version: 4.10.6
@@ -2443,10 +2440,17 @@ importers:
         version: 3.25.76
 
   packages/knowledge:
+    dependencies:
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3
+      zod:
+        specifier: ^3.24.5
+        version: 3.25.76
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 3.0.1(zod@4.1.13)
+        version: 3.0.1(zod@3.25.76)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../_vendored/ai_v5
@@ -18942,12 +18946,6 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.1(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/openai@3.0.1(zod@4.1.13)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.0
-      '@ai-sdk/provider-utils': 4.0.1(zod@4.1.13)
-      zod: 4.1.13
-
   '@ai-sdk/perplexity@2.0.5(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
@@ -19055,13 +19053,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
-
-  '@ai-sdk/provider-utils@4.0.1(zod@4.1.13)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.0
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.6
-      zod: 4.1.13
 
   '@ai-sdk/provider@1.0.9':
     dependencies:

@@ -20,6 +20,7 @@
     "@mastra/client-js": "beta",
     "@mastra/core": "beta",
     "@mastra/evals": "beta",
+    "@mastra/knowledge": "beta",
     "@mastra/libsql": "beta",
     "@mastra/loggers": "beta",
     "@mastra/mcp": "beta",
@@ -35,6 +36,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/knowledge": "link:../../packages/knowledge",
       "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",
       "@mastra/memory": "link:../../packages/memory",

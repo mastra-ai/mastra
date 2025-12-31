@@ -213,7 +213,6 @@
     "@modelcontextprotocol/sdk": "^1.17.5",
     "@sindresorhus/slugify": "^2.2.1",
     "dotenv": "^16.6.1",
-    "gray-matter": "^4.0.3",
     "hono": "^4.10.5",
     "hono-openapi": "^1.1.1",
     "js-tiktoken": "^1.0.20",
