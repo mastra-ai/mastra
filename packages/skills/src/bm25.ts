@@ -1,0 +1,382 @@
+/**
+ * BM25 (Best Matching 25) implementation for keyword-based search.
+ *
+ * BM25 is a probabilistic ranking function used for information retrieval.
+ * It ranks documents based on the query terms appearing in each document,
+ * taking into account term frequency and document length normalization.
+ */
+
+/**
+ * BM25 configuration parameters
+ */
+export interface BM25Config {
+  /**
+   * Controls term frequency saturation.
+   * Higher values give more weight to term frequency.
+   * Typical range: 1.2 - 2.0
+   * @default 1.5
+   */
+  k1?: number;
+
+  /**
+   * Controls document length normalization.
+   * 0 = no length normalization, 1 = full normalization
+   * @default 0.75
+   */
+  b?: number;
+}
+
+/**
+ * Represents a document in the BM25 index
+ */
+export interface BM25Document {
+  /** Document identifier */
+  id: string;
+  /** Document content */
+  content: string;
+  /** Pre-computed tokens for the document */
+  tokens: string[];
+  /** Token frequency map */
+  termFrequencies: Map<string, number>;
+  /** Total number of tokens */
+  length: number;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Result from a BM25 search
+ */
+export interface BM25SearchResult {
+  /** Document identifier */
+  id: string;
+  /** Document content */
+  content: string;
+  /** BM25 score (higher is more relevant) */
+  score: number;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Tokenization options
+ */
+export interface TokenizeOptions {
+  /** Convert to lowercase */
+  lowercase?: boolean;
+  /** Remove punctuation */
+  removePunctuation?: boolean;
+  /** Minimum token length */
+  minLength?: number;
+  /** Custom stopwords to remove */
+  stopwords?: Set<string>;
+}
+
+/**
+ * Default English stopwords
+ */
+export const DEFAULT_STOPWORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'as',
+  'at',
+  'be',
+  'by',
+  'for',
+  'from',
+  'has',
+  'he',
+  'in',
+  'is',
+  'it',
+  'its',
+  'of',
+  'on',
+  'or',
+  'that',
+  'the',
+  'to',
+  'was',
+  'were',
+  'will',
+  'with',
+]);
+
+/**
+ * Default tokenization options
+ */
+const DEFAULT_TOKENIZE_OPTIONS: Required<TokenizeOptions> = {
+  lowercase: true,
+  removePunctuation: true,
+  minLength: 2,
+  stopwords: DEFAULT_STOPWORDS,
+};
+
+/**
+ * Tokenize text into an array of terms
+ */
+export function tokenize(text: string, options: TokenizeOptions = {}): string[] {
+  const opts = { ...DEFAULT_TOKENIZE_OPTIONS, ...options };
+
+  let processed = text;
+
+  // Convert to lowercase if enabled
+  if (opts.lowercase) {
+    processed = processed.toLowerCase();
+  }
+
+  // Remove punctuation if enabled
+  if (opts.removePunctuation) {
+    processed = processed.replace(/[^\w\s]/g, ' ');
+  }
+
+  // Split into tokens
+  const tokens = processed.split(/\s+/).filter(token => {
+    // Filter by minimum length
+    if (token.length < opts.minLength) {
+      return false;
+    }
+    // Filter stopwords
+    if (opts.stopwords?.has(token)) {
+      return false;
+    }
+    return true;
+  });
+
+  return tokens;
+}
+
+/**
+ * Compute term frequencies for a list of tokens
+ */
+function computeTermFrequencies(tokens: string[]): Map<string, number> {
+  const frequencies = new Map<string, number>();
+  for (const token of tokens) {
+    frequencies.set(token, (frequencies.get(token) || 0) + 1);
+  }
+  return frequencies;
+}
+
+/**
+ * BM25 Index for keyword-based document retrieval
+ */
+export class BM25Index {
+  /** BM25 k1 parameter */
+  readonly k1: number;
+  /** BM25 b parameter */
+  readonly b: number;
+
+  /** Documents in the index */
+  #documents: Map<string, BM25Document> = new Map();
+  /** Inverted index: term -> document IDs containing the term */
+  #invertedIndex: Map<string, Set<string>> = new Map();
+  /** Document frequency: term -> number of documents containing the term */
+  #documentFrequency: Map<string, number> = new Map();
+  /** Average document length */
+  #avgDocLength: number = 0;
+  /** Total number of documents */
+  #docCount: number = 0;
+  /** Tokenization options */
+  #tokenizeOptions: TokenizeOptions;
+
+  constructor(config: BM25Config = {}, tokenizeOptions: TokenizeOptions = {}) {
+    this.k1 = config.k1 ?? 1.5;
+    this.b = config.b ?? 0.75;
+    this.#tokenizeOptions = tokenizeOptions;
+  }
+
+  /**
+   * Add a document to the index
+   */
+  add(id: string, content: string, metadata?: Record<string, unknown>): void {
+    // Remove existing document if it exists
+    if (this.#documents.has(id)) {
+      this.remove(id);
+    }
+
+    const tokens = tokenize(content, this.#tokenizeOptions);
+    const termFrequencies = computeTermFrequencies(tokens);
+
+    const doc: BM25Document = {
+      id,
+      content,
+      tokens,
+      termFrequencies,
+      length: tokens.length,
+      metadata,
+    };
+
+    this.#documents.set(id, doc);
+    this.#docCount++;
+
+    // Update inverted index and document frequency
+    for (const term of termFrequencies.keys()) {
+      if (!this.#invertedIndex.has(term)) {
+        this.#invertedIndex.set(term, new Set());
+      }
+      this.#invertedIndex.get(term)!.add(id);
+      this.#documentFrequency.set(term, (this.#documentFrequency.get(term) || 0) + 1);
+    }
+
+    // Update average document length
+    this.#updateAvgDocLength();
+  }
+
+  /**
+   * Remove a document from the index
+   */
+  remove(id: string): boolean {
+    const doc = this.#documents.get(id);
+    if (!doc) {
+      return false;
+    }
+
+    // Update inverted index and document frequency
+    for (const term of doc.termFrequencies.keys()) {
+      const docIds = this.#invertedIndex.get(term);
+      if (docIds) {
+        docIds.delete(id);
+        if (docIds.size === 0) {
+          this.#invertedIndex.delete(term);
+          this.#documentFrequency.delete(term);
+        } else {
+          this.#documentFrequency.set(term, (this.#documentFrequency.get(term) || 1) - 1);
+        }
+      }
+    }
+
+    this.#documents.delete(id);
+    this.#docCount--;
+
+    // Update average document length
+    this.#updateAvgDocLength();
+
+    return true;
+  }
+
+  /**
+   * Clear all documents from the index
+   */
+  clear(): void {
+    this.#documents.clear();
+    this.#invertedIndex.clear();
+    this.#documentFrequency.clear();
+    this.#docCount = 0;
+    this.#avgDocLength = 0;
+  }
+
+  /**
+   * Search for documents matching the query
+   */
+  search(query: string, topK: number = 10, minScore: number = 0): BM25SearchResult[] {
+    const queryTokens = tokenize(query, this.#tokenizeOptions);
+
+    if (queryTokens.length === 0 || this.#docCount === 0) {
+      return [];
+    }
+
+    const scores = new Map<string, number>();
+
+    // Calculate BM25 scores for each document
+    for (const queryTerm of queryTokens) {
+      const docIds = this.#invertedIndex.get(queryTerm);
+      if (!docIds) {
+        continue;
+      }
+
+      const df = this.#documentFrequency.get(queryTerm) || 0;
+      const idf = this.#computeIDF(df);
+
+      for (const docId of docIds) {
+        const doc = this.#documents.get(docId)!;
+        const tf = doc.termFrequencies.get(queryTerm) || 0;
+        const termScore = this.#computeTermScore(tf, doc.length, idf);
+
+        scores.set(docId, (scores.get(docId) || 0) + termScore);
+      }
+    }
+
+    // Sort by score and return top K results
+    const results: BM25SearchResult[] = [];
+
+    for (const [docId, score] of scores.entries()) {
+      if (score >= minScore) {
+        const doc = this.#documents.get(docId)!;
+        results.push({
+          id: docId,
+          content: doc.content,
+          score,
+          metadata: doc.metadata,
+        });
+      }
+    }
+
+    // Sort by score descending
+    results.sort((a, b) => b.score - a.score);
+
+    return results.slice(0, topK);
+  }
+
+  /**
+   * Get a document by ID
+   */
+  get(id: string): BM25Document | undefined {
+    return this.#documents.get(id);
+  }
+
+  /**
+   * Check if a document exists in the index
+   */
+  has(id: string): boolean {
+    return this.#documents.has(id);
+  }
+
+  /**
+   * Get the number of documents in the index
+   */
+  get size(): number {
+    return this.#docCount;
+  }
+
+  /**
+   * Get all document IDs
+   */
+  get documentIds(): string[] {
+    return Array.from(this.#documents.keys());
+  }
+
+  /**
+   * Update average document length after add/remove operations
+   */
+  #updateAvgDocLength(): void {
+    if (this.#docCount === 0) {
+      this.#avgDocLength = 0;
+      return;
+    }
+
+    let totalLength = 0;
+    for (const doc of this.#documents.values()) {
+      totalLength += doc.length;
+    }
+    this.#avgDocLength = totalLength / this.#docCount;
+  }
+
+  /**
+   * Compute IDF (Inverse Document Frequency) for a term
+   */
+  #computeIDF(df: number): number {
+    // Using Robertson-Spärck Jones IDF formula
+    return Math.log((this.#docCount - df + 0.5) / (df + 0.5) + 1);
+  }
+
+  /**
+   * Compute the BM25 score component for a single term
+   */
+  #computeTermScore(tf: number, docLength: number, idf: number): number {
+    const numerator = tf * (this.k1 + 1);
+    const denominator = tf + this.k1 * (1 - this.b + this.b * (docLength / this.#avgDocLength));
+    return idf * (numerator / denominator);
+  }
+}
