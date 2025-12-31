@@ -45,8 +45,16 @@ export const paginationInfoSchema = z.object({
  */
 export const dateRangeSchema = z
   .object({
-    start: z.coerce.date().optional().describe('Start of date range (inclusive)'),
-    end: z.coerce.date().optional().describe('End of date range (inclusive)'),
+    start: z.coerce.date().optional().describe('Start of date range (inclusive by default)'),
+    end: z.coerce.date().optional().describe('End of date range (inclusive by default)'),
+    startExclusive: z
+      .boolean()
+      .optional()
+      .describe('When true, excludes the start date from results (uses > instead of >=)'),
+    endExclusive: z
+      .boolean()
+      .optional()
+      .describe('When true, excludes the end date from results (uses < instead of <=)'),
   })
   .describe('Date range filter for timestamps');
 

@@ -315,41 +315,10 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * Streams agent builder action progress in real-time using VNext streaming.
-   * This calls `/api/agent-builder/:actionId/streamVNext`.
-   */
-  async streamVNext(params: AgentBuilderActionRequest, runId?: string) {
-    const searchParams = new URLSearchParams();
-    if (runId) {
-      searchParams.set('runId', runId);
-    }
-
-    const requestContext = parseClientRequestContext(params.requestContext);
-    const { requestContext: _, ...actionParams } = params;
-
-    const url = `/api/agent-builder/${this.actionId}/streamVNext${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      body: { ...actionParams, requestContext },
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to stream agent builder action VNext: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
    * Observes an existing agent builder action run stream.
    * Replays cached execution from the beginning, then continues with live stream.
    * This is the recommended method for recovery after page refresh/hot reload.
-   * This calls `/api/agent-builder/:actionId/observe` (which delegates to observeStreamVNext).
+   * This calls `/api/agent-builder/:actionId/observe`
    */
   async observeStream(params: { runId: string }) {
     const searchParams = new URLSearchParams();
@@ -363,32 +332,6 @@ export class AgentBuilder extends BaseResource {
 
     if (!response.ok) {
       throw new Error(`Failed to observe agent builder action stream: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    return response.body.pipeThrough(this.createRecordParserTransform());
-  }
-
-  /**
-   * Observes an existing agent builder action run stream using VNext streaming API.
-   * Replays cached execution from the beginning, then continues with live stream.
-   * This calls `/api/agent-builder/:actionId/observe-streamVNext`.
-   */
-  async observeStreamVNext(params: { runId: string }) {
-    const searchParams = new URLSearchParams();
-    searchParams.set('runId', params.runId);
-
-    const url = `/api/agent-builder/${this.actionId}/observe-streamVNext?${searchParams.toString()}`;
-    const response: Response = await this.request(url, {
-      method: 'POST',
-      stream: true,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to observe agent builder action stream VNext: ${response.statusText}`);
     }
 
     if (!response.body) {

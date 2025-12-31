@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.0.0-beta.18",
+  "version": "1.0.0-beta.19",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -36,6 +36,7 @@
   "scripts": {
     "lint": "eslint .",
     "build": "tsup --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts client-sdks/client-js",
     "dev": "pnpm build --watch",
     "test": "vitest",
     "test:unit": "vitest run"

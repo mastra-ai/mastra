@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.0.0-beta.10",
+  "version": "1.0.0-beta.11",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/pg",
     "build:watch": "pnpm build --watch",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",

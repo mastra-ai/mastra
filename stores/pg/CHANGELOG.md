@@ -1,5 +1,68 @@
 # @mastra/pg
 
+## 1.0.0-beta.11
+
+### Minor Changes
+
+- Remove pg-promise dependency and use pg.Pool directly ([#11450](https://github.com/mastra-ai/mastra/pull/11450))
+
+  **BREAKING CHANGE**: This release replaces pg-promise with vanilla node-postgres (`pg`).
+
+  ### Breaking Changes
+  - **Removed `store.pgp`**: The pg-promise library instance is no longer exposed
+  - **Config change**: `{ client: pgPromiseDb }` is no longer supported. Use `{ pool: pgPool }` instead
+  - **Cloud SQL config**: `max` and `idleTimeoutMillis` must now be passed via `pgPoolOptions`
+
+  ### New Features
+  - **`store.pool`**: Exposes the underlying `pg.Pool` for direct database access or ORM integration (e.g., Drizzle)
+  - **`store.db`**: Provides a `DbClient` interface with methods like `one()`, `any()`, `tx()`, etc.
+  - **`store.db.connect()`**: Acquire a client for session-level operations
+
+  ### Migration
+
+  ```typescript
+  // Before (pg-promise)
+  import pgPromise from 'pg-promise';
+  const pgp = pgPromise();
+  const client = pgp(connectionString);
+  const store = new PostgresStore({ id: 'my-store', client });
+
+  // After (pg.Pool)
+  import { Pool } from 'pg';
+  const pool = new Pool({ connectionString });
+  const store = new PostgresStore({ id: 'my-store', pool });
+
+  // Use store.pool with any library that accepts a pg.Pool
+  ```
+
+### Patch Changes
+
+- Added `exportSchemas()` function to generate Mastra database schema as SQL DDL without a database connection. ([#11448](https://github.com/mastra-ai/mastra/pull/11448))
+
+  **What's New**
+
+  You can now export your Mastra database schema as SQL DDL statements without connecting to a database. This is useful for:
+  - Generating migration scripts
+  - Reviewing the schema before deployment
+  - Creating database schemas in environments where the application doesn't have CREATE privileges
+
+  **Example**
+
+  ```typescript
+  import { exportSchemas } from '@mastra/pg';
+
+  // Export schema for default 'public' schema
+  const ddl = exportSchemas();
+  console.log(ddl);
+
+  // Export schema for a custom schema
+  const customDdl = exportSchemas('my_schema');
+  // Creates: CREATE SCHEMA IF NOT EXISTS "my_schema"; and all tables within it
+  ```
+
+- Updated dependencies [[`e54953e`](https://github.com/mastra-ai/mastra/commit/e54953ed8ce1b28c0d62a19950163039af7834b4), [`7d56d92`](https://github.com/mastra-ai/mastra/commit/7d56d9213886e8353956d7d40df10045fd12b299), [`fdac646`](https://github.com/mastra-ai/mastra/commit/fdac646033a0930a1a4e00d13aa64c40bb7f1e02), [`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`68ec97d`](https://github.com/mastra-ai/mastra/commit/68ec97d4c07c6393fcf95c2481fc5d73da99f8c8), [`4aa55b3`](https://github.com/mastra-ai/mastra/commit/4aa55b383cf06043943359ea316572fd969861a7)]:
+  - @mastra/core@1.0.0-beta.19
+
 ## 1.0.0-beta.10
 
 ### Patch Changes

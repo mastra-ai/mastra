@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/chroma",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d",
     "posttest": "docker compose down -v",

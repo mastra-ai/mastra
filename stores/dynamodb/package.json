@@ -24,6 +24,7 @@
   ],
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/dynamodb",
     "dev": "tsup --watch && tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "lint": "eslint .",

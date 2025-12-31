@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.0.0-beta.18",
+  "version": "1.0.0-beta.19",
   "description": "",
   "type": "module",
   "files": [
@@ -84,6 +84,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/deployer",
     "build:watch": "pnpm build --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",

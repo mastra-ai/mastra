@@ -57,13 +57,13 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
     this.endTime = new Date();
     if (options?.output !== undefined) {
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options?.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
     }
     if (options?.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }
@@ -90,10 +90,10 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     // Update attributes if provided
     if (attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(attributes, this.deepCleanOptions) };
     }
     if (metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(metadata, this.deepCleanOptions) };
     }
 
     if (endSpan) {
@@ -110,16 +110,16 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     if (options.input !== undefined) {
-      this.input = deepClean(options.input);
+      this.input = deepClean(options.input, this.deepCleanOptions);
     }
     if (options.output !== undefined) {
-      this.output = deepClean(options.output);
+      this.output = deepClean(options.output, this.deepCleanOptions);
     }
     if (options.attributes) {
-      this.attributes = { ...this.attributes, ...deepClean(options.attributes) };
+      this.attributes = { ...this.attributes, ...deepClean(options.attributes, this.deepCleanOptions) };
     }
     if (options.metadata) {
-      this.metadata = { ...this.metadata, ...deepClean(options.metadata) };
+      this.metadata = { ...this.metadata, ...deepClean(options.metadata, this.deepCleanOptions) };
     }
     // Tracing events automatically handled by base class
   }

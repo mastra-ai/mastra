@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/mcp",
     "build:watch": "pnpm build --watch",
     "test:client": "vitest run ./src/client/client.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",

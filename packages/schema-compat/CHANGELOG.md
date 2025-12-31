@@ -1,5 +1,25 @@
 # @mastra/schema-compat
 
+## 1.0.0-beta.5
+
+### Patch Changes
+
+- Fixed "Transforms cannot be represented in JSON Schema" error when using Zod v4 with structuredOutput ([#11466](https://github.com/mastra-ai/mastra/pull/11466))
+
+  When using schemas with `.optional()`, `.nullable()`, `.default()`, or `.nullish().default("")` patterns with `structuredOutput` and Zod v4, users would encounter an error because OpenAI schema compatibility layer adds transforms that Zod v4's native `toJSONSchema()` cannot handle.
+
+  The fix uses Mastra's transform-safe `zodToJsonSchema` function which gracefully handles transforms by using the `unrepresentable: 'any'` option.
+
+  Also exported `isZodType` utility from `@mastra/schema-compat` and updated it to detect both Zod v3 (`_def`) and Zod v4 (`_zod`) schemas.
+
+- fix(schema-compat): handle undefined values in optional fields for OpenAI compat layers ([#11469](https://github.com/mastra-ai/mastra/pull/11469))
+
+  When a Zod schema has nested objects with `.partial()`, the optional fields would fail validation with "expected string, received undefined" errors. This occurred because the OpenAI schema compat layer converted `.optional()` to `.nullable()`, which only accepts `null` values, not `undefined`.
+
+  Changed `.nullable()` to `.nullish()` so that optional fields now accept both `null` (when explicitly provided by the LLM) and `undefined` (when fields are omitted entirely).
+
+  Fixes #11457
+
 ## 1.0.0-beta.4
 
 ### Patch Changes

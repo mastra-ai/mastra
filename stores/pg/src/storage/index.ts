@@ -24,6 +24,8 @@ const DEFAULT_MAX_CONNECTIONS = 20;
 /** Default idle timeout in milliseconds */
 const DEFAULT_IDLE_TIMEOUT_MS = 30000;
 
+export { exportSchemas } from './db';
+// Export domain classes for direct use with MastraStorage composition
 export { AgentsPG, MemoryPG, ObservabilityPG, ScoresPG, WorkflowsPG };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';

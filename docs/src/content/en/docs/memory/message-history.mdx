@@ -1,6 +1,8 @@
 ---
 title: "Message History | Memory"
 description: "Learn how to configure message history in Mastra to store recent messages from the current conversation."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Message History
@@ -22,48 +24,49 @@ export const agent = new Agent({
 
 ## Querying Messages
 
-Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system:
+Messages are stored in the `MastraDBMessage` format, which provides a consistent structure across the entire Mastra system.
 
-```typescript 
+Storage in Mastra uses domain-specific stores. To access message operations, first get the memory store:
+
+```typescript
+// Get the memory store from storage
+const storage = mastra.getStorage();
+const memoryStore = await storage.getStore('memory');
+
 // Get messages for a thread with pagination
-const result = await mastra
-  .getStorage()
-  .listMessages({
-    threadId: "your-thread-id",
-    page: 0,
-    perPage: 50
-  });
+const result = await memoryStore?.listMessages({
+  threadId: "your-thread-id",
+  page: 0,
+  perPage: 50
+});
 
-console.log(result.messages); // MastraDBMessage[]
-console.log(result.total); // Total count
-console.log(result.hasMore); // Whether more pages exist
+console.log(result?.messages); // MastraDBMessage[]
+console.log(result?.total); // Total count
+console.log(result?.hasMore); // Whether more pages exist
 
 // Get messages from multiple threads at once
-const multiThreadResult = await mastra
-  .getStorage()
-  .listMessages({
-    threadId: ["thread-1", "thread-2", "thread-3"],
-    page: 0,
-    perPage: 100
-  });
+const multiThreadResult = await memoryStore?.listMessages({
+  threadId: ["thread-1", "thread-2", "thread-3"],
+  page: 0,
+  perPage: 100
+});
 
 // Get messages by their IDs
-const messages = await mastra
-  .getStorage()
-  .listMessagesById({ messageIds: messageIdArr });
+const messages = await memoryStore?.listMessagesById({ messageIds: messageIdArr });
 ```
 
 The `threadId` parameter accepts either a single thread ID string or an array of thread IDs to query messages from multiple threads in a single request.
 
 All message queries return `MastraDBMessage[]` format. If you need to convert messages to AI SDK formats for UI rendering, use the conversion utilities from `@mastra/ai-sdk/ui`:
 
-```typescript 
+```typescript
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 
-const result = await mastra
-  .getStorage()
-  .listMessages({ threadId: "your-thread-id" });
+const storage = mastra.getStorage();
+const memoryStore = await storage.getStore('memory');
+
+const result = await memoryStore?.listMessages({ threadId: "your-thread-id" });
 
 // Convert to AI SDK v5 UIMessage format for UI rendering
-const uiMessages = toAISdkV5Messages(result.messages);
+const uiMessages = toAISdkV5Messages(result?.messages ?? []);
 ```

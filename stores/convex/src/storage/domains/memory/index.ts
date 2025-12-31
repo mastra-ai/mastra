@@ -3,6 +3,7 @@ import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  filterByDateRange,
   MemoryStorage,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -196,15 +197,8 @@ export class MemoryConvex extends MemoryStorage {
       rows = rows.filter(row => row.resourceId === resourceId);
     }
 
-    if (filter?.dateRange) {
-      const { start, end } = filter.dateRange;
-      rows = rows.filter(row => {
-        const created = new Date(row.createdAt).getTime();
-        if (start && created < start.getTime()) return false;
-        if (end && created > end.getTime()) return false;
-        return true;
-      });
-    }
+    // Apply date range filter
+    rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
 
     rows.sort((a, b) => {
       const aValue =

@@ -841,7 +841,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
               usage: self.#usageCount,
               totalUsage: self.#getTotalUsage(),
               warnings: self.#warnings,
-              finishReason: 'other',
+              finishReason: 'suspended',
               content: self.messageList.get.response.aiV5.stepContent(),
               object: undefined,
               request: self.#request,
@@ -1137,6 +1137,8 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
       tripwire: this.#tripwire,
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
+      runId: this.runId,
+      suspendPayload: await this.suspendPayload,
     };
 
     return fullOutput;

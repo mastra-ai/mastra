@@ -239,14 +239,21 @@ export class MemoryPG extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "updatedAt" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
-      const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
+      // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
+      const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+        dataQuery,
+        [...queryParams, limitValue, offset],
+      );
 
       const threads = (rows || []).map(thread => ({
-        ...thread,
+        id: thread.id,
+        resourceId: thread.resourceId,
+        title: thread.title,
         metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
+        // Use timezone-aware columns (*Z) for correct UTC timestamps, with fallback for legacy data
+        createdAt: thread.createdAtZ || thread.createdAt,
+        updatedAt: thread.updatedAtZ || thread.updatedAt,
       }));
 
       return {
@@ -629,12 +636,14 @@ export class MemoryPG extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        conditions.push(`"createdAt" >= $${paramIndex++}`);
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
-        conditions.push(`"createdAt" <= $${paramIndex++}`);
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
 
