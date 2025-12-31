@@ -41,7 +41,7 @@ describe('runEvals - Score Persistence', () => {
       id: 'testScorer',
       description: 'Test scorer for bug demonstration',
       name: 'testScorer',
-    }).generateScore(({}) => {
+    }).generateScore(() => {
       // Simple scorer that always returns 0.85
       return 0.85;
     });
