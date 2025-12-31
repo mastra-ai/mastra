@@ -23,6 +23,12 @@ import type { LangfuseExporterConfig } from './tracing';
 // Mock Langfuse constructor (must be at the top level)
 vi.mock('langfuse');
 
+class TestLangfuseExporter extends LangfuseExporter {
+  exposeTraceData(traceId: string) {
+    return this.getTraceData({ traceId, method: "test" });
+  }
+}
+
 describe('LangfuseExporter', () => {
   // Mock objects
   let mockGeneration: any;
@@ -31,7 +37,7 @@ describe('LangfuseExporter', () => {
   let mockLangfuseClient: any;
   let LangfuseMock: any;
 
-  let exporter: LangfuseExporter;
+  let exporter: TestLangfuseExporter;
   let config: LangfuseExporterConfig;
 
   beforeEach(() => {
@@ -82,7 +88,7 @@ describe('LangfuseExporter', () => {
       },
     };
 
-    exporter = new LangfuseExporter(config);
+    exporter = new TestLangfuseExporter(config);
   });
 
   describe('Initialization', () => {
@@ -797,6 +803,7 @@ describe('LangfuseExporter', () => {
         type: SpanType.AGENT_RUN,
         isRoot: true,
         attributes: {},
+        traceId: 'trace-id'
       });
 
       rootSpan.output = { result: 'success' };
@@ -807,10 +814,10 @@ describe('LangfuseExporter', () => {
         exportedSpan: rootSpan,
       });
 
+      const traceData = exporter.exposeTraceData(rootSpan.traceId);
+
       // Verify trace was created and span is tracked as active
-      expect((exporter as any).traceMap.has('root-span-id')).toBe(true);
-      const traceData = (exporter as any).traceMap.get('root-span-id');
-      expect(traceData.activeSpans.has('root-span-id')).toBe(true);
+      expect(traceData.isActiveSpan({spanId: rootSpan.id })).toBe(true);
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,

@@ -31,6 +31,10 @@ export interface LangfuseExporterConfig extends TrackingExporterConfig {
 
 type LangfusePromptData = { name?: string; version?: number; id?: string };
 
+/**
+ * With Langfuse, data from the root span is stored in both the Root and the
+ * first span.
+ */
 
 type LangfuseRoot = LangfuseTraceClient;
 type LangfuseSpan = LangfuseSpanClient | LangfuseGenerationClient;
@@ -128,6 +132,11 @@ export class LangfuseExporter extends TrackingExporter<
     // use update for both update & end, so that we can use the
     // end time we set when ending the span.
     langfuseSpan?.update(this.buildSpanPayload(span, false, traceData));
+
+    if (span.isRootSpan) {
+      const langfuseRoot = traceData.getRoot();
+      langfuseRoot?.update({ output: span.output });
+    }
   }
 
 

@@ -6,13 +6,6 @@ export interface TrackingExporterConfig extends BaseExporterConfig {
   // Subclasses can extend this with vendor-specific config
 }
 
-/**
- * Context passed to span handlers for logging and debugging.
- */
-export interface SpanContext {
-  span: AnyExportedSpan;
-  method: string;
-}
 
 export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
   #rootSpan?: TRootData;
@@ -42,6 +35,10 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
     this.#rootSpan = args.rootData;
   }
 
+  getRoot() : TRootData | undefined {
+    return this.#rootSpan;
+  }
+
   addEarly(args: { event: TracingEvent}) {
     this.#earlyData.push(args.event);
   }
@@ -57,6 +54,10 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
   addSpan(args: { spanId: string; spanData: TSpanData }): void {
     this.#spans.set(args.spanId, args.spanData);
     this.#activeSpanIds.add(args.spanId); //Track span as active
+  }
+
+  isActiveSpan(args: { spanId: string}) : boolean {
+    return this.#activeSpanIds.has(args.spanId);
   }
 
   addMetadata(args: { spanId: string; metadata: TMetadata}): void {
@@ -109,7 +110,7 @@ export abstract class TrackingExporter<
   TSpanData,
   TEventData,
   TMetadata,
-  TConfig extends TrackingExporterConfig = TrackingExporterConfig,
+  TConfig extends TrackingExporterConfig,
 > extends BaseExporter {
 
   /**
@@ -121,11 +122,11 @@ export abstract class TrackingExporter<
   /**
    * Subclass configuration (typed for subclass-specific options)
    */
-  protected readonly exporterConfig: TConfig;
+  protected readonly config: TConfig;
 
   constructor(config: TConfig) {
     super(config);
-    this.exporterConfig = config;
+    this.config = config;
   }
 
   protected async _preExportTracingEvent(event: TracingEvent): Promise<TracingEvent> {
@@ -178,7 +179,7 @@ export abstract class TrackingExporter<
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     const method = this.getMethod(event);
-    const traceData = this.getTraceData({ span: event.exportedSpan, method });
+    const traceData = this.getTraceData({ traceId: event.exportedSpan.traceId, method });
 
     const { exportedSpan } = await this._preExportTracingEvent(event);
 
@@ -276,42 +277,22 @@ export abstract class TrackingExporter<
    * @param context - The span context for logging
    * @returns The trace data
    */
-  protected getTraceData(context: SpanContext): TraceData<TRootData, TSpanData, TEventData, TMetadata> {
-    const { span, method } = context;
+  protected getTraceData(args: { traceId: string, method: string}): TraceData<TRootData, TSpanData, TEventData, TMetadata> {
+    const { traceId, method } = args;
 
     //TODO: Ideally we should store some history of traces that ended recently
     // and log a warning if we see a span coming in for a old trace, instead of
     // creating a new TraceData object for the span.
-    if (!this.#traceMap.has(span.traceId)) {
-        this.#traceMap.set(span.traceId, new TraceData())
-        this.logger.debug(`${this.name}: Created new trace`, {
-            traceId: span.traceId,
-            spanId: span.id,
-            spanName: span.name,
-            spanType: span.type,
+    if (!this.#traceMap.has(traceId)) {
+        this.#traceMap.set(traceId, new TraceData())
+        this.logger.debug(`${this.name}: Created new trace data cache`, {
+            traceId,
             method,
         });
     }
-    return this.#traceMap.get(span.traceId)!
+    return this.#traceMap.get(traceId)!
   }
 
-  protected getParent(context: SpanContext): TRootData | TSpanData | TEventData | undefined {
-    const parent = this.getTraceData(context).getParent({span: context.span});
-    if (parent) {
-      return parent;
-    }
-
-    const { span, method } = context;
-    this.logger.warn(`${this.name}: No parent data found for span`, {
-      traceId: span.traceId,
-      spanId: span.id,
-      spanName: span.name,
-      spanType: span.type,
-      isRootSpan: span.isRootSpan,
-      parentSpanId: span.parentSpanId,
-      method,
-    });
-  }
 
 //   async shutdown(): Promise<void> {
 //     if (this.client) {
