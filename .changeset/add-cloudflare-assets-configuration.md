@@ -2,4 +2,25 @@
 "@mastra/deployer-cloudflare": minor
 ---
 
-Add support for configuring Cloudflare Workers assets via CloudflareDeployer. Introduces a new `CFAssets` interface with typed configuration options (directory, binding, run_worker_first, html_handling, not_found_handling) that aligns with the official Wrangler schema. The assets configuration is now forwarded to the generated wrangler.json, enabling users to serve static assets such as SPA builds using Cloudflare Workers Assets.
+**Added support for serving static assets with Cloudflare Workers.** You can now configure assets (such as SPA builds) directly via CloudflareDeployer, and the configuration will be forwarded to wrangler.json.
+
+**Usage example:**
+
+```typescript
+const deployer = new CloudflareDeployer({
+    assets: {
+        directory: './dist',
+        binding: 'ASSETS',
+        html_handling: 'auto-trailing-slash',
+        not_found_handling: 'single-page-application',
+    },
+});
+```
+**What you can configure:**
+- `directory`: Path to your assets directory
+- `binding` (optional): Variable binding name
+- `run_worker_first` (optional): Control execution order
+- `html_handling` (optional): Trailing slash handling
+- `not_found_handling` (optional): 404 and SPA behavior
+
+See [#11463](https://github.com/mastra-ai/mastra/issues/11463) for more context.
