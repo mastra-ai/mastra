@@ -367,3 +367,33 @@ export const searchMemoryResponseSchema = z.object({
   searchScope: z.string().optional(),
   searchType: z.string().optional(),
 });
+
+/**
+ * Body schema for POST /api/memory/threads/:threadId/clone
+ */
+export const cloneThreadBodySchema = z.object({
+  newThreadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  title: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  options: z
+    .object({
+      messageLimit: z.number().optional(),
+      messageFilter: z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+          messageIds: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Response schema for POST /api/memory/threads/:threadId/clone
+ */
+export const cloneThreadResponseSchema = z.object({
+  thread: threadSchema,
+  clonedMessages: z.array(messageSchema),
+});
