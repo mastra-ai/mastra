@@ -4,8 +4,8 @@ import { BaseProcessor } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
 import type { MastraSkills } from '@mastra/core/skills';
 
-import { Skills, type SkillsBM25Config } from './skills';
-import type { SkillFormat, Skill } from './types';
+import { Skills, type SkillsBM25Config } from '../skills';
+import type { SkillFormat, Skill } from '../types';
 
 // =========================================================================
 // Configuration
