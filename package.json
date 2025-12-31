@@ -48,6 +48,7 @@
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
+    "generate:docs": "pnpx tsx ./scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
