@@ -22,6 +22,12 @@ export interface SkillMetadata {
   compatibility?: string;
   /** Optional arbitrary metadata */
   metadata?: Record<string, string>;
+  /**
+   * Pre-approved tools the skill may use (experimental).
+   * In YAML: space-delimited string. Parsed to array.
+   * @experimental Support may vary between agent implementations.
+   */
+  allowedTools?: string[];
 }
 
 /**
@@ -34,8 +40,12 @@ export interface Skill extends SkillMetadata {
   instructions: string;
   /** Source of the skill (external package, local project, or managed) */
   source: SkillSource;
-  /** List of reference file paths (relative to skill directory) */
+  /** List of reference file paths (relative to references/ directory) */
   references: string[];
+  /** List of script file paths (relative to scripts/ directory) */
+  scripts: string[];
+  /** List of asset file paths (relative to assets/ directory) */
+  assets: string[];
 }
 
 /**
@@ -118,6 +128,26 @@ export interface MastraSkills {
    * Get all reference file paths for a skill
    */
   getReferences(skillName: string): string[];
+
+  /**
+   * Get script file content from a skill
+   */
+  getScript(skillName: string, scriptPath: string): string | undefined;
+
+  /**
+   * Get all script file paths for a skill
+   */
+  getScripts(skillName: string): string[];
+
+  /**
+   * Get asset file content from a skill (returns Buffer for binary files)
+   */
+  getAsset(skillName: string, assetPath: string): Buffer | undefined;
+
+  /**
+   * Get all asset file paths for a skill
+   */
+  getAssets(skillName: string): string[];
 
   /**
    * Refresh skills from disk (re-scan directories)

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, resolve, basename } from 'node:path';
+import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 import z from 'zod';
 
@@ -63,6 +63,7 @@ const SkillMetadataSchema = z.object({
     .optional()
     .describe('Environment requirements or compatibility notes (max 500 chars)'),
   metadata: z.record(z.string()).optional().describe('Arbitrary key-value metadata (e.g., author, version)'),
+  allowedTools: z.array(z.string()).optional().describe('Pre-approved tools the skill may use (experimental)'),
 });
 
 // =========================================================================
@@ -72,6 +73,19 @@ const SkillMetadataSchema = z.object({
 interface InternalSkill extends Skill {
   /** Content for BM25 indexing (instructions + all references) */
   indexableContent: string;
+}
+
+/**
+ * Parse allowed-tools from YAML (space-delimited string) to array
+ */
+function parseAllowedTools(value: unknown): string[] | undefined {
+  if (typeof value === 'string') {
+    return value.split(/\s+/).filter(Boolean);
+  }
+  if (Array.isArray(value)) {
+    return value.filter((v): v is string => typeof v === 'string');
+  }
+  return undefined;
 }
 
 // =========================================================================
@@ -153,6 +167,7 @@ export class Skills implements MastraSkills {
       license: skill.license,
       compatibility: skill.compatibility,
       metadata: skill.metadata,
+      allowedTools: skill.allowedTools,
     }));
   }
 
@@ -240,6 +255,62 @@ export class Skills implements MastraSkills {
   getReferences(skillName: string): string[] {
     const skill = this.#skills.get(skillName);
     return skill?.references ?? [];
+  }
+
+  /**
+   * Get script file content from a skill
+   */
+  getScript(skillName: string, scriptPath: string): string | undefined {
+    const skill = this.#skills.get(skillName);
+    if (!skill) return undefined;
+
+    const scriptFilePath = join(skill.path, 'scripts', scriptPath);
+
+    if (!existsSync(scriptFilePath)) {
+      return undefined;
+    }
+
+    try {
+      return readFileSync(scriptFilePath, 'utf-8');
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Get all script file paths for a skill
+   */
+  getScripts(skillName: string): string[] {
+    const skill = this.#skills.get(skillName);
+    return skill?.scripts ?? [];
+  }
+
+  /**
+   * Get asset file content from a skill (returns Buffer for binary files)
+   */
+  getAsset(skillName: string, assetPath: string): Buffer | undefined {
+    const skill = this.#skills.get(skillName);
+    if (!skill) return undefined;
+
+    const assetFilePath = join(skill.path, 'assets', assetPath);
+
+    if (!existsSync(assetFilePath)) {
+      return undefined;
+    }
+
+    try {
+      return readFileSync(assetFilePath);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Get all asset file paths for a skill
+   */
+  getAssets(skillName: string): string[] {
+    const skill = this.#skills.get(skillName);
+    return skill?.assets ?? [];
   }
 
   /**
@@ -343,6 +414,9 @@ export class Skills implements MastraSkills {
     const frontmatter = parsed.data;
     const body = parsed.content.trim();
 
+    // Parse allowed-tools (can be space-delimited string or array in YAML)
+    const allowedTools = parseAllowedTools(frontmatter['allowed-tools'] ?? frontmatter.allowedTools);
+
     // Extract required fields
     const metadata: SkillMetadata = {
       name: frontmatter.name,
@@ -350,6 +424,7 @@ export class Skills implements MastraSkills {
       license: frontmatter.license,
       compatibility: frontmatter.compatibility,
       metadata: frontmatter.metadata,
+      allowedTools,
     };
 
     // Validate if enabled
@@ -362,8 +437,10 @@ export class Skills implements MastraSkills {
 
     const skillPath = filePath.substring(0, filePath.lastIndexOf('/'));
 
-    // Discover reference files
-    const references = this.#discoverReferences(skillPath);
+    // Discover reference, script, and asset files
+    const references = this.#discoverFilesInSubdir(skillPath, 'references');
+    const scripts = this.#discoverFilesInSubdir(skillPath, 'scripts');
+    const assets = this.#discoverFilesInSubdir(skillPath, 'assets');
 
     // Build indexable content (instructions + references)
     const indexableContent = this.#buildIndexableContent(body, skillPath, references);
@@ -374,6 +451,8 @@ export class Skills implements MastraSkills {
       instructions: body,
       source,
       references,
+      scripts,
+      assets,
       indexableContent,
     };
   }
@@ -399,27 +478,27 @@ export class Skills implements MastraSkills {
   }
 
   /**
-   * Discover reference files in a skill directory
+   * Discover files in a subdirectory of a skill (references/, scripts/, assets/)
    */
-  #discoverReferences(skillPath: string): string[] {
-    const refsPath = join(skillPath, 'references');
-    const references: string[] = [];
+  #discoverFilesInSubdir(skillPath: string, subdir: 'references' | 'scripts' | 'assets'): string[] {
+    const subdirPath = join(skillPath, subdir);
+    const files: string[] = [];
 
-    if (!existsSync(refsPath)) {
-      return references;
+    if (!existsSync(subdirPath)) {
+      return files;
     }
 
     try {
-      this.#walkDirectory(refsPath, (filePath: string) => {
-        // Get relative path from references directory
-        const relativePath = filePath.substring(refsPath.length + 1);
-        references.push(relativePath);
+      this.#walkDirectory(subdirPath, (filePath: string) => {
+        // Get relative path from subdirectory
+        const relativePath = filePath.substring(subdirPath.length + 1);
+        files.push(relativePath);
       });
     } catch {
-      // Failed to read references directory
+      // Failed to read subdirectory
     }
 
-    return references;
+    return files;
   }
 
   /**

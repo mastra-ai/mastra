@@ -287,8 +287,10 @@ export class FilesystemStorage extends SkillsStorage {
 
     const skillPath = filePath.substring(0, filePath.lastIndexOf('/'));
 
-    // Discover reference files
-    const references = this.#discoverReferences(skillPath);
+    // Discover reference, script, and asset files
+    const references = this.#discoverFilesInSubdir(skillPath, 'references');
+    const scripts = this.#discoverFilesInSubdir(skillPath, 'scripts');
+    const assets = this.#discoverFilesInSubdir(skillPath, 'assets');
 
     return {
       ...metadata,
@@ -296,6 +298,8 @@ export class FilesystemStorage extends SkillsStorage {
       instructions: body,
       source,
       references,
+      scripts,
+      assets,
     };
   }
 
@@ -320,27 +324,27 @@ export class FilesystemStorage extends SkillsStorage {
   }
 
   /**
-   * Discover reference files in a skill directory
+   * Discover files in a subdirectory of a skill (references/, scripts/, assets/)
    */
-  #discoverReferences(skillPath: string): string[] {
-    const refsPath = join(skillPath, 'references');
-    const references: string[] = [];
+  #discoverFilesInSubdir(skillPath: string, subdir: 'references' | 'scripts' | 'assets'): string[] {
+    const subdirPath = join(skillPath, subdir);
+    const files: string[] = [];
 
-    if (!existsSync(refsPath)) {
-      return references;
+    if (!existsSync(subdirPath)) {
+      return files;
     }
 
     try {
-      this.#walkDirectory(refsPath, (filePath: string) => {
-        // Get relative path from references directory
-        const relativePath = filePath.substring(refsPath.length + 1);
-        references.push(relativePath);
+      this.#walkDirectory(subdirPath, (filePath: string) => {
+        // Get relative path from subdirectory
+        const relativePath = filePath.substring(subdirPath.length + 1);
+        files.push(relativePath);
       });
     } catch {
-      // Failed to read references directory
+      // Failed to read subdirectory
     }
 
-    return references;
+    return files;
   }
 
   /**

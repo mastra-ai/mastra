@@ -1,7 +1,6 @@
-// Skills processors (for Skills class / SKILL.md files)
+// Skills processor (for Skills class / SKILL.md files)
+// Implements Agent Skills spec progressive disclosure model
 export * from './skills';
-export * from './static-skills';
-export * from './retrieved-skills';
 
 // Knowledge processors (for Knowledge class / namespace artifacts)
 export * from './static-knowledge';
