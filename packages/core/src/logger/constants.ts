@@ -18,6 +18,7 @@ export const RegisteredLogger = {
   SERVER_CACHE: 'SERVER_CACHE',
   SERVER: 'SERVER',
   KNOWLEDGE: 'KNOWLEDGE',
+  SKILLS: 'SKILLS',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];

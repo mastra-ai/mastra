@@ -1,9 +1,11 @@
 import z from 'zod';
-import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
+import type { ProcessInputStepArgs } from '@mastra/core/processors';
+import { BaseProcessor } from '@mastra/core/processors';
 import { createTool } from '@mastra/core/tools';
+import type { MastraSkills } from '@mastra/core/skills';
 
 import { Skills, type SkillsBM25Config } from './skills';
-import type { SkillFormat, SkillMetadata, Skill } from './types';
+import type { SkillFormat, Skill } from './types';
 
 // =========================================================================
 // Configuration
@@ -21,8 +23,12 @@ export interface SkillsProcessorOptions {
   validateSkills?: boolean;
   /** BM25 search configuration */
   bm25Config?: SkillsBM25Config;
-  /** Pre-existing Skills instance (if not provided, one will be created) */
-  skills?: Skills;
+  /**
+   * Pre-existing Skills instance.
+   * If not provided and skillsPaths is set, a new Skills instance will be created.
+   * If neither is provided, the processor will try to inherit from Mastra at runtime.
+   */
+  skills?: Skills | MastraSkills;
 }
 
 // =========================================================================
@@ -37,22 +43,26 @@ export interface SkillsProcessorOptions {
  *
  * @example
  * ```typescript
+ * // Option 1: Provide skills paths directly
  * const processor = new SkillsProcessor({
  *   skillsPaths: ['./skills', 'node_modules/@company/skills'],
  *   format: 'xml',
  * });
  *
- * // Or with a pre-existing Skills instance
+ * // Option 2: Use a pre-existing Skills instance
  * const skills = new Skills({ id: 'my-skills', paths: './skills' });
  * const processor = new SkillsProcessor({ skills });
+ *
+ * // Option 3: Inherit from Mastra (when registered with an agent that has Mastra)
+ * const processor = new SkillsProcessor(); // Will use mastra.getSkills()
  * ```
  */
-export class SkillsProcessor implements Processor {
-  readonly id = 'skills-processor';
+export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
+  readonly id = 'skills-processor' as const;
   readonly name = 'Skills Processor';
 
-  /** Skills instance for managing skills */
-  readonly skills: Skills;
+  /** Skills instance for managing skills (may be set at construction or inherited from Mastra) */
+  private _skills?: Skills | MastraSkills;
 
   /** Format for skill injection */
   private format: SkillFormat;
@@ -60,23 +70,61 @@ export class SkillsProcessor implements Processor {
   /** Set of activated skill names */
   private activatedSkills: Set<string> = new Set();
 
+  /** Options for creating skills lazily */
+  private skillsOptions?: {
+    paths: string | string[];
+    validateOnLoad: boolean;
+    bm25Config?: SkillsBM25Config;
+  };
+
   constructor(opts?: SkillsProcessorOptions) {
+    super();
     this.format = opts?.format ?? 'xml';
 
-    // Use provided Skills instance or create a new one
+    // Use provided Skills instance or store options for lazy creation
     if (opts?.skills) {
-      this.skills = opts.skills;
-    } else {
-      const skillsPaths = opts?.skillsPaths ?? ['./skills'];
-      this.skills = new Skills(
+      this._skills = opts.skills;
+    } else if (opts?.skillsPaths) {
+      // Create skills instance now
+      this._skills = new Skills(
         {
           id: 'skills-processor-skills',
-          paths: skillsPaths,
-          validateOnLoad: opts?.validateSkills ?? true,
+          paths: opts.skillsPaths,
+          validateOnLoad: opts.validateSkills ?? true,
         },
-        opts?.bm25Config,
+        opts.bm25Config,
       );
     }
+    // Otherwise, will try to inherit from Mastra at runtime
+  }
+
+  /**
+   * Get the skills instance from options or inherited from Mastra
+   */
+  private getSkillsInstance(): Skills | MastraSkills {
+    if (this._skills) {
+      return this._skills;
+    }
+
+    // Try to inherit from the registered Mastra instance
+    if (this.mastra?.getSkills) {
+      const inherited = this.mastra.getSkills();
+      if (inherited) {
+        return inherited;
+      }
+    }
+
+    throw new Error(
+      'No skills instance available. Either pass a skills instance to the processor, ' +
+        'provide skillsPaths, or register a skills instance with Mastra.',
+    );
+  }
+
+  /**
+   * Get the skills instance (public accessor for testing)
+   */
+  get skills(): Skills | MastraSkills {
+    return this.getSkillsInstance();
   }
 
   // =========================================================================
@@ -87,15 +135,16 @@ export class SkillsProcessor implements Processor {
    * Format available skills metadata based on configured format
    */
   private formatAvailableSkills(): string {
-    const skills = this.skills.list();
+    const skills = this.getSkillsInstance();
+    const skillsList = skills.list();
 
-    if (skills.length === 0) {
+    if (skillsList.length === 0) {
       return '';
     }
 
     switch (this.format) {
       case 'xml': {
-        const skillsXml = skills
+        const skillsXml = skillsList
           .map(
             skill => `  <skill>
     <name>${this.escapeXml(skill.name)}</name>
@@ -113,14 +162,14 @@ ${skillsXml}
         return `Available Skills:
 
 ${JSON.stringify(
-  skills.map(s => ({ name: s.name, description: s.description })),
+  skillsList.map(s => ({ name: s.name, description: s.description })),
   null,
   2,
 )}`;
       }
 
       case 'markdown': {
-        const skillsMd = skills.map(skill => `- **${skill.name}**: ${skill.description}`).join('\n');
+        const skillsMd = skillsList.map(skill => `- **${skill.name}**: ${skill.description}`).join('\n');
         return `# Available Skills
 
 ${skillsMd}`;
@@ -132,10 +181,11 @@ ${skillsMd}`;
    * Format activated skills based on configured format
    */
   private formatActivatedSkills(): string {
+    const skills = this.getSkillsInstance();
     const activatedSkillsList: Skill[] = [];
 
     for (const name of this.activatedSkills) {
-      const skill = this.skills.get(name);
+      const skill = skills.get(name);
       if (skill) {
         activatedSkillsList.push(skill);
       }
@@ -188,6 +238,8 @@ ${skillInstructions}`;
    * Create skill-activate tool
    */
   private createSkillActivateTool() {
+    const skills = this.getSkillsInstance();
+
     return createTool({
       id: 'skill-activate',
       description:
@@ -197,10 +249,11 @@ ${skillInstructions}`;
       }),
       execute: async ({ name }) => {
         // Check if skill exists
-        if (!this.skills.has(name)) {
+        if (!skills.has(name)) {
+          const skillNames = skills.list().map(s => s.name);
           return {
             success: false,
-            message: `Skill "${name}" not found. Available skills: ${this.skills.skillNames.join(', ')}`,
+            message: `Skill "${name}" not found. Available skills: ${skillNames.join(', ')}`,
           };
         }
 
@@ -227,6 +280,8 @@ ${skillInstructions}`;
    * Create skill-read-reference tool
    */
   private createSkillReadReferenceTool() {
+    const skills = this.getSkillsInstance();
+
     return createTool({
       id: 'skill-read-reference',
       description: 'Read a reference file from an activated skill',
@@ -244,10 +299,10 @@ ${skillInstructions}`;
         }
 
         // Get reference content
-        const content = this.skills.getReference(skillName, referencePath);
+        const content = skills.getReference(skillName, referencePath);
 
         if (content === undefined) {
-          const availableRefs = this.skills.getReferences(skillName);
+          const availableRefs = skills.getReferences(skillName);
           return {
             success: false,
             message: `Reference file "${referencePath}" not found in skill "${skillName}". Available references: ${availableRefs.join(', ') || 'none'}`,
@@ -266,6 +321,8 @@ ${skillInstructions}`;
    * Create skill-search tool for searching across skill content
    */
   private createSkillSearchTool() {
+    const skills = this.getSkillsInstance();
+
     return createTool({
       id: 'skill-search',
       description:
@@ -276,7 +333,7 @@ ${skillInstructions}`;
         topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
       }),
       execute: async ({ query, skillNames, topK }) => {
-        const results = this.skills.search(query, { topK, skillNames });
+        const results = skills.search(query, { topK, skillNames });
 
         if (results.length === 0) {
           return {
@@ -307,7 +364,9 @@ ${skillInstructions}`;
    * Process input step - inject available skills and provide skill tools
    */
   async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
-    const hasSkills = this.skills.size > 0;
+    const skills = this.getSkillsInstance();
+    const skillsList = skills.list();
+    const hasSkills = skillsList.length > 0;
 
     // 1. Inject available skills metadata (if any skills discovered)
     if (hasSkills) {

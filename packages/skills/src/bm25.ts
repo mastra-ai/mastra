@@ -348,6 +348,66 @@ export class BM25Index {
   }
 
   /**
+   * Serialize the index to a JSON-compatible object
+   */
+  serialize(): BM25IndexData {
+    const documents: SerializedBM25Document[] = [];
+    for (const [id, doc] of this.#documents.entries()) {
+      documents.push({
+        id,
+        content: doc.content,
+        tokens: doc.tokens,
+        termFrequencies: Object.fromEntries(doc.termFrequencies),
+        length: doc.length,
+        metadata: doc.metadata,
+      });
+    }
+
+    return {
+      k1: this.k1,
+      b: this.b,
+      documents,
+      avgDocLength: this.#avgDocLength,
+    };
+  }
+
+  /**
+   * Deserialize an index from a JSON object
+   */
+  static deserialize(data: BM25IndexData, tokenizeOptions: TokenizeOptions = {}): BM25Index {
+    const index = new BM25Index({ k1: data.k1, b: data.b }, tokenizeOptions);
+
+    for (const doc of data.documents) {
+      const termFrequencies = new Map(Object.entries(doc.termFrequencies));
+
+      const document: BM25Document = {
+        id: doc.id,
+        content: doc.content,
+        tokens: doc.tokens,
+        termFrequencies,
+        length: doc.length,
+        metadata: doc.metadata,
+      };
+
+      index.#documents.set(doc.id, document);
+      index.#docCount++;
+
+      // Rebuild inverted index and document frequency
+      for (const term of termFrequencies.keys()) {
+        if (!index.#invertedIndex.has(term)) {
+          index.#invertedIndex.set(term, new Set());
+        }
+        index.#invertedIndex.get(term)!.add(doc.id);
+        index.#documentFrequency.set(term, (index.#documentFrequency.get(term) || 0) + 1);
+      }
+    }
+
+    index.#avgDocLength = data.avgDocLength;
+
+    return index;
+  }
+
+  /**
    * Update average document length after add/remove operations
    */
   #updateAvgDocLength(): void {
@@ -379,4 +439,26 @@ export class BM25Index {
     const denominator = tf + this.k1 * (1 - this.b + this.b * (docLength / this.#avgDocLength));
     return idf * (numerator / denominator);
   }
+}
+
+/**
+ * Serialized document format for persistence
+ */
+interface SerializedBM25Document {
+  id: string;
+  content: string;
+  tokens: string[];
+  termFrequencies: Record<string, number>;
+  length: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Serialized index data for persistence
+ */
+export interface BM25IndexData {
+  k1: number;
+  b: number;
+  documents: SerializedBM25Document[];
+  avgDocLength: number;
 }

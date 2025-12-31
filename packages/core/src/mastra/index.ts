@@ -29,6 +29,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator } from '../types';
 import type { MastraVector } from '../vector';
 import type { MastraKnowledge } from '../knowledge';
+import type { MastraSkills } from '../skills';
 import type { Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { createOnScorerHook } from './hooks';
@@ -230,6 +231,25 @@ export interface Config<
   knowledge?: MastraKnowledge;
 
   /**
+   * Skills instance for agent skill management following the Agent Skills specification.
+   * Discovers skills from filesystem paths and makes them available to agents.
+   * Processors like SkillsProcessor can inherit this instance from Mastra.
+   *
+   * @example
+   * ```typescript
+   * import { Skills } from '@mastra/skills';
+   *
+   * const mastra = new Mastra({
+   *   skills: new Skills({
+   *     id: 'my-skills',
+   *     paths: ['./skills', 'node_modules/@company/skills'],
+   *   }),
+   * });
+   * ```
+   */
+  skills?: MastraSkills;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -300,6 +320,7 @@ export class Mastra<
 > {
   #vectors?: TVectors;
   #knowledge?: MastraKnowledge;
+  #skills?: MastraSkills;
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
@@ -316,7 +337,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #memory?: TMemory;
-  // Note: #knowledge is declared above with #vectors
+  // Note: #knowledge and #skills are declared above with #vectors
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -509,6 +530,7 @@ export class Mastra<
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
     this.#knowledge = undefined;
+    this.#skills = undefined;
     this.#mcpServers = {} as TMCPServers;
     this.#tts = {} as TTTS;
     this.#agents = {} as TAgents;
@@ -557,6 +579,10 @@ export class Mastra<
 
     if (config?.knowledge) {
       this.#knowledge = config.knowledge;
+    }
+
+    if (config?.skills) {
+      this.#skills = config.skills;
     }
 
     if (config?.scorers) {
@@ -1427,6 +1453,37 @@ export class Mastra<
    */
   public getKnowledge(): MastraKnowledge | undefined {
     return this.#knowledge;
+  }
+
+  // ============================================================================
+  // Skills Management
+  // ============================================================================
+
+  /**
+   * Returns the registered skills instance.
+   *
+   * @returns The skills instance or undefined if none is registered
+   *
+   * @example
+   * ```typescript
+   * import { Skills } from '@mastra/skills';
+   *
+   * const mastra = new Mastra({
+   *   skills: new Skills({
+   *     id: 'my-skills',
+   *     paths: ['./skills'],
+   *   }),
+   * });
+   *
+   * const skills = mastra.getSkills();
+   * if (skills) {
+   *   const allSkills = skills.list();
+   *   const skill = skills.get('brand-guidelines');
+   * }
+   * ```
+   */
+  public getSkills(): MastraSkills | undefined {
+    return this.#skills;
   }
 
   /**
