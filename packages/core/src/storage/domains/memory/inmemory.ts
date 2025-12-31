@@ -10,6 +10,9 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
 } from '../../types';
 import { filterByDateRange, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
@@ -541,6 +544,122 @@ export class InMemoryMemory extends MemoryStorage {
 
     this.db.resources.set(resourceId, resource);
     return resource;
+  }
+
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const { sourceThreadId, newThreadId: providedThreadId, resourceId, title, metadata, options } = args;
+
+    this.logger.debug(`InMemoryMemory: cloneThread called for source thread ${sourceThreadId}`);
+
+    // Get the source thread
+    const sourceThread = this.db.threads.get(sourceThreadId);
+    if (!sourceThread) {
+      throw new Error(`Source thread with id ${sourceThreadId} not found`);
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    if (this.db.threads.has(newThreadId)) {
+      throw new Error(`Thread with id ${newThreadId} already exists`);
+    }
+
+    // Get messages from the source thread
+    let sourceMessages = Array.from(this.db.messages.values())
+      .filter((msg: StorageMessageType) => msg.thread_id === sourceThreadId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    // Apply message filters if provided
+    if (options?.messageFilter) {
+      const { startDate, endDate, messageIds } = options.messageFilter;
+
+      if (messageIds && messageIds.length > 0) {
+        const messageIdSet = new Set(messageIds);
+        sourceMessages = sourceMessages.filter(msg => messageIdSet.has(msg.id));
+      }
+
+      if (startDate) {
+        sourceMessages = sourceMessages.filter(msg => new Date(msg.createdAt) >= startDate);
+      }
+
+      if (endDate) {
+        sourceMessages = sourceMessages.filter(msg => new Date(msg.createdAt) <= endDate);
+      }
+    }
+
+    // Apply message limit (take from the end to get most recent)
+    if (options?.messageLimit && options.messageLimit > 0 && sourceMessages.length > options.messageLimit) {
+      sourceMessages = sourceMessages.slice(-options.messageLimit);
+    }
+
+    const now = new Date();
+
+    // Determine the last message ID for clone metadata
+    const lastMessageId = sourceMessages.length > 0 ? sourceMessages[sourceMessages.length - 1]!.id : undefined;
+
+    // Create clone metadata
+    const cloneMetadata: ThreadCloneMetadata = {
+      sourceThreadId,
+      clonedAt: now,
+      ...(lastMessageId && { lastMessageId }),
+    };
+
+    // Create the new thread
+    const newThread: StorageThreadType = {
+      id: newThreadId,
+      resourceId: resourceId || sourceThread.resourceId,
+      title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+      metadata: {
+        ...metadata,
+        clone: cloneMetadata,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Save the new thread
+    this.db.threads.set(newThreadId, newThread);
+
+    // Clone messages with new IDs
+    const clonedMessages: MastraDBMessage[] = [];
+    for (const sourceMsg of sourceMessages) {
+      const newMessageId = crypto.randomUUID();
+      const parsedContent = safelyParseJSON(sourceMsg.content);
+
+      // Create storage message
+      const newStorageMessage: StorageMessageType = {
+        id: newMessageId,
+        thread_id: newThreadId,
+        content: sourceMsg.content,
+        role: sourceMsg.role,
+        type: sourceMsg.type,
+        createdAt: sourceMsg.createdAt,
+        resourceId: resourceId || sourceMsg.resourceId,
+      };
+
+      this.db.messages.set(newMessageId, newStorageMessage);
+
+      // Create MastraDBMessage for return
+      clonedMessages.push({
+        id: newMessageId,
+        threadId: newThreadId,
+        content: parsedContent,
+        role: sourceMsg.role as MastraDBMessage['role'],
+        type: sourceMsg.type,
+        createdAt: sourceMsg.createdAt,
+        resourceId: resourceId || sourceMsg.resourceId || undefined,
+      });
+    }
+
+    this.logger.debug(
+      `InMemoryMemory: cloned thread ${sourceThreadId} to ${newThreadId} with ${clonedMessages.length} messages`,
+    );
+
+    return {
+      thread: newThread,
+      clonedMessages,
+    };
   }
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {

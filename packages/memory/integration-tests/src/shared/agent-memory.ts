@@ -1303,4 +1303,405 @@ export function getAgentMemoryTests({
       expect(messages.length).toBe(0);
     });
   });
+
+  describe('Thread Cloning', () => {
+    const cloneStorage = new LibSQLStore({
+      id: 'clone-storage',
+      url: dbFile,
+    });
+    const cloneVector = new LibSQLVector({
+      connectionUrl: dbFile,
+      id: 'clone-vector',
+    });
+    const cloneMemory = new Memory({
+      storage: cloneStorage,
+      vector: cloneVector,
+      embedder: fastembed,
+      options: {
+        lastMessages: 10,
+        semanticRecall: true,
+      },
+    });
+
+    const cloneAgent = new Agent({
+      id: 'clone-test-agent',
+      name: 'Clone Test Agent',
+      instructions: 'You are a helpful assistant for testing thread cloning.',
+      model,
+      memory: cloneMemory,
+      tools,
+    });
+
+    it('should clone a thread with all messages', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-test-resource';
+
+      // Create a conversation in the source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Hello, my name is Alice!', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await cloneAgent.generate('I live in New York.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Hello, my name is Alice!', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await cloneAgent.generateLegacy('I live in New York.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Verify source thread has messages
+      const sourceMessages = await cloneMemory.recall({ threadId: sourceThreadId });
+      expect(sourceMessages.messages.length).toBeGreaterThan(0);
+      const sourceMessageCount = sourceMessages.messages.length;
+
+      // Clone the thread
+      const { thread: clonedThread, clonedMessages } = await cloneMemory.cloneThread({
+        sourceThreadId,
+      });
+
+      // Verify the cloned thread was created
+      expect(clonedThread).toBeDefined();
+      expect(clonedThread.id).not.toBe(sourceThreadId);
+
+      // Verify clone metadata
+      expect(clonedThread.metadata?.clone).toBeDefined();
+      expect((clonedThread.metadata?.clone as any).sourceThreadId).toBe(sourceThreadId);
+
+      // Verify cloned messages match source count
+      expect(clonedMessages.length).toBe(sourceMessageCount);
+
+      // Verify cloned messages have new IDs but same content
+      const clonedThreadMessages = await cloneMemory.recall({ threadId: clonedThread.id });
+      expect(clonedThreadMessages.messages.length).toBe(sourceMessageCount);
+    });
+
+    it('should clone a thread with custom title', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-custom-title-resource';
+
+      // Create source thread with a message
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Test message for cloning', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Test message for cloning', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Clone with custom title
+      const customTitle = 'My Custom Clone Title';
+      const { thread: clonedThread } = await cloneMemory.cloneThread({
+        sourceThreadId,
+        title: customTitle,
+      });
+
+      expect(clonedThread.title).toBe(customTitle);
+    });
+
+    it('should clone a thread with message limit', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-limit-resource';
+
+      // Create multiple messages
+      for (let i = 1; i <= 3; i++) {
+        if (
+          typeof model === 'string' ||
+          ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+        ) {
+          await cloneAgent.generate(`Message number ${i}`, {
+            threadId: sourceThreadId,
+            resourceId,
+          });
+        } else {
+          await cloneAgent.generateLegacy(`Message number ${i}`, {
+            threadId: sourceThreadId,
+            resourceId,
+          });
+        }
+      }
+
+      // Count total messages (should be 6: 3 user + 3 assistant)
+      const sourceMessages = await cloneMemory.recall({ threadId: sourceThreadId });
+      expect(sourceMessages.messages.length).toBe(6);
+
+      // Clone with limit of 2 (should get last 2 messages)
+      const { clonedMessages } = await cloneMemory.cloneThread({
+        sourceThreadId,
+        options: { messageLimit: 2 },
+      });
+
+      expect(clonedMessages.length).toBe(2);
+    });
+
+    it('should allow continuing conversation on cloned thread independently', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-continue-resource';
+
+      // Create initial conversation
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('My favorite color is blue.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('My favorite color is blue.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Clone the thread
+      const { thread: clonedThread } = await cloneMemory.cloneThread({
+        sourceThreadId,
+      });
+
+      // Continue conversation on cloned thread with different info
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Actually, my favorite color is red.', {
+          threadId: clonedThread.id,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Actually, my favorite color is red.', {
+          threadId: clonedThread.id,
+          resourceId,
+        });
+      }
+
+      // Verify source thread is unchanged
+      const sourceMessages = await cloneMemory.recall({ threadId: sourceThreadId });
+      const sourceUserMessages = sourceMessages.messages.filter((m: any) => m.role === 'user');
+      expect(sourceUserMessages.length).toBe(1); // Only original message
+
+      // Verify cloned thread has additional messages
+      const clonedMessages = await cloneMemory.recall({ threadId: clonedThread.id });
+      const clonedUserMessages = clonedMessages.messages.filter((m: any) => m.role === 'user');
+      expect(clonedUserMessages.length).toBe(2); // Original + new message
+    });
+
+    it('should clone thread with custom thread ID', async () => {
+      const sourceThreadId = randomUUID();
+      const customCloneId = `custom-clone-${randomUUID()}`;
+      const resourceId = 'clone-custom-id-resource';
+
+      // Create source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Clone with custom ID
+      const { thread: clonedThread } = await cloneMemory.cloneThread({
+        sourceThreadId,
+        newThreadId: customCloneId,
+      });
+
+      expect(clonedThread.id).toBe(customCloneId);
+    });
+
+    it('should use utility methods to check clone status', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-utility-resource';
+
+      // Create source thread
+      const sourceThread = await cloneMemory.createThread({
+        threadId: sourceThreadId,
+        resourceId,
+        title: 'Source Thread',
+      });
+
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Clone the thread
+      const { thread: clonedThread } = await cloneMemory.cloneThread({
+        sourceThreadId,
+      });
+
+      // Test isClone utility
+      expect(cloneMemory.isClone(sourceThread)).toBe(false);
+      expect(cloneMemory.isClone(clonedThread)).toBe(true);
+
+      // Test getCloneMetadata utility
+      expect(cloneMemory.getCloneMetadata(sourceThread)).toBeNull();
+      const cloneMetadata = cloneMemory.getCloneMetadata(clonedThread);
+      expect(cloneMetadata).not.toBeNull();
+      expect(cloneMetadata?.sourceThreadId).toBe(sourceThreadId);
+
+      // Test getSourceThread utility
+      const retrievedSource = await cloneMemory.getSourceThread(clonedThread.id);
+      expect(retrievedSource).not.toBeNull();
+      expect(retrievedSource?.id).toBe(sourceThreadId);
+    });
+
+    it('should list all clones of a source thread', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-list-resource';
+
+      // Create source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Create multiple clones
+      await cloneMemory.cloneThread({ sourceThreadId, title: 'Clone 1' });
+      await cloneMemory.cloneThread({ sourceThreadId, title: 'Clone 2' });
+      await cloneMemory.cloneThread({ sourceThreadId, title: 'Clone 3' });
+
+      // List clones
+      const clones = await cloneMemory.listClones(sourceThreadId);
+
+      expect(clones.length).toBe(3);
+      expect(clones.every(c => cloneMemory.isClone(c))).toBe(true);
+    });
+
+    it('should track clone history chain', async () => {
+      const originalThreadId = randomUUID();
+      const resourceId = 'clone-history-resource';
+
+      // Create original thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate('Original message', {
+          threadId: originalThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy('Original message', {
+          threadId: originalThreadId,
+          resourceId,
+        });
+      }
+
+      // Create chain: original -> clone1 -> clone2
+      const { thread: clone1 } = await cloneMemory.cloneThread({
+        sourceThreadId: originalThreadId,
+        title: 'First Clone',
+      });
+
+      const { thread: clone2 } = await cloneMemory.cloneThread({
+        sourceThreadId: clone1.id,
+        title: 'Second Clone',
+      });
+
+      // Get clone history
+      const history = await cloneMemory.getCloneHistory(clone2.id);
+
+      expect(history.length).toBe(3);
+      expect(history[0]?.id).toBe(originalThreadId);
+      expect(history[1]?.id).toBe(clone1.id);
+      expect(history[2]?.id).toBe(clone2.id);
+    });
+
+    it('should create embeddings for cloned messages that are searchable via semantic recall', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'clone-embedding-resource';
+
+      // Create a unique, memorable message in the source thread
+      const uniqueContent = 'The ancient library of Alexandria contained countless scrolls of knowledge.';
+
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await cloneAgent.generate(uniqueContent, {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await cloneAgent.generateLegacy(uniqueContent, {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Wait a moment for embeddings to be created
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Clone the thread - this should also create embeddings for the cloned messages
+      const { thread: clonedThread } = await cloneMemory.cloneThread({
+        sourceThreadId,
+      });
+
+      // Wait for embeddings to be created for cloned messages
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Now search using semantic recall on the cloned thread
+      // The search should find the cloned message via its embeddings
+      const searchResults = await cloneMemory.recall({
+        threadId: clonedThread.id,
+        resourceId,
+        vectorSearchString: 'ancient library scrolls',
+      });
+
+      // Verify we got results from the cloned thread
+      expect(searchResults.messages.length).toBeGreaterThan(0);
+
+      // Verify the cloned messages are in the results
+      const hasClonedMessage = searchResults.messages.some((m: any) => {
+        const textContent = m.content?.parts?.find((p: any) => p.type === 'text')?.text || '';
+        return textContent.includes('Alexandria') || textContent.includes('library');
+      });
+      expect(hasClonedMessage).toBe(true);
+    });
+  });
 }

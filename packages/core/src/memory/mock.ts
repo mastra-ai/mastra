@@ -9,6 +9,8 @@ import type {
   StorageListMessagesInput,
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
 } from '../storage';
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
@@ -302,5 +304,10 @@ export class MockMemory extends MastraMemory {
         reason: error instanceof Error ? error.message : 'Failed to update working memory',
       };
     }
+  }
+
+  async cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput> {
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.cloneThread(args);
   }
 }
