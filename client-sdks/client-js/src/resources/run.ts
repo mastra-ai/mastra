@@ -246,6 +246,7 @@ export class Run extends BaseResource {
     tracingOptions?: TracingOptions;
     resourceId?: string;
     perStep?: boolean;
+    closeOnSuspend?: boolean;
   }) {
     const searchParams = new URLSearchParams();
 
@@ -263,6 +264,7 @@ export class Run extends BaseResource {
           tracingOptions: params.tracingOptions,
           resourceId: params.resourceId,
           perStep: params.perStep,
+          closeOnSuspend: params.closeOnSuspend,
         },
         stream: true,
       },
@@ -308,82 +310,6 @@ export class Run extends BaseResource {
   }
 
   /**
-   * Starts a workflow run and returns a stream
-   * @param params - Object containing the inputData, initialState and requestContext
-   * @returns Promise containing the workflow execution results
-   */
-  async streamVNext(params: {
-    inputData?: Record<string, any>;
-    initialState?: Record<string, any>;
-    requestContext?: RequestContext;
-    closeOnSuspend?: boolean;
-    tracingOptions?: TracingOptions;
-    resourceId?: string;
-    perStep?: boolean;
-  }) {
-    const searchParams = new URLSearchParams();
-
-    searchParams.set('runId', this.runId);
-
-    const requestContext = parseClientRequestContext(params.requestContext);
-    const response: Response = await this.request(
-      `/api/workflows/${this.workflowId}/streamVNext?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        body: {
-          inputData: params.inputData,
-          initialState: params.initialState,
-          requestContext,
-          closeOnSuspend: params.closeOnSuspend,
-          tracingOptions: params.tracingOptions,
-          resourceId: params.resourceId,
-          perStep: params.perStep,
-        },
-        stream: true,
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(this.createChunkTransformStream());
-  }
-
-  /**
-   * Observes workflow vNext stream for a workflow run
-   * @returns Promise containing the workflow execution results
-   */
-  async observeStreamVNext() {
-    const searchParams = new URLSearchParams();
-    searchParams.set('runId', this.runId);
-
-    const response: Response = await this.request(
-      `/api/workflows/${this.workflowId}/observe-streamVNext?${searchParams.toString()}`,
-      {
-        method: 'POST',
-        stream: true,
-      },
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to observe stream vNext workflow: ${response.statusText}`);
-    }
-
-    if (!response.body) {
-      throw new Error('Response body is null');
-    }
-
-    // Pipe the response body through the transform stream
-    return response.body.pipeThrough(this.createChunkTransformStream());
-  }
-
-  /**
    * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the step, resumeData and requestContext
    * @returns Promise containing the workflow resume results
@@ -409,11 +335,11 @@ export class Run extends BaseResource {
   }
 
   /**
-   * Resumes a suspended workflow step that uses streamVNext asynchronously and returns a promise that resolves when the workflow is complete
+   * Resumes a suspended workflow step that uses stream asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the step, resumeData and requestContext
    * @returns Promise containing the workflow resume results
    */
-  async resumeStreamVNext(params: {
+  async resumeStream(params: {
     step?: string | string[];
     resumeData?: Record<string, any>;
     requestContext?: RequestContext | Record<string, any>;

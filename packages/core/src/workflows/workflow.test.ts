@@ -1464,7 +1464,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {} });
+      const streamResult = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1603,7 +1603,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {}, perStep: true });
+      const streamResult = run.stream({ inputData: {}, perStep: true });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -1718,7 +1718,7 @@ describe('Workflow', () => {
       workflow.then(step1).commit();
 
       const run = await workflow.createRun();
-      const streamResult = run.streamVNext({
+      const streamResult = run.stream({
         inputData: {},
         initialState: { value: 'test-state', otherValue: 'test-other-state' },
         outputOptions: { includeState: true },
@@ -1836,7 +1836,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRun();
 
-      let streamResult = run.streamVNext({ inputData: { input: 'test' } });
+      let streamResult = run.stream({ inputData: { input: 'test' } });
 
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-suspended') {
@@ -1848,7 +1848,7 @@ describe('Workflow', () => {
       }
 
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const errStreamResult = run.resumeStreamVNext({ resumeData, step: getUserInput });
+      const errStreamResult = run.resumeStream({ resumeData, step: getUserInput });
       for await (const _data of errStreamResult.fullStream) {
       }
 
@@ -1861,7 +1861,7 @@ describe('Workflow', () => {
         );
       }
 
-      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      streamResult = run.resumeStream({ resumeData, step: promptAgent });
       console.log('created stream');
       for await (const _data of streamResult.fullStream) {
         // console.log('data===', _data);
@@ -1995,7 +1995,7 @@ describe('Workflow', () => {
 
       const run = await promptEvalWorkflow.createRun();
 
-      let streamResult = run.streamVNext({ inputData: { input: 'test' }, closeOnSuspend: false });
+      let streamResult = run.stream({ inputData: { input: 'test' }, closeOnSuspend: false });
 
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-suspended') {
@@ -2110,7 +2110,7 @@ describe('Workflow', () => {
 
       const run = await resumableWorkflow.createRun();
 
-      let streamResult = run.streamVNext({ inputData: { input: 'test input for stream' } });
+      let streamResult = run.stream({ inputData: { input: 'test input for stream' } });
 
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
@@ -2126,7 +2126,7 @@ describe('Workflow', () => {
       let result = await streamResult.result;
 
       const resumeData = { userInput: 'test input for resumption' };
-      streamResult = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      streamResult = run.resumeStream({ resumeData, step: promptAgent });
       for await (const data of streamResult.fullStream) {
         if (data.type === 'workflow-step-output') {
           expect(data.payload.output).toMatchObject({
@@ -2278,7 +2278,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun({
         runId: 'test-run-id',
       });
-      const streamResult = run.streamVNext({
+      const streamResult = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -2582,7 +2582,7 @@ describe('Workflow', () => {
       const run = await workflow.createRun({
         runId: 'test-run-id',
       });
-      const streamResult = run.streamVNext({
+      const streamResult = run.stream({
         inputData: {
           prompt1: 'Capital of France, just the name',
           prompt2: 'Capital of UK, just the name',
@@ -2910,7 +2910,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {} });
+      const streamResult = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -3080,7 +3080,7 @@ describe('Workflow', () => {
         runId,
       });
 
-      const streamResult = run.streamVNext({ inputData: {} });
+      const streamResult = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
@@ -3246,13 +3246,13 @@ describe('Workflow', () => {
       const run = await workflow.createRun({ runId: 'test-run-id' });
       const originalInput = { originalInput: 'original-data' };
 
-      let streamResult = run.streamVNext({ inputData: originalInput });
+      let streamResult = run.stream({ inputData: originalInput });
 
       for await (const _data of streamResult) {
       }
 
       const resumeData = { stepId: 'step1', context: { differentData: 'resume-data' } };
-      streamResult = run.resumeStreamVNext({ resumeData: resumeData as any, step: step1 });
+      streamResult = run.resumeStream({ resumeData: resumeData as any, step: step1 });
       for await (const _data of streamResult) {
       }
 
@@ -10730,6 +10730,70 @@ describe('Workflow', () => {
       expect(step1Spy).toHaveBeenCalledTimes(1);
       expect(step2Spy).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });
+
+    it('should retry a step with step retries option, overriding the workflow retry config', async () => {
+      let err: Error | undefined;
+      const step1 = createStep({
+        id: 'step1',
+        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 5,
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: vi.fn().mockImplementation(() => {
+          err = new Error('Step failed');
+          throw err;
+        }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retries: 5,
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { delay: 200, attempts: 10 },
+      });
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: {
+          'test-workflow': workflow,
+        },
+      });
+
+      workflow.then(step1).then(step2).commit();
+
+      const run = await workflow.createRun();
+      const step1Spy = vi.spyOn(step1, 'execute');
+      const step2Spy = vi.spyOn(step2, 'execute');
+      const result = await run.start({ inputData: {} });
+
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step2).toMatchObject({
+        // Change to toMatchObject
+        status: 'failed',
+        // error: err?.stack ?? err, // REMOVE THIS LINE
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      // ADD THIS SEPARATE ASSERTION - error is now an Error instance
+      expect((result.steps.step2 as any)?.error).toBeInstanceOf(Error);
+      expect((result.steps.step2 as any)?.error.message).toMatch(/Step failed/);
+      expect(step1Spy).toHaveBeenCalledTimes(1);
+      expect(step2Spy).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
+    });
   });
 
   describe('Interoperability (Actions)', () => {
@@ -12344,6 +12408,255 @@ describe('Workflow', () => {
       expect(thridResume.steps['step-1'].payload.value).toBe(3);
 
       expect(thridResume.status).toBe('suspended');
+    });
+
+    it('should have access to the correct inputValue when resuming a step preceded by a .map step', async () => {
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: async ({ inputData }) => {
+          return {
+            userInput: inputData.input,
+          };
+        },
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend({ testPayload: 'suspend message' });
+          }
+
+          return {
+            modelOutput: inputData.userInput + ' ' + resumeData.userInput,
+          };
+        },
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            return suspend();
+          }
+
+          return {
+            improvedOutput: 'improved output',
+            overallScore: {
+              completenessScore: {
+                score: (inputData.completenessScore.score + resumeData.completenessScore.score) / 2,
+              },
+              toneScore: { score: (inputData.toneScore.score + resumeData.toneScore.score) / 2 },
+            },
+          };
+        },
+        resumeSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        inputSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+        outputSchema: z.object({
+          improvedOutput: z.string(),
+          overallScore: z.object({
+            toneScore: z.object({ score: z.number() }),
+            completenessScore: z.object({ score: z.number() }),
+          }),
+        }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: async ({ inputData }) => {
+          return inputData.overallScore;
+        },
+        inputSchema: z.object({
+          improvedOutput: z.string(),
+          overallScore: z.object({
+            toneScore: z.object({ score: z.number() }),
+            completenessScore: z.object({ score: z.number() }),
+          }),
+        }),
+        outputSchema: z.object({
+          toneScore: z.object({ score: z.number() }),
+          completenessScore: z.object({ score: z.number() }),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .map(
+          async () => {
+            return {
+              toneScore: { score: 0.8 },
+              completenessScore: { score: 0.7 },
+            };
+          },
+          {
+            id: 'evaluateToneConsistency',
+          },
+        )
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = await promptEvalWorkflow.createRun();
+
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(initialResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test' },
+          suspendPayload: { testPayload: 'suspend message' },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const newCtx = {
+        userInput: 'input for resumption',
+      };
+
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      if (!firstResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(firstResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test input for resumption' },
+          payload: { userInput: 'test' },
+          suspendPayload: { testPayload: 'suspend message' },
+          resumePayload: { userInput: 'input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
+      });
+
+      const secondResumeResult = await run.resume({
+        step: improveResponse,
+        resumeData: {
+          toneScore: { score: 0.9 },
+          completenessScore: { score: 0.8 },
+        },
+      });
+      if (!secondResumeResult) {
+        throw new Error('Resume failed to return a result');
+      }
+
+      expect(secondResumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test input for resumption' },
+          payload: { userInput: 'test' },
+          suspendPayload: { testPayload: 'suspend message' },
+          resumePayload: { userInput: 'input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        improveResponse: {
+          status: 'success',
+          output: {
+            improvedOutput: 'improved output',
+            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+          },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          resumePayload: {
+            toneScore: { score: 0.9 },
+            completenessScore: { score: 0.8 },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+          payload: {
+            improvedOutput: 'improved output',
+            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+      });
     });
 
     it('should preserve state across suspend and resume cycles', async () => {
@@ -20190,7 +20503,7 @@ describe('Workflow', () => {
 
       // Use streaming to verify workflow returns tripwire status
       const chunks: StreamEvent[] = [];
-      const streamResult = run.streamVNext({ inputData: { prompt: 'This has forbidden content' } });
+      const streamResult = run.stream({ inputData: { prompt: 'This has forbidden content' } });
 
       // Collect all chunks
       for await (const chunk of streamResult.fullStream) {

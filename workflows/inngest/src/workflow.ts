@@ -164,31 +164,15 @@ export class InngestWorkflow<
     if (this.function) {
       return this.function;
     }
+
+    // Always set function-level retries to 0, since retries are handled at the step level via executeStepWithRetry
+    // which uses either step.retries or retryConfig.attempts (step.retries takes precedence).
+    // step.retries is not accessible at function level, so we handle retries manually in executeStepWithRetry.
+    // This is why we set retries to 0 here.
     this.function = this.inngest.createFunction(
       {
         id: `workflow.${this.id}`,
-        retries: Math.min(this.retryConfig?.attempts ?? 0, 20) as
-          | 0
-          | 1
-          | 2
-          | 3
-          | 4
-          | 5
-          | 6
-          | 7
-          | 8
-          | 9
-          | 10
-          | 11
-          | 12
-          | 13
-          | 14
-          | 15
-          | 16
-          | 17
-          | 18
-          | 19
-          | 20,
+        retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
         // Spread flow control configuration
         ...this.flowControlConfig,

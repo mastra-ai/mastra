@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/rag",
     "build:watch": "pnpm build --watch",
     "vitest": "vitest",
     "test": "vitest run",

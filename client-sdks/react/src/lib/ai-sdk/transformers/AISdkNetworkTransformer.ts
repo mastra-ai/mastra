@@ -24,6 +24,7 @@ export class AISdkNetworkTransformer implements Transformer<NetworkChunkType> {
       return this.handleToolConversation(chunk, newConversation, metadata);
     }
 
+    // Fallback: extract text from result if core didn't send routing-agent-text-* events
     if (chunk.type === 'network-execution-event-step-finish') {
       const lastMessage = newConversation[newConversation.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return newConversation;
