@@ -28,6 +28,7 @@ import {
   validateStepResumeData,
   validateStepSuspendData,
   validateStepStateData,
+  validateStepRequestContext,
 } from '../utils';
 
 export interface ExecuteStepParams {
@@ -89,6 +90,13 @@ export async function executeStep(
 
   const { inputData, validationError } = await validateStepInput({
     prevOutput,
+    step,
+    validateInputs: engine.options?.validateInputs ?? true,
+  });
+
+  // Validate requestContext if step has requestContextSchema
+  const { validationError: requestContextValidationError } = await validateStepRequestContext({
+    requestContext,
     step,
     validateInputs: engine.options?.validateInputs ?? true,
   });
@@ -226,6 +234,10 @@ export async function executeStep(
     async () => {
       if (validationError) {
         throw validationError;
+      }
+
+      if (requestContextValidationError) {
+        throw requestContextValidationError;
       }
 
       const retryCount = engine.getOrGenerateRetryCount(step.id);

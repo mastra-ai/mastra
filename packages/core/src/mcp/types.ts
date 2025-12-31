@@ -207,7 +207,7 @@ export interface MCPServerConfig<TId extends string = string> {
    * Optional Workflow instances to be exposed as tools.
    * Each workflow will be converted into a tool named 'run_<workflowKey>'.
    */
-  workflows?: Record<string, Workflow>;
+  workflows?: Record<string, Workflow<any, any, any, any, any, any, any, any>>;
   /**
    * Optional unique identifier for the server.
    * If not provided, a UUID will be generated.

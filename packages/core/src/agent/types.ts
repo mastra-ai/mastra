@@ -33,6 +33,7 @@ import type { InferSchemaOutput } from '../stream/base/schema';
 import type { ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
+import type { ZodLikeSchema } from '../types/zod-compat';
 import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
@@ -158,7 +159,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>>;
   /**
    * Default options used when calling `generate()`.
    */
@@ -215,6 +216,34 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
+  /**
+   * Schema for validating and typing the requestContext.
+   * When provided, the requestContext will be validated at runtime using .parse()
+   * when generate(), stream(), or other agent methods are called.
+   *
+   * @example
+   * ```typescript
+   * const agent = new Agent({
+   *   id: 'my-agent',
+   *   name: 'My Agent',
+   *   model: 'openai/gpt-4',
+   *   instructions: 'You are helpful',
+   *   requestContextSchema: z.object({
+   *     userId: z.string(),
+   *     tenantId: z.string(),
+   *   }),
+   * });
+   *
+   * // Now requestContext is validated when calling generate/stream
+   * await agent.generate('Hello', {
+   *   requestContext: new RequestContext([
+   *     ['userId', 'user-123'],
+   *     ['tenantId', 'tenant-456'],
+   *   ]),
+   * });
+   * ```
+   */
+  requestContextSchema?: ZodLikeSchema;
 }
 
 export type AgentMemoryOption = {

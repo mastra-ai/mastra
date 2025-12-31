@@ -46,7 +46,7 @@ export function runEvals<TAgent extends Agent>(config: {
 }): Promise<RunEvalsResult>;
 
 // Workflow with scorers array
-export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
+export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any, any>>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: MastraScorer<any, any, any, any>[];
   target: TWorkflow;
@@ -59,7 +59,7 @@ export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any
 }): Promise<RunEvalsResult>;
 
 // Workflow with workflow configuration
-export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any>>(config: {
+export function runEvals<TWorkflow extends Workflow<any, any, any, any, any, any, any, any>>(config: {
   data: RunEvalsDataItem<TWorkflow>[];
   scorers: WorkflowScorerConfig;
   target: TWorkflow;

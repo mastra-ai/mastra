@@ -92,7 +92,7 @@ export function mapVariable<TStep extends Step<string, any, any, any, any, any>>
   step: TStep;
   path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '.';
 };
-export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any>>({
+export function mapVariable<TWorkflow extends Workflow<any, any, any, any, any, any, any, any>>({
   initData: TWorkflow,
   path,
 }: {
@@ -123,9 +123,19 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
+  TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
 >(
-  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
-): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, TRequestContextSchema>,
+): Step<
+  TStepId,
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  DefaultEngineType,
+  TRequestContextSchema
+>;
 
 // Overload for agent WITH structured output schema
 export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
@@ -824,6 +834,7 @@ export function createStep<
     outputSchema: params.outputSchema,
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
+    requestContextSchema: params.requestContextSchema,
     scorers: params.scorers,
     retries: params.retries,
     execute: params.execute.bind(params),
@@ -842,6 +853,7 @@ export function cloneStep<TStepId extends string>(
     suspendSchema: step.suspendSchema,
     resumeSchema: step.resumeSchema,
     stateSchema: step.stateSchema,
+    requestContextSchema: step.requestContextSchema,
     execute: step.execute,
     retries: step.retries,
     scorers: step.scorers,
@@ -883,8 +895,11 @@ export function createWorkflow<
     any,
     DefaultEngineType
   >[],
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>(params);
+  TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
+>(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContextSchema>) {
+  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContextSchema>(
+    params,
+  );
 }
 
 export function cloneWorkflow<
@@ -922,7 +937,7 @@ export function cloneWorkflow<
 
 export class Workflow<
     TEngineType = any,
-    TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
       string,
       any,
       any,
@@ -936,15 +951,17 @@ export class Workflow<
     TInput extends z.ZodType<any> = z.ZodType<any>,
     TOutput extends z.ZodType<any> = z.ZodType<any>,
     TPrevSchema extends z.ZodType<any> = TInput,
+    TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
   >
   extends MastraBase
-  implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType>
+  implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType, TRequestContextSchema>
 {
   public id: TWorkflowId;
   public description?: string | undefined;
   public inputSchema: TInput;
   public outputSchema: TOutput;
   public stateSchema?: TState;
+  public requestContextSchema?: TRequestContextSchema;
   public steps: Record<string, StepWithComponent>;
   public stepDefs?: TSteps;
   public engineType: WorkflowEngineType = 'default';
@@ -979,13 +996,15 @@ export class Workflow<
     steps,
     options = {},
     type,
-  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+    requestContextSchema,
+  }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContextSchema>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
     this.inputSchema = inputSchema;
     this.outputSchema = outputSchema;
     this.stateSchema = stateSchema;
+    this.requestContextSchema = requestContextSchema;
     this.retryConfig = retryConfig ?? { attempts: 0, delay: 0 };
     this.executionGraph = this.buildExecutionGraph();
     this.stepFlow = [];
@@ -1062,7 +1081,8 @@ export class Workflow<
       TSchemaOut,
       any,
       any,
-      TEngineType
+      TEngineType,
+      any
     >,
   ) {
     this.stepFlow.push({ type: 'step', step: step as any });
@@ -1168,8 +1188,8 @@ export class Workflow<
           [k: string]:
             | {
                 step:
-                  | Step<string, any, any, any, any, any, TEngineType>
-                  | Step<string, any, any, any, any, any, TEngineType>[];
+                  | Step<string, any, any, any, any, any, TEngineType, any>
+                  | Step<string, any, any, any, any, any, TEngineType, any>[];
                 path: string;
               }
             | { value: any; schema: z.ZodType<any> }
@@ -1310,7 +1330,7 @@ export class Workflow<
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
       [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
         string,
@@ -1365,7 +1385,7 @@ export class Workflow<
     TBranchSteps extends Array<
       [
         ConditionFunction<z.infer<TState>, z.infer<TPrevSchema>, any, any, TEngineType>,
-        Step<string, any, TPrevSchema, any, any, any, TEngineType>,
+        Step<string, any, TPrevSchema, any, any, any, TEngineType, any>,
       ]
     >,
   >(steps: TBranchSteps) {
@@ -1699,7 +1719,7 @@ export class Workflow<
     resumeData?: any;
     state: z.infer<TState>;
     setState: (state: z.infer<TState>) => Promise<void>;
-    getStepResult<T extends Step<any, any, any, any, any, any, TEngineType>>(
+    getStepResult<T extends Step<any, any, any, any, any, any, TEngineType, any>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
     suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => Promise<any>;
@@ -2114,7 +2134,7 @@ export class Workflow<
 
 export class Run<
   TEngineType = any,
-  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
     string,
     any,
     any,
@@ -2355,7 +2375,7 @@ export class Run<
 
   protected async _validateTimetravelInputData<TInputSchema extends z.ZodType<any>>(
     inputData: z.input<TInputSchema>,
-    step: Step<string, any, TInputSchema, any, any, any, TEngineType>,
+    step: Step<string, any, TInputSchema, any, any, any, TEngineType, any>,
   ) {
     let inputDataToUse = inputData;
 
@@ -2796,10 +2816,10 @@ export class Run<
   }: {
     resumeData?: z.input<TResumeSchema>;
     step?:
-      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
+      | Step<string, any, any, any, TResumeSchema, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, TResumeSchema, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -2959,10 +2979,10 @@ export class Run<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
-      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
+      | Step<string, any, any, any, TResumeSchema, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, any, TResumeSchema, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3000,10 +3020,10 @@ export class Run<
   protected async _resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.input<TResumeSchema>;
     step?:
-      | Step<string, any, any, TResumeSchema, any, any, TEngineType>
+      | Step<string, any, any, TResumeSchema, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, TResumeSchema, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, any, TResumeSchema, any, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3317,10 +3337,10 @@ export class Run<
     resumeData?: any;
     initialState?: z.input<TState>;
     step:
-      | Step<string, any, TInputSchema, any, any, any, TEngineType>
+      | Step<string, any, TInputSchema, any, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, TInputSchema, any, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInputSchema, any, any, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3442,10 +3462,10 @@ export class Run<
     resumeData?: any;
     initialState?: z.input<TState>;
     step:
-      | Step<string, any, TInputSchema, any, any, any, TEngineType>
+      | Step<string, any, TInputSchema, any, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, TInputSchema, any, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInputSchema, any, any, any, TEngineType, any>,
         ]
       | string
       | string[];
@@ -3481,10 +3501,10 @@ export class Run<
     initialState?: z.input<TState>;
     resumeData?: any;
     step:
-      | Step<string, any, TInputSchema, any, any, any, TEngineType>
+      | Step<string, any, TInputSchema, any, any, any, TEngineType, any>
       | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, TInputSchema, any, any, any, TEngineType>,
+          ...Step<string, any, any, any, any, any, TEngineType, any>[],
+          Step<string, any, TInputSchema, any, any, any, TEngineType, any>,
         ]
       | string
       | string[];

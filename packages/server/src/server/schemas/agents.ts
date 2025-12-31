@@ -35,6 +35,7 @@ export const serializedToolSchema = z.object({
   description: z.string().optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
+  requestContextSchema: z.string().optional(),
   requireApproval: z.boolean().optional(),
 });
 
@@ -104,6 +105,7 @@ export const serializedAgentSchema = z.object({
   defaultOptions: z.record(z.string(), z.any()).optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  requestContextSchema: z.string().optional(),
 });
 
 /**

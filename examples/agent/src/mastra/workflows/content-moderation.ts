@@ -30,6 +30,7 @@ import {
   PIIDetectionProcessor,
   ToxicityCheckProcessor,
 } from '../processors/index.js';
+import { z } from 'zod';
 
 // =============================================================================
 // Approach 1: Individual Processors
@@ -279,6 +280,9 @@ export const contentModerationWorkflow = createWorkflow({
   id: 'content-moderation-processor-workflow',
   inputSchema: ProcessorStepSchema,
   outputSchema: ProcessorStepSchema,
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
 })
   .then(piiStep)
   .then(toxicityStep)

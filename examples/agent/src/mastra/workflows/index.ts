@@ -10,6 +10,9 @@ export const myWorkflow = createWorkflow({
   outputSchema: z.object({
     result: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
 });
 
 const step = createStep({
@@ -56,6 +59,9 @@ const addLetterStep = createStep({
   }),
   outputSchema: z.object({
     text: z.string(),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string(),
   }),
   execute: async ({ inputData }) => {
     const { text } = inputData;

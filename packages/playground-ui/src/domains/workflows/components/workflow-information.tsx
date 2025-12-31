@@ -16,6 +16,7 @@ import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { PlaygroundTabs, TabList, Tab, TabContent } from '@/components/ui/playground-tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { WorkflowStepDetailContent } from './workflow-step-detail';
+import { WorkflowRequestContext } from '../workflow/workflow-request-context';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -44,6 +45,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+  const hasRequestContextSchema = Boolean(workflow?.requestContextSchema);
 
   // Generate dynamic tab name based on step detail type
   const nodeDetailTabName = useMemo(() => {
@@ -122,6 +124,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         <PlaygroundTabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
           <TabList>
             <Tab value="current-run">Current Run</Tab>
+            {hasRequestContextSchema && <Tab value="request-context">Request Context</Tab>}
             <Tab value="run-options">Run Options</Tab>
             {stepDetail && nodeDetailTabName && (
               <Tab
@@ -171,6 +174,11 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               )
             ) : null}
           </TabContent>
+          {hasRequestContextSchema && (
+            <TabContent value="request-context">
+              <WorkflowRequestContext workflowId={workflowId} />
+            </TabContent>
+          )}
           <TabContent value="run-options">
             <TracingRunOptions />
           </TabContent>

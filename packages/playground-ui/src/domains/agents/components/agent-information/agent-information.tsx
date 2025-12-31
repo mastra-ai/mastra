@@ -8,6 +8,7 @@ import { useMemory } from '@/domains/memory/hooks';
 import { useAgentSettings } from '../../context/agent-context';
 import { AgentSettings } from '../agent-settings';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+import { AgentRequestContext } from '../agent-request-context';
 
 export interface AgentInformationProps {
   agentId: string;
@@ -15,8 +16,10 @@ export interface AgentInformationProps {
 }
 
 export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
+  const { data: agent } = useAgent(agentId);
   const { data: memory } = useMemory(agentId);
   const hasMemory = Boolean(memory?.result);
+  const hasRequestContextSchema = Boolean(agent?.requestContextSchema);
 
   return (
     <AgentInformationLayout agentId={agentId}>
@@ -27,6 +30,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
           <Tab value="overview">Overview</Tab>
           <Tab value="model-settings">Model Settings</Tab>
           {hasMemory && <Tab value="memory">Memory</Tab>}
+          {hasRequestContextSchema && <Tab value="request-context">Request Context</Tab>}
           <Tab value="tracing-options">Tracing Options</Tab>
         </TabList>
         <TabContent value="overview">
@@ -38,6 +42,11 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
         {hasMemory && (
           <TabContent value="memory">
             <AgentMemory agentId={agentId} threadId={threadId} />
+          </TabContent>
+        )}
+        {hasRequestContextSchema && (
+          <TabContent value="request-context">
+            <AgentRequestContext agentId={agentId} />
           </TabContent>
         )}
         <TabContent value="tracing-options">

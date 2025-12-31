@@ -4,11 +4,11 @@ import { useExecuteTool } from '@/domains/tools/hooks/use-execute-tool';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
-import { z } from 'zod';
+import { z, ZodType } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { toast } from '@/lib/toast';
 
 export interface ToolPanelProps {
@@ -17,6 +17,8 @@ export interface ToolPanelProps {
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const { data: agents = {} } = useAgents();
+  // Use a ref instead of state to avoid re-renders when request context changes
+  const requestContextFormDataRef = useRef<Record<string, any>>({});
 
   // Check if tool exists in any agent's tools
   const agentTool = useMemo(() => {
@@ -46,13 +48,31 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
+  // Parse requestContextSchema if it exists
+  const zodRequestContextSchema: ZodType | undefined = useMemo(() => {
+    if (!tool?.requestContextSchema) return undefined;
+    try {
+      return resolveSerializedZodOutput(jsonSchemaToZod(parse(tool.requestContextSchema)));
+    } catch (e) {
+      console.error('Error parsing requestContextSchema:', e);
+      return undefined;
+    }
+  }, [tool?.requestContextSchema]);
+
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
+
+    // Merge playground requestContext with form-based requestContext
+    // Form values take precedence
+    const mergedRequestContext = {
+      ...playgroundRequestContext,
+      ...requestContextFormDataRef.current,
+    };
 
     return executeTool({
       toolId: tool.id,
       input: data,
-      requestContext: playgroundRequestContext,
+      requestContext: mergedRequestContext,
     });
   };
 
@@ -76,6 +96,10 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       executionResult={result}
       isExecutingTool={isExecuting}
       zodInputSchema={zodInputSchema}
+      zodRequestContextSchema={zodRequestContextSchema}
+      onRequestContextChange={(data: Record<string, any>) => {
+        requestContextFormDataRef.current = data;
+      }}
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}

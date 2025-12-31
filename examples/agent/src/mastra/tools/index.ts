@@ -7,6 +7,9 @@ export const cookingTool = createTool({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
   execute: async (inputData, context) => {
     await new Promise(resolve => setTimeout(resolve, 5000));
     console.log('My cooking tool is running!', inputData.ingredient);

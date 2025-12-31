@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useForm, FormProvider, DefaultValues } from 'react-hook-form';
 import { parseSchema, getDefaultValues } from '@autoform/core';
 import { AutoFormProps, AutoFormProvider } from '@autoform/react';
@@ -26,11 +26,17 @@ export function CustomAutoForm<T extends Record<string, any>>({
     values: values as T,
   });
 
+  // Track if onFormInit has been called to prevent re-running on every render
+  const onFormInitCalledRef = useRef(false);
+
   useEffect(() => {
-    if (onFormInit) {
-      onFormInit(methods);
+    if (onFormInit && !onFormInitCalledRef.current) {
+      onFormInitCalledRef.current = true;
+      const cleanup = onFormInit(methods);
+      // Return cleanup function if one was provided
+      return typeof cleanup === 'function' ? cleanup : undefined;
     }
-  }, [onFormInit, methods]);
+  }, []);
 
   const handleSubmit = async (dataRaw: T) => {
     const data = removeEmptyValues(dataRaw);
