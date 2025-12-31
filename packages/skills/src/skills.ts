@@ -1,9 +1,9 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
-import z from 'zod';
 
 import { BM25Index, type BM25Config, type TokenizeOptions } from './bm25';
+import { validateSkillMetadata, parseAllowedTools } from './schemas';
 import type {
   Skill,
   SkillMetadata,
@@ -15,77 +15,12 @@ import type {
 } from './types';
 
 // =========================================================================
-// Validation Schemas (following Agent Skills spec)
-// =========================================================================
-
-/**
- * Skill name schema according to spec:
- * - 1-64 characters
- * - Lowercase letters, numbers, hyphens only
- * - Must not start or end with hyphen
- * - Must not contain consecutive hyphens
- */
-const SkillNameSchema = z
-  .string()
-  .min(1, 'Skill name cannot be empty')
-  .max(64, 'Skill name must be 64 characters or less')
-  .regex(/^[a-z0-9-]+$/, 'Skill name must contain only lowercase letters, numbers, and hyphens')
-  .refine(name => !name.startsWith('-') && !name.endsWith('-'), {
-    message: 'Skill name must not start or end with a hyphen',
-  })
-  .refine(name => !name.includes('--'), {
-    message: 'Skill name must not contain consecutive hyphens',
-  })
-  .describe('Skill name (1-64 chars, lowercase letters/numbers/hyphens only, must match directory name)');
-
-/**
- * Skill description schema according to spec (1-1024 chars, non-empty)
- */
-const SkillDescriptionSchema = z
-  .string()
-  .min(1, 'Skill description cannot be empty')
-  .max(1024, 'Skill description must be 1024 characters or less')
-  .refine(desc => desc.trim().length > 0, {
-    message: 'Skill description cannot be only whitespace',
-  })
-  .describe('Description of what the skill does and when to use it (1-1024 characters)');
-
-/**
- * Skill metadata schema
- */
-const SkillMetadataSchema = z.object({
-  name: SkillNameSchema,
-  description: SkillDescriptionSchema,
-  license: z.string().optional().describe('License for the skill (e.g., "Apache-2.0", "MIT")'),
-  compatibility: z
-    .string()
-    .max(500, 'Compatibility field must be 500 characters or less')
-    .optional()
-    .describe('Environment requirements or compatibility notes (max 500 chars)'),
-  metadata: z.record(z.string()).optional().describe('Arbitrary key-value metadata (e.g., author, version)'),
-  allowedTools: z.array(z.string()).optional().describe('Pre-approved tools the skill may use (experimental)'),
-});
-
-// =========================================================================
 // Internal Types
 // =========================================================================
 
 interface InternalSkill extends Skill {
   /** Content for BM25 indexing (instructions + all references) */
   indexableContent: string;
-}
-
-/**
- * Parse allowed-tools from YAML (space-delimited string) to array
- */
-function parseAllowedTools(value: unknown): string[] | undefined {
-  if (typeof value === 'string') {
-    return value.split(/\s+/).filter(Boolean);
-  }
-  if (Array.isArray(value)) {
-    return value.filter((v): v is string => typeof v === 'string');
-  }
-  return undefined;
 }
 
 // =========================================================================
@@ -427,9 +362,9 @@ export class Skills implements MastraSkills {
       allowedTools,
     };
 
-    // Validate if enabled
+    // Validate if enabled (includes token/line count warnings)
     if (this.validateOnLoad) {
-      const validation = this.#validateSkillMetadata(metadata, dirName);
+      const validation = this.#validateSkillMetadata(metadata, dirName, body);
       if (!validation.valid) {
         throw new Error(`Invalid skill metadata in ${filePath}:\n${validation.errors.join('\n')}`);
       }
@@ -458,23 +393,23 @@ export class Skills implements MastraSkills {
   }
 
   /**
-   * Validate skill metadata
+   * Validate skill metadata (delegates to shared validation function)
    */
-  #validateSkillMetadata(metadata: SkillMetadata, dirName: string): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
+  #validateSkillMetadata(
+    metadata: SkillMetadata,
+    dirName: string,
+    instructions?: string,
+  ): { valid: boolean; errors: string[]; warnings: string[] } {
+    const result = validateSkillMetadata(metadata, dirName, instructions);
 
-    // Validate against schema
-    const result = SkillMetadataSchema.safeParse(metadata);
-    if (!result.success) {
-      errors.push(...result.error.errors.map(err => `${err.path.join('.')}: ${err.message}`));
+    // Log warnings if any
+    if (result.warnings.length > 0) {
+      for (const warning of result.warnings) {
+        console.warn(`[Skills] ${metadata.name}: ${warning}`);
+      }
     }
 
-    // Validate name matches directory
-    if (metadata.name !== dirName) {
-      errors.push(`Skill name "${metadata.name}" must match directory name "${dirName}"`);
-    }
-
-    return { valid: errors.length === 0, errors };
+    return result;
   }
 
   /**

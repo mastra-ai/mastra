@@ -70,6 +70,9 @@ export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
   /** Set of activated skill names */
   private activatedSkills: Set<string> = new Set();
 
+  /** Map of skill name -> allowed tools (only for skills with allowedTools defined) */
+  private skillAllowedTools: Map<string, string[]> = new Map();
+
   /** Options for creating skills lazily */
   private skillsOptions?: {
     paths: string | string[];
@@ -132,6 +135,20 @@ export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
   // =========================================================================
 
   /**
+   * Format skill location (path to SKILL.md file)
+   */
+  private formatLocation(skill: Skill): string {
+    return `${skill.path}/SKILL.md`;
+  }
+
+  /**
+   * Format skill source type for display
+   */
+  private formatSourceType(skill: Skill): string {
+    return skill.source.type;
+  }
+
+  /**
    * Format available skills metadata based on configured format
    */
   private formatAvailableSkills(): string {
@@ -142,13 +159,24 @@ export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
       return '';
     }
 
+    // Get full skill objects to include source info
+    const fullSkills: Skill[] = [];
+    for (const meta of skillsList) {
+      const skill = skills.get(meta.name);
+      if (skill) {
+        fullSkills.push(skill);
+      }
+    }
+
     switch (this.format) {
       case 'xml': {
-        const skillsXml = skillsList
+        const skillsXml = fullSkills
           .map(
             skill => `  <skill>
     <name>${this.escapeXml(skill.name)}</name>
     <description>${this.escapeXml(skill.description)}</description>
+    <location>${this.escapeXml(this.formatLocation(skill))}</location>
+    <source>${this.escapeXml(this.formatSourceType(skill))}</source>
   </skill>`,
           )
           .join('\n');
@@ -162,14 +190,24 @@ ${skillsXml}
         return `Available Skills:
 
 ${JSON.stringify(
-  skillsList.map(s => ({ name: s.name, description: s.description })),
+  fullSkills.map(s => ({
+    name: s.name,
+    description: s.description,
+    location: this.formatLocation(s),
+    source: this.formatSourceType(s),
+  })),
   null,
   2,
 )}`;
       }
 
       case 'markdown': {
-        const skillsMd = skillsList.map(skill => `- **${skill.name}**: ${skill.description}`).join('\n');
+        const skillsMd = fullSkills
+          .map(
+            skill =>
+              `- **${skill.name}** [${this.formatSourceType(skill)}] (${this.formatLocation(skill)}): ${skill.description}`,
+          )
+          .join('\n');
         return `# Available Skills
 
 ${skillsMd}`;
@@ -198,7 +236,10 @@ ${skillsMd}`;
     switch (this.format) {
       case 'xml': {
         const skillInstructions = activatedSkillsList
-          .map(skill => `# Skill: ${skill.name}\n\n${skill.instructions}`)
+          .map(
+            skill =>
+              `# Skill: ${skill.name}\nLocation: ${this.formatLocation(skill)}\nSource: ${this.formatSourceType(skill)}\n\n${skill.instructions}`,
+          )
           .join('\n\n---\n\n');
 
         return `<activated_skills>
@@ -208,7 +249,10 @@ ${skillInstructions}
       case 'json':
       case 'markdown': {
         const skillInstructions = activatedSkillsList
-          .map(skill => `# Skill: ${skill.name}\n\n${skill.instructions}`)
+          .map(
+            skill =>
+              `# Skill: ${skill.name}\n*Location: ${this.formatLocation(skill)} | Source: ${this.formatSourceType(skill)}*\n\n${skill.instructions}`,
+          )
           .join('\n\n---\n\n');
 
         return `# Activated Skills
@@ -228,6 +272,27 @@ ${skillInstructions}`;
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
+  }
+
+  /**
+   * Get all allowed tools from activated skills.
+   * Returns undefined if no skill specifies allowed tools (no restriction).
+   * Returns the union of all allowed tools if any skill specifies them.
+   */
+  getAllowedTools(): string[] | undefined {
+    if (this.skillAllowedTools.size === 0) {
+      return undefined; // No restrictions
+    }
+
+    // Union of all allowed tools from all activated skills
+    const allAllowed = new Set<string>();
+    for (const tools of this.skillAllowedTools.values()) {
+      for (const tool of tools) {
+        allAllowed.add(tool);
+      }
+    }
+
+    return Array.from(allAllowed);
   }
 
   // =========================================================================
@@ -268,9 +333,22 @@ ${skillInstructions}`;
         // Activate the skill
         this.activatedSkills.add(name);
 
+        // Track allowed tools if specified
+        const skill = skills.get(name);
+        if (skill?.allowedTools && skill.allowedTools.length > 0) {
+          this.skillAllowedTools.set(name, skill.allowedTools);
+        }
+
+        // Build response message
+        let message = `Skill "${name}" activated successfully. The skill instructions are now available.`;
+        if (skill?.allowedTools && skill.allowedTools.length > 0) {
+          message += ` This skill pre-approves the following tools: ${skill.allowedTools.join(', ')}.`;
+        }
+
         return {
           success: true,
-          message: `Skill "${name}" activated successfully. The skill instructions are now available.`,
+          message,
+          allowedTools: skill?.allowedTools,
         };
       },
     });
@@ -312,6 +390,105 @@ ${skillInstructions}`;
         return {
           success: true,
           content,
+        };
+      },
+    });
+  }
+
+  /**
+   * Create skill-read-script tool
+   */
+  private createSkillReadScriptTool() {
+    const skills = this.getSkillsInstance();
+
+    return createTool({
+      id: 'skill-read-script',
+      description: 'Read a script file from an activated skill. Scripts contain executable code that can be run.',
+      inputSchema: z.object({
+        skillName: z.string().describe('The name of the activated skill'),
+        scriptPath: z.string().describe('Path to the script file (relative to scripts/ directory)'),
+      }),
+      execute: async ({ skillName, scriptPath }) => {
+        // Check if skill is activated
+        if (!this.activatedSkills.has(skillName)) {
+          return {
+            success: false,
+            message: `Skill "${skillName}" is not activated. Activate it first using skill-activate.`,
+          };
+        }
+
+        // Get script content
+        const content = skills.getScript(skillName, scriptPath);
+
+        if (content === undefined) {
+          const availableScripts = skills.getScripts(skillName);
+          return {
+            success: false,
+            message: `Script file "${scriptPath}" not found in skill "${skillName}". Available scripts: ${availableScripts.join(', ') || 'none'}`,
+          };
+        }
+
+        return {
+          success: true,
+          content,
+        };
+      },
+    });
+  }
+
+  /**
+   * Create skill-read-asset tool
+   */
+  private createSkillReadAssetTool() {
+    const skills = this.getSkillsInstance();
+
+    return createTool({
+      id: 'skill-read-asset',
+      description:
+        'Read an asset file from an activated skill. Assets include templates, data files, and other static resources. Binary files are returned as base64.',
+      inputSchema: z.object({
+        skillName: z.string().describe('The name of the activated skill'),
+        assetPath: z.string().describe('Path to the asset file (relative to assets/ directory)'),
+      }),
+      execute: async ({ skillName, assetPath }) => {
+        // Check if skill is activated
+        if (!this.activatedSkills.has(skillName)) {
+          return {
+            success: false,
+            message: `Skill "${skillName}" is not activated. Activate it first using skill-activate.`,
+          };
+        }
+
+        // Get asset content
+        const content = skills.getAsset(skillName, assetPath);
+
+        if (content === undefined) {
+          const availableAssets = skills.getAssets(skillName);
+          return {
+            success: false,
+            message: `Asset file "${assetPath}" not found in skill "${skillName}". Available assets: ${availableAssets.join(', ') || 'none'}`,
+          };
+        }
+
+        // Try to return as string for text files, base64 for binary
+        try {
+          const textContent = content.toString('utf-8');
+          // Check if it looks like valid text (no null bytes in first 1000 chars)
+          if (!textContent.slice(0, 1000).includes('\0')) {
+            return {
+              success: true,
+              content: textContent,
+              encoding: 'utf-8',
+            };
+          }
+        } catch {
+          // Fall through to base64
+        }
+
+        return {
+          success: true,
+          content: content.toString('base64'),
+          encoding: 'base64',
         };
       },
     });
@@ -395,6 +572,18 @@ ${skillInstructions}`;
           content: activatedSkillsMessage,
         });
       }
+
+      // 2b. Add allowed-tools notice if any activated skill specifies them
+      const allowedTools = this.getAllowedTools();
+      if (allowedTools && allowedTools.length > 0) {
+        messageList.addSystem({
+          role: 'system',
+          content: `<skill_allowed_tools>
+The following tools are pre-approved by the activated skills: ${allowedTools.join(', ')}.
+You may use these tools without asking for additional permission.
+</skill_allowed_tools>`,
+        });
+      }
     }
 
     // 3. Build skill tools
@@ -407,6 +596,8 @@ ${skillInstructions}`;
 
     if (this.activatedSkills.size > 0) {
       skillTools['skill-read-reference'] = this.createSkillReadReferenceTool();
+      skillTools['skill-read-script'] = this.createSkillReadScriptTool();
+      skillTools['skill-read-asset'] = this.createSkillReadAssetTool();
     }
 
     return {

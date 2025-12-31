@@ -38,8 +38,6 @@ export * from './knowledge';
 
 // Processors (Skills)
 export { SkillsProcessor, type SkillsProcessorOptions } from './processors/skills';
-export { StaticSkills, type StaticSkillsOptions } from './processors/static-skills';
-export { RetrievedSkills, type RetrievedSkillsOptions } from './processors/retrieved-skills';
 
 // Processors (Knowledge)
 export { StaticKnowledge, type StaticKnowledgeOptions } from './processors/static-knowledge';
@@ -50,6 +48,27 @@ export { FilesystemStorage, type FilesystemStorageOptions } from './storage/file
 
 // Storage (Knowledge)
 export { KnowledgeFilesystemStorage } from './storage';
+
+// Validation schemas (for external validation tools)
+export {
+  // Schema constants
+  SKILL_LIMITS,
+  // Zod schemas
+  SkillNameSchema,
+  SkillDescriptionSchema,
+  SkillCompatibilitySchema,
+  SkillLicenseSchema,
+  SkillMetadataFieldSchema,
+  SkillAllowedToolsSchema,
+  SkillMetadataSchema,
+  // Schema types
+  type SkillMetadataInput,
+  type SkillMetadataOutput,
+  // Validation functions
+  validateSkillMetadata,
+  parseAllowedTools,
+  type SkillValidationResult,
+} from './schemas';
 
 // BM25 (for advanced use cases)
 export {
