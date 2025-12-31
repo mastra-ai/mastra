@@ -342,19 +342,6 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   },
 });
 
-export const STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
-  method: 'POST',
-  path: '/api/workflows/:workflowId/streamVNext',
-  responseType: 'stream',
-  pathParamSchema: workflowIdPathParams,
-  queryParamSchema: runIdSchema,
-  bodySchema: streamWorkflowBodySchema,
-  summary: 'Stream workflow execution (v2)',
-  description: 'Executes a workflow using the v2 streaming API and streams the results in real-time',
-  tags: ['Workflows'],
-  handler: STREAM_WORKFLOW_ROUTE.handler,
-});
-
 export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/resume-stream',
@@ -622,19 +609,6 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       return handleError(error, 'Error observing workflow stream');
     }
   },
-});
-
-export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
-  method: 'POST',
-  path: '/api/workflows/:workflowId/observe-streamVNext',
-  responseType: 'stream',
-  pathParamSchema: workflowIdPathParams,
-  queryParamSchema: runIdSchema,
-  responseSchema: streamResponseSchema,
-  summary: 'Observe workflow stream (v2)',
-  description: 'Observes and streams updates from an already running workflow execution using v2 streaming API',
-  tags: ['Workflows'],
-  handler: OBSERVE_STREAM_WORKFLOW_ROUTE.handler,
 });
 
 export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({

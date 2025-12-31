@@ -29,6 +29,7 @@ import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
+import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
@@ -78,6 +79,7 @@ export type AgentStepOptions<TOutput extends OutputSchema = undefined> = Omit<
   | 'experimental_output'
   | 'resourceId'
   | 'threadId'
+  | 'scorers'
 >;
 
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
@@ -128,7 +130,11 @@ export function createStep<
 // Overload for agent WITH structured output schema
 export function createStep<TStepId extends string, TStepOutput extends z.ZodType<any>>(
   agent: Agent<TStepId, any>,
-  agentOptions: AgentStepOptions<TStepOutput> & { structuredOutput: { schema: TStepOutput } },
+  agentOptions: AgentStepOptions<TStepOutput> & {
+    structuredOutput: { schema: TStepOutput };
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<
   TStepId,
   any,
@@ -148,7 +154,7 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any>,
-  agentOptions?: AgentStepOptions,
+  agentOptions?: AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<TStepId, any, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 export function createStep<
@@ -159,6 +165,7 @@ export function createStep<
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
   tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, DefaultEngineType>;
 
 // Processor overload - wraps a Processor as a workflow step
@@ -187,11 +194,23 @@ export function createStep<
     | Agent<any, any>
     | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>
     | Processor,
-  agentOptions?: AgentStepOptions,
+  agentOrToolOptions?:
+    | (AgentStepOptions & {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      })
+    | {
+        retries?: number;
+        scorers?: DynamicArgument<MastraScorers>;
+      },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
+    const options = (agentOrToolOptions ?? {}) as
+      | (AgentStepOptions & { retries?: number; scorers?: DynamicArgument<MastraScorers> })
+      | undefined;
     // Determine output schema based on structuredOutput option
-    const outputSchema = agentOptions?.structuredOutput?.schema ?? z.object({ text: z.string() });
+    const outputSchema = options?.structuredOutput?.schema ?? z.object({ text: z.string() });
+    const { retries, scorers, ...agentOptions } = options ?? {};
 
     return {
       id: params.id,
@@ -204,6 +223,8 @@ export function createStep<
       }),
       // @ts-ignore
       outputSchema,
+      retries,
+      scorers,
       execute: async ({
         inputData,
         runId,
@@ -340,6 +361,7 @@ export function createStep<
   }
 
   if (params instanceof Tool) {
+    const toolOpts = agentOrToolOptions as { retries?: number; scorers?: DynamicArgument<MastraScorers> } | undefined;
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
@@ -353,6 +375,8 @@ export function createStep<
       outputSchema: params.outputSchema,
       resumeSchema: params.resumeSchema,
       suspendSchema: params.suspendSchema,
+      retries: toolOpts?.retries,
+      scorers: toolOpts?.scorers,
       execute: async ({
         inputData,
         mastra,
@@ -2471,7 +2495,7 @@ export class Run<
   }): Promise<{ runId: string }> {
     // Fire execution in background, don't await completion
     this._start(args).catch(err => {
-      console.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, err);
     });
     return { runId: this.runId };
   }
@@ -2534,7 +2558,7 @@ export class Run<
       try {
         await writer.close();
       } catch (err) {
-        console.error('Error closing stream:', err);
+        this.mastra?.getLogger()?.error('Error closing stream:', err);
       } finally {
         writer.releaseLock();
       }
@@ -2566,29 +2590,6 @@ export class Run<
   }
 
   /**
-   * Starts the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  stream(
-    args: {
-      inputData?: z.input<TInput>;
-      requestContext?: RequestContext;
-      tracingContext?: TracingContext;
-      tracingOptions?: TracingOptions;
-      closeOnSuspend?: boolean;
-      initialState?: z.input<TState>;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-      perStep?: boolean;
-    } = {},
-  ): ReturnType<typeof this.streamVNext> {
-    return this.streamVNext(args);
-  }
-
-  /**
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
@@ -2614,7 +2615,7 @@ export class Run<
       try {
         await writer.close();
       } catch (err) {
-        console.error('Error closing stream:', err);
+        this.mastra?.getLogger()?.error('Error closing stream:', err);
       } finally {
         writer.releaseLock();
       }
@@ -2629,15 +2630,7 @@ export class Run<
    * Observe the workflow stream
    * @returns A readable stream of the workflow events
    */
-  observeStream(): ReturnType<typeof this.observeStreamVNext> {
-    return this.observeStreamVNext();
-  }
-
-  /**
-   * Observe the workflow stream vnext
-   * @returns A readable stream of the workflow events
-   */
-  observeStreamVNext(): ReadableStream<WorkflowStreamEvent> {
+  observeStream(): ReadableStream<WorkflowStreamEvent> {
     if (!this.streamOutput) {
       return new ReadableStream<WorkflowStreamEvent>({
         pull(controller) {
@@ -2667,7 +2660,7 @@ export class Run<
    * @param input The input data for the workflow
    * @returns A promise that resolves to the workflow output
    */
-  streamVNext({
+  stream({
     inputData,
     requestContext,
     tracingContext,
@@ -2734,7 +2727,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
 
@@ -2792,49 +2785,6 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   resumeStream<TResumeSchema extends z.ZodType<any>>({
-    step,
-    resumeData,
-    requestContext,
-    tracingContext,
-    tracingOptions,
-    outputOptions,
-    perStep,
-  }: {
-    resumeData?: z.input<TResumeSchema>;
-    step?:
-      | Step<string, any, any, any, TResumeSchema, any, TEngineType>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType>[],
-          Step<string, any, any, any, TResumeSchema, any, TEngineType>,
-        ]
-      | string
-      | string[];
-    requestContext?: RequestContext;
-    tracingContext?: TracingContext;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-  } = {}) {
-    return this.resumeStreamVNext({
-      resumeData,
-      step,
-      requestContext,
-      tracingContext,
-      tracingOptions,
-      outputOptions,
-      perStep,
-    });
-  }
-
-  /**
-   * Resumes the workflow execution with the provided input as a stream
-   * @param input The input data for the workflow
-   * @returns A promise that resolves to the workflow output
-   */
-  resumeStreamVNext<TResumeSchema extends z.ZodType<any>>({
     step,
     resumeData,
     requestContext,
@@ -2904,7 +2854,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
         const executionResultsPromise = self._resume({
@@ -2961,19 +2911,32 @@ export class Run<
     const nestedWatchCb = (event: Event) => {
       if (event.runId === this.runId) {
         const { event: nestedEvent, workflowId } = event.data as {
-          event: { type: string; payload: { id: string } & Record<string, unknown> };
+          event: { type: string; payload?: { id: string } & Record<string, unknown>; data?: any };
           workflowId: string;
         };
-        void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
-          type: 'watch',
-          runId: this.runId,
-          data: {
-            ...nestedEvent,
-            ...(nestedEvent.payload?.id
-              ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
-              : {}),
-          },
-        });
+
+        // Data chunks from writer.custom() should bubble up directly without modification
+        // These are events with type starting with 'data-' and have a 'data' property
+        if (nestedEvent.type.startsWith('data-') && nestedEvent.data !== undefined) {
+          // Bubble up custom data events directly to preserve their structure
+          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+            type: 'watch',
+            runId: this.runId,
+            data: nestedEvent,
+          });
+        } else {
+          // Regular workflow events get prefixed with nested workflow ID
+          void this.pubsub.publish(`workflow.events.v2.${this.runId}`, {
+            type: 'watch',
+            runId: this.runId,
+            data: {
+              ...nestedEvent,
+              ...(nestedEvent.payload?.id
+                ? { payload: { ...nestedEvent.payload, id: `${workflowId}.${nestedEvent.payload.id}` } }
+                : {}),
+            },
+          });
+        }
       }
     };
 
@@ -3564,7 +3527,7 @@ export class Run<
               controller.close();
             }
           } catch (err) {
-            console.error('Error closing stream:', err);
+            self.mastra?.getLogger()?.error('Error closing stream:', err);
           }
         };
         const executionResultsPromise = self._timeTravel({

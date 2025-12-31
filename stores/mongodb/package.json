@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.0.0-beta.8",
+  "version": "1.0.0-beta.9",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/mongodb",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d --wait",
     "test": "vitest run",

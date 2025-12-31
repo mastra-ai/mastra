@@ -257,6 +257,3 @@ export type ScorerRunInputForAgent = {
 };
 
 export type ScorerRunOutputForAgent = MastraDBMessage[];
-
-/** @deprecated Use SaveScorePayload instead */
-export type ValidatedSaveScorePayload = SaveScorePayload;

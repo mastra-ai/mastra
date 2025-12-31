@@ -1,6 +1,6 @@
 {
   "name": "@mastra/convex",
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "description": "Convex provider for Mastra - includes both storage and vector adapters plus Convex server helpers",
   "type": "module",
   "main": "dist/index.js",
@@ -40,6 +40,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/convex",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."

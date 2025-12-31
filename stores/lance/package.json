@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "1.0.0-beta.8",
+  "version": "1.0.0-beta.9",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/lance",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

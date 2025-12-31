@@ -1,5 +1,112 @@
 # @mastra/pg
 
+## 1.0.0-beta.11
+
+### Minor Changes
+
+- Remove pg-promise dependency and use pg.Pool directly ([#11450](https://github.com/mastra-ai/mastra/pull/11450))
+
+  **BREAKING CHANGE**: This release replaces pg-promise with vanilla node-postgres (`pg`).
+
+  ### Breaking Changes
+  - **Removed `store.pgp`**: The pg-promise library instance is no longer exposed
+  - **Config change**: `{ client: pgPromiseDb }` is no longer supported. Use `{ pool: pgPool }` instead
+  - **Cloud SQL config**: `max` and `idleTimeoutMillis` must now be passed via `pgPoolOptions`
+
+  ### New Features
+  - **`store.pool`**: Exposes the underlying `pg.Pool` for direct database access or ORM integration (e.g., Drizzle)
+  - **`store.db`**: Provides a `DbClient` interface with methods like `one()`, `any()`, `tx()`, etc.
+  - **`store.db.connect()`**: Acquire a client for session-level operations
+
+  ### Migration
+
+  ```typescript
+  // Before (pg-promise)
+  import pgPromise from 'pg-promise';
+  const pgp = pgPromise();
+  const client = pgp(connectionString);
+  const store = new PostgresStore({ id: 'my-store', client });
+
+  // After (pg.Pool)
+  import { Pool } from 'pg';
+  const pool = new Pool({ connectionString });
+  const store = new PostgresStore({ id: 'my-store', pool });
+
+  // Use store.pool with any library that accepts a pg.Pool
+  ```
+
+### Patch Changes
+
+- Added `exportSchemas()` function to generate Mastra database schema as SQL DDL without a database connection. ([#11448](https://github.com/mastra-ai/mastra/pull/11448))
+
+  **What's New**
+
+  You can now export your Mastra database schema as SQL DDL statements without connecting to a database. This is useful for:
+  - Generating migration scripts
+  - Reviewing the schema before deployment
+  - Creating database schemas in environments where the application doesn't have CREATE privileges
+
+  **Example**
+
+  ```typescript
+  import { exportSchemas } from '@mastra/pg';
+
+  // Export schema for default 'public' schema
+  const ddl = exportSchemas();
+  console.log(ddl);
+
+  // Export schema for a custom schema
+  const customDdl = exportSchemas('my_schema');
+  // Creates: CREATE SCHEMA IF NOT EXISTS "my_schema"; and all tables within it
+  ```
+
+- Updated dependencies [[`e54953e`](https://github.com/mastra-ai/mastra/commit/e54953ed8ce1b28c0d62a19950163039af7834b4), [`7d56d92`](https://github.com/mastra-ai/mastra/commit/7d56d9213886e8353956d7d40df10045fd12b299), [`fdac646`](https://github.com/mastra-ai/mastra/commit/fdac646033a0930a1a4e00d13aa64c40bb7f1e02), [`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`68ec97d`](https://github.com/mastra-ai/mastra/commit/68ec97d4c07c6393fcf95c2481fc5d73da99f8c8), [`4aa55b3`](https://github.com/mastra-ai/mastra/commit/4aa55b383cf06043943359ea316572fd969861a7)]:
+  - @mastra/core@1.0.0-beta.19
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Fix missing timezone columns during PostgreSQL spans table migration ([#11419](https://github.com/mastra-ai/mastra/pull/11419))
+
+  Fixes issue #11410 where users upgrading to observability beta.7 encountered errors about missing `startedAtZ`, `endedAtZ`, `createdAtZ`, and `updatedAtZ` columns. The migration now properly adds timezone-aware columns for all timestamp fields when upgrading existing databases, ensuring compatibility with the new observability implementation that requires these columns for batch operations.
+
+- Add storage composition to MastraStorage ([#11401](https://github.com/mastra-ai/mastra/pull/11401))
+
+  `MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a different database for observability.
+
+  ```typescript
+  import { MastraStorage } from '@mastra/core/storage';
+  import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg';
+  import { MemoryLibSQL } from '@mastra/libsql';
+
+  // Compose domains from different stores
+  const storage = new MastraStorage({
+    id: 'composite',
+    domains: {
+      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    },
+  });
+  ```
+
+  **Breaking changes:**
+  - `storage.supports` property no longer exists
+  - `StorageSupports` type is no longer exported from `@mastra/core/storage`
+
+  All stores now support the same features. For domain availability, use `getStore()`:
+
+  ```typescript
+  const store = await storage.getStore('memory');
+  if (store) {
+    // domain is available
+  }
+  ```
+
+- Updated dependencies [[`3d93a15`](https://github.com/mastra-ai/mastra/commit/3d93a15796b158c617461c8b98bede476ebb43e2), [`efe406a`](https://github.com/mastra-ai/mastra/commit/efe406a1353c24993280ebc2ed61dd9f65b84b26), [`119e5c6`](https://github.com/mastra-ai/mastra/commit/119e5c65008f3e5cfca954eefc2eb85e3bf40da4), [`74e504a`](https://github.com/mastra-ai/mastra/commit/74e504a3b584eafd2f198001c6a113bbec589fd3), [`e33fdbd`](https://github.com/mastra-ai/mastra/commit/e33fdbd07b33920d81e823122331b0c0bee0bb59), [`929f69c`](https://github.com/mastra-ai/mastra/commit/929f69c3436fa20dd0f0e2f7ebe8270bd82a1529), [`8a73529`](https://github.com/mastra-ai/mastra/commit/8a73529ca01187f604b1f3019d0a725ac63ae55f)]:
+  - @mastra/core@1.0.0-beta.16
+
 ## 1.0.0-beta.9
 
 ### Minor Changes

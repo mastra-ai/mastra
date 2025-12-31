@@ -1,9 +1,13 @@
 import { MastraStorage } from '@mastra/core/storage';
-import type { StorageDomains, StorageSupports } from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
 import { Redis } from '@upstash/redis';
 import { StoreMemoryUpstash } from './domains/memory';
 import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { StoreMemoryUpstash, ScoresUpstash, WorkflowsUpstash };
+export type { UpstashDomainConfig } from './db';
 
 /**
  * Upstash configuration type.
@@ -122,20 +126,6 @@ export class UpstashStore extends MastraStorage {
       scores,
       workflows,
       memory,
-    };
-  }
-
-  public get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: false,
-      createTable: false,
-      deleteMessages: true,
-      observability: false,
-      indexManagement: false,
-      listScoresBySpan: true,
-      agents: false,
     };
   }
 

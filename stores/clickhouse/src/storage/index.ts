@@ -2,11 +2,15 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS, StorageSupports } from '@mastra/core/storage';
+import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { MemoryStorageClickhouse } from './domains/memory';
 import { ObservabilityStorageClickhouse } from './domains/observability';
 import { ScoresStorageClickhouse } from './domains/scores';
 import { WorkflowsStorageClickhouse } from './domains/workflows';
+
+// Export domain classes for direct use with MastraStorage composition
+export { MemoryStorageClickhouse, ObservabilityStorageClickhouse, ScoresStorageClickhouse, WorkflowsStorageClickhouse };
+export type { ClickhouseDomainConfig } from './db';
 
 type IntervalUnit =
   | 'NANOSECOND'
@@ -176,20 +180,6 @@ export class ClickhouseStore extends MastraStorage {
       scores,
       memory,
       observability,
-    };
-  }
-
-  get supports(): StorageSupports {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      observability: true,
-      indexManagement: false,
-      listScoresBySpan: true,
-      agents: false,
     };
   }
 

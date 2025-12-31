@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "1.0.0-beta.8",
+  "version": "1.0.0-beta.9",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/cloudflare",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."

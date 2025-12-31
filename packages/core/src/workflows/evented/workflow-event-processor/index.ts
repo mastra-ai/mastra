@@ -878,7 +878,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (stepResult.status === 'failed') {
-      if (retryCount >= (workflow.retryConfig.attempts ?? 0)) {
+      const retries = step.step.retries ?? workflow.retryConfig.attempts ?? 0;
+      if (retryCount >= retries) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
           runId,
@@ -1420,7 +1421,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     try {
       await ack?.();
     } catch (e) {
-      console.error('Error acking event', e);
+      this.mastra.getLogger()?.error('Error acking event', e);
     }
   }
 }

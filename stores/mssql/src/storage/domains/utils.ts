@@ -19,10 +19,14 @@ export function getTableName({ indexName, schemaName }: { indexName: string; sch
 export function buildDateRangeFilter(dateRange: DateRange | undefined, fieldName: string): Record<string, any> {
   const filters: Record<string, any> = {};
   if (dateRange?.start) {
-    filters[`${fieldName}_gte`] = dateRange.start;
+    // Use exclusive comparison if startExclusive is true
+    const suffix = dateRange.startExclusive ? '_gt' : '_gte';
+    filters[`${fieldName}${suffix}`] = dateRange.start;
   }
   if (dateRange?.end) {
-    filters[`${fieldName}_lte`] = dateRange.end;
+    // Use exclusive comparison if endExclusive is true
+    const suffix = dateRange.endExclusive ? '_lt' : '_lte';
+    filters[`${fieldName}${suffix}`] = dateRange.end;
   }
   return filters;
 }
@@ -56,10 +60,20 @@ export function prepareWhereClause(
       const fieldName = key.slice(0, -4);
       conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] >= @${paramName}`);
       params[paramName] = value instanceof Date ? value.toISOString() : value;
+    } else if (key.endsWith('_gt')) {
+      const paramName = `p${paramIndex++}`;
+      const fieldName = key.slice(0, -3);
+      conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] > @${paramName}`);
+      params[paramName] = value instanceof Date ? value.toISOString() : value;
     } else if (key.endsWith('_lte')) {
       const paramName = `p${paramIndex++}`;
       const fieldName = key.slice(0, -4);
       conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] <= @${paramName}`);
+      params[paramName] = value instanceof Date ? value.toISOString() : value;
+    } else if (key.endsWith('_lt')) {
+      const paramName = `p${paramIndex++}`;
+      const fieldName = key.slice(0, -3);
+      conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] < @${paramName}`);
       params[paramName] = value instanceof Date ? value.toISOString() : value;
     } else if (value === null) {
       conditions.push(`[${parseSqlIdentifier(key, 'field name')}] IS NULL`);

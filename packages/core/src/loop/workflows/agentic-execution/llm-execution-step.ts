@@ -8,6 +8,7 @@ import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
+import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import { executeWithContextSync } from '../../../observability';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
@@ -43,6 +44,7 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
     request: any;
     rawResponse: any;
   };
+  logger?: IMastraLogger;
 };
 
 async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
@@ -55,6 +57,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   controller,
   responseFromModel,
   includeRawChunks,
+  logger,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   for await (const chunk of outputStream._getBaseStream()) {
     if (!chunk) {
@@ -109,6 +112,9 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       });
     }
 
+    // Only reset reasoning state for truly unexpected chunk types.
+    // Some providers (e.g., ZAI/glm-4.6) send text-start before reasoning-end,
+    // so we must allow text-start to pass through without clearing reasoningDeltas.
     if (
       chunk.type !== 'reasoning-start' &&
       chunk.type !== 'reasoning-delta' &&
@@ -116,6 +122,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
       chunk.type !== 'redacted-reasoning' &&
       chunk.type !== 'reasoning-signature' &&
       chunk.type !== 'response-metadata' &&
+      chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
       runState.setState({
@@ -162,7 +169,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onInputStart', error);
+            logger?.error('Error calling onInputStart', error);
           }
         }
 
@@ -187,7 +194,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onInputDelta', error);
+            logger?.error('Error calling onInputDelta', error);
           }
         }
         if (isControllerOpen(controller)) {
@@ -401,7 +408,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   }
 }
 
-function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): ExecuteStreamModelManager<T> {
+function executeStreamWithFallbackModels<T>(
+  models: ModelManagerModelConfig[],
+  logger?: IMastraLogger,
+): ExecuteStreamModelManager<T> {
   return async callback => {
     let index = 0;
     let finalResult: T | undefined;
@@ -432,7 +442,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
 
           attempt++;
 
-          console.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
+          logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
 
           // If we've exhausted all retries for this model, break and try the next model
           if (attempt > maxRetries) {
@@ -447,7 +457,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
       }
     }
     if (typeof finalResult === 'undefined') {
-      console.error('Exhausted all fallback models and reached the maximum number of retries.');
+      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
       throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
     }
     return finalResult;
@@ -503,7 +513,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
-      }>(models)(async (modelConfig, isLastModel) => {
+      }>(
+        models,
+        logger,
+      )(async (modelConfig, isLastModel) => {
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
         // Reset system messages to original before each step execution
@@ -612,7 +625,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                 stepTools: tools,
               };
             }
-            console.error('Error in processInputStep processors:', error);
+            logger?.error('Error in processInputStep processors:', error);
             throw error;
           }
         }
@@ -631,16 +644,42 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         if (autoResumeSuspendedTools) {
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-          const suspendedToolsMessage = assistantMessages.find(
-            message => message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals,
-          );
+          const suspendedToolsMessage = assistantMessages.find(message => {
+            const pendingOrSuspendedTools =
+              message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals;
+            if (pendingOrSuspendedTools) {
+              return true;
+            }
+            const dataToolSuspendedParts = message.content.parts?.filter(
+              part =>
+                (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                !(part.data as any).resumed,
+            );
+            if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+              return true;
+            }
+            return false;
+          });
 
           if (suspendedToolsMessage) {
             const metadata = suspendedToolsMessage.content.metadata;
-            const suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
-              string,
-              any
-            >;
+            let suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<string, any>;
+            if (!suspendedToolObj) {
+              suspendedToolObj = suspendedToolsMessage.content.parts
+                ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
+                ?.reduce(
+                  (acc, part) => {
+                    if (
+                      (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
+                      !(part.data as any).resumed
+                    ) {
+                      acc[(part.data as any).toolName] = part.data;
+                    }
+                    return acc;
+                  },
+                  {} as Record<string, any>,
+                );
+            }
             const suspendedTools = Object.values(suspendedToolObj);
             if (suspendedTools.length > 0) {
               inputMessages = inputMessages.map((message, index) => {
@@ -757,9 +796,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               request,
               rawResponse,
             },
+            logger,
           });
         } catch (error) {
-          console.error('Error in LLM Execution Step', error);
+          logger?.error('Error in LLM Execution Step', error);
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
@@ -922,7 +962,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             // If retry is requested, we'll handle it below
             // For now, we just capture the tripwire
           } else {
-            console.error('Error in processOutputStep processors:', error);
+            logger?.error('Error in processOutputStep processors:', error);
             throw error;
           }
         }

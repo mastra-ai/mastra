@@ -1,5 +1,33 @@
 # @mastra/observability
 
+## 1.0.0-beta.9
+
+### Patch Changes
+
+- Fix SensitiveDataFilter destroying Date objects ([#11437](https://github.com/mastra-ai/mastra/pull/11437))
+
+  The `deepFilter` method now correctly preserves `Date` objects instead of converting them to empty objects `{}`. This fixes issues with downstream exporters like `BraintrustExporter` that rely on `Date` methods like `getTime()`.
+
+  Previously, `Object.keys(new Date())` returned `[]`, causing Date objects to be incorrectly converted to `{}`. The fix adds an explicit check for `Date` instances before generic object processing.
+
+- Updated dependencies [[`5947fcd`](https://github.com/mastra-ai/mastra/commit/5947fcdd425531f29f9422026d466c2ee3113c93)]:
+  - @mastra/core@1.0.0-beta.18
+
+## 1.0.0-beta.8
+
+### Patch Changes
+
+- fix(observability): start MODEL_STEP span at beginning of LLM execution ([#11409](https://github.com/mastra-ai/mastra/pull/11409))
+
+  The MODEL_STEP span was being created when the step-start chunk arrived (after the model API call completed), causing the span's startTime to be close to its endTime instead of accurately reflecting when the step began.
+
+  This fix ensures MODEL_STEP spans capture the full duration of each LLM execution step, including the API call latency, by starting the span at the beginning of the step execution rather than when the response starts streaming.
+
+  Fixes #11271
+
+- Updated dependencies [[`3d93a15`](https://github.com/mastra-ai/mastra/commit/3d93a15796b158c617461c8b98bede476ebb43e2), [`efe406a`](https://github.com/mastra-ai/mastra/commit/efe406a1353c24993280ebc2ed61dd9f65b84b26), [`119e5c6`](https://github.com/mastra-ai/mastra/commit/119e5c65008f3e5cfca954eefc2eb85e3bf40da4), [`74e504a`](https://github.com/mastra-ai/mastra/commit/74e504a3b584eafd2f198001c6a113bbec589fd3), [`e33fdbd`](https://github.com/mastra-ai/mastra/commit/e33fdbd07b33920d81e823122331b0c0bee0bb59), [`929f69c`](https://github.com/mastra-ai/mastra/commit/929f69c3436fa20dd0f0e2f7ebe8270bd82a1529), [`8a73529`](https://github.com/mastra-ai/mastra/commit/8a73529ca01187f604b1f3019d0a725ac63ae55f)]:
+  - @mastra/core@1.0.0-beta.16
+
 ## 1.0.0-beta.7
 
 ### Minor Changes

@@ -1,5 +1,266 @@
 # @mastra/core
 
+## 1.0.0-beta.19
+
+### Minor Changes
+
+- Add embedderOptions support to Memory for AI SDK 5+ provider-specific embedding options ([#11462](https://github.com/mastra-ai/mastra/pull/11462))
+
+  With AI SDK 5+, embedding models no longer accept options in their constructor. Options like `outputDimensionality` for Google embedding models must now be passed when calling `embed()` or `embedMany()`. This change adds `embedderOptions` to Memory configuration to enable passing these provider-specific options.
+
+  You can now configure embedder options when creating Memory:
+
+  ```typescript
+  import { Memory } from '@mastra/core';
+  import { google } from '@ai-sdk/google';
+
+  // Before: No way to specify providerOptions
+  const memory = new Memory({
+    embedder: google.textEmbeddingModel('text-embedding-004'),
+  });
+
+  // After: Pass embedderOptions with providerOptions
+  const memory = new Memory({
+    embedder: google.textEmbeddingModel('text-embedding-004'),
+    embedderOptions: {
+      providerOptions: {
+        google: {
+          outputDimensionality: 768,
+          taskType: 'RETRIEVAL_DOCUMENT',
+        },
+      },
+    },
+  });
+  ```
+
+  This is especially important for:
+  - Google `text-embedding-004`: Control output dimensions (default 768)
+  - Google `gemini-embedding-001`: Reduce from default 3072 dimensions to avoid pgvector's 2000 dimension limit for HNSW indexes
+
+  Fixes #8248
+
+### Patch Changes
+
+- Fix Anthropic API error when tool calls have empty input objects ([#11474](https://github.com/mastra-ai/mastra/pull/11474))
+
+  Fixes issue #11376 where Anthropic models would fail with error "messages.17.content.2.tool_use.input: Field required" when a tool call in a previous step had an empty object `{}` as input.
+
+  The fix adds proper reconstruction of tool call arguments when converting messages to AIV5 model format. Tool-result parts now correctly include the `input` field from the matching tool call, which is required by Anthropic's API validation.
+
+  Changes:
+  - Added `findToolCallArgs()` helper method to search through messages and retrieve original tool call arguments
+  - Enhanced `aiV5UIMessagesToAIV5ModelMessages()` to populate the `input` field on tool-result parts
+  - Added comprehensive test coverage for empty object inputs, parameterized inputs, and multi-turn conversations
+
+- Fixed an issue where deprecated Groq models were shown during template creation. The model selection now filters out models marked as deprecated, displaying only active and supported models. ([#11445](https://github.com/mastra-ai/mastra/pull/11445))
+
+- Fix AI SDK v6 (specificationVersion: "v3") model support in sub-agent calls. Previously, when a parent agent invoked a sub-agent with a v3 model through the `agents` property, the version check only matched "v2", causing v3 models to incorrectly fall back to legacy streaming methods and throw "V2 models are not supported for streamLegacy" error. ([#11452](https://github.com/mastra-ai/mastra/pull/11452))
+
+  The fix updates version checks in `listAgentTools` and `llm-mapping-step.ts` to use the centralized `supportedLanguageModelSpecifications` array which includes both v2 and v3.
+
+  Also adds missing v3 test coverage to tool-handling.test.ts to prevent regression.
+
+- Fixed "Transforms cannot be represented in JSON Schema" error when using Zod v4 with structuredOutput ([#11466](https://github.com/mastra-ai/mastra/pull/11466))
+
+  When using schemas with `.optional()`, `.nullable()`, `.default()`, or `.nullish().default("")` patterns with `structuredOutput` and Zod v4, users would encounter an error because OpenAI schema compatibility layer adds transforms that Zod v4's native `toJSONSchema()` cannot handle.
+
+  The fix uses Mastra's transform-safe `zodToJsonSchema` function which gracefully handles transforms by using the `unrepresentable: 'any'` option.
+
+  Also exported `isZodType` utility from `@mastra/schema-compat` and updated it to detect both Zod v3 (`_def`) and Zod v4 (`_zod`) schemas.
+
+- Improved test description in ModelsDevGateway to clearly reflect the behavior being tested ([#11460](https://github.com/mastra-ai/mastra/pull/11460))
+
+- Updated dependencies [[`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`70b300e`](https://github.com/mastra-ai/mastra/commit/70b300ebc631dfc0aa14e61547fef7994adb4ea6)]:
+  - @mastra/schema-compat@1.0.0-beta.5
+
+## 1.0.0-beta.18
+
+### Patch Changes
+
+- Fixed semantic recall fetching all thread messages instead of only matched ones. ([#11435](https://github.com/mastra-ai/mastra/pull/11435))
+
+  When using `semanticRecall` with `scope: 'thread'`, the processor was incorrectly fetching all messages from the thread instead of just the semantically matched messages with their context. This caused memory to return far more messages than expected when `topK` and `messageRange` were set to small values.
+
+  Fixes #11428
+
+## 1.0.0-beta.17
+
+### Patch Changes
+
+- Fix Zod 4 compatibility for storage schema detection ([#11431](https://github.com/mastra-ai/mastra/pull/11431))
+
+  If you're using Zod 4, `buildStorageSchema` was failing to detect nullable and optional fields correctly. This caused `NOT NULL constraint failed` errors when storing observability spans and other data.
+
+  This fix enables proper schema detection for Zod 4 users, ensuring nullable fields like `parentSpanId` are correctly identified and don't cause database constraint violations.
+
+- Updated dependencies [[`af56599`](https://github.com/mastra-ai/mastra/commit/af56599d73244ae3bf0d7bcade656410f8ded37b)]:
+  - @mastra/schema-compat@1.0.0-beta.4
+
+## 1.0.0-beta.16
+
+### Minor Changes
+
+- Add `onError` hook to server configuration for custom error handling. ([#11403](https://github.com/mastra-ai/mastra/pull/11403))
+
+  You can now provide a custom error handler through the Mastra server config to catch errors, format responses, or send them to external services like Sentry:
+
+  ```typescript
+  import { Mastra } from '@mastra/core/mastra';
+
+  const mastra = new Mastra({
+    server: {
+      onError: (err, c) => {
+        // Send to Sentry
+        Sentry.captureException(err);
+
+        // Return custom formatted response
+        return c.json(
+          {
+            error: err.message,
+            timestamp: new Date().toISOString(),
+          },
+          500,
+        );
+      },
+    },
+  });
+  ```
+
+  If no `onError` is provided, the default error handler is used.
+
+  Fixes #9610
+
+### Patch Changes
+
+- fix(observability): start MODEL_STEP span at beginning of LLM execution ([#11409](https://github.com/mastra-ai/mastra/pull/11409))
+
+  The MODEL_STEP span was being created when the step-start chunk arrived (after the model API call completed), causing the span's startTime to be close to its endTime instead of accurately reflecting when the step began.
+
+  This fix ensures MODEL_STEP spans capture the full duration of each LLM execution step, including the API call latency, by starting the span at the beginning of the step execution rather than when the response starts streaming.
+
+  Fixes #11271
+
+- Fixed inline type narrowing for `tool.execute()` return type when using `outputSchema`. ([#11420](https://github.com/mastra-ai/mastra/pull/11420))
+
+  **Problem:** When calling `tool.execute()`, TypeScript couldn't narrow the `ValidationError | OutputType` union after checking `'error' in result && result.error`, causing type errors when accessing output properties.
+
+  **Solution:**
+  - Added `{ error?: never }` to the success type, enabling proper discriminated union narrowing
+  - Simplified `createTool` generics so `inputData` is correctly typed based on `inputSchema`
+
+  **Note:** Tool output schemas should not use `error` as a field name since it's reserved for ValidationError discrimination. Use `errorMessage` or similar instead.
+
+  **Usage:**
+
+  ```typescript
+  const result = await myTool.execute({ firstName: 'Hans' });
+
+  if ('error' in result && result.error) {
+    console.error('Validation failed:', result.message);
+    return;
+  }
+
+  // ✅ TypeScript now correctly narrows result
+  return { fullName: result.fullName };
+  ```
+
+- Add support for `instructions` field in MCPServer ([#11421](https://github.com/mastra-ai/mastra/pull/11421))
+
+  Implements the official MCP specification's `instructions` field, which allows MCP servers to provide system-wide prompts that are automatically sent to clients during initialization. This eliminates the need for per-project configuration files (like AGENTS.md) by centralizing the system prompt in the server definition.
+
+  **What's New:**
+  - Added `instructions` optional field to `MCPServerConfig` type
+  - Instructions are passed to the underlying MCP SDK Server during initialization
+  - Instructions are sent to clients in the `InitializeResult` response
+  - Fully compatible with all MCP clients (Cursor, Windsurf, Claude Desktop, etc.)
+
+  **Example Usage:**
+
+  ```typescript
+  const server = new MCPServer({
+    name: 'GitHub MCP Server',
+    version: '1.0.0',
+    instructions:
+      'Use the available tools to help users manage GitHub repositories, issues, and pull requests. Always search before creating to avoid duplicates.',
+    tools: { searchIssues, createIssue, listPRs },
+  });
+  ```
+
+- Add storage composition to MastraStorage ([#11401](https://github.com/mastra-ai/mastra/pull/11401))
+
+  `MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a different database for observability.
+
+  ```typescript
+  import { MastraStorage } from '@mastra/core/storage';
+  import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg';
+  import { MemoryLibSQL } from '@mastra/libsql';
+
+  // Compose domains from different stores
+  const storage = new MastraStorage({
+    id: 'composite',
+    domains: {
+      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    },
+  });
+  ```
+
+  **Breaking changes:**
+  - `storage.supports` property no longer exists
+  - `StorageSupports` type is no longer exported from `@mastra/core/storage`
+
+  All stores now support the same features. For domain availability, use `getStore()`:
+
+  ```typescript
+  const store = await storage.getStore('memory');
+  if (store) {
+    // domain is available
+  }
+  ```
+
+- Fix various places in core package where we were logging with console.error instead of the mastra logger. ([#11425](https://github.com/mastra-ai/mastra/pull/11425))
+
+- fix(workflows): ensure writer.custom() bubbles up from nested workflows and loops ([#11422](https://github.com/mastra-ai/mastra/pull/11422))
+
+  Previously, when using `writer.custom()` in steps within nested sub-workflows or loops (like `dountil`), the custom data events would not properly bubble up to the top-level workflow stream. This fix ensures that custom events are now correctly propagated through the nested workflow hierarchy without modification, allowing them to be consumed at the top level.
+
+  This brings workflows in line with the existing behavior for agents, where custom data chunks properly bubble up through sub-agent execution.
+
+  **What changed:**
+  - Modified the `nestedWatchCb` function in workflow event handling to detect and preserve `data-*` custom events
+  - Custom events now bubble up directly without being wrapped or modified
+  - Regular workflow events continue to work as before with proper step ID prefixing
+
+  **Example:**
+
+  ```typescript
+  const subStep = createStep({
+    id: 'subStep',
+    execute: async ({ writer }) => {
+      await writer.custom({
+        type: 'custom-progress',
+        data: { status: 'processing' },
+      });
+      return { result: 'done' };
+    },
+  });
+
+  const subWorkflow = createWorkflow({ id: 'sub' }).then(subStep).commit();
+
+  const topWorkflow = createWorkflow({ id: 'top' }).then(subWorkflow).commit();
+
+  const run = await topWorkflow.createRun();
+  const stream = run.stream({ inputData: {} });
+
+  // Custom events from subStep now properly appear in the top-level stream
+  for await (const event of stream) {
+    if (event.type === 'custom-progress') {
+      console.log(event.data); // { status: 'processing' }
+    }
+  }
+  ```
+
 ## 1.0.0-beta.15
 
 ### Minor Changes

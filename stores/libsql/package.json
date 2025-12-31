@@ -1,6 +1,6 @@
 {
   "name": "@mastra/libsql",
-  "version": "1.0.0-beta.9",
+  "version": "1.0.0-beta.10",
   "description": "Libsql provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/libsql",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
