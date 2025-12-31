@@ -720,6 +720,18 @@ export class Knowledge implements MastraKnowledge {
       });
     }
 
+    // Create a map of lineRange from BM25 results (which computes lineRange)
+    const lineRangeMap = new Map<string, { start: number; end: number } | undefined>();
+    for (const result of bm25Results) {
+      lineRangeMap.set(result.key, result.lineRange);
+    }
+    // Also get lineRange from vector results if BM25 didn't have it
+    for (const result of vectorResults) {
+      if (!lineRangeMap.has(result.key)) {
+        lineRangeMap.set(result.key, result.lineRange);
+      }
+    }
+
     // Combine scores from both search methods
     const combinedResults = new Map<string, KnowledgeSearchResult>();
     const allKeys = new Set([...vectorScoreMap.keys(), ...bm25ScoreMap.keys()]);
@@ -744,6 +756,7 @@ export class Knowledge implements MastraKnowledge {
         key,
         content,
         score: combinedScore,
+        lineRange: lineRangeMap.get(key),
         metadata,
         scoreDetails: {
           vector: vectorScore,

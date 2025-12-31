@@ -477,6 +477,30 @@ describe('Knowledge with indexing', () => {
       expect(result?.metadata?.category).toBe('documentation');
       expect(result?.metadata?.version).toBe('1.0');
     });
+
+    it('should include lineRange in vector search results', async () => {
+      const multilineContent = `Line 1: Introduction to the guide
+Line 2: This section covers password reset procedures
+Line 3: Follow these steps carefully
+Line 4: Additional password tips here
+Line 5: Conclusion of the guide`;
+
+      await knowledge.add(NS, {
+        type: 'text',
+        key: 'docs/password-guide.txt',
+        content: multilineContent,
+      });
+
+      const results = await knowledge.search(NS, 'password');
+
+      expect(results.length).toBeGreaterThan(0);
+      const result = results.find(r => r.key === 'docs/password-guide.txt');
+      expect(result).toBeDefined();
+      // lineRange should indicate where 'password' appears (lines 2 and 4)
+      expect(result?.lineRange).toBeDefined();
+      expect(result?.lineRange?.start).toBe(2);
+      expect(result?.lineRange?.end).toBe(4);
+    });
   });
 
   describe('canSearch', () => {
@@ -622,6 +646,64 @@ describe('Knowledge with BM25', () => {
       // Verify it's no longer searchable
       results = await knowledge.search(NS, 'unique searchable', { mode: 'bm25' });
       expect(results.find(r => r.key === 'to-delete.txt')).toBeUndefined();
+    });
+
+    it('should include lineRange in search results', async () => {
+      const multilineContent = `Line 1: Introduction
+Line 2: This document is about password reset
+Line 3: Some other content here
+Line 4: More password information
+Line 5: Conclusion`;
+
+      await knowledge.add(NS, {
+        type: 'text',
+        key: 'docs/multiline.txt',
+        content: multilineContent,
+      });
+
+      const results = await knowledge.search(NS, 'password', { mode: 'bm25' });
+
+      expect(results.length).toBe(1);
+      expect(results[0]?.lineRange).toBeDefined();
+      // 'password' appears on lines 2 and 4
+      expect(results[0]?.lineRange?.start).toBe(2);
+      expect(results[0]?.lineRange?.end).toBe(4);
+    });
+
+    it('should return lineRange spanning all matched lines', async () => {
+      const content = `First line
+Second line has machine learning
+Third line is empty
+Fourth line has deep learning
+Fifth line has neural networks
+Sixth line ends`;
+
+      await knowledge.add(NS, {
+        type: 'text',
+        key: 'docs/ml.txt',
+        content,
+      });
+
+      const results = await knowledge.search(NS, 'machine neural', { mode: 'bm25' });
+
+      expect(results.length).toBe(1);
+      expect(results[0]?.lineRange).toBeDefined();
+      // 'machine' on line 2, 'neural' on line 5
+      expect(results[0]?.lineRange?.start).toBe(2);
+      expect(results[0]?.lineRange?.end).toBe(5);
+    });
+
+    it('should handle single line match in lineRange', async () => {
+      await knowledge.add(NS, {
+        type: 'text',
+        key: 'docs/single.txt',
+        content: 'Line 1\nLine 2 with unique keyword\nLine 3',
+      });
+
+      const results = await knowledge.search(NS, 'unique keyword', { mode: 'bm25' });
+
+      expect(results.length).toBe(1);
+      expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
     });
   });
 
@@ -822,6 +904,33 @@ describe('Knowledge with hybrid search', () => {
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.scoreDetails?.bm25).toBeDefined();
       expect(results[0]?.scoreDetails?.vector).toBeUndefined();
+    });
+
+    it('should include lineRange in hybrid search results', async () => {
+      const multilineContent = `Line 1: Introduction
+Line 2: Password reset instructions
+Line 3: Some intermediate content
+Line 4: More password details here
+Line 5: Conclusion`;
+
+      await knowledge.add(NS, {
+        type: 'text',
+        key: 'docs/hybrid-test.txt',
+        content: multilineContent,
+      });
+
+      const results = await knowledge.search(NS, 'password', { mode: 'hybrid' });
+
+      expect(results.length).toBeGreaterThan(0);
+      const result = results.find(r => r.key === 'docs/hybrid-test.txt');
+      expect(result).toBeDefined();
+      expect(result?.lineRange).toBeDefined();
+      // 'password' appears on lines 2 and 4
+      expect(result?.lineRange?.start).toBe(2);
+      expect(result?.lineRange?.end).toBe(4);
+      // Should also have both score types
+      expect(result?.scoreDetails?.vector).toBeDefined();
+      expect(result?.scoreDetails?.bm25).toBeDefined();
     });
   });
 
