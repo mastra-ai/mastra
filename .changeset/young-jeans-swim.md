@@ -11,7 +11,7 @@ const workflow = createWorkflow({
   outputSchema: z.object({ result: z.string() }),
   steps: [step1],
   cron: '0 0 * * *', // Run daily at midnight
-  inputData: { value: 'scheduled-run' }, // Optional
-  initialState: { count: 0 }, // Optional
+  inputData: { value: 'scheduled-run' }, // Optional inputData for the scheduled workflow run
+  initialState: { count: 0 }, // Optional initialState for the scheduled workflow run
 });
 ```
