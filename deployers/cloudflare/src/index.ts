@@ -13,6 +13,14 @@ interface CFRoute {
   custom_domain?: boolean;
 }
 
+interface CFAssets {
+  directory: string;
+  binding?: string;
+  run_worker_first?: boolean | string[];
+  html_handling?: 'auto-trailing-slash' | 'force-trailing-slash' | 'drop-trailing-slash' | 'none';
+  not_found_handling?: 'none' | '404-page' | 'single-page-application';
+}
+
 interface D1DatabaseBinding {
   binding: string;
   database_name: string;
@@ -32,6 +40,7 @@ export class CloudflareDeployer extends Deployer {
   projectName?: string;
   d1Databases?: D1DatabaseBinding[];
   kvNamespaces?: KVNamespaceBinding[];
+  assets?: CFAssets;
 
   constructor({
     env,
@@ -40,6 +49,7 @@ export class CloudflareDeployer extends Deployer {
     workerNamespace,
     d1Databases,
     kvNamespaces,
+    assets,
   }: {
     env?: Record<string, any>;
     projectName?: string;
@@ -47,6 +57,7 @@ export class CloudflareDeployer extends Deployer {
     workerNamespace?: string;
     d1Databases?: D1DatabaseBinding[];
     kvNamespaces?: KVNamespaceBinding[];
+    assets?: CFAssets;
   }) {
     super({ name: 'CLOUDFLARE' });
 
@@ -60,6 +71,7 @@ export class CloudflareDeployer extends Deployer {
 
     if (d1Databases) this.d1Databases = d1Databases;
     if (kvNamespaces) this.kvNamespaces = kvNamespaces;
+    if (assets) this.assets = assets;
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
@@ -90,6 +102,9 @@ export class CloudflareDeployer extends Deployer {
     }
     if (this.kvNamespaces?.length) {
       wranglerConfig.kv_namespaces = this.kvNamespaces;
+    }
+    if (this.assets) {
+      wranglerConfig.assets = this.assets;
     }
     await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
