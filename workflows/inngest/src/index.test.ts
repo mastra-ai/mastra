@@ -13568,7 +13568,7 @@ describe('MastraInngestWorkflow', () => {
       expect(inngestFunction).toBeDefined();
     });
 
-    it.only('should execute workflow via cron schedule', async ctx => {
+    it('should execute workflow via cron schedule', async ctx => {
       const inngest = new Inngest({
         id: 'mastra-cron-test',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
