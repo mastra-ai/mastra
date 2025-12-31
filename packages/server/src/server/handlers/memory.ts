@@ -40,6 +40,13 @@ import {
   deleteMessagesResponseSchema,
   cloneThreadBodySchema,
   cloneThreadResponseSchema,
+  branchThreadBodySchema,
+  branchThreadResponseSchema,
+  promoteBranchBodySchema,
+  promoteBranchResponseSchema,
+  listBranchesResponseSchema,
+  getParentThreadResponseSchema,
+  getBranchHistoryResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -525,6 +532,171 @@ export const CLONE_THREAD_ROUTE = createRoute({
       return result;
     } catch (error) {
       return handleError(error, 'Error cloning thread');
+    }
+  },
+});
+
+export const BRANCH_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/memory/threads/:threadId/branch',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  bodySchema: branchThreadBodySchema,
+  responseSchema: branchThreadResponseSchema,
+  summary: 'Branch thread',
+  description:
+    'Creates a new thread that references the parent thread messages up to a branch point. Unlike cloning, branched threads share message history with their parent.',
+  tags: ['Memory'],
+  handler: async ({
+    mastra,
+    agentId,
+    threadId,
+    branchPointMessageId,
+    newThreadId,
+    resourceId,
+    title,
+    metadata,
+    requestContext,
+  }) => {
+    try {
+      validateBody({ threadId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const result = await memory.branchThread({
+        sourceThreadId: threadId!,
+        branchPointMessageId,
+        newThreadId,
+        resourceId,
+        title,
+        metadata,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error branching thread');
+    }
+  },
+});
+
+export const PROMOTE_BRANCH_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/memory/threads/:threadId/promote',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  bodySchema: promoteBranchBodySchema,
+  responseSchema: promoteBranchResponseSchema,
+  summary: 'Promote branch',
+  description:
+    'Promotes a branch to become the canonical thread, optionally archiving or deleting the parent messages that came after the branch point.',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, threadId, deleteParentMessages, archiveThreadTitle, requestContext }) => {
+    try {
+      validateBody({ threadId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const result = await memory.promoteBranch({
+        branchThreadId: threadId!,
+        deleteParentMessages,
+        archiveThreadTitle,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error promoting branch');
+    }
+  },
+});
+
+export const LIST_BRANCHES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId/branches',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  responseSchema: listBranchesResponseSchema,
+  summary: 'List branches',
+  description: 'Lists all threads that were branched from the specified source thread.',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, threadId, requestContext }) => {
+    try {
+      validateBody({ threadId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const branches = await memory.listBranches(threadId!);
+
+      return { branches };
+    } catch (error) {
+      return handleError(error, 'Error listing branches');
+    }
+  },
+});
+
+export const GET_PARENT_THREAD_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId/parent',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  responseSchema: getParentThreadResponseSchema,
+  summary: 'Get parent thread',
+  description: 'Gets the parent thread that this thread was branched from, if any.',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, threadId, requestContext }) => {
+    try {
+      validateBody({ threadId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const thread = await memory.getParentThread(threadId!);
+
+      return { thread };
+    } catch (error) {
+      return handleError(error, 'Error getting parent thread');
+    }
+  },
+});
+
+export const GET_BRANCH_HISTORY_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/memory/threads/:threadId/history',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  responseSchema: getBranchHistoryResponseSchema,
+  summary: 'Get branch history',
+  description: 'Gets the full branch history chain from the root thread to this thread.',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, threadId, requestContext }) => {
+    try {
+      validateBody({ threadId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const history = await memory.getBranchHistory(threadId!);
+
+      return { history };
+    } catch (error) {
+      return handleError(error, 'Error getting branch history');
     }
   },
 });

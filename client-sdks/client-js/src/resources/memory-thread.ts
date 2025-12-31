@@ -8,6 +8,13 @@ import type {
   ListMemoryThreadMessagesResponse,
   CloneMemoryThreadParams,
   CloneMemoryThreadResponse,
+  BranchMemoryThreadParams,
+  BranchMemoryThreadResponse,
+  PromoteBranchParams,
+  PromoteBranchResponse,
+  ListBranchesResponse,
+  GetParentThreadResponse,
+  GetBranchHistoryResponse,
 } from '../types';
 
 import { requestContextQueryString } from '../utils';
@@ -124,6 +131,73 @@ export class MemoryThread extends BaseResource {
         method: 'POST',
         body,
       },
+    );
+  }
+
+  /**
+   * Branches the thread at a specific message point, creating a new thread that references parent messages
+   * Unlike cloning, branched threads share message history with their parent up to the branch point
+   * @param params - Branch parameters including optional branch point message ID, new thread ID, title, metadata
+   * @returns Promise containing the branched thread and count of inherited messages
+   */
+  branch(params: BranchMemoryThreadParams = {}): Promise<BranchMemoryThreadResponse> {
+    const { requestContext, ...body } = params;
+    return this.request(
+      `/api/memory/threads/${this.threadId}/branch?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Promotes this branch to become the canonical thread
+   * Merges branch messages into the parent and optionally archives or deletes parent's divergent messages
+   * @param params - Promotion parameters including whether to delete parent messages and archive thread title
+   * @returns Promise containing the promoted thread, optional archive thread, and count of archived messages
+   */
+  promote(params: PromoteBranchParams = {}): Promise<PromoteBranchResponse> {
+    const { requestContext, ...body } = params;
+    return this.request(
+      `/api/memory/threads/${this.threadId}/promote?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+  }
+
+  /**
+   * Lists all threads that were branched from this thread
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing array of branch threads
+   */
+  listBranches(requestContext?: RequestContext | Record<string, any>): Promise<ListBranchesResponse> {
+    return this.request(
+      `/api/memory/threads/${this.threadId}/branches?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
+    );
+  }
+
+  /**
+   * Gets the parent thread that this thread was branched from
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the parent thread if this is a branch, null otherwise
+   */
+  getParent(requestContext?: RequestContext | Record<string, any>): Promise<GetParentThreadResponse> {
+    return this.request(
+      `/api/memory/threads/${this.threadId}/parent?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
+    );
+  }
+
+  /**
+   * Gets the full branch history chain from the root thread to this thread
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing array of threads from oldest ancestor to this thread
+   */
+  getBranchHistory(requestContext?: RequestContext | Record<string, any>): Promise<GetBranchHistoryResponse> {
+    return this.request(
+      `/api/memory/threads/${this.threadId}/history?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
     );
   }
 }

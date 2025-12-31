@@ -24,6 +24,11 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  StorageBranchThreadInput,
+  StorageBranchThreadOutput,
+  ThreadBranchMetadata,
+  StoragePromoteBranchInput,
+  StoragePromoteBranchOutput,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
@@ -610,9 +615,51 @@ export class StoreMemoryUpstash extends MemoryStorage {
         includedMessages = included.map(this.parseStoredMessage);
       }
 
-      // Get all message IDs from all thread sorted sets
-      const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
+      // Collect all thread IDs to query, including inherited parent threads for branches
+      const allThreadIdsToQuery = new Set<string>(threadIds);
+      const branchConstraints: Map<string, { parentThreadId: string; branchPointMessageId: string }> = new Map();
+
+      // Check each thread for branch metadata and build parent chain
       for (const tid of threadIds) {
+        const thread = await this.getThreadById({ threadId: tid });
+        if (thread) {
+          const branchMeta = this.getBranchMetadata(thread);
+          if (branchMeta) {
+            // Store the branch constraint for this thread
+            branchConstraints.set(tid, {
+              parentThreadId: branchMeta.parentThreadId,
+              branchPointMessageId: branchMeta.branchPointMessageId,
+            });
+            // Add parent thread to query set
+            allThreadIdsToQuery.add(branchMeta.parentThreadId);
+
+            // Recursively resolve parent chain
+            let currentParentId = branchMeta.parentThreadId;
+            while (currentParentId) {
+              const parentThread = await this.getThreadById({ threadId: currentParentId });
+              if (!parentThread) break;
+
+              const parentBranchMeta = this.getBranchMetadata(parentThread);
+              if (parentBranchMeta) {
+                branchConstraints.set(currentParentId, {
+                  parentThreadId: parentBranchMeta.parentThreadId,
+                  branchPointMessageId: parentBranchMeta.branchPointMessageId,
+                });
+                allThreadIdsToQuery.add(parentBranchMeta.parentThreadId);
+                currentParentId = parentBranchMeta.parentThreadId;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const allThreadIdsList = Array.from(allThreadIdsToQuery);
+
+      // Get all message IDs from all thread sorted sets (including parent threads)
+      const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
+      for (const tid of allThreadIdsList) {
         const threadMessagesKey = getThreadMessagesKey(tid);
         const messageIds = await this.client.zrange(threadMessagesKey, 0, -1);
         for (const mid of messageIds) {
@@ -679,6 +726,49 @@ export class StoreMemoryUpstash extends MemoryStorage {
         const bValue = getFieldValue(b);
         return direction === 'ASC' ? aValue - bValue : bValue - aValue;
       });
+
+      // Filter out messages from parent threads that are after the branch point
+      if (branchConstraints.size > 0) {
+        // Build a map of branch point message timestamps for filtering
+        const branchPointTimestamps: Map<string, Date> = new Map();
+
+        for (const [_branchThreadId, constraint] of branchConstraints) {
+          // Find the branch point message to get its timestamp
+          const branchPointMsg = messagesData.find(m => m.id === constraint.branchPointMessageId);
+          if (branchPointMsg) {
+            branchPointTimestamps.set(constraint.parentThreadId, branchPointMsg.createdAt);
+          }
+        }
+
+        // Filter messages: keep only those that are:
+        // 1. From the original requested threads (not inherited parents), OR
+        // 2. From parent threads but before or at the branch point
+        messagesData = messagesData.filter(msg => {
+          const msgThreadId = msg.threadId;
+          if (!msgThreadId) return true;
+
+          // If this message is from one of the originally requested threads, keep it
+          if (threadIds.includes(msgThreadId)) return true;
+
+          // If this message is from a parent thread, check if it's before the branch point
+          const branchPointTime = branchPointTimestamps.get(msgThreadId);
+          if (branchPointTime) {
+            return msg.createdAt <= branchPointTime;
+          }
+
+          // For deeply nested branches, check all constraints
+          for (const [_tid, constraint] of branchConstraints) {
+            if (constraint.parentThreadId === msgThreadId) {
+              const bpMsg = messagesData.find(m => m.id === constraint.branchPointMessageId);
+              if (bpMsg) {
+                return msg.createdAt <= bpMsg.createdAt;
+              }
+            }
+          }
+
+          return true;
+        });
+      }
 
       const total = messagesData.length;
 
@@ -1282,5 +1372,368 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  async branchThread(args: StorageBranchThreadInput): Promise<StorageBranchThreadOutput> {
+    const { sourceThreadId, branchPointMessageId, newThreadId: providedThreadId, resourceId, title, metadata } = args;
+
+    // Get the source thread
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('UPSTASH', 'BRANCH_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('UPSTASH', 'BRANCH_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    try {
+      // Get all messages from source thread
+      const messagesKey = getThreadMessagesKey(sourceThreadId);
+      const messageIds = await this.client.zrange(messagesKey, 0, -1);
+
+      // Get message data to find branch point
+      let sourceMessages: Array<{ id: string; createdAt: Date }> = [];
+      if (messageIds.length > 0) {
+        const pipeline = this.client.pipeline();
+        for (const msgId of messageIds) {
+          const messageKey = getMessageKey(sourceThreadId, msgId as string);
+          pipeline.hgetall(messageKey);
+        }
+        const messageData = await pipeline.exec();
+
+        sourceMessages = messageData
+          .filter((msg): msg is Record<string, any> => msg !== null && typeof msg === 'object')
+          .map(msg => ({
+            id: msg.id as string,
+            createdAt: ensureDate(msg.createdAt) as Date,
+          }))
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      }
+
+      // Determine branch point (default to last message)
+      let branchPoint = branchPointMessageId;
+      if (!branchPoint && sourceMessages.length > 0) {
+        branchPoint = sourceMessages[sourceMessages.length - 1]!.id;
+      }
+
+      // Validate branch point exists in source thread
+      if (branchPoint && !sourceMessages.some(m => m.id === branchPoint)) {
+        throw new MastraError({
+          id: createStorageErrorId('UPSTASH', 'BRANCH_THREAD', 'BRANCH_POINT_NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Branch point message ${branchPoint} not found in source thread ${sourceThreadId}`,
+          details: { sourceThreadId, branchPointMessageId: branchPoint },
+        });
+      }
+
+      // Calculate number of inherited messages
+      let inheritedMessageCount = 0;
+      if (branchPoint) {
+        const branchPointIndex = sourceMessages.findIndex(m => m.id === branchPoint);
+        inheritedMessageCount = branchPointIndex + 1;
+      }
+
+      const now = new Date();
+
+      // Get working memory snapshot if thread-scoped
+      let workingMemorySnapshot: string | undefined;
+      if (sourceThread.metadata?.workingMemory && typeof sourceThread.metadata.workingMemory === 'string') {
+        workingMemorySnapshot = sourceThread.metadata.workingMemory;
+      }
+
+      // Create branch metadata
+      const branchMetadata: ThreadBranchMetadata = {
+        parentThreadId: sourceThreadId,
+        branchPointMessageId: branchPoint || '',
+        branchCreatedAt: now,
+        ...(workingMemorySnapshot && { workingMemorySnapshot }),
+      };
+
+      // Create the new thread (NO messages are copied)
+      const newThread: StorageThreadType = {
+        id: newThreadId,
+        resourceId: resourceId || sourceThread.resourceId,
+        title: title || (sourceThread.title ? `Branch of ${sourceThread.title}` : undefined),
+        metadata: {
+          ...metadata,
+          branch: branchMetadata,
+          ...(workingMemorySnapshot && { workingMemory: workingMemorySnapshot }),
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // Save the new thread
+      const threadKey = getKey(TABLE_THREADS, { id: newThreadId });
+      const pipeline = this.client.pipeline();
+      pipeline.set(threadKey, processRecord(TABLE_THREADS, newThread).processedRecord);
+
+      // Add thread to resource's threads sorted set
+      const resourceThreadsKey = `resource:${newThread.resourceId}:threads`;
+      pipeline.zadd(resourceThreadsKey, { score: now.getTime(), member: newThreadId });
+
+      await pipeline.exec();
+
+      return {
+        thread: newThread,
+        inheritedMessageCount,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'BRANCH_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    }
+  }
+
+  async promoteBranch(args: StoragePromoteBranchInput): Promise<StoragePromoteBranchOutput> {
+    const { branchThreadId, deleteParentMessages = false, archiveThreadTitle } = args;
+
+    // Get the branch thread
+    const branchThread = await this.getThreadById({ threadId: branchThreadId });
+    if (!branchThread) {
+      throw new MastraError({
+        id: createStorageErrorId('UPSTASH', 'PROMOTE_BRANCH', 'BRANCH_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Branch thread with id ${branchThreadId} not found`,
+        details: { branchThreadId },
+      });
+    }
+
+    // Validate it's actually a branch
+    const branchMetadata = branchThread.metadata?.branch as ThreadBranchMetadata | undefined;
+    if (!branchMetadata) {
+      throw new MastraError({
+        id: createStorageErrorId('UPSTASH', 'PROMOTE_BRANCH', 'NOT_A_BRANCH'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${branchThreadId} is not a branch (no branch metadata)`,
+        details: { branchThreadId },
+      });
+    }
+
+    const { parentThreadId, branchPointMessageId } = branchMetadata;
+
+    // Get the parent thread
+    const parentThread = await this.getThreadById({ threadId: parentThreadId });
+    if (!parentThread) {
+      throw new MastraError({
+        id: createStorageErrorId('UPSTASH', 'PROMOTE_BRANCH', 'PARENT_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Parent thread with id ${parentThreadId} not found`,
+        details: { parentThreadId, branchThreadId },
+      });
+    }
+
+    try {
+      // Get parent messages to find those after branch point
+      const parentMessagesKey = getThreadMessagesKey(parentThreadId);
+      const parentMessageIds = await this.client.zrange(parentMessagesKey, 0, -1);
+
+      // Get branch point message timestamp
+      let branchPointTime: number | null = null;
+      if (branchPointMessageId && parentMessageIds.includes(branchPointMessageId)) {
+        const bpMsgKey = getMessageKey(parentThreadId, branchPointMessageId);
+        const bpMsg = (await this.client.hgetall(bpMsgKey)) as Record<string, any> | null;
+        if (bpMsg) {
+          const bpCreatedAt = ensureDate(bpMsg.createdAt);
+          branchPointTime = bpCreatedAt ? bpCreatedAt.getTime() : null;
+        }
+      }
+
+      // Find messages after branch point
+      const messagesAfterBranchPoint: string[] = [];
+      if (branchPointTime !== null) {
+        for (const msgId of parentMessageIds) {
+          const msgKey = getMessageKey(parentThreadId, msgId as string);
+          const msg = (await this.client.hgetall(msgKey)) as Record<string, any> | null;
+          const msgCreatedAt = msg ? ensureDate(msg.createdAt) : null;
+          if (msgCreatedAt && msgCreatedAt.getTime() > branchPointTime) {
+            messagesAfterBranchPoint.push(msgId as string);
+          }
+        }
+      }
+
+      const now = new Date();
+      let archiveThread: StorageThreadType | undefined;
+      const pipeline = this.client.pipeline();
+
+      if (messagesAfterBranchPoint.length > 0) {
+        if (deleteParentMessages) {
+          // Delete messages after branch point
+          for (const msgId of messagesAfterBranchPoint) {
+            const msgKey = getMessageKey(parentThreadId, msgId);
+            pipeline.del(msgKey);
+            pipeline.zrem(parentMessagesKey, msgId);
+          }
+        } else {
+          // Archive messages to a new thread
+          const archiveThreadId = crypto.randomUUID();
+          archiveThread = {
+            id: archiveThreadId,
+            resourceId: parentThread.resourceId,
+            title: archiveThreadTitle || `Archived from ${parentThread.title || parentThreadId}`,
+            metadata: {
+              archivedFrom: {
+                threadId: parentThreadId,
+                branchPointMessageId,
+                archivedAt: now,
+                promotedBranchId: branchThreadId,
+              },
+            },
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          // Save archive thread
+          const archiveThreadKey = getKey(TABLE_THREADS, { id: archiveThreadId });
+          pipeline.set(archiveThreadKey, processRecord(TABLE_THREADS, archiveThread).processedRecord);
+
+          // Add archive thread to resource's threads
+          const resourceThreadsKey = `resource:${archiveThread.resourceId}:threads`;
+          pipeline.zadd(resourceThreadsKey, { score: now.getTime(), member: archiveThreadId });
+
+          // Move messages to archive thread
+          const archiveMessagesKey = getThreadMessagesKey(archiveThreadId);
+          for (const msgId of messagesAfterBranchPoint) {
+            const oldMsgKey = getMessageKey(parentThreadId, msgId);
+            const newMsgKey = getMessageKey(archiveThreadId, msgId);
+
+            // Get message data
+            const msgData = (await this.client.hgetall(oldMsgKey)) as Record<string, any>;
+            if (msgData) {
+              // Update thread_id and save to new location
+              msgData.thread_id = archiveThreadId;
+              pipeline.set(newMsgKey, processRecord(TABLE_MESSAGES, msgData).processedRecord);
+              const msgCreatedAt = ensureDate(msgData.createdAt);
+              if (msgCreatedAt) {
+                pipeline.zadd(archiveMessagesKey, {
+                  score: msgCreatedAt.getTime(),
+                  member: msgId,
+                });
+              }
+              pipeline.del(oldMsgKey);
+              pipeline.zrem(parentMessagesKey, msgId);
+            }
+          }
+        }
+      }
+
+      // Move branch's own messages to the parent thread
+      const branchMessagesKey = getThreadMessagesKey(branchThreadId);
+      const branchMessageIds = await this.client.zrange(branchMessagesKey, 0, -1);
+
+      for (const msgId of branchMessageIds) {
+        const oldMsgKey = getMessageKey(branchThreadId, msgId as string);
+        const newMsgKey = getMessageKey(parentThreadId, msgId as string);
+
+        // Get message data
+        const msgData = (await this.client.hgetall(oldMsgKey)) as Record<string, any>;
+        if (msgData) {
+          // Update thread_id and save to new location
+          msgData.thread_id = parentThreadId;
+          pipeline.set(newMsgKey, processRecord(TABLE_MESSAGES, msgData).processedRecord);
+          const msgCreatedAt = ensureDate(msgData.createdAt);
+          if (msgCreatedAt) {
+            pipeline.zadd(parentMessagesKey, { score: msgCreatedAt.getTime(), member: msgId as string });
+          }
+          pipeline.del(oldMsgKey);
+        }
+      }
+
+      // Delete branch messages sorted set
+      pipeline.del(branchMessagesKey);
+
+      // Update parent thread metadata
+      const updatedParentMetadata = { ...parentThread.metadata };
+      if (branchThread.metadata?.workingMemory) {
+        updatedParentMetadata.workingMemory = branchThread.metadata.workingMemory;
+      }
+
+      const parentThreadKey = getKey(TABLE_THREADS, { id: parentThreadId });
+      pipeline.set(
+        parentThreadKey,
+        processRecord(TABLE_THREADS, {
+          ...parentThread,
+          metadata: updatedParentMetadata,
+          updatedAt: now,
+        }).processedRecord,
+      );
+
+      // Delete the branch thread
+      const branchThreadKey = getKey(TABLE_THREADS, { id: branchThreadId });
+      pipeline.del(branchThreadKey);
+
+      // Remove branch from resource's threads sorted set
+      const resourceThreadsKey = `resource:${branchThread.resourceId}:threads`;
+      pipeline.zrem(resourceThreadsKey, branchThreadId);
+
+      await pipeline.exec();
+
+      // Return updated parent thread
+      const promotedThread: StorageThreadType = {
+        ...parentThread,
+        metadata: updatedParentMetadata,
+        updatedAt: now,
+      };
+
+      return {
+        promotedThread,
+        archiveThread,
+        archivedMessageCount: messagesAfterBranchPoint.length,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'PROMOTE_BRANCH', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { branchThreadId, parentThreadId },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Get branch metadata from a thread if it's a branch.
+   */
+  private getBranchMetadata(thread: StorageThreadType | null): ThreadBranchMetadata | null {
+    if (!thread?.metadata?.branch) {
+      return null;
+    }
+    return thread.metadata.branch as ThreadBranchMetadata;
   }
 }

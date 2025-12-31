@@ -190,6 +190,78 @@ export type StorageCloneThreadOutput = {
   clonedMessages: MastraDBMessage[];
 };
 
+/**
+ * Metadata stored on branched threads to track their origin and branch point.
+ * Unlike cloning, branching references parent messages instead of copying them.
+ */
+export type ThreadBranchMetadata = {
+  /** ID of the parent thread this was branched from */
+  parentThreadId: string;
+  /** ID of the last message included from the parent thread (branch point) */
+  branchPointMessageId: string;
+  /** Timestamp when the branch was created */
+  branchCreatedAt: Date;
+  /** Working memory snapshot at the time of branching (for thread-scoped working memory) */
+  workingMemorySnapshot?: string;
+};
+
+/**
+ * Input options for branching a thread.
+ * Branching creates a new thread that references parent messages up to a branch point,
+ * rather than copying them like cloning does.
+ */
+export type StorageBranchThreadInput = {
+  /** ID of the thread to branch from */
+  sourceThreadId: string;
+  /** ID of the message to branch from (last included message).
+   *  If not provided, branches from the latest message */
+  branchPointMessageId?: string;
+  /** ID for the new branched thread (auto-generated if not provided) */
+  newThreadId?: string;
+  /** Resource ID for the new thread (defaults to source thread's resourceId) */
+  resourceId?: string;
+  /** Title for the new branched thread */
+  title?: string;
+  /** Additional metadata to merge with branch metadata */
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * Output from branching a thread
+ */
+export type StorageBranchThreadOutput = {
+  /** The newly created branched thread */
+  thread: StorageThreadType;
+  /** Number of messages accessible through the branch (parent messages up to branch point) */
+  inheritedMessageCount: number;
+};
+
+/**
+ * Input options for promoting a branch to replace its parent thread.
+ * After promotion, the branch becomes the canonical thread and the parent's
+ * messages after the branch point are moved to an archive thread.
+ */
+export type StoragePromoteBranchInput = {
+  /** ID of the branch thread to promote */
+  branchThreadId: string;
+  /** Whether to delete the parent thread's messages after the branch point (default: false, archives them) */
+  deleteParentMessages?: boolean;
+  /** Title for the archive thread containing parent's post-branch messages (if not deleting) */
+  archiveThreadTitle?: string;
+};
+
+/**
+ * Output from promoting a branch
+ */
+export type StoragePromoteBranchOutput = {
+  /** The promoted thread (now the canonical thread) */
+  promotedThread: StorageThreadType;
+  /** The archive thread containing parent's post-branch messages (if not deleted) */
+  archiveThread?: StorageThreadType;
+  /** Number of messages that were archived or deleted from the parent */
+  archivedMessageCount: number;
+};
+
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;

@@ -21,6 +21,11 @@ import type {
   StorageListThreadsByResourceIdOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
+  StorageBranchThreadInput,
+  StorageBranchThreadOutput,
+  StoragePromoteBranchInput,
+  StoragePromoteBranchOutput,
+  ThreadBranchMetadata,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
@@ -750,4 +755,122 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Branches a thread at a specific message point, creating a new thread that
+   * references the parent's messages up to the branch point instead of copying them.
+   *
+   * Unlike cloning, branched threads share message history with their parent
+   * up to the branch point. Messages added after branching are independent.
+   *
+   * @param args - Branch parameters including source thread ID and optional branch point
+   * @returns Promise resolving to the branched thread and count of inherited messages
+   */
+  abstract branchThread(args: StorageBranchThreadInput): Promise<StorageBranchThreadOutput>;
+
+  /**
+   * Promotes a branch to become the canonical thread, optionally archiving
+   * or deleting the parent's messages that came after the branch point.
+   *
+   * @param args - Promotion parameters including branch thread ID
+   * @returns Promise resolving to the promoted thread and optionally the archive thread
+   */
+  abstract promoteBranch(args: StoragePromoteBranchInput): Promise<StoragePromoteBranchOutput>;
+
+  /**
+   * Get the branch metadata from a thread if it was branched from another thread.
+   *
+   * @param thread - The thread to check
+   * @returns The branch metadata if the thread is a branch, null otherwise
+   */
+  getBranchMetadata(thread: StorageThreadType | null): ThreadBranchMetadata | null {
+    if (!thread?.metadata?.branch) {
+      return null;
+    }
+    return thread.metadata.branch as ThreadBranchMetadata;
+  }
+
+  /**
+   * Check if a thread is a branch of another thread.
+   *
+   * @param thread - The thread to check
+   * @returns True if the thread is a branch, false otherwise
+   */
+  isBranch(thread: StorageThreadType | null): boolean {
+    return this.getBranchMetadata(thread) !== null;
+  }
+
+  /**
+   * Get the parent thread that a branched thread was created from.
+   *
+   * @param threadId - ID of the branched thread
+   * @returns The parent thread if found, null if the thread is not a branch or parent doesn't exist
+   */
+  async getParentThread(threadId: string): Promise<StorageThreadType | null> {
+    const thread = await this.getThreadById({ threadId });
+    const branchMetadata = this.getBranchMetadata(thread);
+
+    if (!branchMetadata) {
+      return null;
+    }
+
+    return this.getThreadById({ threadId: branchMetadata.parentThreadId });
+  }
+
+  /**
+   * List all threads that were branched from a specific source thread.
+   *
+   * @param sourceThreadId - ID of the source thread
+   * @param resourceId - Optional resource ID to filter by
+   * @returns Array of threads that are branches of the source thread
+   */
+  async listBranches(sourceThreadId: string, resourceId?: string): Promise<StorageThreadType[]> {
+    // If resourceId is provided, use it to scope the search
+    // Otherwise, get the source thread's resourceId
+    let targetResourceId = resourceId;
+
+    if (!targetResourceId) {
+      const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+      if (!sourceThread) {
+        return [];
+      }
+      targetResourceId = sourceThread.resourceId;
+    }
+
+    // List all threads for the resource and filter for branches
+    const { threads } = await this.listThreadsByResourceId({
+      resourceId: targetResourceId,
+      perPage: false, // Get all threads
+    });
+
+    return threads.filter(thread => {
+      const branchMetadata = this.getBranchMetadata(thread);
+      return branchMetadata?.parentThreadId === sourceThreadId;
+    });
+  }
+
+  /**
+   * Get the branch history chain for a thread (all ancestors back to the root).
+   *
+   * @param threadId - ID of the thread to get history for
+   * @returns Array of threads from oldest ancestor to the given thread (inclusive)
+   */
+  async getBranchHistory(threadId: string): Promise<StorageThreadType[]> {
+    const history: StorageThreadType[] = [];
+    let currentThreadId: string | null = threadId;
+
+    while (currentThreadId) {
+      const thread = await this.getThreadById({ threadId: currentThreadId });
+      if (!thread) {
+        break;
+      }
+
+      history.unshift(thread); // Add to beginning to maintain order from oldest to newest
+
+      const branchMetadata = this.getBranchMetadata(thread);
+      currentThreadId = branchMetadata?.parentThreadId ?? null;
+    }
+
+    return history;
+  }
 }
