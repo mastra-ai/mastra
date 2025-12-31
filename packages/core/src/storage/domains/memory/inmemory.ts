@@ -637,7 +637,7 @@ export class InMemoryMemory extends MemoryStorage {
       bufferingMessageIds: [],
       // Resource scope fields
       observedThreadIds: scope === 'resource' ? [] : undefined,
-      threadContinuityMessages: scope === 'resource' ? {} : undefined,
+      threadSuggestedResponses: scope === 'resource' ? {} : undefined,
       config,
       metadata: {
         createdAt: new Date(),
@@ -666,7 +666,7 @@ export class InMemoryMemory extends MemoryStorage {
       tokenCount,
       suggestedContinuation,
       currentThreadId,
-      threadContinuityMessages,
+      threadSuggestedResponses,
       lastObservedAt,
     } = input;
     const record = this.findObservationalMemoryRecordById(id);
@@ -695,11 +695,11 @@ export class InMemoryMemory extends MemoryStorage {
       record.observedThreadIds = Array.from(threadSet);
     }
 
-    // Update per-thread continuity messages (from Reflector)
-    if (threadContinuityMessages && record.threadContinuityMessages) {
-      record.threadContinuityMessages = {
-        ...record.threadContinuityMessages,
-        ...threadContinuityMessages,
+    // Update per-thread suggested responses (from Reflector)
+    if (threadSuggestedResponses && record.threadSuggestedResponses) {
+      record.threadSuggestedResponses = {
+        ...record.threadSuggestedResponses,
+        ...threadSuggestedResponses,
       };
     }
 

@@ -53,7 +53,7 @@ const agent = new Agent({
   name: 'Multi-Thread Memory Agent',
   instructions: `You are an AI assistant with excellent memory across all conversations.
 
-IMPORTANT: You have access to <observational_memory> containing observations from ALL 
+IMPORTANT: You have access to <observations> containing observations from ALL 
 conversations with this user, not just the current one. Observations are labeled with 
 their source thread (e.g., "**Thread: thread-work**").
 

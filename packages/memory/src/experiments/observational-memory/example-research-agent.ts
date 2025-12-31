@@ -62,7 +62,7 @@ Your approach:
 3. Make connections between related concepts
 4. Cite specific facts and figures from your research
 
-IMPORTANT: You have access to <observational_memory> containing observations from earlier 
+IMPORTANT: You have access to <observations> containing observations from earlier 
 in this research session. Use this to avoid repeating searches and to build on prior findings.
 
 Be thorough but concise. Cite specific numbers, dates, and sources when available.`,
@@ -78,7 +78,7 @@ const recallAgent = new Agent({
   name: 'Recall Agent (No Tools)',
   instructions: `You are a research assistant answering questions from memory.
 
-You have access to <observational_memory> containing observations from prior research.
+You have access to <observations> containing observations from prior research.
 Use ONLY this information to answer. You have NO tools available.
 
 If you don't have information in your observations, say "I don't have that in my research notes."

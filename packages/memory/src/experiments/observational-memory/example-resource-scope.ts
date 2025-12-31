@@ -48,7 +48,7 @@ const agent = new Agent({
   name: 'Resource Scope Agent',
   instructions: `You are a helpful assistant with excellent memory across conversations.
 
-IMPORTANT: You may receive an <observational_memory> section containing observations 
+IMPORTANT: You may receive an <observations> section containing observations 
 about the user from ALL their conversations (not just this one). Use this information 
 to provide personalized, context-aware responses.
 

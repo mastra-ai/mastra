@@ -45,7 +45,7 @@ const agent = new Agent({
   name: 'Debug Agent',
   instructions: `You are a helpful assistant.
 
-IMPORTANT: You may receive an <observational_memory> section containing observations about 
+IMPORTANT: You may receive an <observations> section containing observations about 
 the user. Use this information when answering questions about the user.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [

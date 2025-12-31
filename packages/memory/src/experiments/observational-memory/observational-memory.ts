@@ -711,27 +711,27 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observations: string,
     suggestedContinuation?: string,
     currentThreadId?: string,
-    threadContinuityMessages?: Record<string, string>,
+    threadSuggestedResponses?: Record<string, string>,
   ): string {
     // Optimize observations to save tokens
     const optimized = optimizeObservationsForContext(observations);
 
-    let content = `<observational_memory>
+    let content = `<observations>
 ${optimized}
-</observational_memory>`;
+</observations>`;
 
-    // In resource scope, use per-thread continuity message if available
-    let continuityMessage = suggestedContinuation;
-    if (this.resourceScope && currentThreadId && threadContinuityMessages?.[currentThreadId]) {
-      continuityMessage = threadContinuityMessages[currentThreadId];
+    // In resource scope, use per-thread suggested response if available
+    let suggestedResponse = suggestedContinuation;
+    if (this.resourceScope && currentThreadId && threadSuggestedResponses?.[currentThreadId]) {
+      suggestedResponse = threadSuggestedResponses[currentThreadId];
     }
 
-    if (continuityMessage) {
+    if (suggestedResponse) {
       content += `
 
-<continuation_hint>
-${continuityMessage}
-</continuation_hint>`;
+<suggested-response>
+${suggestedResponse}
+</suggested-response>`;
     }
 
     return content;
@@ -799,8 +799,8 @@ ${continuityMessage}
       const observationSystemMessage = this.formatObservationsForContext(
         record.activeObservations,
         record.suggestedContinuation,
-        threadId, // Current thread for continuity message filtering
-        record.threadContinuityMessages, // Per-thread continuity messages (resource scope)
+        threadId, // Current thread for suggested response filtering
+        record.threadSuggestedResponses, // Per-thread suggested responses (resource scope)
       );
       console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.resourceScope) {

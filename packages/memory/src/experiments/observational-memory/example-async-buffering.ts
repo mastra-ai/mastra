@@ -51,7 +51,7 @@ const agent = new Agent({
   name: 'Buffering Test Agent',
   instructions: `You are a helpful assistant with excellent memory.
 
-IMPORTANT: You have access to <observational_memory> containing key facts about the user.
+IMPORTANT: You have access to <observations> containing key facts about the user.
 Use this to provide personalized responses.`,
   model: 'google/gemini-2.5-flash',
   inputProcessors: [messageHistory, om],

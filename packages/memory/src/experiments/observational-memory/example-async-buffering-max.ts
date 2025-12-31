@@ -70,7 +70,7 @@ const agent = new Agent({
   name: 'Buffering Stress Test Agent',
   instructions: `You are a helpful assistant with excellent memory.
 
-IMPORTANT: You have access to <observational_memory> containing key facts about the user.
+IMPORTANT: You have access to <observations> containing key facts about the user.
 Use this information to provide personalized, context-aware responses.
 
 Be concise but accurate. When asked about facts, cite specific details.`,
