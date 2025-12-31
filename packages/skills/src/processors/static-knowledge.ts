@@ -101,19 +101,16 @@ export class StaticKnowledge extends BaseProcessor<'static-knowledge'> {
   }
 
   /**
-   * Process input by fetching static knowledge and adding to system messages
+   * Process input by fetching static knowledge and adding to system messages.
+   * Runs once at the start of generation.
    */
-  async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
-    const { messageList } = args;
-
+  async processInput({ messageList }: ProcessInputArgs): Promise<ProcessInputResult> {
     // Get the knowledge instance
     const knowledge = this.getKnowledgeInstance();
 
     // Fetch static artifacts from knowledge
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const artifacts = await (knowledge as any).getStatic(this.namespace);
-
-    console.log('artifacts', artifacts);
 
     if (artifacts.length === 0) {
       return messageList;

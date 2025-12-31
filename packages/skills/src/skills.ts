@@ -2,7 +2,9 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { BM25Index, type BM25Config, type TokenizeOptions } from './bm25';
+import type { MastraVector } from '@mastra/core/vector';
+
+import { BM25Index, type BM25Config, type TokenizeOptions, type BM25SearchResult } from './bm25';
 import { validateSkillMetadata, parseAllowedTools } from './schemas';
 import type {
   Skill,
@@ -11,6 +13,7 @@ import type {
   SkillsConfig,
   SkillSearchResult,
   SkillSearchOptions,
+  SkillSearchMode,
   MastraSkills,
 } from './types';
 
@@ -26,6 +29,25 @@ interface InternalSkill extends Skill {
 // =========================================================================
 // Skills Class
 // =========================================================================
+
+/**
+ * Embedder interface - any function that takes text and returns embeddings
+ */
+export interface Embedder {
+  (text: string): Promise<number[]>;
+}
+
+/**
+ * Configuration for vector search indexing
+ */
+export interface SkillsIndexConfig {
+  /** Vector store for semantic search */
+  vectorStore: MastraVector;
+  /** Embedder function for generating vectors */
+  embedder: Embedder;
+  /** Index name for the vector store (default: skills-{id}) */
+  indexName?: string;
+}
 
 /**
  * Configuration for BM25 search
@@ -76,13 +98,34 @@ export class Skills implements MastraSkills {
   /** BM25 index for searching */
   #bm25Index: BM25Index;
 
-  constructor(config: SkillsConfig, bm25Config?: SkillsBM25Config) {
+  /** Vector index configuration (optional) */
+  #indexConfig?: SkillsIndexConfig;
+
+  /** Vector index name */
+  #vectorIndexName?: string;
+
+  /** Whether vector indexing has been done */
+  #vectorIndexed: boolean = false;
+
+  constructor(
+    config: SkillsConfig,
+    options?: {
+      bm25?: SkillsBM25Config;
+      index?: SkillsIndexConfig;
+    },
+  ) {
     this.id = config.id;
     this.paths = Array.isArray(config.paths) ? config.paths : [config.paths];
     this.validateOnLoad = config.validateOnLoad ?? true;
 
     // Initialize BM25 index
-    this.#bm25Index = new BM25Index(bm25Config?.bm25, bm25Config?.tokenize);
+    this.#bm25Index = new BM25Index(options?.bm25?.bm25, options?.bm25?.tokenize);
+
+    // Store index config if provided
+    if (options?.index) {
+      this.#indexConfig = options.index;
+      this.#vectorIndexName = options.index.indexName ?? `skills_${this.id.replace(/-/g, '_')}`;
+    }
 
     // Discover skills at construction time
     this.refresh();
@@ -126,11 +169,60 @@ export class Skills implements MastraSkills {
   }
 
   /**
-   * Search across all skills content using BM25
+   * Search across all skills content using BM25, vector, or hybrid search
    */
-  search(query: string, options: SkillSearchOptions = {}): SkillSearchResult[] {
-    const { topK = 5, minScore, skillNames, includeReferences = true } = options;
+  search(query: string, options: SkillSearchOptions = {}): SkillSearchResult[] | Promise<SkillSearchResult[]> {
+    const { topK = 5, minScore, skillNames, includeReferences = true, mode, hybrid } = options;
 
+    // Determine the effective search mode
+    const effectiveMode = this.#determineSearchMode(mode);
+
+    if (effectiveMode === 'bm25') {
+      return this.#searchBM25(query, topK, minScore, skillNames, includeReferences);
+    }
+
+    if (effectiveMode === 'vector') {
+      return this.#searchVector(query, topK, minScore, skillNames, includeReferences);
+    }
+
+    // Hybrid search
+    return this.#searchHybrid(query, topK, minScore, skillNames, includeReferences, hybrid?.vectorWeight ?? 0.5);
+  }
+
+  /**
+   * Determine the effective search mode based on configuration
+   */
+  #determineSearchMode(requestedMode?: SkillSearchMode): SkillSearchMode {
+    const canVector = !!this.#indexConfig;
+    const canBM25 = true; // BM25 is always available
+
+    if (requestedMode) {
+      if (requestedMode === 'vector' && !canVector) {
+        throw new Error('Vector search requires index configuration. Provide index config when creating Skills.');
+      }
+      if (requestedMode === 'hybrid' && !canVector) {
+        throw new Error('Hybrid search requires index configuration. Provide index config when creating Skills.');
+      }
+      return requestedMode;
+    }
+
+    // Auto-determine mode based on available configuration
+    if (canVector) {
+      return 'hybrid'; // Default to hybrid when vector is available
+    }
+    return 'bm25';
+  }
+
+  /**
+   * BM25 keyword search
+   */
+  #searchBM25(
+    query: string,
+    topK: number,
+    minScore?: number,
+    skillNames?: string[],
+    includeReferences: boolean = true,
+  ): SkillSearchResult[] {
     // Get more results than needed to filter
     const expandedTopK = skillNames ? topK * 3 : topK;
     const bm25Results = this.#bm25Index.search(query, expandedTopK, minScore);
@@ -156,12 +248,238 @@ export class Skills implements MastraSkills {
         source: metadata.source,
         content: result.content,
         score: result.score,
+        scoreDetails: { bm25: result.score },
       });
 
       if (results.length >= topK) break;
     }
 
     return results;
+  }
+
+  /**
+   * Vector semantic search
+   */
+  async #searchVector(
+    query: string,
+    topK: number,
+    minScore?: number,
+    skillNames?: string[],
+    includeReferences: boolean = true,
+  ): Promise<SkillSearchResult[]> {
+    if (!this.#indexConfig || !this.#vectorIndexName) {
+      throw new Error('Vector search requires index configuration.');
+    }
+
+    // Ensure vector index is built
+    await this.#ensureVectorIndex();
+
+    const { vectorStore, embedder } = this.#indexConfig;
+
+    // Generate embedding for the query
+    const queryEmbedding = await embedder(query);
+
+    // Get more results to allow for filtering
+    const expandedTopK = skillNames ? topK * 3 : topK;
+
+    // Query the vector store
+    const vectorResults = await vectorStore.query({
+      indexName: this.#vectorIndexName,
+      queryVector: queryEmbedding,
+      topK: expandedTopK,
+    });
+
+    const results: SkillSearchResult[] = [];
+
+    for (const result of vectorResults) {
+      // Skip results below minimum score
+      if (minScore !== undefined && result.score < minScore) {
+        continue;
+      }
+
+      const skillName = result.metadata?.skillName as string;
+      const source = result.metadata?.source as string;
+      const content = result.metadata?.text as string;
+
+      if (!skillName || !source || !content) continue;
+
+      // Filter by skill names if specified
+      if (skillNames && !skillNames.includes(skillName)) {
+        continue;
+      }
+
+      // Filter out references if not included
+      if (!includeReferences && source !== 'SKILL.md') {
+        continue;
+      }
+
+      results.push({
+        skillName,
+        source,
+        content,
+        score: result.score,
+        scoreDetails: { vector: result.score },
+      });
+
+      if (results.length >= topK) break;
+    }
+
+    return results;
+  }
+
+  /**
+   * Hybrid search combining vector and BM25 scores
+   */
+  async #searchHybrid(
+    query: string,
+    topK: number,
+    minScore?: number,
+    skillNames?: string[],
+    includeReferences: boolean = true,
+    vectorWeight: number = 0.5,
+  ): Promise<SkillSearchResult[]> {
+    // Get more results than requested to account for merging
+    const expandedTopK = Math.min(topK * 2, 50);
+
+    // Perform both searches in parallel
+    const [vectorResults, bm25Results] = await Promise.all([
+      this.#searchVector(query, expandedTopK, undefined, skillNames, includeReferences),
+      Promise.resolve(this.#searchBM25(query, expandedTopK, undefined, skillNames, includeReferences)),
+    ]);
+
+    // Normalize BM25 scores to 0-1 range for fair combination
+    const normalizedBM25 = this.#normalizeBM25Scores(bm25Results);
+
+    // Create score maps by unique key (skillName:source)
+    const bm25ScoreMap = new Map<string, SkillSearchResult>();
+    for (const result of normalizedBM25) {
+      const key = `${result.skillName}:${result.source}`;
+      bm25ScoreMap.set(key, result);
+    }
+
+    const vectorScoreMap = new Map<string, SkillSearchResult>();
+    for (const result of vectorResults) {
+      const key = `${result.skillName}:${result.source}`;
+      vectorScoreMap.set(key, result);
+    }
+
+    // Combine scores from both search methods
+    const combinedResults = new Map<string, SkillSearchResult>();
+    const allKeys = new Set([...vectorScoreMap.keys(), ...bm25ScoreMap.keys()]);
+
+    const bm25Weight = 1 - vectorWeight;
+
+    for (const key of allKeys) {
+      const vectorResult = vectorScoreMap.get(key);
+      const bm25Result = bm25ScoreMap.get(key);
+
+      const vectorScore = vectorResult?.scoreDetails?.vector ?? 0;
+      const bm25Score = bm25Result?.score ?? 0; // Already normalized
+
+      // Weighted combination of scores
+      const combinedScore = vectorWeight * vectorScore + bm25Weight * bm25Score;
+
+      // Use data from whichever source has it
+      const baseResult = vectorResult ?? bm25Result!;
+
+      combinedResults.set(key, {
+        skillName: baseResult.skillName,
+        source: baseResult.source,
+        content: baseResult.content,
+        score: combinedScore,
+        scoreDetails: {
+          vector: vectorResult?.scoreDetails?.vector,
+          bm25: bm25Result?.scoreDetails?.bm25,
+        },
+      });
+    }
+
+    // Sort by combined score and apply filters
+    let results = Array.from(combinedResults.values());
+    results.sort((a, b) => b.score - a.score);
+
+    // Apply minScore filter
+    if (minScore !== undefined) {
+      results = results.filter(r => r.score >= minScore);
+    }
+
+    return results.slice(0, topK);
+  }
+
+  /**
+   * Normalize BM25 scores to 0-1 range using min-max normalization
+   */
+  #normalizeBM25Scores(results: SkillSearchResult[]): SkillSearchResult[] {
+    if (results.length === 0) return results;
+
+    const scores = results.map(r => r.scoreDetails?.bm25 ?? r.score);
+    const maxScore = Math.max(...scores);
+    const minScore = Math.min(...scores);
+    const range = maxScore - minScore;
+
+    if (range === 0) {
+      // All scores are the same, normalize to 1
+      return results.map(r => ({ ...r, score: 1 }));
+    }
+
+    return results.map(r => ({
+      ...r,
+      score: ((r.scoreDetails?.bm25 ?? r.score) - minScore) / range,
+    }));
+  }
+
+  /**
+   * Ensure vector index is built (lazy indexing)
+   */
+  async #ensureVectorIndex(): Promise<void> {
+    if (this.#vectorIndexed || !this.#indexConfig || !this.#vectorIndexName) {
+      return;
+    }
+
+    const { vectorStore, embedder } = this.#indexConfig;
+
+    // Index all skills
+    for (const skill of this.#skills.values()) {
+      // Index the main skill instructions
+      const instructionEmbedding = await embedder(skill.instructions);
+      await vectorStore.upsert({
+        indexName: this.#vectorIndexName,
+        vectors: [instructionEmbedding],
+        metadata: [
+          {
+            skillName: skill.name,
+            source: 'SKILL.md',
+            text: skill.instructions,
+          },
+        ],
+        ids: [`${skill.name}:SKILL.md`],
+      });
+
+      // Index each reference file
+      for (const refPath of skill.references) {
+        const fullPath = join(skill.path, 'references', refPath);
+        try {
+          const content = readFileSync(fullPath, 'utf-8');
+          const refEmbedding = await embedder(content);
+          await vectorStore.upsert({
+            indexName: this.#vectorIndexName,
+            vectors: [refEmbedding],
+            metadata: [
+              {
+                skillName: skill.name,
+                source: `references/${refPath}`,
+                text: content,
+              },
+            ],
+            ids: [`${skill.name}:${refPath}`],
+          });
+        } catch {
+          // Skip files that can't be read
+        }
+      }
+    }
+
+    this.#vectorIndexed = true;
   }
 
   /**

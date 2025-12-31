@@ -73,7 +73,19 @@ export interface SkillSearchResult {
     start: number;
     end: number;
   };
+  /** Score breakdown for hybrid search */
+  scoreDetails?: {
+    /** Vector similarity score (0-1) */
+    vector?: number;
+    /** BM25 relevance score */
+    bm25?: number;
+  };
 }
+
+/**
+ * Search mode for skill queries
+ */
+export type SkillSearchMode = 'vector' | 'bm25' | 'hybrid';
 
 /**
  * Options for searching skills
@@ -87,6 +99,20 @@ export interface SkillSearchOptions {
   skillNames?: string[];
   /** Include reference files in search (default: true) */
   includeReferences?: boolean;
+  /**
+   * Search mode to use:
+   * - 'vector': Semantic similarity search using embeddings
+   * - 'bm25': Keyword-based search using BM25 algorithm
+   * - 'hybrid': Combine both vector and BM25 scores
+   *
+   * If not specified, auto-detects based on configuration.
+   */
+  mode?: SkillSearchMode;
+  /** Hybrid search configuration (only applies when mode is 'hybrid') */
+  hybrid?: {
+    /** Weight for vector similarity score (0-1). BM25 weight is (1 - vectorWeight). @default 0.5 */
+    vectorWeight?: number;
+  };
 }
 
 /**
@@ -115,9 +141,10 @@ export interface MastraSkills {
   has(name: string): boolean;
 
   /**
-   * Search across all skills content
+   * Search across all skills content.
+   * Returns a Promise when using vector or hybrid search modes.
    */
-  search(query: string, options?: SkillSearchOptions): SkillSearchResult[];
+  search(query: string, options?: SkillSearchOptions): SkillSearchResult[] | Promise<SkillSearchResult[]>;
 
   /**
    * Get reference file content from a skill

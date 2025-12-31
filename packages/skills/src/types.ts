@@ -8,6 +8,7 @@ export type {
   SkillSource,
   SkillSearchResult,
   SkillSearchOptions,
+  SkillSearchMode,
   MastraSkills,
 } from '@mastra/core/skills';
 

@@ -95,7 +95,7 @@ export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
           paths: opts.skillsPaths,
           validateOnLoad: opts.validateSkills ?? true,
         },
-        opts.bm25Config,
+        { bm25: opts.bm25Config },
       );
     }
     // Otherwise, will try to inherit from Mastra at runtime
@@ -510,7 +510,9 @@ ${skillInstructions}`;
         topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
       }),
       execute: async ({ query, skillNames, topK }) => {
-        const results = skills.search(query, { topK, skillNames });
+        // Handle both sync and async search results
+        const searchResult = skills.search(query, { topK, skillNames });
+        const results = Array.isArray(searchResult) ? searchResult : await searchResult;
 
         if (results.length === 0) {
           return {
@@ -522,7 +524,7 @@ ${skillInstructions}`;
 
         return {
           success: true,
-          results: results.map(r => ({
+          results: results.map((r: { skillName: string; source: string; score: number; content: string }) => ({
             skillName: r.skillName,
             source: r.source,
             score: r.score,

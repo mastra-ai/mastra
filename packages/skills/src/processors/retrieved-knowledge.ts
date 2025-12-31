@@ -1,6 +1,8 @@
 import type { MastraKnowledge, KnowledgeSearchResult } from '@mastra/core/knowledge';
 import { BaseProcessor } from '@mastra/core/processors';
-import type { ProcessInputArgs, ProcessInputResult } from '@mastra/core/processors';
+import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs } from '@mastra/core/processors';
+import { createTool } from '@mastra/core/tools';
+import z from 'zod';
 
 import type { Knowledge, SearchMode, SearchOptions } from '../knowledge';
 
@@ -69,6 +71,23 @@ export interface RetrievedKnowledgeOptions {
    * Can be a static filter or a function that returns a filter based on runtime context
    */
   filter?: SearchOptions['filter'] | ((args: ProcessInputArgs) => SearchOptions['filter']);
+  /**
+   * Whether to provide tools for the LLM to search and read knowledge.
+   * When true, the processor provides:
+   * - knowledge-search: Search for relevant documents
+   * - knowledge-read: Read the full content of a document by key
+   * - knowledge-list: List available documents in the namespace
+   *
+   * When false (default), the processor uses automatic retrieval based on the user query.
+   * @default false
+   */
+  provideTools?: boolean;
+  /**
+   * Whether to also perform automatic retrieval when provideTools is true.
+   * This allows combining tool-based retrieval with automatic context injection.
+   * @default true when provideTools is false, false when provideTools is true
+   */
+  autoRetrieve?: boolean;
 }
 
 /**
@@ -131,6 +150,22 @@ export interface RetrievedKnowledgeOptions {
  *
  * // User asks: "How do I reset my password?"
  * // -> Processor searches, finds relevant docs, injects into context
+ *
+ * // Tool-based retrieval (LLM controls when to search)
+ * const toolProcessor = new RetrievedKnowledge({
+ *   knowledge,
+ *   provideTools: true, // Provides knowledge-search, knowledge-read, knowledge-list tools
+ *   autoRetrieve: false, // Don't auto-inject, let LLM decide when to search
+ * });
+ *
+ * const agent = new Agent({
+ *   inputProcessors: [toolProcessor],
+ *   // ...
+ * });
+ *
+ * // User asks: "What's the refund policy?"
+ * // -> LLM uses knowledge-search tool to find relevant docs
+ * // -> LLM uses knowledge-read tool to get full content
  * ```
  */
 export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
@@ -147,6 +182,8 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
   private formatter?: (results: KnowledgeSearchResult[]) => string;
   private queryExtractor: (args: ProcessInputArgs) => string | undefined;
   private filter?: SearchOptions['filter'] | ((args: ProcessInputArgs) => SearchOptions['filter']);
+  private provideTools: boolean;
+  private autoRetrieve: boolean;
 
   constructor(options: RetrievedKnowledgeOptions = {}) {
     super();
@@ -161,6 +198,9 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
     this.formatter = options.formatter;
     this.queryExtractor = options.queryExtractor ?? this.defaultQueryExtractor;
     this.filter = options.filter;
+    this.provideTools = options.provideTools ?? false;
+    // Default autoRetrieve to true when not providing tools, false when providing tools
+    this.autoRetrieve = options.autoRetrieve ?? !this.provideTools;
   }
 
   /**
@@ -234,10 +274,17 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
   }
 
   /**
-   * Process input by searching knowledge and adding relevant results
+   * Process input by searching knowledge and adding relevant results.
+   * Only runs if autoRetrieve is enabled.
+   * Runs once at the start of generation.
    */
   async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
     const { messageList } = args;
+
+    // Skip if autoRetrieve is disabled (e.g., when using tools instead)
+    if (!this.autoRetrieve) {
+      return messageList;
+    }
 
     // Extract the search query
     const query = this.queryExtractor(args);
@@ -334,5 +381,156 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
         return `[${result.key}] (score: ${result.score.toFixed(3)}):\n${result.content}`;
       })
       .join('\n\n');
+  }
+
+  // =========================================================================
+  // Tool Creation
+  // =========================================================================
+
+  /**
+   * Create the knowledge-search tool
+   */
+  private createKnowledgeSearchTool() {
+    const knowledge = this.getKnowledgeInstance();
+    const namespace = this.namespace;
+    const mode = this.mode;
+    const hybrid = this.hybrid;
+
+    return createTool({
+      id: 'knowledge-search',
+      description:
+        'Search the knowledge base for relevant documents. Returns matching documents with relevance scores.',
+      inputSchema: z.object({
+        query: z.string().describe('The search query'),
+        topK: z.number().optional().describe('Maximum number of results to return (default: 5)'),
+        minScore: z.number().optional().describe('Minimum relevance score threshold (0-1)'),
+      }),
+      execute: async ({ query, topK, minScore }) => {
+        const results = await knowledge.search(namespace, query, {
+          topK: topK ?? 5,
+          minScore,
+          mode,
+          hybrid,
+        });
+
+        if (results.length === 0) {
+          return {
+            success: true,
+            message: 'No matching documents found',
+            results: [],
+          };
+        }
+
+        return {
+          success: true,
+          results: results.map(r => ({
+            key: r.key,
+            score: r.score,
+            preview: r.content.substring(0, 300) + (r.content.length > 300 ? '...' : ''),
+            metadata: r.metadata,
+          })),
+        };
+      },
+    });
+  }
+
+  /**
+   * Create the knowledge-read tool
+   */
+  private createKnowledgeReadTool() {
+    const knowledge = this.getKnowledgeInstance();
+    const namespace = this.namespace;
+
+    return createTool({
+      id: 'knowledge-read',
+      description: 'Read the full content of a document from the knowledge base by its key.',
+      inputSchema: z.object({
+        key: z.string().describe('The document key to read'),
+      }),
+      execute: async ({ key }) => {
+        try {
+          const content = await knowledge.get(namespace, key);
+          return {
+            success: true,
+            key,
+            content,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: `Document "${key}" not found in namespace "${namespace}"`,
+          };
+        }
+      },
+    });
+  }
+
+  /**
+   * Create the knowledge-list tool
+   */
+  private createKnowledgeListTool() {
+    const knowledge = this.getKnowledgeInstance();
+    const namespace = this.namespace;
+
+    return createTool({
+      id: 'knowledge-list',
+      description: 'List available documents in the knowledge base. Optionally filter by prefix.',
+      inputSchema: z.object({
+        prefix: z.string().optional().describe('Optional prefix to filter documents'),
+      }),
+      execute: async ({ prefix }) => {
+        const keys = await knowledge.list(namespace, prefix);
+
+        return {
+          success: true,
+          namespace,
+          count: keys.length,
+          documents: keys,
+        };
+      },
+    });
+  }
+
+  // =========================================================================
+  // Step-based Processing (for tools only)
+  // =========================================================================
+
+  /**
+   * Process input step - provide knowledge tools if enabled.
+   * Only runs when provideTools is true.
+   * Auto-retrieval is handled by processInput (runs once at start).
+   */
+  async processInputStep({ messageList, tools }: ProcessInputStepArgs) {
+    // Only provide tools if provideTools is enabled
+    if (!this.provideTools) {
+      return { messageList };
+    }
+
+    const resultTools: Record<string, ReturnType<typeof createTool>> = {};
+
+    resultTools['knowledge-search'] = this.createKnowledgeSearchTool();
+    resultTools['knowledge-read'] = this.createKnowledgeReadTool();
+    resultTools['knowledge-list'] = this.createKnowledgeListTool();
+
+    // Add instruction about available knowledge tools
+    messageList.addSystem({
+      role: 'system',
+      content: `<knowledge_tools>
+You have access to a knowledge base via tools:
+- knowledge-search: Search for relevant documents
+- knowledge-read: Read the full content of a document by key
+- knowledge-list: List available documents
+
+Use these tools to find and retrieve information when needed.
+</knowledge_tools>`,
+    });
+
+    return {
+      messageList,
+      tools: {
+        ...tools,
+        ...resultTools,
+      },
+    };
   }
 }
