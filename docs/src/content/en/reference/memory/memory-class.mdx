@@ -88,6 +88,14 @@ export const agent = new Agent({
       defaultValue: "10",
     },
     {
+      name: "readOnly",
+      type: "boolean",
+      description:
+        "When true, prevents memory from saving new messages. Useful for read-only operations like previews or internal routing agents.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
       name: "semanticRecall",
       type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
       description:
