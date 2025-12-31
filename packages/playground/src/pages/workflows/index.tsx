@@ -30,7 +30,7 @@ function Workflows() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" size="tiny">
             <Icon>
               <DocsIcon />
             </Icon>

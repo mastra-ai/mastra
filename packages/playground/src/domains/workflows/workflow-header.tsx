@@ -51,26 +51,26 @@ export function WorkflowHeader({
 
           <DividerIcon />
 
-          <Button as={Link} to={`/workflows/${workflowId}/graph`}>
+          <Button as={Link} to={`/workflows/${workflowId}/graph`} size="tiny">
             Graph
           </Button>
 
           <DividerIcon />
 
-          <Button as={Link} to={`/observability?entity=${workflowName}`}>
+          <Button as={Link} to={`/observability?entity=${workflowName}`} size="tiny">
             Traces
           </Button>
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} target="_blank" to="/swagger-ui">
+          <Button as={Link} target="_blank" to="/swagger-ui" size="tiny">
             <Icon>
               <ApiIcon />
             </Icon>
             API endpoints
           </Button>
 
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" size="tiny">
             <Icon>
               <DocsIcon />
             </Icon>

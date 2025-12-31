@@ -33,19 +33,19 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
 
         <DividerIcon />
 
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
+        <Button as={Link} to={`/agents/${agentId}/chat`} size="tiny">
           Chat
         </Button>
 
         <DividerIcon />
 
-        <Button as={Link} to={`/observability?entity=${agentId}`}>
+        <Button as={Link} to={`/observability?entity=${agentId}`} size="tiny">
           Traces
         </Button>
       </HeaderGroup>
 
       <HeaderAction>
-        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">
+        <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank" size="tiny">
           <Icon>
             <DocsIcon />
           </Icon>

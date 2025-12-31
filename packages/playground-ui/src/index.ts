@@ -15,7 +15,7 @@ export * from './components/ui/playground-tabs';
 export * from './components/ui/elements';
 export * from './types';
 export * from './ds/components/Badge/index';
-export * from './ds/components/Button/index';
+// export * from './ds/components/Button/index';
 export * from './ds/components/Breadcrumb/index';
 export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
