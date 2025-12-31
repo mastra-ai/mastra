@@ -76,8 +76,12 @@ export async function getInputOptions(
 
     inputOptions.plugins = plugins;
     inputOptions.plugins.push(aliasHono());
-    // fixes imports like lodash/fp/get
-    inputOptions.plugins.push(nodeModulesExtensionResolver());
+    // fixes imports like lodash/fp/get, and bundles workspace packages
+    inputOptions.plugins.push(
+      nodeModulesExtensionResolver({
+        workspacePackages: Array.from(workspaceMap.keys()),
+      }),
+    );
   }
 
   return inputOptions;
