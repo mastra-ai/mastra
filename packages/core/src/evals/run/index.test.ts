@@ -532,7 +532,7 @@ describe('runEvals', () => {
   });
 
   describe('Score persistence', () => {
-    it.skip('should save scores to storage when runEvals is called', async () => {
+    it('should save scores to storage when runEvals is called', async () => {
       // Create agent
       const dummyModel = new MockLanguageModelV2({
         doGenerate: async () => ({
@@ -615,7 +615,7 @@ describe('runEvals', () => {
       );
     });
 
-    it.skip('should save workflow scores to storage', async () => {
+    it('should save workflow scores to storage', async () => {
       const mockStep = createStep({
         id: 'test-step',
         inputSchema: z.object({ input: z.string() }),

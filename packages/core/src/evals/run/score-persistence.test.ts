@@ -1,5 +1,4 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
@@ -42,7 +41,7 @@ describe('runEvals - Score Persistence', () => {
       id: 'testScorer',
       description: 'Test scorer for bug demonstration',
       name: 'testScorer',
-    }).generateScore(({ run }) => {
+    }).generateScore(({}) => {
       // Simple scorer that always returns 0.85
       return 0.85;
     });
