@@ -196,7 +196,9 @@ describe('LangfuseExporter', () => {
       });
     });
 
-    it('should not create trace for child spans', async () => {
+    it('should create lazy trace for orphan child spans (out-of-order arrival fix)', async () => {
+      // With the fix for GitHub #11060, child spans arriving before root spans
+      // will create a "lazy trace" that gets upgraded when the root span arrives
       const childSpan = createMockSpan({
         id: 'child-span-id',
         name: 'child-tool',
@@ -212,8 +214,11 @@ describe('LangfuseExporter', () => {
 
       await exporter.exportTracingEvent(event);
 
-      // Should not create trace for child spans
-      expect(mockLangfuseClient.trace).not.toHaveBeenCalled();
+      // Should create a lazy trace for orphan child spans (GitHub #11060 fix)
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'parent-trace-id',
+        name: '(pending root span)',
+      });
     });
 
     it('should reuse existing trace when multiple root spans share the same traceId', async () => {
@@ -828,7 +833,8 @@ describe('LangfuseExporter', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle missing traces gracefully', async () => {
+    it('should handle orphan child spans gracefully by creating lazy trace (GitHub #11060)', async () => {
+      // With the fix for GitHub #11060, orphan child spans now create lazy traces
       const orphanSpan = createMockSpan({
         id: 'orphan-span',
         name: 'orphan',
@@ -845,9 +851,12 @@ describe('LangfuseExporter', () => {
         }),
       ).resolves.not.toThrow();
 
-      // Should not create Langfuse span
-      expect(mockTrace.span).not.toHaveBeenCalled();
-      expect(mockTrace.generation).not.toHaveBeenCalled();
+      // Should create a lazy trace and a span (GitHub #11060 fix)
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'parent-trace-id',
+        name: '(pending root span)',
+      });
+      expect(mockTrace.span).toHaveBeenCalled();
     });
 
     it('should handle missing Langfuse objects gracefully', async () => {
@@ -984,7 +993,8 @@ describe('LangfuseExporter', () => {
       });
     });
 
-    it('should handle event spans with missing parent gracefully', async () => {
+    it('should handle orphan event spans gracefully by creating lazy trace (GitHub #11060)', async () => {
+      // With the fix for GitHub #11060, orphan event spans now create lazy traces
       const orphanEventSpan = createMockSpan({
         id: 'orphan-event-id',
         name: 'orphan-event',
@@ -1003,9 +1013,12 @@ describe('LangfuseExporter', () => {
         }),
       ).resolves.not.toThrow();
 
-      // Should not create any Langfuse objects
-      expect(mockTrace.event).not.toHaveBeenCalled();
-      expect(mockSpan.event).not.toHaveBeenCalled();
+      // Should create a lazy trace and an event (GitHub #11060 fix)
+      expect(mockLangfuseClient.trace).toHaveBeenCalledWith({
+        id: 'missing-trace-id',
+        name: '(pending root span)',
+      });
+      expect(mockTrace.event).toHaveBeenCalled();
     });
   });
 
@@ -2874,6 +2887,191 @@ describe('LangfuseExporter', () => {
 
       // Verify maps were cleared
       expect((exporter as any).traceMap.size).toBe(0);
+    });
+  });
+
+  describe('Out-of-order child span arrival (GitHub #11060)', () => {
+    /**
+     * This test reproduces the race condition reported in GitHub issue #11060.
+     *
+     * The issue occurs when:
+     * 1. Root span's SPAN_STARTED event is emitted (async, fire-and-forget)
+     * 2. Child span (e.g., MODEL_STEP) is created immediately after
+     * 3. Child span's SPAN_STARTED event arrives at the exporter BEFORE the root span's event
+     *
+     * Since events are processed via `.catch()` (fire-and-forget), they can arrive out of order.
+     * When a child span arrives first, the trace hasn't been initialized in traceMap yet,
+     * causing the warning: "Langfuse exporter: No trace data found for span"
+     */
+    it('should handle MODEL_STEP span arriving before root span without warning (issue #11060)', async () => {
+      const mockLoggerWarn = vi.spyOn(exporter['logger'], 'warn').mockImplementation(() => {});
+      const sharedTraceId = 'trace-11060';
+
+      // Simulate out-of-order event arrival: child span arrives BEFORE root span
+      // This is what happens when events are processed asynchronously via .catch()
+      const modelStepSpan = createMockSpan({
+        id: 'model-step-span',
+        name: 'step: 0',
+        type: SpanType.MODEL_STEP,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'model-generation-span', // Parent is MODEL_GENERATION
+        attributes: {
+          stepIndex: 0,
+        },
+      });
+
+      // Process child span FIRST (simulating race condition)
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: modelStepSpan,
+      });
+
+      // The child span should be handled gracefully without warning
+      // Currently this FAILS because the trace doesn't exist yet
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+        'Langfuse exporter: No trace data found for span',
+        expect.objectContaining({
+          traceId: sharedTraceId,
+          spanType: 'model_step',
+        }),
+      );
+
+      // Now send the root span (which would normally create the trace)
+      const rootSpan = createMockSpan({
+        id: 'agent-run-span',
+        name: 'test-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: {
+          agentId: 'test-agent',
+        },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Trace should now exist
+      expect((exporter as any).traceMap.has(sharedTraceId)).toBe(true);
+
+      mockLoggerWarn.mockRestore();
+    });
+
+    it('should create trace lazily when child span arrives before root span', async () => {
+      const sharedTraceId = 'lazy-trace-123';
+
+      // Child span arrives first (race condition scenario)
+      const childSpan = createMockSpan({
+        id: 'child-span-first',
+        name: 'step: 0',
+        type: SpanType.MODEL_STEP,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'root-span',
+        attributes: { stepIndex: 0 },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: childSpan,
+      });
+
+      // Trace should be created lazily for the child span
+      // This is the expected fix behavior
+      expect((exporter as any).traceMap.has(sharedTraceId)).toBe(true);
+
+      // The child span should be tracked
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData.spans.has('child-span-first')).toBe(true);
+
+      // Now when root span arrives, it should update the existing trace
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        name: 'test-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: { agentId: 'agent-123' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      // Both spans should be in the trace
+      expect(traceData.spans.has('root-span')).toBe(true);
+      expect(traceData.spans.has('child-span-first')).toBe(true);
+    });
+
+    it('should handle complete lifecycle when events arrive out of order', async () => {
+      const mockLoggerWarn = vi.spyOn(exporter['logger'], 'warn').mockImplementation(() => {});
+      const sharedTraceId = 'lifecycle-trace-123';
+
+      // Simulate realistic out-of-order scenario from issue #11060:
+      // MODEL_STEP span ("step: 0") arrives before parent MODEL_GENERATION span
+
+      const modelStepSpan = createMockSpan({
+        id: 'step-0',
+        name: 'step: 0',
+        type: SpanType.MODEL_STEP,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'model-gen',
+        attributes: { stepIndex: 0 },
+      });
+
+      // Step arrives first
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: modelStepSpan,
+      });
+
+      // MODEL_GENERATION span arrives second
+      const modelGenSpan = createMockSpan({
+        id: 'model-gen',
+        name: "llm: 'gpt-4'",
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        traceId: sharedTraceId,
+        parentSpanId: 'agent-run',
+        attributes: { model: 'gpt-4' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: modelGenSpan,
+      });
+
+      // Root AGENT_RUN span arrives last
+      const agentRunSpan = createMockSpan({
+        id: 'agent-run',
+        name: 'test-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        traceId: sharedTraceId,
+        attributes: { agentId: 'test-agent' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: agentRunSpan,
+      });
+
+      // No warnings should have been logged
+      expect(mockLoggerWarn).not.toHaveBeenCalled();
+
+      // All spans should be tracked
+      const traceData = (exporter as any).traceMap.get(sharedTraceId);
+      expect(traceData).toBeDefined();
+      expect(traceData.spans.has('step-0')).toBe(true);
+      expect(traceData.spans.has('model-gen')).toBe(true);
+      expect(traceData.spans.has('agent-run')).toBe(true);
+
+      mockLoggerWarn.mockRestore();
     });
   });
 });

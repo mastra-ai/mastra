@@ -41,6 +41,7 @@ type TraceData = {
   events: Map<string, LangfuseEventClient>; // Maps span.id to Langfuse event
   activeSpans: Set<string>; // Tracks which spans haven't ended yet
   rootSpanId?: string; // Track the root span ID
+  isLazy?: boolean; // True if trace was created lazily from a child span before root span arrived
 };
 
 type LangfuseParent = LangfuseTraceClient | LangfuseSpanClient | LangfuseGenerationClient | LangfuseEventClient;
@@ -154,8 +155,36 @@ export class LangfuseExporter extends BaseExporter {
     }
     const method = 'handleSpanStarted';
 
-    const traceData = this.getTraceData({ span, method });
+    // Handle out-of-order span arrival (GitHub #11060):
+    // Check if trace exists first WITHOUT logging a warning
+    let traceData = this.traceMap.get(span.traceId);
+
+    // If a child span arrives before the root span (due to async event processing),
+    // create a lazy trace to store the child span. The root span will update this
+    // trace when it arrives later.
+    if (!traceData && !span.isRootSpan) {
+      this.logger.debug('Langfuse exporter: Creating lazy trace for out-of-order child span', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        parentSpanId: span.parentSpanId,
+      });
+      this.initLazyTrace(span);
+      traceData = this.traceMap.get(span.traceId);
+    }
+
     if (!traceData) {
+      // Only log warning for root spans that failed to create trace (unexpected)
+      this.logger.warn('Langfuse exporter: No trace data found for span', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        isRootSpan: span.isRootSpan,
+        parentSpanId: span.parentSpanId,
+        method,
+      });
       return;
     }
 
@@ -168,7 +197,8 @@ export class LangfuseExporter extends BaseExporter {
       });
     }
 
-    const langfuseParent = this.getLangfuseParent({ traceData, span, method });
+    // For lazy traces, parent spans may not exist yet. Use trace as parent.
+    const langfuseParent = this.getLangfuseParent({ traceData, span, method, allowMissingParent: traceData.isLazy });
     if (!langfuseParent) {
       return;
     }
@@ -245,12 +275,38 @@ export class LangfuseExporter extends BaseExporter {
     }
     const method = 'handleEventSpan';
 
-    const traceData = this.getTraceData({ span, method });
+    // Handle out-of-order event span arrival (similar to handleSpanStarted)
+    // Check if trace exists first WITHOUT logging a warning
+    let traceData = this.traceMap.get(span.traceId);
+
+    if (!traceData && !span.isRootSpan) {
+      this.logger.debug('Langfuse exporter: Creating lazy trace for out-of-order child event span', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        parentSpanId: span.parentSpanId,
+      });
+      this.initLazyTrace(span);
+      traceData = this.traceMap.get(span.traceId);
+    }
+
     if (!traceData) {
+      // Only log warning for root spans that failed to create trace (unexpected)
+      this.logger.warn('Langfuse exporter: No trace data found for span', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        spanType: span.type,
+        isRootSpan: span.isRootSpan,
+        parentSpanId: span.parentSpanId,
+        method,
+      });
       return;
     }
 
-    const langfuseParent = this.getLangfuseParent({ traceData, span, method });
+    // For lazy traces, parent spans may not exist yet. Use trace as parent.
+    const langfuseParent = this.getLangfuseParent({ traceData, span, method, allowMissingParent: traceData.isLazy });
     if (!langfuseParent) {
       return;
     }
@@ -269,9 +325,32 @@ export class LangfuseExporter extends BaseExporter {
 
   private initTrace(span: AnyExportedSpan): void {
     // Check if trace already exists in our local traceMap
-    // This allows multiple root spans (e.g., from multiple agent.stream calls)
-    // to be grouped under the same Langfuse trace
-    if (this.traceMap.has(span.traceId)) {
+    // This can happen in two scenarios:
+    // 1. Multiple root spans share the same traceId (e.g., multiple agent.stream calls)
+    // 2. Child spans arrived before the root span (lazy trace creation for out-of-order events)
+    const existingTraceData = this.traceMap.get(span.traceId);
+    if (existingTraceData) {
+      // Check if this is a lazy trace that needs to be upgraded with root span metadata
+      if (existingTraceData.isLazy) {
+        this.logger.debug('Langfuse exporter: Upgrading lazy trace with root span metadata', {
+          traceId: span.traceId,
+          spanId: span.id,
+          spanName: span.name,
+        });
+        // Update the trace with the root span's full metadata
+        existingTraceData.trace.update(this.buildTracePayload(span));
+        existingTraceData.rootSpanId = span.id;
+        existingTraceData.isLazy = false;
+
+        // Store root span metadata for prompt inheritance
+        const langfuseData = span.metadata?.langfuse as { prompt?: LangfusePromptData } | undefined;
+        existingTraceData.spanMetadata.set(span.id, {
+          parentSpanId: undefined,
+          langfusePrompt: langfuseData?.prompt,
+        });
+        return;
+      }
+
       this.logger.debug('Langfuse exporter: Reusing existing trace from local map', {
         traceId: span.traceId,
         spanId: span.id,
@@ -304,6 +383,33 @@ export class LangfuseExporter extends BaseExporter {
       events: new Map(),
       activeSpans: new Set(),
       rootSpanId: span.id,
+      isLazy: false,
+    });
+  }
+
+  /**
+   * Create a lazy trace for a child span that arrived before its root span.
+   * This handles the race condition where async event processing causes
+   * child spans to be processed before their parent root spans (GitHub #11060).
+   *
+   * The lazy trace will be upgraded with full metadata when the root span arrives.
+   */
+  private initLazyTrace(span: AnyExportedSpan): void {
+    // Create a minimal trace with just the traceId
+    // The Langfuse SDK allows creating traces with just an ID, and updating them later
+    const trace = this.client.trace({
+      id: span.traceId,
+      name: `(pending root span)`, // Placeholder name until root span arrives
+    });
+
+    this.traceMap.set(span.traceId, {
+      trace,
+      spans: new Map(),
+      spanMetadata: new Map(),
+      events: new Map(),
+      activeSpans: new Set(),
+      rootSpanId: undefined, // Will be set when root span arrives
+      isLazy: true, // Mark as lazy trace
     });
   }
 
@@ -329,8 +435,9 @@ export class LangfuseExporter extends BaseExporter {
     traceData: TraceData;
     span: AnyExportedSpan;
     method: string;
+    allowMissingParent?: boolean;
   }): LangfuseParent | undefined {
-    const { traceData, span, method } = options;
+    const { traceData, span, method, allowMissingParent } = options;
 
     const parentId = span.parentSpanId;
     if (!parentId) {
@@ -338,6 +445,18 @@ export class LangfuseExporter extends BaseExporter {
     }
     if (traceData.spans.has(parentId)) {
       return traceData.spans.get(parentId);
+    }
+    // For lazy traces (out-of-order span arrival), the parent span may not exist yet.
+    // In this case, attach the child span directly to the trace. The parent relationship
+    // will be established visually in Langfuse based on the parentSpanId in metadata.
+    if (allowMissingParent) {
+      this.logger.debug('Langfuse exporter: Parent span not found, using trace as parent (lazy trace)', {
+        traceId: span.traceId,
+        spanId: span.id,
+        spanName: span.name,
+        parentSpanId: parentId,
+      });
+      return traceData.trace;
     }
     if (traceData.events.has(parentId)) {
       return traceData.events.get(parentId);
