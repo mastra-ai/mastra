@@ -5669,7 +5669,7 @@ describe('MastraInngestWorkflow', () => {
       }
     });
 
-    it('should have access to the correct inputValue when resuming a step preceeded by a .map step', async ctx => {
+    it('should have access to the correct inputValue when resuming a step preceded by a .map step', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -5713,7 +5713,7 @@ describe('MastraInngestWorkflow', () => {
 
           return {
             improvedOutput: 'improved output',
-            overralScore: {
+            overallScore: {
               completenessScore: {
                 score: (inputData.completenessScore.score + resumeData.completenessScore.score) / 2,
               },
@@ -5731,7 +5731,7 @@ describe('MastraInngestWorkflow', () => {
         }),
         outputSchema: z.object({
           improvedOutput: z.string(),
-          overralScore: z.object({
+          overallScore: z.object({
             toneScore: z.object({ score: z.number() }),
             completenessScore: z.object({ score: z.number() }),
           }),
@@ -5740,11 +5740,11 @@ describe('MastraInngestWorkflow', () => {
       const evaluateImproved = createStep({
         id: 'evaluateImprovedResponse',
         execute: async ({ inputData }) => {
-          return inputData.overralScore;
+          return inputData.overallScore;
         },
         inputSchema: z.object({
           improvedOutput: z.string(),
-          overralScore: z.object({
+          overallScore: z.object({
             toneScore: z.object({ score: z.number() }),
             completenessScore: z.object({ score: z.number() }),
           }),
@@ -5929,7 +5929,7 @@ describe('MastraInngestWorkflow', () => {
           status: 'success',
           output: {
             improvedOutput: 'improved output',
-            overralScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           },
           payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           resumePayload: {
@@ -5946,7 +5946,7 @@ describe('MastraInngestWorkflow', () => {
           output: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           payload: {
             improvedOutput: 'improved output',
-            overralScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),

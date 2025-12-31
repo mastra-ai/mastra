@@ -12300,7 +12300,7 @@ describe('Workflow', () => {
       expect(thridResume.status).toBe('suspended');
     });
 
-    it('should have access to the correct inputValue when resuming a step preceeded by a .map step', async () => {
+    it('should have access to the correct inputValue when resuming a step preceded by a .map step', async () => {
       const getUserInput = createStep({
         id: 'getUserInput',
         execute: async ({ inputData }) => {
@@ -12336,7 +12336,7 @@ describe('Workflow', () => {
 
           return {
             improvedOutput: 'improved output',
-            overralScore: {
+            overallScore: {
               completenessScore: {
                 score: (inputData.completenessScore.score + resumeData.completenessScore.score) / 2,
               },
@@ -12354,7 +12354,7 @@ describe('Workflow', () => {
         }),
         outputSchema: z.object({
           improvedOutput: z.string(),
-          overralScore: z.object({
+          overallScore: z.object({
             toneScore: z.object({ score: z.number() }),
             completenessScore: z.object({ score: z.number() }),
           }),
@@ -12363,11 +12363,11 @@ describe('Workflow', () => {
       const evaluateImproved = createStep({
         id: 'evaluateImprovedResponse',
         execute: async ({ inputData }) => {
-          return inputData.overralScore;
+          return inputData.overallScore;
         },
         inputSchema: z.object({
           improvedOutput: z.string(),
-          overralScore: z.object({
+          overallScore: z.object({
             toneScore: z.object({ score: z.number() }),
             completenessScore: z.object({ score: z.number() }),
           }),
@@ -12524,7 +12524,7 @@ describe('Workflow', () => {
           status: 'success',
           output: {
             improvedOutput: 'improved output',
-            overralScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           },
           payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
           resumePayload: {
@@ -12541,7 +12541,7 @@ describe('Workflow', () => {
           output: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           payload: {
             improvedOutput: 'improved output',
-            overralScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
+            overallScore: { toneScore: { score: (0.8 + 0.9) / 2 }, completenessScore: { score: (0.7 + 0.8) / 2 } },
           },
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
