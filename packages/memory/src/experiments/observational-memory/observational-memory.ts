@@ -1,7 +1,12 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import type { Processor, ProcessInputArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
+import type {
+  Processor,
+  ProcessInputArgs,
+  ProcessInputStepArgs,
+  ProcessOutputResultArgs,
+} from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import {
@@ -82,8 +87,6 @@ export interface ObservationalMemoryConfig {
    */
   resourceScope?: boolean;
 
-
-
   /**
    * Debug callback for observation events.
    * Called whenever observation-related events occur.
@@ -111,8 +114,6 @@ interface ResolvedReflectorConfig {
   modelSettings: Required<ModelSettings>;
   providerOptions: ProviderOptions;
 }
-
-
 
 /**
  * Default configuration values matching the spec
@@ -503,7 +504,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   // ): void {
   //   const messageIds = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
 
-  //   console.log(`[OM Buffering] Starting async observation buffering for ${record.id} (${currentTokens} tokens)`);
+  //   console.info(`[OM Buffering] Starting async observation buffering for ${record.id} (${currentTokens} tokens)`);
 
   //   // Create the async operation
   //   const bufferingPromise = (async () => {
@@ -528,7 +529,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //         suggestedContinuation: result.suggestedContinuation,
   //       });
 
-  //       console.log(`[OM Buffering] Observation buffering complete for ${record.id}`);
+  //       console.info(`[OM Buffering] Observation buffering complete for ${record.id}`);
   //     } catch (error) {
   //       console.error(`[OM Buffering] Observation buffering failed for ${record.id}:`, error);
   //       // Clear buffering state on failure
@@ -552,7 +553,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //  * Start async reflection buffering in the background.
   //  */
   // private startReflectionBuffering(record: ObservationalMemoryRecord, observations: string): void {
-  //   console.log(`[OM Buffering] Starting async reflection buffering for ${record.id}`);
+  //   console.info(`[OM Buffering] Starting async reflection buffering for ${record.id}`);
 
   //   const bufferingPromise = (async () => {
   //     try {
@@ -561,7 +562,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //       // Store as buffered reflection
   //       await this.storage.updateBufferedReflection(record.id, result.observations);
 
-  //       console.log(`[OM Buffering] Reflection buffering complete for ${record.id}`);
+  //       console.info(`[OM Buffering] Reflection buffering complete for ${record.id}`);
   //     } catch (error) {
   //       console.error(`[OM Buffering] Reflection buffering failed for ${record.id}:`, error);
   //       throw error;
@@ -588,7 +589,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //     throw new Error(`[OM] ${type} buffering timeout exceeded (started ${elapsed}ms ago)`);
   //   }
 
-  //   console.log(`[OM] Waiting for in-progress ${type} buffering (max ${remaining}ms)...`);
+  //   console.info(`[OM] Waiting for in-progress ${type} buffering (max ${remaining}ms)...`);
 
   //   // Race between the operation and timeout
   //   await Promise.race([
@@ -663,7 +664,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Check if compression was successful
     if (!validateCompression(originalTokens, reflectedTokens)) {
-      console.log(
+      console.info(
         `[OM] Reflection did not compress (${originalTokens} -> ${reflectedTokens}), retrying with compression guidance`,
       );
 
@@ -687,10 +688,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
             `This may indicate the observations cannot be further condensed.`,
         );
       } else {
-        console.log(`[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens})`);
+        console.info(`[OM] Compression successful after retry (${originalTokens} -> ${reflectedTokens})`);
       }
     } else {
-      console.log(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens})`);
+      console.info(`[OM] Compression successful (${originalTokens} -> ${reflectedTokens})`);
     }
 
     return {
@@ -768,28 +769,32 @@ ${continuityMessage}
   }
 
   /**
-   * Process input - inject observations and filter messages.
+   * Process input at each step - inject observations and filter messages.
+   * Unlike processInput which runs once, this runs at every step of the agentic loop.
+   *
+   * - Step 0: Load historical messages + inject observations + filter observed messages
+   * - Step N: Re-inject observations + filter any new observed messages (e.g., after tool calls)
    */
-  async processInput(args: ProcessInputArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, messages, requestContext } = args;
+  async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
+    const { messageList, messages, requestContext, stepNumber, state } = args;
 
-    console.log(`[OM processInput] Messages: ${messages.length}`);
+    console.info(`[OM processInputStep] Step ${stepNumber}, Messages: ${messages.length}`);
 
     const context = this.getThreadContext(requestContext, messageList);
     if (!context) {
-      console.log('[OM processInput] No thread context found, skipping');
+      console.info('[OM processInputStep] No thread context found, skipping');
       return messageList;
     }
 
     const { threadId, resourceId } = context;
-    console.log(`[OM processInput] Thread: ${threadId}, Resource: ${resourceId}`);
+    console.info(`[OM processInputStep] Thread: ${threadId}, Resource: ${resourceId}`);
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    console.log(
-      `[OM processInput] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, observedMsgIds: ${record.observedMessageIds.length}`,
+    console.info(
+      `[OM processInputStep] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, observedMsgIds: ${record.observedMessageIds.length}`,
     );
 
-    // Inject observations as a system message
+    // Inject observations as a system message (every step)
     if (record.activeObservations) {
       const observationSystemMessage = this.formatObservationsForContext(
         record.activeObservations,
@@ -797,48 +802,57 @@ ${continuityMessage}
         threadId, // Current thread for continuity message filtering
         record.threadContinuityMessages, // Per-thread continuity messages (resource scope)
       );
-      console.log(`[OM processInput] Injecting observations (${observationSystemMessage.length} chars)`);
+      console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.resourceScope) {
-        console.log(
-          `[OM processInput] Resource scope: observations from ${record.observedThreadIds?.length || 0} threads`,
+        console.info(
+          `[OM processInputStep] Resource scope: observations from ${record.observedThreadIds?.length || 0} threads`,
         );
       }
       messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
 
-    // Load unobserved messages from storage using cursor-based query
-    // This is more efficient than loading all messages and filtering by ID
-    const lastObservedAt = record.metadata.lastObservedAt;
-    const historicalMessages = await this.loadUnobservedMessages(threadId, lastObservedAt);
+    // Historical message loading should only happen once per request (on step 0)
+    // Use state to track this so we don't re-load on subsequent steps
+    if (!state.initialSetupDone) {
+      state.initialSetupDone = true;
 
-    if (historicalMessages.length > 0) {
-      console.log(
-        `[OM processInput] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
-      );
+      // Load unobserved messages from storage using cursor-based query
+      // This is more efficient than loading all messages and filtering by ID
+      const lastObservedAt = record.metadata.lastObservedAt;
+      const historicalMessages = await this.loadUnobservedMessages(threadId, lastObservedAt);
 
-      // Add historical messages to messageList (excluding system messages)
-      for (const msg of historicalMessages) {
-        if (msg.role !== 'system') {
-          messageList.add(msg, 'memory');
+      if (historicalMessages.length > 0) {
+        console.info(
+          `[OM processInputStep] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
+        );
+
+        // Add historical messages to messageList (excluding system messages)
+        for (const msg of historicalMessages) {
+          if (msg.role !== 'system') {
+            messageList.add(msg, 'memory');
+          }
         }
       }
+    } else {
+      console.info(`[OM processInputStep] Step ${stepNumber}: skipping historical message load (already done)`);
     }
 
     // Safety net: also filter by observed IDs in case of edge cases
     // (e.g., messages created at exact same timestamp as lastObservedAt)
+    // This runs every step to ensure new messages from tool calls are filtered
     const observedIds = [...record.observedMessageIds, ...record.bufferedMessageIds];
     if (observedIds.length > 0) {
       const beforeCount = messageList.get.all.db().length;
       messageList.removeByIds(observedIds);
       const afterCount = messageList.get.all.db().length;
       if (beforeCount !== afterCount) {
-        console.log(`[OM processInput] Safety filter removed ${beforeCount - afterCount} messages by ID`);
+        console.info(`[OM processInputStep] Safety filter removed ${beforeCount - afterCount} messages by ID`);
       }
     }
 
     // Log what agent will actually see
     const finalMessages = messageList.get.all.db();
-    console.log(`[OM processInput] Agent will see: observations + ${finalMessages.length} unobserved messages`);
+    console.info(`[OM processInputStep] Agent will see: observations + ${finalMessages.length} unobserved messages`);
 
     return messageList;
   }
@@ -896,7 +910,7 @@ ${continuityMessage}
       this.getMaxThreshold(this.reflectorConfig.reflectionThreshold),
     );
 
-    console.log(
+    console.info(
       `[OM processOutputResult] Messages: ${allMessages.length}, Unobserved: ${unobservedMessages.length}, ` +
         `SessionTokens: ${currentSessionTokens}, PendingTokens: ${pendingTokens}, TotalPending: ${totalPendingTokens}, ` +
         `Threshold: ${threshold}`,
@@ -907,7 +921,7 @@ ${continuityMessage}
     // ═══════════════════════════════════════════════════════════════════
 
     const shouldObserveNow = this.shouldObserve(totalPendingTokens, currentObservationTokens);
-    console.log(
+    console.info(
       `[OM] Observe check: totalPending=${totalPendingTokens} > threshold=${threshold} ? ${shouldObserveNow}`,
     );
 
@@ -915,7 +929,7 @@ ${continuityMessage}
       // ════════════════════════════════════════════════════════════
       // SYNC PATH: Do synchronous observation (blocking)
       // ════════════════════════════════════════════════════════════
-      console.log(`[OM] Observation threshold exceeded (${totalPendingTokens} > ${threshold}), triggering Observer`);
+      console.info(`[OM] Observation threshold exceeded (${totalPendingTokens} > ${threshold}), triggering Observer`);
 
       await this.doSynchronousObservation(record, threadId, unobservedMessages);
     } else if (currentSessionTokens > 0) {
@@ -923,7 +937,7 @@ ${continuityMessage}
       // Observation not triggered - accumulate pending tokens for next check
       // This allows observations to trigger after multiple small sessions
       // ═══════════════════════════════════════════════════════════════════
-      console.log(`[OM] Accumulating ${currentSessionTokens} pending tokens (total will be ${totalPendingTokens})`);
+      console.info(`[OM] Accumulating ${currentSessionTokens} pending tokens (total will be ${totalPendingTokens})`);
       // Use type assertion since addPendingMessageTokens was just added to MemoryStorage
       await (this.storage as any).addPendingMessageTokens(record.id, currentSessionTokens);
 
@@ -977,7 +991,7 @@ ${continuityMessage}
     try {
       const result = await this.callObserver(record.activeObservations, unobservedMessages);
 
-      console.log(`[OM] Observer returned observations (${result.observations.length} chars)`);
+      console.info(`[OM] Observer returned observations (${result.observations.length} chars)`);
 
       // In resource scope, add thread header
       let observationsWithHeader = result.observations;
@@ -992,7 +1006,7 @@ ${continuityMessage}
 
       const totalTokenCount = this.tokenCounter.countObservations(newObservations);
 
-      console.log(`[OM] Storing observations: ${totalTokenCount} tokens, ${messageIdsToObserve.length} message IDs`);
+      console.info(`[OM] Storing observations: ${totalTokenCount} tokens, ${messageIdsToObserve.length} message IDs`);
 
       await this.storage.updateActiveObservations({
         id: record.id,
@@ -1004,7 +1018,7 @@ ${continuityMessage}
         lastObservedAt: new Date(),
       });
 
-      console.log(`[OM] Observations stored successfully`);
+      console.info(`[OM] Observations stored successfully`);
 
       // Emit debug event for observation complete
       this.emitDebugEvent({
@@ -1038,7 +1052,9 @@ ${continuityMessage}
     }
 
     const reflectThreshold = this.getMaxThreshold(this.reflectorConfig.reflectionThreshold);
-    console.log(`[OM] Reflection threshold exceeded (${observationTokens} > ${reflectThreshold}), triggering Reflector`);
+    console.info(
+      `[OM] Reflection threshold exceeded (${observationTokens} > ${reflectThreshold}), triggering Reflector`,
+    );
 
     // ════════════════════════════════════════════════════════════
     // SYNC PATH: Do synchronous reflection (blocking)
@@ -1065,7 +1081,7 @@ ${continuityMessage}
    */
   async observe(threadId: string, resourceId?: string, _prompt?: string): Promise<void> {
     const record = await this.getOrCreateRecord(threadId, resourceId);
-    console.log(`[OM] Manual observation triggered for ${record.id}`);
+    console.info(`[OM] Manual observation triggered for ${record.id}`);
     // TODO: Implement manual observation
   }
 
@@ -1084,11 +1100,11 @@ ${continuityMessage}
     const record = await this.getOrCreateRecord(threadId, resourceId);
 
     if (!record.activeObservations) {
-      console.log(`[OM] No observations to reflect on for ${record.id}`);
+      console.info(`[OM] No observations to reflect on for ${record.id}`);
       return;
     }
 
-    console.log(`[OM] Manual reflection triggered for ${record.id}`);
+    console.info(`[OM] Manual reflection triggered for ${record.id}`);
 
     await this.storage.setReflectingFlag(record.id, true);
 
@@ -1103,7 +1119,7 @@ ${continuityMessage}
         suggestedContinuation: reflectResult.suggestedContinuation,
       });
 
-      console.log(`[OM] Manual reflection complete, new generation created`);
+      console.info(`[OM] Manual reflection complete, new generation created`);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }
@@ -1169,5 +1185,4 @@ ${continuityMessage}
   getReflectorConfig(): ResolvedReflectorConfig {
     return this.reflectorConfig;
   }
-
 }

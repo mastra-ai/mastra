@@ -65,6 +65,12 @@ export class ProcessorRunner {
   public readonly outputProcessors: Processor[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  /**
+   * Per-processor state that persists across all method calls within this request.
+   * This is used to share state between processInput, processInputStep, processOutputResult, etc.
+   * for the same processor within a single generate() call.
+   */
+  private readonly processorStates: Map<string, Record<string, unknown>> = new Map();
 
   constructor({
     inputProcessors,
@@ -81,6 +87,20 @@ export class ProcessorRunner {
     this.outputProcessors = outputProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+  }
+
+  /**
+   * Get or create per-processor state for the given processor ID.
+   * This state persists across all method calls (processInput, processInputStep, processOutputResult)
+   * for the same processor within this request.
+   */
+  private getProcessorState(processorId: string): Record<string, unknown> {
+    let state = this.processorStates.get(processorId);
+    if (!state) {
+      state = {};
+      this.processorStates.set(processorId, state);
+    }
+    return state;
   }
 
   async runOutputProcessors(
@@ -131,9 +151,13 @@ export class ProcessorRunner {
       // Start recording MessageList mutations for this processor
       messageList.startRecording();
 
+      // Get per-processor state that persists across all method calls within this request
+      const processorState = this.getProcessorState(processor.id);
+
       const result = await processMethod({
         messages: processableMessages,
         messageList,
+        state: processorState,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
         requestContext,
@@ -375,9 +399,13 @@ export class ProcessorRunner {
       // Get all system messages to pass to the processor
       const currentSystemMessages = messageList.getAllSystemMessages();
 
+      // Get per-processor state that persists across all method calls within this request
+      const processorState = this.getProcessorState(processor.id);
+
       const result = await processMethod({
         messages: processableMessages,
         systemMessages: currentSystemMessages,
+        state: processorState,
         abort: ctx.abort,
         tracingContext: { currentSpan: processorSpan },
         messageList,
@@ -559,11 +587,15 @@ export class ProcessorRunner {
       const currentSystemMessages = messageList.getAllSystemMessages();
 
       try {
+        // Get per-processor state that persists across all method calls within this request
+        const processorState = this.getProcessorState(processor.id);
+
         const result = await processMethod({
           messages: processableMessages,
           messageList,
           stepNumber,
           systemMessages: currentSystemMessages,
+          state: processorState,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,

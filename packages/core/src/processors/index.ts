@@ -53,12 +53,17 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
 export interface ProcessInputArgs extends ProcessorMessageContext {
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
 }
 
 /**
  * Arguments for processOutputResult method
  */
-export interface ProcessOutputResultArgs extends ProcessorMessageContext {}
+export interface ProcessOutputResultArgs extends ProcessorMessageContext {
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+}
 
 /**
  * Arguments for processInputStep method
@@ -68,6 +73,8 @@ export interface ProcessInputStepArgs extends ProcessorMessageContext {
   stepNumber: number;
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
 }
 
 /**
