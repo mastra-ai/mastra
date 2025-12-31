@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { RetrievedKnowledge, StaticKnowledge } from '@mastra/knowledge';
+import { RetrievedKnowledge, StaticKnowledge } from '@mastra/skills';
 
 /**
  * Static knowledge processor - includes fixed policy info in every response.
@@ -57,7 +57,7 @@ Guidelines:
  * Alternative support agent using hybrid search (requires vector embeddings).
  * Uncomment and configure if you want semantic + keyword search.
  */
-// import { Knowledge } from '@mastra/knowledge';
+// import { Knowledge } from '@mastra/skills';
 //
 // const hybridKnowledge = new Knowledge({
 //   provider: 'PINECONE',

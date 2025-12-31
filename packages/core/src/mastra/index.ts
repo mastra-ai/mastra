@@ -217,12 +217,12 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Knowledge } from '@mastra/knowledge';
+   * import { Knowledge, KnowledgeFilesystemStorage } from '@mastra/skills';
    *
    * const mastra = new Mastra({
    *   knowledge: new Knowledge({
    *     id: 'support-docs',
-   *     storage: new FilesystemStorage({ basePath: './docs' }),
+   *     storage: new KnowledgeFilesystemStorage({ basePath: './docs' }),
    *     bm25: true,
    *   }),
    * });
@@ -1435,12 +1435,12 @@ export class Mastra<
    *
    * @example
    * ```typescript
-   * import { Knowledge } from '@mastra/knowledge';
+   * import { Knowledge, KnowledgeFilesystemStorage } from '@mastra/skills';
    *
    * const mastra = new Mastra({
    *   knowledge: new Knowledge({
    *     id: 'support-docs',
-   *     storage: new FilesystemStorage({ basePath: './docs' }),
+   *     storage: new KnowledgeFilesystemStorage({ basePath: './docs' }),
    *     bm25: true,
    *   }),
    * });

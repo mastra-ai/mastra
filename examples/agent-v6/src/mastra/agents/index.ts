@@ -3,7 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import { stepCountIs, ToolLoopAgent } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { weatherInfo, weatherTool } from '../tools';
-import { SkillsProcessor } from '@mastra/knowledge';
+import { SkillsProcessor } from '@mastra/skills';
 
 const memory = new Memory();
 

@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { Knowledge } from './knowledge';
 import { StaticKnowledge, RetrievedKnowledge } from './processors';
-import { FilesystemStorage } from './storage';
+import { KnowledgeFilesystemStorage as FilesystemStorage } from './storage';
 
 // Default namespace
 const NS = 'default';

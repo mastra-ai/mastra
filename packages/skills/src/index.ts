@@ -36,13 +36,20 @@ export { Skills, type SkillsBM25Config } from './skills';
 // Knowledge class (namespace/artifact based)
 export * from './knowledge';
 
-// Processors
+// Processors (Skills)
 export { SkillsProcessor, type SkillsProcessorOptions } from './processors/skills';
 export { StaticSkills, type StaticSkillsOptions } from './processors/static-skills';
 export { RetrievedSkills, type RetrievedSkillsOptions } from './processors/retrieved-skills';
 
-// Storage
+// Processors (Knowledge)
+export { StaticKnowledge, type StaticKnowledgeOptions } from './processors/static-knowledge';
+export { RetrievedKnowledge, type RetrievedKnowledgeOptions } from './processors/retrieved-knowledge';
+
+// Storage (Skills)
 export { FilesystemStorage, type FilesystemStorageOptions } from './storage/filesystem';
+
+// Storage (Knowledge)
+export { KnowledgeFilesystemStorage } from './storage';
 
 // BM25 (for advanced use cases)
 export {

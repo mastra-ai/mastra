@@ -1,4 +1,4 @@
-import { FilesystemStorage, Knowledge } from '@mastra/knowledge';
+import { KnowledgeFilesystemStorage as FilesystemStorage, Knowledge } from '@mastra/skills';
 
 /**
  * Knowledge base for the support agent.

@@ -130,7 +130,7 @@ export interface CreateNamespaceOptions {
 
 /**
  * Base interface for Knowledge instances that can be registered with Mastra.
- * The actual Knowledge class in @mastra/knowledge implements this interface.
+ * The actual Knowledge class in @mastra/skills implements this interface.
  *
  * A Knowledge instance manages multiple namespaces, each with its own
  * artifacts, BM25 index, and optional vector configuration.

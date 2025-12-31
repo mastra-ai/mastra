@@ -252,7 +252,7 @@ export const GET_KNOWLEDGE_ARTIFACT_ROUTE = createRoute({
   },
 });
 
-/** Default prefix for static knowledge artifacts - must match @mastra/knowledge */
+/** Default prefix for static knowledge artifacts - must match @mastra/skills */
 const STATIC_PREFIX = 'static';
 
 export const ADD_KNOWLEDGE_ARTIFACT_ROUTE = createRoute({

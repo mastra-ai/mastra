@@ -1,7 +1,7 @@
 /**
  * Knowledge Demo
  *
- * This script demonstrates how to use the @mastra/knowledge package
+ * This script demonstrates how to use the @mastra/skills package (Knowledge class)
  * with a support agent that retrieves relevant FAQ documents.
  *
  * Run with: npx bun src/knowledge-demo.ts
