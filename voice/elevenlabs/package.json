@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts voice/elevenlabs",
     "build:watch": "tsup build --watch && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "eslint ."

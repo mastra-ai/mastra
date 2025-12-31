@@ -191,9 +191,11 @@
     "lint": "eslint .",
     "pre-build": "tsup --silent --config tsup.config.ts --no-dts",
     "build": "node ./tools/commonjs-tsc-fixer.js",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
     "build:watch": "pnpm build --watch",
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
+    "generate:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test:types:zod": "node test-zod-compat.mjs",
     "test": "npm run test:unit"
