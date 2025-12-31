@@ -259,18 +259,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     },
   ): Promise<
     | {
-      ok: true;
-      result: T;
-    }
+        ok: true;
+        result: T;
+      }
     | {
-      ok: false;
-      error: {
-        status: 'failed';
-        error: Error;
-        endedAt: number;
-        tripwire?: StepTripwireInfo;
-      };
-    }
+        ok: false;
+        error: {
+          status: 'failed';
+          error: Error;
+          endedAt: number;
+          tripwire?: StepTripwireInfo;
+        };
+      }
   > {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
@@ -316,11 +316,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               tripwire:
                 e instanceof TripWire
                   ? {
-                    reason: e.message,
-                    retry: e.options?.retry,
-                    metadata: e.options?.metadata,
-                    processorId: e.processorId,
-                  }
+                      reason: e.message,
+                      retry: e.options?.retry,
+                      metadata: e.options?.metadata,
+                      processorId: e.processorId,
+                    }
                   : undefined,
             },
           };
