@@ -55,6 +55,9 @@ import type {
   StoredAgentResponse,
   GetSystemPackagesResponse,
   ListScoresResponse as ListScoresResponseOld,
+  ListKnowledgeNamespacesResponse,
+  CreateKnowledgeNamespaceParams,
+  KnowledgeNamespace,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -779,7 +782,7 @@ export class MastraClient extends BaseResource {
    * Lists all knowledge namespaces
    * @returns Promise containing list of namespaces
    */
-  public listKnowledgeNamespaces(): Promise<import('./types').ListKnowledgeNamespacesResponse> {
+  public listKnowledgeNamespaces(): Promise<ListKnowledgeNamespacesResponse> {
     return this.request('/api/knowledge/namespaces');
   }
 
@@ -788,9 +791,7 @@ export class MastraClient extends BaseResource {
    * @param params - Namespace configuration
    * @returns Promise containing the created namespace
    */
-  public createKnowledgeNamespace(
-    params: import('./types').CreateKnowledgeNamespaceParams,
-  ): Promise<import('./types').KnowledgeNamespace> {
+  public createKnowledgeNamespace(params: CreateKnowledgeNamespaceParams): Promise<KnowledgeNamespace> {
     return this.request('/api/knowledge/namespaces', {
       method: 'POST',
       body: params,

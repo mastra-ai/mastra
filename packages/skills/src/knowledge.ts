@@ -9,14 +9,8 @@ import type {
 } from '@mastra/core/knowledge';
 import type { MastraVector } from '@mastra/core/vector';
 
-import {
-  BM25Index,
-  tokenize,
-  findLineRange,
-  type BM25Config,
-  type TokenizeOptions,
-  type BM25SearchResult,
-} from './bm25';
+import { BM25Index, tokenize, findLineRange } from './bm25';
+import type { BM25Config, TokenizeOptions, BM25SearchResult } from './bm25';
 
 /** Default prefix for static knowledge artifacts */
 export const STATIC_PREFIX = 'static';

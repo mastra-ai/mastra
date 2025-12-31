@@ -472,7 +472,7 @@ export class RetrievedKnowledge extends BaseProcessor<'retrieved-knowledge'> {
             lines: result.lines,
             totalLines: result.totalLines,
           };
-        } catch (error) {
+        } catch {
           return {
             success: false,
             message: `Document "${key}" not found in namespace "${namespace}"`,

@@ -1,11 +1,12 @@
-import z from 'zod';
 import type { ProcessInputStepArgs } from '@mastra/core/processors';
 import { BaseProcessor } from '@mastra/core/processors';
-import { createTool } from '@mastra/core/tools';
 import type { MastraSkills } from '@mastra/core/skills';
+import { createTool } from '@mastra/core/tools';
+import z from 'zod';
 
 import { extractLines } from '../bm25';
-import { Skills, type SkillsBM25Config } from '../skills';
+import { Skills } from '../skills';
+import type { SkillsBM25Config } from '../skills';
 import type { SkillFormat, Skill } from '../types';
 
 // =========================================================================

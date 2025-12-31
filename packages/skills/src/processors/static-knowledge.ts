@@ -109,7 +109,7 @@ export class StaticKnowledge extends BaseProcessor<'static-knowledge'> {
     const knowledge = this.getKnowledgeInstance();
 
     // Fetch static artifacts from knowledge
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const artifacts = await (knowledge as any).getStatic(this.namespace);
 
     if (artifacts.length === 0) {

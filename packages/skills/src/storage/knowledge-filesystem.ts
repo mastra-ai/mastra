@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir, readdir, unlink, rm, stat } from 'node:fs/promises';
 import { join, dirname, relative } from 'node:path';
 
-import { KnowledgeStorage, type CreateNamespaceStorageOptions } from '@mastra/core/knowledge';
-import type { AnyArtifact, KnowledgeNamespaceInfo } from '@mastra/core/knowledge';
+import { KnowledgeStorage } from '@mastra/core/knowledge';
+import type { CreateNamespaceStorageOptions, AnyArtifact, KnowledgeNamespaceInfo } from '@mastra/core/knowledge';
 
 /**
  * Filesystem-based knowledge storage.

@@ -1,10 +1,10 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { MastraVector } from '@mastra/core/vector';
 import matter from 'gray-matter';
 
-import type { MastraVector } from '@mastra/core/vector';
-
-import { BM25Index, tokenize, findLineRange, type BM25Config, type TokenizeOptions } from './bm25';
+import { BM25Index, tokenize, findLineRange } from './bm25';
+import type { BM25Config, TokenizeOptions } from './bm25';
 import { validateSkillMetadata, parseAllowedTools } from './schemas';
 import type {
   Skill,
@@ -198,7 +198,6 @@ export class Skills implements MastraSkills {
    */
   #determineSearchMode(requestedMode?: SkillSearchMode): SkillSearchMode {
     const canVector = !!this.#indexConfig;
-    const canBM25 = true; // BM25 is always available
 
     if (requestedMode) {
       if (requestedMode === 'vector' && !canVector) {

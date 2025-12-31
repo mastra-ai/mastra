@@ -1,11 +1,11 @@
 import { join } from 'node:path';
-import { describe, it, expect, beforeEach } from 'vitest';
 import { MessageList } from '@mastra/core/agent';
 import type { ProcessInputArgs } from '@mastra/core/processors';
+import { describe, it, expect, beforeEach } from 'vitest';
 
-import { Skills } from './skills';
-import { StaticSkills } from './processors/static-skills';
 import { RetrievedSkills } from './processors/retrieved-skills';
+import { StaticSkills } from './processors/static-skills';
+import { Skills } from './skills';
 
 const FIXTURES_PATH = join(__dirname, '__fixtures__', 'skills');
 

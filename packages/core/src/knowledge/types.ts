@@ -1,3 +1,5 @@
+import type { KnowledgeStorage } from './base';
+
 /**
  * Supported artifact types for Knowledge storage
  */
@@ -42,7 +44,7 @@ export type AnyArtifact = FileArtifact | ImageArtifact | TextArtifact;
  * Factory function for creating KnowledgeStorage instances.
  * Used by Knowledge to create storage for new namespaces dynamically.
  */
-export type KnowledgeStorageFactory = (namespace: string) => Promise<import('./base').KnowledgeStorage>;
+export type KnowledgeStorageFactory = (namespace: string) => Promise<KnowledgeStorage>;
 
 /**
  * Search mode for knowledge queries

@@ -24,7 +24,7 @@ import { handleError } from './error';
  * Get the knowledge instance from Mastra.
  * Returns null if no knowledge instance is registered.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function getKnowledge(mastra: any): MastraKnowledge | null {
   return mastra.getKnowledge?.() ?? null;
 }

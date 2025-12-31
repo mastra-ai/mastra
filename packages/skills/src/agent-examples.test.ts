@@ -13,8 +13,8 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { describe, it, beforeEach } from 'vitest';
 
-import { Skills } from './skills';
 import { SkillsProcessor, StaticSkills, RetrievedSkills } from './processors';
+import { Skills } from './skills';
 
 const FIXTURES_PATH = join(__dirname, '__fixtures__', 'skills');
 
