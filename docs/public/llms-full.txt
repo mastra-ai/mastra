@@ -1,5 +1,19 @@
 ---
 title: "Voice | Agents"
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-azure"
+  - "@mastra/voice-cloudflare"
+  - "@mastra/voice-deepgram"
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-google"
+  - "@mastra/voice-murf"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
+  - "@mastra/voice-sarvam"
+  - "@mastra/voice-speechify"
 ---
 
 # Voice
@@ -360,6 +374,10 @@ Mastra supports multiple voice providers for text-to-speech (TTS) and speech-to-
 ---
 title: "Agent Approval | Agents"
 description: Learn how to require approvals, suspend tool execution, and automatically resume suspended tools while keeping humans in control of agent workflows.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Agent Approval
@@ -685,6 +703,10 @@ Both approaches work with the same tool definitions. Automatic resumption trigge
 ---
 title: "Agent Memory | Agents"
 description: Learn how to add memory to agents to store message history and maintain context across interactions.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -862,6 +884,8 @@ Visit [Request Context](/docs/v1/server/request-context) for more information.
 ---
 title: "Guardrails | Agents"
 description: "Learn how to implement guardrails using input and output processors to secure and control AI interactions."
+packages:
+  - "@mastra/core"
 ---
 
 # Guardrails
@@ -1285,6 +1309,10 @@ Available examples:
 ---
 title: "Agent Networks | Agents"
 description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Agent Networks
@@ -1527,6 +1555,8 @@ network-execution-event-step-finish
 ---
 title: "Using Agents | Agents"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
+packages:
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -1865,6 +1895,8 @@ Use [Studio](/docs/v1/getting-started/studio) to test agents with different mess
 ---
 title: "Processors | Agents | Mastra Docs"
 description: "Learn how to use input and output processors to transform, validate, and control messages in Mastra agents."
+packages:
+  - "@mastra/core"
 ---
 
 # Processors
@@ -2299,6 +2331,8 @@ The retry mechanism:
 ---
 title: "Structured Output | Agents"
 description: "Learn how to generate structured data from agents using schemas and validation."
+packages:
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -2530,6 +2564,8 @@ console.log(response.object);
 ---
 title: "Using Tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
+packages:
+  - "@mastra/core"
 ---
 
 # Using Tools
@@ -2914,6 +2950,8 @@ If you have specific questions about how the Apache License 2.0 applies to your 
 ---
 title: "Deploy to Cloud Providers | Deployment"
 description: Deploy your Mastra applications to cloud providers
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deploy to Cloud Providers
@@ -2937,6 +2975,8 @@ The following guides show how to deploy Mastra to specific cloud providers:
 ---
 title: "Deploy a Mastra Server | Deployment"
 description: "Learn how to build a Mastra server with build settings and deployment options."
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deploy a Mastra Server
@@ -3013,6 +3053,8 @@ node .mastra/output/index.mjs
 ---
 title: "Deploy in a Monorepo | Deployment"
 description: Learn how to deploy Mastra applications that are part of a monorepo setup
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deploy in a Monorepo
@@ -3092,6 +3134,8 @@ In a monorepo, keep dependencies consistent to avoid version conflicts and build
 ---
 title: "Deployment Overview | Deployment"
 description: Learn about different deployment options for your Mastra applications
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deployment Overview
@@ -3158,6 +3202,8 @@ Visit the [Workflow Runners guide](/docs/v1/deployment/workflow-runners) for exe
 ---
 title: "Deploy with a Web Framework | Deployment"
 description: "Learn how Mastra can be deployed when integrated with a Web Framework"
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deploy with a Web Framework
@@ -3220,6 +3266,8 @@ export default defineConfig({
 ---
 title: "Workflow Runners | Deployment"
 description: "Deploy Mastra workflows to specialized workflow execution platforms"
+packages:
+  - "@mastra/deployer"
 ---
 
 # Workflow Runners
@@ -3237,6 +3285,8 @@ Visit the [Inngest deployment guide](/guides/v1/deployment/inngest) for setup in
 ---
 title: "Built-in Scorers | Evals"
 description: "Overview of Mastra's ready-to-use scorers for evaluating AI outputs across quality, safety, and performance dimensions."
+packages:
+  - "@mastra/evals"
 ---
 
 # Built-in Scorers
@@ -3291,6 +3341,8 @@ These scorers evaluate adherence to format, style, and safety requirements:
 
 ---
 title: "Custom Scorers | Evals"
+packages:
+  - "@mastra/core"
 ---
 
 # Custom scorers
@@ -3779,6 +3831,9 @@ console.log("Reason:", result.reason);
 ---
 title: "Scorers overview | Evals"
 description: Overview of scorers in Mastra, detailing their capabilities for evaluating AI outputs and measuring performance.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Scorers overview
@@ -3917,6 +3972,8 @@ For more details, see [Studio](/docs/v1/getting-started/studio) docs.
 ---
 title: "Running Scorers in CI | Evals"
 description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
+packages:
+  - "@mastra/core"
 ---
 
 # Running Scorers in CI
@@ -5168,6 +5225,9 @@ Team members can view environment variables and delete projects. Only invite peo
 ---
 title: "MCP Overview | MCP"
 description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -5547,6 +5607,9 @@ As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so 
 ---
 title: "Publishing an MCP Server | MCP"
 description: Guide to setting up and building a Mastra MCP server using the stdio transport, and publishing it to NPM.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -5689,6 +5752,12 @@ Note: If you published without an organization scope, the `args` might just be `
 ---
 title: "Memory Processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/openai"
+  - "@mastra/pinecone"
 ---
 
 # Memory Processors
@@ -6014,6 +6083,8 @@ When creating custom processors avoid mutating the input `messages` array or its
 ---
 title: "Message History | Memory"
 description: "Learn how to configure message history in Mastra to store recent messages from the current conversation."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Message History
@@ -6087,6 +6158,10 @@ const uiMessages = toAISdkV5Messages(result?.messages ?? []);
 ---
 title: "Memory overview | Memory"
 description: "Learn how Mastra's memory system works with working memory, message history, and semantic recall."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Memory
@@ -6169,6 +6244,12 @@ For more details on enabling and configuring tracing, see [Tracing](/docs/v1/obs
 ---
 title: "Semantic Recall | Memory"
 description: "Learn how to use semantic recall in Mastra to retrieve relevant messages from past conversations using vector search and embeddings."
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # Semantic Recall
@@ -6412,6 +6493,12 @@ For more info on viewing message traces, see [Viewing Retrieved Messages](./over
 ---
 title: "Storage | Memory"
 description: Configure storage for Mastra's memory system to persist conversations, workflows, and traces.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
 ---
 
 # Storage
@@ -6603,6 +6690,13 @@ For more information on configuring semantic recall, see the [Semantic Recall](.
 ---
 title: "Working Memory | Memory"
 description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+  - "@mastra/pg"
+  - "@mastra/upstash"
 ---
 
 import YouTube from "@site/src/components/YouTube-player";
@@ -6997,6 +7091,9 @@ await memory.updateWorkingMemory({
 ---
 title: "Logging | Observability"
 description: Learn how to use logging in Mastra to monitor execution, capture application behavior, and improve the accuracy of AI applications.
+packages:
+  - "@mastra/core"
+  - "@mastra/loggers"
 ---
 
 # Logging
@@ -7109,6 +7206,11 @@ export const testWorkflow = createWorkflow({...})
 ---
 title: "Observability Overview | Observability"
 description: Monitor and debug applications with Mastra's Observability features.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
+  - "@mastra/observability"
 ---
 
 # Observability Overview
@@ -7163,6 +7265,10 @@ We also support various external tracing providers like MLflow, Langfuse, Braint
 ---
 title: "OpenTelemetry Bridge | Tracing | Observability"
 description: "Integrate Mastra tracing with existing OpenTelemetry infrastructure"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/otel-bridge"
 ---
 
 # OpenTelemetry Bridge
@@ -7366,6 +7472,10 @@ If traces aren't appearing or connecting as expected:
 ---
 title: "Arize Exporter | Tracing | Observability"
 description: "Send traces to Arize Phoenix or Arize AX using OpenTelemetry and OpenInference"
+packages:
+  - "@mastra/arize"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Arize Exporter
@@ -7599,6 +7709,10 @@ Tags appear as the `tag.tags` attribute following OpenInference conventions and 
 ---
 title: "Braintrust Exporter | Tracing | Observability"
 description: "Send traces to Braintrust for evaluation and monitoring"
+packages:
+  - "@mastra/braintrust"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Braintrust Exporter
@@ -7692,6 +7806,9 @@ Tags appear in Braintrust's trace view and can be used to filter and search trac
 ---
 title: "Cloud Exporter | Tracing | Observability"
 description: "Send traces to Mastra Cloud for production monitoring"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Cloud Exporter
@@ -7810,6 +7927,10 @@ CloudExporter uses intelligent batching to optimize network usage. Traces are bu
 ---
 title: "Default Exporter | Tracing | Observability"
 description: "Store traces locally for development and debugging"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/observability"
 ---
 
 # Default Exporter
@@ -7976,6 +8097,10 @@ new DefaultExporter({
 ---
 title: "Langfuse Exporter | Tracing | Observability"
 description: "Send traces to Langfuse for LLM observability and analytics"
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
 ---
 
 # Langfuse Exporter
@@ -8174,6 +8299,10 @@ Tags appear in Langfuse's trace view and can be used to filter and search traces
 ---
 title: "LangSmith Exporter | Tracing | Observability"
 description: "Send traces to LangSmith for LLM observability and evaluation"
+packages:
+  - "@mastra/core"
+  - "@mastra/langsmith"
+  - "@mastra/observability"
 ---
 
 # LangSmith Exporter
@@ -8268,6 +8397,10 @@ The `projectName` config option takes precedence over the `LANGCHAIN_PROJECT` en
 ---
 title: "OpenTelemetry Exporter | Tracing | Observability"
 description: "Send traces to any OpenTelemetry-compatible observability platform"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/otel-exporter"
 ---
 
 # OpenTelemetry Exporter
@@ -8623,6 +8756,10 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 ---
 title: "PostHog Exporter | Tracing | Observability"
 description: "Send traces to PostHog for AI observability and analytics"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/posthog"
 ---
 
 # PostHog Exporter
@@ -8752,6 +8889,10 @@ Tags are added as event properties where the tag name is the key and the value i
 ---
 title: "Tracing | Observability"
 description: "Set up Tracing for Mastra applications"
+packages:
+  - "@mastra/arize"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Tracing
@@ -9385,6 +9526,67 @@ Processors are executed in the order they're defined, allowing you to chain mult
 - Sampling high-volume traces
 - Enriching spans with business context
 
+## Serialization Options
+
+Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, deeply nested objects, or when you need to optimize trace storage.
+
+### Configuration
+
+Add `serializationOptions` to your observability configuration:
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        serializationOptions: {
+          maxStringLength: 2048,   // Maximum length for string values (default: 1024)
+          maxDepth: 10,            // Maximum depth for nested objects (default: 6)
+          maxArrayLength: 100,     // Maximum number of items in arrays (default: 50)
+          maxObjectKeys: 75,       // Maximum number of keys in objects (default: 50)
+        },
+        exporters: [new DefaultExporter()],
+      },
+    },
+  }),
+});
+```
+
+### Available Options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `maxStringLength` | 1024 | Maximum length for string values. Longer strings are truncated. |
+| `maxDepth` | 6 | Maximum depth for nested objects. Deeper levels are omitted. |
+| `maxArrayLength` | 50 | Maximum number of items in arrays. Additional items are omitted. |
+| `maxObjectKeys` | 50 | Maximum number of keys in objects. Additional keys are omitted. |
+
+### Use Cases
+
+**Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
+
+```ts
+serializationOptions: {
+  maxStringLength: 8192,  // Capture longer text content
+  maxDepth: 12,           // Handle deeply nested JSON responses
+  maxArrayLength: 200,    // Keep more items from large lists
+}
+```
+
+**Reducing trace size for production**: Lower these values to reduce storage costs and improve performance when you don't need full payload visibility:
+
+```ts
+serializationOptions: {
+  maxStringLength: 256,   // Truncate strings aggressively
+  maxDepth: 3,            // Shallow object representation
+  maxArrayLength: 10,     // Keep only first few items
+  maxObjectKeys: 20,      // Limit object keys
+}
+```
+
+All options are optional — if not specified, they fall back to the defaults shown above.
+
 ## Retrieving Trace IDs
 
 When you execute agents or workflows with tracing enabled, the response includes a `traceId` that you can use to look up the full trace in your observability platform. This is useful for debugging, customer support, or correlating traces with other events in your system.
@@ -9601,6 +9803,8 @@ Mastra automatically creates spans for:
 ---
 title: "Sensitive Data Filter | Processors | Observability"
 description: "Protect sensitive information in your traces with automatic data redaction"
+packages:
+  - "@mastra/observability"
 ---
 
 # Sensitive Data Filter
@@ -9899,6 +10103,9 @@ This ensures that processing errors don't prevent traces from being exported or 
 ---
 title: Chunking and Embedding Documents | RAG | Mastra Docs
 description: Guide on chunking and embedding documents in Mastra for efficient processing and retrieval.
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
 ---
 
 # Chunking and Embedding Documents
@@ -10098,6 +10305,9 @@ For more details on vector databases and embeddings, see:
 ---
 title: "GraphRAG | RAG"
 description: Guide on graph-based retrieval in Mastra's RAG systems for documents with complex relationships.
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
 ---
 
 # GraphRAG
@@ -10321,6 +10531,10 @@ For detailed API documentation, see:
 ---
 title: "RAG (Retrieval-Augmented Generation) in Mastra | RAG"
 description: Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
 ---
 
 # RAG (Retrieval-Augmented Generation) in Mastra
@@ -10401,6 +10615,20 @@ Mastra supports multiple vector stores for embedding persistence and similarity 
 ---
 title: "Retrieval, Semantic Search, Reranking | RAG"
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
+packages:
+  - "@mastra/astra"
+  - "@mastra/chroma"
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/mongodb"
+  - "@mastra/opensearch"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+  - "@mastra/qdrant"
+  - "@mastra/rag"
+  - "@mastra/s3vectors"
+  - "@mastra/upstash"
+  - "@mastra/vectorize"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -10965,6 +11193,21 @@ For graph-based retrieval that follows connections between chunks, see the [Grap
 ---
 title: "Storing Embeddings in A Vector Database | RAG"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+packages:
+  - "@mastra/astra"
+  - "@mastra/chroma"
+  - "@mastra/core"
+  - "@mastra/couchbase"
+  - "@mastra/elasticsearch"
+  - "@mastra/lance"
+  - "@mastra/mongodb"
+  - "@mastra/opensearch"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+  - "@mastra/qdrant"
+  - "@mastra/s3vectors"
+  - "@mastra/upstash"
+  - "@mastra/vectorize"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -11607,6 +11850,10 @@ await store.deleteVectors({
 ---
 title: "MastraAuthAuth0 Class | Auth"
 description: "Documentation for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+packages:
+  - "@mastra/auth-auth0"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -11852,6 +12099,10 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
 ---
 title: "MastraAuthClerk Class | Auth"
 description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
+packages:
+  - "@mastra/auth-clerk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -12006,6 +12257,10 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 ---
 title: "MastraAuthFirebase Class | Auth"
 description: "Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+packages:
+  - "@mastra/auth-firebase"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -12303,6 +12558,8 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 ---
 title: "Auth Overview | Auth"
 description: Learn about different Auth options for your Mastra applications
+packages:
+  - "@mastra/auth"
 ---
 
 # Auth Overview
@@ -12325,6 +12582,10 @@ You can start with simple shared secret JWT authentication and switch to provide
 ---
 title: "MastraJwtAuth Class | Auth"
 description: "Documentation for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
+packages:
+  - "@mastra/auth"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -12438,6 +12699,10 @@ The easiest way to generate one is using [jwt.io](https://www.jwt.io/):
 ---
 title: "MastraAuthSupabase Class | Auth"
 description: "Documentation for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
+packages:
+  - "@mastra/auth-supabase"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -12578,6 +12843,10 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
 ---
 title: "MastraAuthWorkos Class | Auth"
 description: "Documentation for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -12791,6 +13060,11 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
 ---
 title: "Custom Adapters | Server"
 description: "Create a custom server adapter for frameworks other than Hono or Express."
+packages:
+  - "@mastra/core"
+  - "@mastra/express"
+  - "@mastra/hono"
+  - "@mastra/server"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -13180,6 +13454,8 @@ The existing [@mastra/hono](https://github.com/mastra-ai/mastra/blob/main/server
 ---
 title: "Custom API Routes | Server"
 description: "Expose additional HTTP endpoints from your Mastra server."
+packages:
+  - "@mastra/core"
 ---
 
 # Custom API Routes
@@ -13248,6 +13524,9 @@ export const mastra = new Mastra({
 ---
 title: "Mastra Client SDK | Server"
 description: "Learn how to set up and use the Mastra Client SDK"
+packages:
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -13538,6 +13817,8 @@ export async function action() {
 ---
 title: "Server Configuration | Server"
 description: "Configure the Mastra server with custom settings for port, timeout, CORS, and more."
+packages:
+  - "@mastra/core"
 ---
 
 # Server Configuration
@@ -13640,6 +13921,8 @@ If you're using server adapters directly, you can configure redaction behavior. 
 ---
 title: "Middleware | Server"
 description: "Apply custom middleware functions to intercept requests."
+packages:
+  - "@mastra/core"
 ---
 
 # Middleware
@@ -13820,6 +14103,8 @@ be inspected by middleware to tailor behavior:
 ---
 title: "Request Context | Server"
 description: Learn how to use Mastra's RequestContext to provide dynamic, request-specific configuration to agents.
+packages:
+  - "@mastra/core"
 ---
 
 # Request Context
@@ -14017,6 +14302,9 @@ Visit [createTool()](/reference/v1/tools/create-tool) for a full list of configu
 ---
 title: "Server Adapters | Server"
 description: "Manually configure a Mastra server using Hono or Express adapters."
+packages:
+  - "@mastra/express"
+  - "@mastra/hono"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -14332,6 +14620,8 @@ See [MCP](/docs/v1/mcp/overview) for configuration details and how to set up MCP
 ---
 title: "Streaming Events | Streaming"
 description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
+packages:
+  - "@mastra/core"
 ---
 
 # Streaming Events
@@ -14573,6 +14863,8 @@ for await (const chunk of networkStream) {
 ---
 title: "Streaming Overview | Streaming"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Streaming Overview
@@ -14774,6 +15066,8 @@ A workflow stream provides access to various response properties:
 ---
 title: "Tool streaming | Streaming"
 description: "Learn how to use tool streaming in Mastra, including handling tool calls, tool results, and tool execution events during streaming."
+packages:
+  - "@mastra/core"
 ---
 
 # Tool streaming
@@ -14959,6 +15253,8 @@ export const testTool = createTool({
 ---
 title: "Workflow streaming | Streaming"
 description: "Learn how to use workflow streaming in Mastra, including handling workflow execution events, step streaming, and workflow integration with agents and tools."
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow streaming
@@ -15080,6 +15376,8 @@ export const testStep = createStep({
 ---
 title: "Advanced Tool Usage | Tools & MCP"
 description: This page covers advanced features for Mastra tools, including abort signals and compatibility with the Vercel AI SDK tool format.
+packages:
+  - "@mastra/core"
 ---
 
 # Advanced Tool Usage
@@ -15211,6 +15509,9 @@ Mastra supports both tool formats, allowing you to mix and match as needed.
 ---
 title: "MCP Overview | Tools & MCP"
 description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -15604,6 +15905,8 @@ As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so 
 ---
 title: "Using Tools | Tools & MCP"
 description: Understand what tools are in Mastra, how to add them to agents, and best practices for designing effective tools.
+packages:
+  - "@mastra/core"
 ---
 
 # Using Tools
@@ -15694,6 +15997,21 @@ Use [Studio](/docs/v1/getting-started/studio) to test tools with different input
 ---
 title: "Voice in Mastra | Voice"
 description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-azure"
+  - "@mastra/voice-cloudflare"
+  - "@mastra/voice-deepgram"
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-google"
+  - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-murf"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
+  - "@mastra/voice-sarvam"
+  - "@mastra/voice-speechify"
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
@@ -16731,6 +17049,11 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 ---
 title: "Speech-to-Speech Capabilities in Mastra | Voice"
 description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # Speech-to-Speech Capabilities in Mastra
@@ -16843,6 +17166,10 @@ Note:
 ---
 title: "Speech-to-Text (STT) | Voice"
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai"
 ---
 
 # Speech-to-Text (STT)
@@ -16932,6 +17259,9 @@ Check out the [Adding Voice to Agents](/docs/v1/agents/adding-voice) documentati
 ---
 title: "Text-to-Speech (TTS) | Voice"
 description: Overview of Text-to-Speech capabilities in Mastra, including configuration, usage, and integration with voice providers.
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai"
 ---
 
 # Text-to-Speech (TTS)
@@ -17025,6 +17355,8 @@ Check out the [Adding Voice to Agents](/docs/v1/agents/adding-voice) documentati
 ---
 title: "Agents and Tools | Workflows"
 description: "Learn how to call agents and tools from workflow steps and choose between execute functions and step composition."
+packages:
+  - "@mastra/core"
 ---
 
 # Agents and Tools
@@ -17221,6 +17553,8 @@ Visit [Input Data Mapping](./input-data-mapping) for more information.
 ---
 title: "Control Flow | Workflows"
 description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+packages:
+  - "@mastra/core"
 ---
 
 # Control Flow
@@ -18050,6 +18384,8 @@ export const testWorkflow = createWorkflow({...})
 ---
 title: "Error Handling | Workflows"
 description: "Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring."
+packages:
+  - "@mastra/core"
 ---
 
 # Error Handling
@@ -18400,6 +18736,8 @@ for await (const chunk of stream.stream) {
 ---
 title: "Human-in-the-loop (HITL) | Workflows"
 description: "Human-in-the-loop workflows in Mastra allow you to pause execution for manual approvals, reviews, or user input before continuing."
+packages:
+  - "@mastra/core"
 ---
 
 # Human-in-the-loop (HITL)
@@ -18620,6 +18958,8 @@ const handleDelete = async () => {
 ---
 title: "Input Data Mapping | Workflows"
 description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows."
+packages:
+  - "@mastra/core"
 ---
 
 # Input Data Mapping
@@ -18730,6 +19070,8 @@ testWorkflow
 ---
 title: "Workflows overview | Workflows"
 description: "Workflows in Mastra help you orchestrate complex sequences of tasks with features like branching, parallel execution, resource suspension, and more."
+packages:
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -19096,6 +19438,9 @@ For a closer look at workflows, see our [Workflow Guide](/guides/v1/guide/ai-rec
 ---
 title: "Snapshots | Workflows"
 description: "Learn how to save and resume workflow execution state with snapshots in Mastra"
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
 ---
 
 # Snapshots
@@ -19342,6 +19687,8 @@ if (result.status === "suspended") {
 ---
 title: "Suspend & Resume | Workflows"
 description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
+packages:
+  - "@mastra/core"
 ---
 
 # Suspend & Resume
@@ -19555,6 +19902,8 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 ---
 title: "Time Travel | Workflows"
 description: "Re-execute workflow steps from a specific point using time travel debugging in Mastra"
+packages:
+  - "@mastra/core"
 ---
 
 # Time Travel
@@ -19871,6 +20220,8 @@ const result = await run.timeTravel({
 ---
 title: "Workflow state | Workflows"
 description: "Share values across workflow steps using global state that persists through the entire workflow run."
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow State
@@ -20061,6 +20412,10 @@ const parentWorkflow = createWorkflow({
 ---
 title: "AI SDK | Agent Frameworks"
 description: "Use Mastra processors and memory with the Vercel AI SDK"
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+  - "@mastra/libsql"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -29078,6 +29433,18 @@ Run-related methods cannot be called directly on workflow instance. You need to 
 + const stream = await run.stream({ inputData: { ... } });
 ```
 
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods instead.
+
+```diff
++ const run = await workflow.createRun({ runId: '123' });
+- const stream = await run.streamVNext({ inputData: { ... } });
++ const stream = await run.stream({ inputData: { ... } });
+```
+
 ### Deprecated stream endpoints
 
 Some stream endpoints are deprecated and will be removed. The `/api/agents/:agentId/stream/vnext` endpoint returns 410 Gone, and `/api/agents/:agentId/stream/ui` is deprecated. This change consolidates on standard streaming endpoints.
@@ -33210,7 +33577,7 @@ ANTHROPIC_API_KEY=ant-...
 
 ---
 title: "Models"
-description: "Access 65+ AI providers and 1540+ models through Mastra's model router."
+description: "Access 65+ AI providers and 1542+ models through Mastra's model router."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -33223,7 +33590,7 @@ import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 # Model Providers
 [EN] Source: https://mastra.ai/en/models
 
-Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1540 models from 65 providers through a single API.
+Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to 1542 models from 65 providers through a single API.
 
 ## Features
 
@@ -42889,7 +43256,7 @@ Direct access to individual AI model providers. Each provider offers unique mode
       logo="https://models.dev/logos/upstage.svg"
     />    <CardGridItem
       title="Venice AI"
-      description="22 models"
+      description="24 models"
       href="/models/v1/providers/venice"
       logo="https://models.dev/logos/venice.svg"
     />    <CardGridItem
@@ -50742,7 +51109,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "siliconflow-cn/baidu-ernie-4.5-300b-a47b"
+  model: "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct"
 });
 
 // Generate a response
@@ -50766,7 +51133,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "siliconflow-cn/baidu-ernie-4.5-300b-a47b",
+    "model": "siliconflow-cn/baidu/ERNIE-4.5-300B-A47B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50778,7 +51145,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.1
   },
   {
-    "model": "siliconflow-cn/bytedance-seed-seed-oss-36b-instruct",
+    "model": "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50790,7 +51157,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-r1",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-R1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50802,7 +51169,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.18
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-r1-distill-qwen-14b",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50814,7 +51181,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.1
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-r1-distill-qwen-32b",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50826,7 +51193,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-r1-distill-qwen-7b",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50838,7 +51205,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-v3",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50850,7 +51217,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-v3.1",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50862,7 +51229,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-v3.1-terminus",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.1-Terminus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50874,7 +51241,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-v3.2-exp",
+    "model": "siliconflow-cn/deepseek-ai/DeepSeek-V3.2-Exp",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50886,7 +51253,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.41
   },
   {
-    "model": "siliconflow-cn/deepseek-ai-deepseek-vl2",
+    "model": "siliconflow-cn/deepseek-ai/deepseek-vl2",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -50898,7 +51265,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.15
   },
   {
-    "model": "siliconflow-cn/inclusionai-ling-flash-2.0",
+    "model": "siliconflow-cn/inclusionAI/Ling-flash-2.0",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50910,7 +51277,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/inclusionai-ling-mini-2.0",
+    "model": "siliconflow-cn/inclusionAI/Ling-mini-2.0",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50922,7 +51289,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "siliconflow-cn/inclusionai-ring-flash-2.0",
+    "model": "siliconflow-cn/inclusionAI/Ring-flash-2.0",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50934,7 +51301,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/meta-llama-meta-llama-3.1-8b-instruct",
+    "model": "siliconflow-cn/meta-llama/Meta-Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50946,7 +51313,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.06
   },
   {
-    "model": "siliconflow-cn/minimaxai-minimax-m1-80k",
+    "model": "siliconflow-cn/MiniMaxAI/MiniMax-M1-80k",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50958,7 +51325,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.2
   },
   {
-    "model": "siliconflow-cn/minimaxai-minimax-m2",
+    "model": "siliconflow-cn/MiniMaxAI/MiniMax-M2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50970,7 +51337,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "siliconflow-cn/moonshotai-kimi-dev-72b",
+    "model": "siliconflow-cn/moonshotai/Kimi-Dev-72B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50982,7 +51349,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.15
   },
   {
-    "model": "siliconflow-cn/moonshotai-kimi-k2-instruct",
+    "model": "siliconflow-cn/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -50994,7 +51361,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.29
   },
   {
-    "model": "siliconflow-cn/moonshotai-kimi-k2-instruct-0905",
+    "model": "siliconflow-cn/moonshotai/Kimi-K2-Instruct-0905",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51006,7 +51373,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow-cn/moonshotai-kimi-k2-thinking",
+    "model": "siliconflow-cn/moonshotai/Kimi-K2-Thinking",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51018,7 +51385,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "siliconflow-cn/nex-agi-deepseek-v3.1-nex-n1",
+    "model": "siliconflow-cn/nex-agi/DeepSeek-V3.1-Nex-N1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51030,7 +51397,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow-cn/openai-gpt-oss-120b",
+    "model": "siliconflow-cn/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51042,7 +51409,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.45
   },
   {
-    "model": "siliconflow-cn/openai-gpt-oss-20b",
+    "model": "siliconflow-cn/openai/gpt-oss-20b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51054,7 +51421,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-14b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-14B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51066,7 +51433,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.1
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-32b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-32B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51078,7 +51445,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-72b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-72B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51090,7 +51457,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-72b-instruct-128k",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-72B-Instruct-128K",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51102,7 +51469,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-7b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-7B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51114,7 +51481,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-coder-32b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-Coder-32B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51126,7 +51493,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-vl-32b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-VL-32B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51138,7 +51505,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.27
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-vl-72b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-VL-72B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51150,7 +51517,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "siliconflow-cn/qwen-qwen2.5-vl-7b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen2.5-VL-7B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51162,7 +51529,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-14b",
+    "model": "siliconflow-cn/Qwen/Qwen3-14B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51174,7 +51541,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-235b-a22b",
+    "model": "siliconflow-cn/Qwen/Qwen3-235B-A22B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51186,7 +51553,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.42
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-235b-a22b-instruct-2507",
+    "model": "siliconflow-cn/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51198,7 +51565,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-235b-a22b-thinking-2507",
+    "model": "siliconflow-cn/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51210,7 +51577,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-30b-a3b",
+    "model": "siliconflow-cn/Qwen/Qwen3-30B-A3B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51222,7 +51589,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.45
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-30b-a3b-instruct-2507",
+    "model": "siliconflow-cn/Qwen/Qwen3-30B-A3B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51234,7 +51601,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.3
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-30b-a3b-thinking-2507",
+    "model": "siliconflow-cn/Qwen/Qwen3-30B-A3B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51246,7 +51613,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.3
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-32b",
+    "model": "siliconflow-cn/Qwen/Qwen3-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51258,7 +51625,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-8b",
+    "model": "siliconflow-cn/Qwen/Qwen3-8B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51270,7 +51637,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.06
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-coder-30b-a3b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51282,7 +51649,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-coder-480b-a35b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51294,7 +51661,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-next-80b-a3b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-Next-80B-A3B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51306,7 +51673,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.4
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-next-80b-a3b-thinking",
+    "model": "siliconflow-cn/Qwen/Qwen3-Next-80B-A3B-Thinking",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51318,7 +51685,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-omni-30b-a3b-captioner",
+    "model": "siliconflow-cn/Qwen/Qwen3-Omni-30B-A3B-Captioner",
     "imageInput": false,
     "audioInput": true,
     "videoInput": false,
@@ -51330,7 +51697,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-omni-30b-a3b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-Omni-30B-A3B-Instruct",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -51342,7 +51709,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-omni-30b-a3b-thinking",
+    "model": "siliconflow-cn/Qwen/Qwen3-Omni-30B-A3B-Thinking",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -51354,7 +51721,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-235b-a22b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-235B-A22B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51366,7 +51733,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-235b-a22b-thinking",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-235B-A22B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51378,7 +51745,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.5
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-30b-a3b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-30B-A3B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51390,7 +51757,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-30b-a3b-thinking",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-30B-A3B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51402,7 +51769,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-32b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-32B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51414,7 +51781,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-32b-thinking",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-32B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51426,7 +51793,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-8b-instruct",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-8B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51438,7 +51805,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.68
   },
   {
-    "model": "siliconflow-cn/qwen-qwen3-vl-8b-thinking",
+    "model": "siliconflow-cn/Qwen/Qwen3-VL-8B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51450,7 +51817,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow-cn/qwen-qwq-32b",
+    "model": "siliconflow-cn/Qwen/QwQ-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51462,7 +51829,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.58
   },
   {
-    "model": "siliconflow-cn/stepfun-ai-step3",
+    "model": "siliconflow-cn/stepfun-ai/step3",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51474,7 +51841,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.42
   },
   {
-    "model": "siliconflow-cn/tencent-hunyuan-a13b-instruct",
+    "model": "siliconflow-cn/tencent/Hunyuan-A13B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51486,7 +51853,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/tencent-hunyuan-mt-7b",
+    "model": "siliconflow-cn/tencent/Hunyuan-MT-7B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51498,7 +51865,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "siliconflow-cn/thudm-glm-4-32b-0414",
+    "model": "siliconflow-cn/THUDM/GLM-4-32B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51510,7 +51877,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.27
   },
   {
-    "model": "siliconflow-cn/thudm-glm-4-9b-0414",
+    "model": "siliconflow-cn/THUDM/GLM-4-9B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51522,7 +51889,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.086
   },
   {
-    "model": "siliconflow-cn/thudm-glm-4.1v-9b-thinking",
+    "model": "siliconflow-cn/THUDM/GLM-4.1V-9B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51534,7 +51901,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.14
   },
   {
-    "model": "siliconflow-cn/thudm-glm-z1-32b-0414",
+    "model": "siliconflow-cn/THUDM/GLM-Z1-32B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51546,7 +51913,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow-cn/thudm-glm-z1-9b-0414",
+    "model": "siliconflow-cn/THUDM/GLM-Z1-9B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51558,7 +51925,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.086
   },
   {
-    "model": "siliconflow-cn/z-ai-glm-4.5",
+    "model": "siliconflow-cn/z-ai/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51570,7 +51937,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow-cn/z-ai-glm-4.5-air",
+    "model": "siliconflow-cn/z-ai/GLM-4.5-Air",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51582,7 +51949,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.86
   },
   {
-    "model": "siliconflow-cn/zai-org-glm-4.5",
+    "model": "siliconflow-cn/zai-org/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51594,7 +51961,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow-cn/zai-org-glm-4.5-air",
+    "model": "siliconflow-cn/zai-org/GLM-4.5-Air",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51606,7 +51973,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.86
   },
   {
-    "model": "siliconflow-cn/zai-org-glm-4.5v",
+    "model": "siliconflow-cn/zai-org/GLM-4.5V",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51618,7 +51985,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.86
   },
   {
-    "model": "siliconflow-cn/zai-org-glm-4.6",
+    "model": "siliconflow-cn/zai-org/GLM-4.6",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51642,7 +52009,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.siliconflow.cn/v1",
-    id: "siliconflow-cn/baidu-ernie-4.5-300b-a47b",
+    id: "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct",
     apiKey: process.env.SILICONFLOW_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -51660,8 +52027,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "siliconflow-cn/zai-org-glm-4.6"
-      : "siliconflow-cn/baidu-ernie-4.5-300b-a47b";
+      ? "siliconflow-cn/zai-org/GLM-4.6"
+      : "siliconflow-cn/ByteDance-Seed/Seed-OSS-36B-Instruct";
   }
 });
 ```
@@ -51696,7 +52063,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "siliconflow/baidu-ernie-4.5-300b-a47b"
+  model: "siliconflow/ByteDance-Seed/Seed-OSS-36B-Instruct"
 });
 
 // Generate a response
@@ -51720,7 +52087,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "siliconflow/baidu-ernie-4.5-300b-a47b",
+    "model": "siliconflow/baidu/ERNIE-4.5-300B-A47B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51732,7 +52099,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.1
   },
   {
-    "model": "siliconflow/bytedance-seed-seed-oss-36b-instruct",
+    "model": "siliconflow/ByteDance-Seed/Seed-OSS-36B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51744,7 +52111,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-r1",
+    "model": "siliconflow/deepseek-ai/DeepSeek-R1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51756,7 +52123,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.18
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-r1-distill-qwen-14b",
+    "model": "siliconflow/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51768,7 +52135,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.1
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-r1-distill-qwen-32b",
+    "model": "siliconflow/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51780,7 +52147,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-r1-distill-qwen-7b",
+    "model": "siliconflow/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51792,7 +52159,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-v3",
+    "model": "siliconflow/deepseek-ai/DeepSeek-V3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51804,7 +52171,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-v3.1",
+    "model": "siliconflow/deepseek-ai/DeepSeek-V3.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51816,7 +52183,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-v3.1-terminus",
+    "model": "siliconflow/deepseek-ai/DeepSeek-V3.1-Terminus",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51828,7 +52195,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-v3.2-exp",
+    "model": "siliconflow/deepseek-ai/DeepSeek-V3.2-Exp",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51840,7 +52207,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.41
   },
   {
-    "model": "siliconflow/deepseek-ai-deepseek-vl2",
+    "model": "siliconflow/deepseek-ai/deepseek-vl2",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -51852,7 +52219,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.15
   },
   {
-    "model": "siliconflow/inclusionai-ling-flash-2.0",
+    "model": "siliconflow/inclusionAI/Ling-flash-2.0",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51864,7 +52231,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/inclusionai-ling-mini-2.0",
+    "model": "siliconflow/inclusionAI/Ling-mini-2.0",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51876,7 +52243,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "siliconflow/inclusionai-ring-flash-2.0",
+    "model": "siliconflow/inclusionAI/Ring-flash-2.0",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51888,7 +52255,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/meta-llama-meta-llama-3.1-8b-instruct",
+    "model": "siliconflow/meta-llama/Meta-Llama-3.1-8B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51900,7 +52267,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.06
   },
   {
-    "model": "siliconflow/minimaxai-minimax-m1-80k",
+    "model": "siliconflow/MiniMaxAI/MiniMax-M1-80k",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51912,7 +52279,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.2
   },
   {
-    "model": "siliconflow/minimaxai-minimax-m2",
+    "model": "siliconflow/MiniMaxAI/MiniMax-M2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51924,7 +52291,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "siliconflow/moonshotai-kimi-dev-72b",
+    "model": "siliconflow/moonshotai/Kimi-Dev-72B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51936,7 +52303,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.15
   },
   {
-    "model": "siliconflow/moonshotai-kimi-k2-instruct",
+    "model": "siliconflow/moonshotai/Kimi-K2-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51948,7 +52315,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.29
   },
   {
-    "model": "siliconflow/moonshotai-kimi-k2-instruct-0905",
+    "model": "siliconflow/moonshotai/Kimi-K2-Instruct-0905",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51960,7 +52327,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow/moonshotai-kimi-k2-thinking",
+    "model": "siliconflow/moonshotai/Kimi-K2-Thinking",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51972,7 +52339,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.5
   },
   {
-    "model": "siliconflow/nex-agi-deepseek-v3.1-nex-n1",
+    "model": "siliconflow/nex-agi/DeepSeek-V3.1-Nex-N1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51984,7 +52351,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow/openai-gpt-oss-120b",
+    "model": "siliconflow/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -51996,7 +52363,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.45
   },
   {
-    "model": "siliconflow/openai-gpt-oss-20b",
+    "model": "siliconflow/openai/gpt-oss-20b",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52008,7 +52375,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-14b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-14B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52020,7 +52387,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.1
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-32b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-32B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52032,7 +52399,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-72b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-72B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52044,7 +52411,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-72b-instruct-128k",
+    "model": "siliconflow/Qwen/Qwen2.5-72B-Instruct-128K",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52056,7 +52423,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-7b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-7B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52068,7 +52435,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-coder-32b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-Coder-32B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52080,7 +52447,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-vl-32b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-VL-32B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52092,7 +52459,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.27
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-vl-72b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-VL-72B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52104,7 +52471,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.59
   },
   {
-    "model": "siliconflow/qwen-qwen2.5-vl-7b-instruct",
+    "model": "siliconflow/Qwen/Qwen2.5-VL-7B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52116,7 +52483,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "siliconflow/qwen-qwen3-14b",
+    "model": "siliconflow/Qwen/Qwen3-14B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52128,7 +52495,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "siliconflow/qwen-qwen3-235b-a22b",
+    "model": "siliconflow/Qwen/Qwen3-235B-A22B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52140,7 +52507,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.42
   },
   {
-    "model": "siliconflow/qwen-qwen3-235b-a22b-instruct-2507",
+    "model": "siliconflow/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52152,7 +52519,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "siliconflow/qwen-qwen3-235b-a22b-thinking-2507",
+    "model": "siliconflow/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52164,7 +52531,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "siliconflow/qwen-qwen3-30b-a3b",
+    "model": "siliconflow/Qwen/Qwen3-30B-A3B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52176,7 +52543,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.45
   },
   {
-    "model": "siliconflow/qwen-qwen3-30b-a3b-instruct-2507",
+    "model": "siliconflow/Qwen/Qwen3-30B-A3B-Instruct-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52188,7 +52555,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.3
   },
   {
-    "model": "siliconflow/qwen-qwen3-30b-a3b-thinking-2507",
+    "model": "siliconflow/Qwen/Qwen3-30B-A3B-Thinking-2507",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52200,7 +52567,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.3
   },
   {
-    "model": "siliconflow/qwen-qwen3-32b",
+    "model": "siliconflow/Qwen/Qwen3-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52212,7 +52579,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/qwen-qwen3-8b",
+    "model": "siliconflow/Qwen/Qwen3-8B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52224,7 +52591,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.06
   },
   {
-    "model": "siliconflow/qwen-qwen3-coder-30b-a3b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52236,7 +52603,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.28
   },
   {
-    "model": "siliconflow/qwen-qwen3-coder-480b-a35b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52248,7 +52615,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow/qwen-qwen3-next-80b-a3b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-Next-80B-A3B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52260,7 +52627,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.4
   },
   {
-    "model": "siliconflow/qwen-qwen3-next-80b-a3b-thinking",
+    "model": "siliconflow/Qwen/Qwen3-Next-80B-A3B-Thinking",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52272,7 +52639,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/qwen-qwen3-omni-30b-a3b-captioner",
+    "model": "siliconflow/Qwen/Qwen3-Omni-30B-A3B-Captioner",
     "imageInput": false,
     "audioInput": true,
     "videoInput": false,
@@ -52284,7 +52651,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "siliconflow/qwen-qwen3-omni-30b-a3b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-Omni-30B-A3B-Instruct",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -52296,7 +52663,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "siliconflow/qwen-qwen3-omni-30b-a3b-thinking",
+    "model": "siliconflow/Qwen/Qwen3-Omni-30B-A3B-Thinking",
     "imageInput": true,
     "audioInput": true,
     "videoInput": false,
@@ -52308,7 +52675,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-235b-a22b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-VL-235B-A22B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52320,7 +52687,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-235b-a22b-thinking",
+    "model": "siliconflow/Qwen/Qwen3-VL-235B-A22B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52332,7 +52699,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.5
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-30b-a3b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-VL-30B-A3B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52344,7 +52711,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-30b-a3b-thinking",
+    "model": "siliconflow/Qwen/Qwen3-VL-30B-A3B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52356,7 +52723,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-32b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-VL-32B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52368,7 +52735,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-32b-thinking",
+    "model": "siliconflow/Qwen/Qwen3-VL-32B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52380,7 +52747,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-8b-instruct",
+    "model": "siliconflow/Qwen/Qwen3-VL-8B-Instruct",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52392,7 +52759,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.68
   },
   {
-    "model": "siliconflow/qwen-qwen3-vl-8b-thinking",
+    "model": "siliconflow/Qwen/Qwen3-VL-8B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52404,7 +52771,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow/qwen-qwq-32b",
+    "model": "siliconflow/Qwen/QwQ-32B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52416,7 +52783,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.58
   },
   {
-    "model": "siliconflow/stepfun-ai-step3",
+    "model": "siliconflow/stepfun-ai/step3",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52428,7 +52795,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.42
   },
   {
-    "model": "siliconflow/tencent-hunyuan-a13b-instruct",
+    "model": "siliconflow/tencent/Hunyuan-A13B-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52440,7 +52807,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/tencent-hunyuan-mt-7b",
+    "model": "siliconflow/tencent/Hunyuan-MT-7B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52452,7 +52819,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "siliconflow/thudm-glm-4-32b-0414",
+    "model": "siliconflow/THUDM/GLM-4-32B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52464,7 +52831,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.27
   },
   {
-    "model": "siliconflow/thudm-glm-4-9b-0414",
+    "model": "siliconflow/THUDM/GLM-4-9B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52476,7 +52843,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.086
   },
   {
-    "model": "siliconflow/thudm-glm-4.1v-9b-thinking",
+    "model": "siliconflow/THUDM/GLM-4.1V-9B-Thinking",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52488,7 +52855,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.14
   },
   {
-    "model": "siliconflow/thudm-glm-z1-32b-0414",
+    "model": "siliconflow/THUDM/GLM-Z1-32B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52500,7 +52867,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.57
   },
   {
-    "model": "siliconflow/thudm-glm-z1-9b-0414",
+    "model": "siliconflow/THUDM/GLM-Z1-9B-0414",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52512,7 +52879,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.086
   },
   {
-    "model": "siliconflow/z-ai-glm-4.5",
+    "model": "siliconflow/z-ai/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52524,7 +52891,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow/z-ai-glm-4.5-air",
+    "model": "siliconflow/z-ai/GLM-4.5-Air",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52536,7 +52903,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.86
   },
   {
-    "model": "siliconflow/zai-org-glm-4.5",
+    "model": "siliconflow/zai-org/GLM-4.5",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52548,7 +52915,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2
   },
   {
-    "model": "siliconflow/zai-org-glm-4.5-air",
+    "model": "siliconflow/zai-org/GLM-4.5-Air",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52560,7 +52927,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.86
   },
   {
-    "model": "siliconflow/zai-org-glm-4.5v",
+    "model": "siliconflow/zai-org/GLM-4.5V",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -52572,7 +52939,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.86
   },
   {
-    "model": "siliconflow/zai-org-glm-4.6",
+    "model": "siliconflow/zai-org/GLM-4.6",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -52596,7 +52963,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.siliconflow.com/v1",
-    id: "siliconflow/baidu-ernie-4.5-300b-a47b",
+    id: "siliconflow/ByteDance-Seed/Seed-OSS-36B-Instruct",
     apiKey: process.env.SILICONFLOW_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -52614,8 +52981,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "siliconflow/zai-org-glm-4.6"
-      : "siliconflow/baidu-ernie-4.5-300b-a47b";
+      ? "siliconflow/zai-org/GLM-4.6"
+      : "siliconflow/ByteDance-Seed/Seed-OSS-36B-Instruct";
   }
 });
 ```
@@ -53560,7 +53927,7 @@ const agent = new Agent({
 
 ---
 title: "Venice AI | Models | Mastra"
-description: "Use Venice AI models with Mastra. 22 models available."
+description: "Use Venice AI models with Mastra. 24 models available."
 ---
 
 {/* This file is auto-generated by generate-model-docs.ts - DO NOT EDIT MANUALLY */}
@@ -53570,7 +53937,7 @@ description: "Use Venice AI models with Mastra. 22 models available."
 # <img src="https://models.dev/logos/venice.svg" alt="Venice AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Venice AI
 [EN] Source: https://mastra.ai/en/models/providers/venice
 
-Access 22 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
+Access 24 Venice AI models through Mastra's model router. Authentication is handled automatically using the `VENICE_API_KEY` environment variable.
 
 Learn more in the [Venice AI documentation](https://docs.venice.ai).
 
@@ -53681,6 +54048,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.25
   },
   {
+    "model": "venice/grok-code-fast-1",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.25,
+    "outputCost": 1.87
+  },
+  {
     "model": "venice/hermes-3-llama-3.1-405b",
     "imageInput": false,
     "audioInput": false,
@@ -53727,6 +54106,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.7,
     "outputCost": 2.8
+  },
+  {
+    "model": "venice/minimax-m21",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202752,
+    "maxOutput": 50688,
+    "inputCost": 0.4,
+    "outputCost": 1.6
   },
   {
     "model": "venice/mistral-31-24b",
@@ -55848,6 +56239,8 @@ const agent = new Agent({
 ---
 title: "Reference: Agent Class | Agents"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent Class
@@ -56102,6 +56495,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Agent.generate() | Agents"
 description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
@@ -56756,6 +57151,8 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
 ---
 title: "Reference: Agent.generateLegacy() (Legacy) | Agents"
 description: "Documentation for the legacy `Agent.generateLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.generateLegacy() (Legacy)
@@ -57369,6 +57766,8 @@ await agent.generateLegacy(
 ---
 title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents"
 description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDefaultGenerateOptionsLegacy()
@@ -57447,6 +57846,8 @@ await agent.getDefaultGenerateOptionsLegacy({
 ---
 title: "Reference: Agent.getDefaultOptions() | Agents"
 description: "Documentation for the `Agent.getDefaultOptions()` method in Mastra agents, which retrieves the default options used for stream and generate calls."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDefaultOptions()
@@ -57519,6 +57920,8 @@ await agent.getDefaultOptions({
 ---
 title: "Reference: Agent.getDefaultStreamOptionsLegacy() | Agents"
 description: "Documentation for the `Agent.getDefaultStreamOptionsLegacy()` method in Mastra agents, which retrieves the default options used for streamLegacy calls."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDefaultStreamOptionsLegacy()
@@ -57597,6 +58000,8 @@ await agent.getDefaultStreamOptionsLegacy({
 ---
 title: "Reference: Agent.getDescription() | Agents"
 description: "Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agent's description."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDescription()
@@ -57635,6 +58040,8 @@ This method takes no parameters.
 ---
 title: "Reference: Agent.getInstructions() | Agents"
 description: "Documentation for the `Agent.getInstructions()` method in Mastra agents, which retrieves the instructions that guide the agent's behavior."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getInstructions()
@@ -57707,6 +58114,8 @@ await agent.getInstructions({
 ---
 title: "Reference: Agent.getLLM() | Agents"
 description: "Documentation for the `Agent.getLLM()` method in Mastra agents, which retrieves the language model instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getLLM()
@@ -57788,6 +58197,8 @@ await agent.getLLM({
 ---
 title: "Reference: Agent.getMemory() | Agents"
 description: "Documentation for the `Agent.getMemory()` method in Mastra agents, which retrieves the memory system associated with the agent."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getMemory()
@@ -57860,6 +58271,8 @@ await agent.getMemory({
 ---
 title: "Reference: Agent.getModel() | Agents"
 description: "Documentation for the `Agent.getModel()` method in Mastra agents, which retrieves the language model that powers the agent."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getModel()
@@ -57932,6 +58345,8 @@ await agent.getModel({
 ---
 title: "Reference: Agent.getTools() | Agents"
 description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getTools()
@@ -58004,6 +58419,8 @@ await agent.getTools({
 ---
 title: "Reference: Agent.getVoice() | Agents"
 description: "Documentation for the `Agent.getVoice()` method in Mastra agents, which retrieves the voice provider for speech capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getVoice()
@@ -58076,6 +58493,8 @@ await agent.getVoice({
 ---
 title: "Reference: Agent.listAgents() | Agents"
 description: "Documentation for the `Agent.listAgents()` method in Mastra agents, which retrieves the sub-agents that the agent can access."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.listAgents()
@@ -58149,6 +58568,8 @@ await agent.listAgents({
 ---
 title: "Reference: Agent.listScorers() | Agents"
 description: "Documentation for the `Agent.listScorers()` method in Mastra agents, which retrieves the scoring configuration."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.listScorers()
@@ -58221,6 +58642,8 @@ await agent.listScorers({
 ---
 title: "Reference: Agent.listTools() | Agents"
 description: "Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.listTools()
@@ -58293,6 +58716,8 @@ await agent.listTools({
 ---
 title: "Reference: Agent.listWorkflows() | Agents"
 description: "Documentation for the `Agent.listWorkflows()` method in Mastra agents, which retrieves the workflows that the agent can execute."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.listWorkflows()
@@ -58365,6 +58790,8 @@ await agent.listWorkflows({
 ---
 title: "Reference: Agent.network() | Agents"
 description: "Documentation for the `Agent.network()` method in Mastra agents, which enables multi-agent collaboration and routing."
+packages:
+  - "@mastra/core"
 ---
 
 import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
@@ -58675,6 +59102,9 @@ await agent.network(`
 ---
 title: "Reference: chatRoute() | AI SDK"
 description: API reference for chatRoute(), a function to create chat route handlers for streaming agent conversations in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -58804,6 +59234,8 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 ---
 title: "Reference: handleChatStream() | AI SDK"
 description: API reference for handleChatStream(), a framework-agnostic handler for streaming agent chat in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -58923,6 +59355,8 @@ export async function POST(req: Request) {
 ---
 title: "Reference: handleNetworkStream() | AI SDK"
 description: API reference for handleNetworkStream(), a framework-agnostic handler for streaming network execution in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -58989,6 +59423,8 @@ export async function POST(req: Request) {
 ---
 title: "Reference: handleWorkflowStream() | AI SDK"
 description: API reference for handleWorkflowStream(), a framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59107,6 +59543,9 @@ export async function POST(req: Request) {
 ---
 title: "Reference: networkRoute() | AI SDK"
 description: API reference for networkRoute(), a function to create network route handlers for streaming network execution in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59208,6 +59647,10 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 ---
 title: "Reference: toAISdkStream() | AI SDK"
 description: API reference for toAISdkStream(), a function to convert Mastra streams to AI SDK-compatible streams.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59500,6 +59943,9 @@ for await (const part of uiMessageStream) {
 ---
 title: "Reference: toAISdkV4Messages() | AI SDK"
 description: API reference for toAISdkV4Messages(), a function to convert Mastra messages to AI SDK v4 UI messages.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59630,6 +60076,9 @@ const uiMessages = toAISdkV4Messages(messages);
 ---
 title: "Reference: toAISdkV5Messages() | AI SDK"
 description: API reference for toAISdkV5Messages(), a function to convert Mastra messages to AI SDK v5 UI messages.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59740,6 +60189,9 @@ const uiMessages = toAISdkV5Messages(messages);
 ---
 title: "Reference: withMastra() | AI SDK"
 description: API reference for withMastra(), a function to use Mastra functionality in AI SDK.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59861,6 +60313,9 @@ A wrapped model compatible with `generateText`, `streamText`, `generateObject`, 
 ---
 title: "Reference: workflowRoute() | AI SDK"
 description: API reference for workflowRoute(), a function to create workflow route handlers for streaming workflow execution in AI SDK-compatible format.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -59973,6 +60428,9 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
 ---
 title: "Reference: MastraAuthAuth0 Class | Auth"
 description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+packages:
+  - "@mastra/auth-auth0"
+  - "@mastra/core"
 ---
 
 # MastraAuthAuth0 Class
@@ -60096,6 +60554,9 @@ The exact properties available depend on your Auth0 configuration, scopes reques
 ---
 title: "Reference: MastraAuthClerk Class | Auth"
 description: "API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
+packages:
+  - "@mastra/auth-clerk"
+  - "@mastra/core"
 ---
 
 # MastraAuthClerk Class
@@ -60172,6 +60633,9 @@ export const mastra = new Mastra({
 ---
 title: "Reference: MastraAuthFirebase Class | Auth"
 description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+packages:
+  - "@mastra/auth-firebase"
+  - "@mastra/core"
 ---
 
 # MastraAuthFirebase Class
@@ -60308,6 +60772,9 @@ The `FirebaseUser` type used in the `authorizeUser` function corresponds to Fire
 ---
 title: "Reference: MastraJwtAuth Class | Auth"
 description: "API reference for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
+packages:
+  - "@mastra/auth"
+  - "@mastra/core"
 ---
 
 # MastraJwtAuth Class
@@ -60352,6 +60819,9 @@ export const mastra = new Mastra({
 ---
 title: "Reference: MastraAuthSupabase Class | Auth"
 description: "API reference for the MastraAuthSupabase class, which authenticates Mastra applications using Supabase Auth."
+packages:
+  - "@mastra/auth-supabase"
+  - "@mastra/core"
 ---
 
 # MastraAuthSupabase Class
@@ -60419,6 +60889,9 @@ export const mastra = new Mastra({
 ---
 title: "Reference: MastraAuthWorkos Class | Auth"
 description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/core"
 ---
 
 # MastraAuthWorkos Class
@@ -60553,6 +61026,8 @@ The properties with `urn:myapp:` prefixes are custom claims configured in your W
 ---
 title: "Reference: create-mastra | CLI"
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
+packages:
+  - "@mastra/create-mastra"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -60750,6 +61225,8 @@ MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@beta
 ---
 title: "Reference: CLI Commands | CLI"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
+packages:
+  - "@mastra/core"
 ---
 
 # CLI Commands
@@ -61024,6 +61501,10 @@ MASTRA_TELEMETRY_DISABLED=1 mastra dev
 ---
 title: "Reference: Agents API | Client SDK"
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 # Agents API
@@ -61431,6 +61912,8 @@ console.log(result.success); // true
 ---
 title: "Reference: Error Handling | Client SDK"
 description: Learn about the built-in retry mechanism and error handling capabilities in the Mastra client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Error Handling
@@ -61457,6 +61940,8 @@ try {
 ---
 title: "Reference: Logs API | Client SDK"
 description: Learn how to access and query system logs and debugging information in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Logs API
@@ -61489,6 +61974,8 @@ const runLogs = await mastraClient.getLogForRun({
 ---
 title: "Reference: Mastra Client SDK | Client SDK"
 description: Learn how to interact with Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Mastra Client SDK
@@ -61657,6 +62144,8 @@ export const mastraClient = new MastraClient({
 ---
 title: "Reference: Memory API | Client SDK"
 description: Learn how to manage conversation threads and message history in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Memory API
@@ -61848,6 +62337,8 @@ const status = await mastraClient.getMemoryStatus("agent-id");
 ---
 title: "Reference: Observability API | Client SDK"
 description: Learn how to retrieve traces, monitor application performance, and score traces using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Observability API
@@ -61928,6 +62419,8 @@ const scores = await mastraClient.listScoresBySpan({
 ---
 title: "Reference: Telemetry API | Client SDK"
 description: Learn how to retrieve and analyze traces from your Mastra application for monitoring and debugging using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Telemetry API
@@ -61956,6 +62449,8 @@ const telemetry = await mastraClient.getTelemetry({
 ---
 title: "Reference: Tools API | Client SDK"
 description: Learn how to interact with and execute tools available in the Mastra platform using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Tools API
@@ -62008,6 +62503,8 @@ const result = await tool.execute({
 ---
 title: "Reference: Vectors API | Client SDK"
 description: Learn how to work with vector embeddings for semantic search and similarity matching in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Vectors API
@@ -62095,6 +62592,8 @@ const result = await vector.delete("index-name");
 ---
 title: "Reference: Workflows API | Client SDK"
 description: Learn how to interact with and execute automated workflows in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Workflows API
@@ -62309,6 +62808,8 @@ A workflow run result yields the following:
 ---
 title: "Reference: Mastra.addGateway() | Core"
 description: "Add a gateway to the Mastra instance"
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.addGateway()
@@ -62371,6 +62872,8 @@ Void. The gateway is added to the internal registry.
 ---
 title: "Reference: Mastra.getAgent() | Core"
 description: "Documentation for the `Agent.getAgent()` method in Mastra, which retrieves an agent by name."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getAgent()
@@ -62418,6 +62921,8 @@ mastra.getAgent("testAgent");
 ---
 title: "Reference: Mastra.getAgentById() | Core"
 description: "Documentation for the `Mastra.getAgentById()` method in Mastra, which retrieves an agent by its ID."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getAgentById()
@@ -62465,6 +62970,8 @@ mastra.getAgentById("test-agent-123");
 ---
 title: "Reference: Mastra.getDeployer() | Core"
 description: "Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getDeployer()
@@ -62504,6 +63011,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.getGateway() | Core"
 description: "Retrieve a registered gateway by its registration key"
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getGateway()
@@ -62566,6 +63075,8 @@ Throws an error if no gateway is found with the specified key.
 ---
 title: "Reference: Mastra.getGatewayById() | Core"
 description: "Retrieve a registered gateway by its unique ID"
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getGatewayById()
@@ -62631,6 +63142,8 @@ console.log(gateway.name); // 'My Custom Gateway'
 ---
 title: "Reference: Mastra.getLogger() | Core"
 description: "Documentation for the `Mastra.getLogger()` method in Mastra, which retrieves the configured logger instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getLogger()
@@ -62670,6 +63183,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.getMCPServer() | Core"
 description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getMCPServer()
@@ -62741,6 +63256,8 @@ const serverById = mastra.getMCPServerById('my-mcp-server');
 ---
 title: "Reference: Mastra.getMCPServerById() | Core"
 description: "Documentation for the `Mastra.getMCPServerById()` method in Mastra, which retrieves a specific MCP server instance by its intrinsic id property."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getMCPServerById()
@@ -62825,6 +63342,10 @@ const serverByKey = mastra.getMCPServer('customKey');
 ---
 title: "Reference: Mastra.getMemory() | Core"
 description: "Documentation for the `Mastra.getMemory()` method in Mastra, which retrieves a registered memory instance by its registry key."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Mastra.getMemory()
@@ -62901,6 +63422,8 @@ const memory = mastra.getMemory("conversationMemory");
 ---
 title: "Reference: getScorer() | Core"
 description: "Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key."
+packages:
+  - "@mastra/core"
 ---
 
 # getScorer()
@@ -62982,6 +63505,8 @@ try {
 ---
 title: "Reference: getScorerById() | Core"
 description: "Documentation for the `getScorerById()` method in Mastra, which retrieves a scorer by its id property rather than registration key."
+packages:
+  - "@mastra/core"
 ---
 
 # getScorerById()
@@ -63064,6 +63589,8 @@ try {
 ---
 title: "Reference: Mastra.getServer() | Core"
 description: "Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getServer()
@@ -63103,6 +63630,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.getStorage() | Core"
 description: "Documentation for the `Mastra.getStorage()` method in Mastra, which retrieves the configured storage instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getStorage()
@@ -63142,6 +63671,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.getStoredAgentById() | Core"
 description: "Documentation for the `Mastra.getStoredAgentById()` method in Mastra, which retrieves an agent from storage and creates an executable Agent instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getStoredAgentById()
@@ -63328,6 +63859,8 @@ When using `raw: true`, the returned object has the following structure:
 ---
 title: "Reference: Mastra.getTelemetry() | Core"
 description: "Documentation for the `Mastra.getTelemetry()` method in Mastra, which retrieves the configured telemetry instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getTelemetry()
@@ -63367,6 +63900,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.getVector() | Core"
 description: "Documentation for the `Mastra.getVector()` method in Mastra, which retrieves a vector store by name."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getVector()
@@ -63415,6 +63950,8 @@ mastra.getVector("testVectorStore");
 ---
 title: "Reference: Mastra.getWorkflow() | Core"
 description: "Documentation for the `Mastra.getWorkflow()` method in Mastra, which retrieves a workflow by ID."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getWorkflow()
@@ -63469,6 +64006,8 @@ mastra.getWorkflow("testWorkflow");
 ---
 title: "Reference: Mastra.listAgents() | Core"
 description: "Documentation for the `Mastra.listAgents()` method in Mastra, which retrieves all configured agents."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listAgents()
@@ -63507,6 +64046,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.listGateways() | Core"
 description: "List all registered gateways"
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listGateways()
@@ -63563,6 +64104,8 @@ None.
 ---
 title: "Reference: Mastra.listLogs() | Core"
 description: "Documentation for the `Mastra.listLogs()` method in Mastra, which retrieves all logs for a specific transport ID."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listLogs()
@@ -63662,6 +64205,8 @@ mastra.listLogs("456");
 ---
 title: "Reference: Mastra.listLogsByRunId() | Core"
 description: "Documentation for the `Mastra.listLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listLogsByRunId()
@@ -63752,6 +64297,8 @@ mastra.listLogsByRunId({ runId: "123", transportId: "456" });
 ---
 title: "Reference: Mastra.listMCPServers() | Core"
 description: "Documentation for the `Mastra.listMCPServers()` method in Mastra, which retrieves all registered MCP server instances."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listMCPServers()
@@ -63820,6 +64367,10 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.listMemory() | Core"
 description: "Documentation for the `Mastra.listMemory()` method in Mastra, which returns all registered memory instances."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Mastra.listMemory()
@@ -63893,6 +64444,8 @@ console.log(Object.keys(allMemory)); // ["conversationMemory", "analyticsMemory"
 ---
 title: "Reference: listScorers() | Core"
 description: "Documentation for the `listScorers()` method in Mastra, which returns all registered scorers for evaluating AI outputs."
+packages:
+  - "@mastra/core"
 ---
 
 # listScorers()
@@ -63939,6 +64492,8 @@ This method takes no parameters.
 ---
 title: "Reference: Mastra.listStoredAgents() | Core"
 description: "Documentation for the `Mastra.listStoredAgents()` method in Mastra, which retrieves a paginated list of agents from storage."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listStoredAgents()
@@ -64093,6 +64648,8 @@ async function getAllStoredAgents(mastra: Mastra) {
 ---
 title: "Reference: Mastra.listVectors() | Core"
 description: "Documentation for the `Mastra.listVectors()` method in Mastra, which retrieves all configured vector stores."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listVectors()
@@ -64132,6 +64689,8 @@ This method does not accept any parameters.
 ---
 title: "Reference: Mastra.listWorkflows() | Core"
 description: "Documentation for the `Mastra.listWorkflows()` method in Mastra, which retrieves all configured workflows."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listWorkflows()
@@ -64180,6 +64739,10 @@ mastra.listWorkflows();
 ---
 title: "Reference: Mastra Class | Core"
 description: "Documentation for the `Mastra` class in Mastra, the core entry point for managing agents, workflows, MCP servers, and server endpoints."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
 ---
 
 # Mastra Class
@@ -64343,6 +64906,8 @@ export const mastra = new Mastra({
 ---
 title: "Reference: MastraModelGateway | Core"
 description: "Base class for creating custom model gateways"
+packages:
+  - "@mastra/core"
 ---
 
 # MastraModelGateway
@@ -64573,6 +65138,8 @@ Examples:
 ---
 title: "Reference: Mastra.setLogger() | Core"
 description: "Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.)."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.setLogger()
@@ -64625,6 +65192,8 @@ This method does not return a value.
 ---
 title: "Reference: Mastra.setStorage() | Core"
 description: "Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.setStorage()
@@ -64668,6 +65237,8 @@ This method does not return a value.
 ---
 title: "Reference: Mastra.setTelemetry() | Core"
 description: "Documentation for the `Mastra.setTelemetry()` method in Mastra, which sets the telemetry configuration for all components."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.setTelemetry()
@@ -64707,6 +65278,9 @@ This method does not return a value.
 ---
 title: "Reference: CloudflareDeployer | Deployer"
 description: "Documentation for the CloudflareDeployer class, which deploys Mastra applications to Cloudflare Workers."
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-cloudflare"
 ---
 
 # CloudflareDeployer
@@ -64805,6 +65379,8 @@ export const mastra = new Mastra({
 title: "Reference: Deployer | Deployer"
 description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 asIndexPage: true
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deployer
@@ -64966,6 +65542,9 @@ The Deployer class extends the Bundler class, establishing a clear relationship 
 ---
 title: "Reference: NetlifyDeployer | Deployer"
 description: "Documentation for the NetlifyDeployer class, which deploys Mastra applications to Netlify Functions."
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-netlify"
 ---
 
 # NetlifyDeployer
@@ -64988,6 +65567,9 @@ export const mastra = new Mastra({
 ---
 title: "Reference: VercelDeployer | Deployer"
 description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-vercel"
 ---
 
 # VercelDeployer
@@ -65035,6 +65617,9 @@ export const mastra = new Mastra({
 ---
 title: "Reference: Answer Relevancy Scorer | Evals"
 description: Documentation for the Answer Relevancy Scorer in Mastra, which evaluates how well LLM outputs address the input query.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Answer Relevancy Scorer
@@ -65195,6 +65780,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Answer Similarity Scorer | Evals"
 description: Documentation for the Answer Similarity Scorer in Mastra, which compares agent outputs against ground truth answers for CI/CD testing.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Answer Similarity Scorer
@@ -65391,6 +65979,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Bias Scorer | Evals"
 description: Documentation for the Bias Scorer in Mastra, which evaluates LLM outputs for various forms of bias, including gender, political, racial/ethnic, or geographical bias.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Bias Scorer
@@ -65564,6 +66155,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Completeness Scorer | Evals"
 description: Documentation for the Completeness Scorer in Mastra, which evaluates how thoroughly LLM outputs cover key elements present in the input.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Completeness Scorer
@@ -65722,6 +66316,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Content Similarity Scorer | Evals"
 description: Documentation for the Content Similarity Scorer in Mastra, which measures textual similarity between strings and provides a matching score.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Content Similarity Scorer
@@ -65862,6 +66459,9 @@ A similarity score between 0 and 1:
 ---
 title: "Reference: Context Precision Scorer | Evals"
 description: Documentation for the Context Precision Scorer in Mastra. Evaluates the relevance and precision of retrieved context for generating expected outputs using Mean Average Precision.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -66115,6 +66715,8 @@ Choose the right scorer for your needs:
 ---
 title: "Reference: Context Relevance Scorer | Evals"
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
+packages:
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -66733,6 +67335,8 @@ Choose the right scorer for your needs:
 ---
 title: "Reference: createScorer | Evals"
 description: Documentation for creating custom scorers in Mastra, allowing users to define their own evaluation logic using either JavaScript functions or LLM-based prompts.
+packages:
+  - "@mastra/core"
 ---
 
 # createScorer
@@ -67272,6 +67876,9 @@ All step functions can be async.
 ---
 title: "Reference: Faithfulness Scorer | Evals"
 description: Documentation for the Faithfulness Scorer in Mastra, which evaluates the factual accuracy of LLM outputs compared to the provided context.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Faithfulness Scorer
@@ -67443,6 +68050,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Hallucination Scorer | Evals"
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Hallucination Scorer
@@ -67623,6 +68233,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Keyword Coverage Scorer | Evals"
 description: Documentation for the Keyword Coverage Scorer in Mastra, which evaluates how well LLM outputs cover important keywords from the input.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Keyword Coverage Scorer
@@ -67776,6 +68389,8 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: MastraScorer | Evals"
 description: Documentation for the MastraScorer base class in Mastra, which provides the foundation for all custom and built-in scorers.
+packages:
+  - "@mastra/core"
 ---
 
 # MastraScorer
@@ -67969,6 +68584,8 @@ See the [createScorer reference](./create-scorer) for detailed information on de
 ---
 title: "Reference: Noise Sensitivity Scorer | Evals"
 description: Documentation for the Noise Sensitivity Scorer in Mastra. A CI/testing scorer that evaluates agent robustness by comparing responses between clean and noisy inputs in controlled test environments.
+packages:
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -68789,6 +69406,8 @@ jobs:
 ---
 title: "Reference: Prompt Alignment Scorer | Evals"
 description: Documentation for the Prompt Alignment Scorer in Mastra. Evaluates how well agent responses align with user prompt intent, requirements, completeness, and appropriateness using multi-dimensional analysis.
+packages:
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -69460,6 +70079,8 @@ const result = await scorer.run({
 ---
 title: "Reference: runEvals | Evals"
 description: "Documentation for the runEvals function in Mastra, which enables batch evaluation of agents and workflows using multiple scorers."
+packages:
+  - "@mastra/core"
 ---
 
 # runEvals
@@ -69687,6 +70308,9 @@ const workflowResult = await runEvals({
 ---
 title: "Reference: Scorer Utils | Evals"
 description: Utility functions for extracting data from scorer run inputs and outputs, including text content, reasoning, system messages, and tool calls.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Scorer Utils
@@ -70052,6 +70676,9 @@ const comprehensiveScorer = createScorer({
 ---
 title: "Reference: Textual Difference Scorer | Evals"
 description: Documentation for the Textual Difference Scorer in Mastra, which measures textual differences between strings using sequence matching.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Textual Difference Scorer
@@ -70185,6 +70812,9 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Tone Consistency Scorer | Evals"
 description: Documentation for the Tone Consistency Scorer in Mastra, which evaluates emotional tone and sentiment consistency in text.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Tone Consistency Scorer
@@ -70326,6 +70956,8 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 ---
 title: "Reference: Tool Call Accuracy Scorers | Evals"
 description: Documentation for the Tool Call Accuracy Scorers in Mastra, which evaluate whether LLM outputs call the correct tools from available options.
+packages:
+  - "@mastra/evals"
 ---
 
 # Tool Call Accuracy Scorers
@@ -70902,6 +71534,9 @@ console.log("LLM Reason:", llmResult.reason); // Explains why search-tool is les
 ---
 title: "Reference: Toxicity Scorer | Evals"
 description: Documentation for the Toxicity Scorer in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Toxicity Scorer
@@ -71071,6 +71706,8 @@ To add this scorer to an agent, see the [Scorers overview](/docs/v1/evals/overvi
 title: "Reference: Overview"
 description: "Reference documentation on Mastra's APIs and tools"
 showCopyButton: false
+packages:
+  - "@mastra/core"
 ---
 
 import { ReferenceCards } from "@site/src/components/ReferenceCards";
@@ -71086,6 +71723,9 @@ The Reference section provides documentation of Mastra's API, including paramete
 ---
 title: "Reference: PinoLogger | Observability"
 description: Documentation for PinoLogger, which provides methods to record events at various severity levels.
+packages:
+  - "@mastra/core"
+  - "@mastra/loggers"
 ---
 
 # PinoLogger
@@ -71234,6 +71874,8 @@ export const sentryLogger = new PinoLogger({
 ---
 title: "Reference: Memory.createThread() | Memory"
 description: "Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system."
+packages:
+  - "@mastra/memory"
 ---
 
 # Memory.createThread()
@@ -71356,6 +71998,8 @@ console.log(response.text);
 ---
 title: "Reference: Memory.deleteMessages() | Memory"
 description: "Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs."
+packages:
+  - "@mastra/core"
 ---
 
 # Memory.deleteMessages()
@@ -71421,6 +72065,8 @@ await memory?.deleteMessages([...messageIds]);
 ---
 title: "Reference: Memory.getThreadById() | Memory"
 description: "Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID."
+packages:
+  - "@mastra/memory"
 ---
 
 # Memory.getThreadById()
@@ -71471,6 +72117,8 @@ await memory?.getThreadById({ threadId: "thread-123" });
 ---
 title: "Reference: Memory.listThreadsByResourceId() | Memory"
 description: "Documentation for the `Memory.listThreadsByResourceId()` method in Mastra, which retrieves threads associated with a specific resource ID with pagination support."
+packages:
+  - "@mastra/memory"
 ---
 
 # Memory.listThreadsByResourceId()
@@ -71584,6 +72232,11 @@ while (hasMorePages) {
 ---
 title: "Reference: Memory Class | Memory"
 description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # Memory Class
@@ -71803,6 +72456,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Memory.query() | Memory"
 description: "Documentation for the `Memory.query()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Memory.query()
@@ -71995,6 +72650,8 @@ const uiMessages = toAISdkV5Messages(messages);
 ---
 title: "Reference: Memory.recall() | Memory"
 description: "Documentation for the `Memory.recall()` method in Mastra, which retrieves messages from a specific thread with support for pagination, filtering options, and semantic search."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Memory.recall()
@@ -72183,6 +72840,11 @@ const uiMessages = toAISdkV5Messages(messages);
 ---
 title: "Reference: OtelBridge | Observability"
 description: OpenTelemetry bridge for Tracing
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
+  - "@mastra/otel-bridge"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -72363,6 +73025,8 @@ This format ensures compatibility with all OTEL-compatible backends and collecto
 ---
 title: "Reference: Configuration | Observability"
 description: Tracing configuration types and registry functions
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -72414,6 +73078,7 @@ interface ObservabilityInstanceConfig {
   spanOutputProcessors?: SpanOutputProcessor[];
   includeInternalSpans?: boolean;
   requestContextKeys?: string[];
+  serializationOptions?: SerializationOptions;
 }
 ```
 
@@ -72459,6 +73124,54 @@ interface ObservabilityInstanceConfig {
       name: "requestContextKeys",
       type: "string[]",
       description: "RequestContext keys to extract as metadata (supports dot notation)",
+      required: false,
+    },
+    {
+      name: "serializationOptions",
+      type: "SerializationOptions",
+      description: "Options for controlling serialization of span data (input/output/attributes)",
+      required: false,
+    },
+  ]}
+/>
+
+## SerializationOptions
+
+Options for controlling how span data is serialized before export. Use these to customize truncation limits for large payloads.
+
+```typescript
+interface SerializationOptions {
+  maxStringLength?: number;
+  maxDepth?: number;
+  maxArrayLength?: number;
+  maxObjectKeys?: number;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "maxStringLength",
+      type: "number",
+      description: "Maximum length for string values (default: 1024)",
+      required: false,
+    },
+    {
+      name: "maxDepth",
+      type: "number",
+      description: "Maximum depth for nested objects (default: 6)",
+      required: false,
+    },
+    {
+      name: "maxArrayLength",
+      type: "number",
+      description: "Maximum number of items in arrays (default: 50)",
+      required: false,
+    },
+    {
+      name: "maxObjectKeys",
+      type: "number",
+      description: "Maximum number of keys in objects (default: 50)",
       required: false,
     },
   ]}
@@ -72607,6 +73320,8 @@ Shuts down all observability instances and clears the registry.
 ---
 title: "Reference: ArizeExporter | Observability"
 description: Arize exporter for Tracing using OpenInference
+packages:
+  - "@mastra/arize"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -72803,6 +73518,8 @@ Tags are stored using the OpenInference `tag.tags` attribute:
 ---
 title: "Reference: BraintrustExporter | Observability"
 description: Braintrust exporter for Tracing
+packages:
+  - "@mastra/braintrust"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -72921,6 +73638,8 @@ const exporter = new BraintrustExporter({
 ---
 title: "Reference: CloudExporter | Observability"
 description: API reference for the CloudExporter
+packages:
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -73107,6 +73826,9 @@ const customExporter = new CloudExporter({
 ---
 title: "Reference: ConsoleExporter | Observability"
 description: API reference for the ConsoleExporter
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -73294,6 +74016,8 @@ const exporterWithLogger = new ConsoleExporter({
 ---
 title: "Reference: DefaultExporter | Observability"
 description: API reference for the DefaultExporter
+packages:
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -73502,6 +74226,9 @@ const customExporter = new DefaultExporter({
 ---
 title: "Reference: LangfuseExporter | Observability"
 description: Langfuse exporter for Tracing
+packages:
+  - "@mastra/langfuse"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -73667,6 +74394,8 @@ When `metadata.langfuse.prompt` is set on a `MODEL_GENERATION` span (with either
 ---
 title: "Reference: LangSmithExporter | Observability"
 description: LangSmith exporter for Tracing
+packages:
+  - "@mastra/langsmith"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -73801,6 +74530,8 @@ const exporter = new LangSmithExporter({
 ---
 title: "Reference: OtelExporter | Observability"
 description: OpenTelemetry exporter for Tracing
+packages:
+  - "@mastra/otel-exporter"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -74163,6 +74894,8 @@ While the OpenTelemetry specification supports native array attributes, many bac
 ---
 title: "Reference: PosthogExporter | Observability"
 description: PostHog exporter for Tracing
+packages:
+  - "@mastra/posthog"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -74299,6 +75032,8 @@ const exporter = new PosthogExporter({
 title: "Reference: Tracing | Observability"
 description: Core Tracing classes and methods
 asIndexPage: true
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -74465,6 +75200,8 @@ class CustomObservabilityInstance extends BaseObservabilityInstance {
 ---
 title: "Reference: Interfaces | Observability"
 description: Tracing type definitions and interfaces
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -75206,6 +75943,8 @@ enum InternalSpans {
 ---
 title: "Reference: SensitiveDataFilter | Observability"
 description: API reference for the SensitiveDataFilter processor
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -75392,6 +76131,8 @@ Handles nested objects, arrays, and circular references safely.
 ---
 title: "Reference: Spans | Observability"
 description: Span interfaces, methods, and lifecycle events
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -75783,6 +76524,8 @@ A span that performs no operations. All methods are no-ops:
 ---
 title: "Reference: Batch Parts Processor | Processors"
 description: "Documentation for the BatchPartsProcessor in Mastra, which batches multiple stream parts together to reduce frequency of emissions."
+packages:
+  - "@mastra/core"
 ---
 
 # BatchPartsProcessor
@@ -75902,6 +76645,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Language Detector | Processors"
 description: "Documentation for the LanguageDetector in Mastra, which detects language and can translate content in AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # LanguageDetector
@@ -76070,6 +76815,9 @@ export const agent = new Agent({
 ---
 title: "Reference: Message History Processor | Processors"
 description: "Documentation for the MessageHistory processor in Mastra, which handles retrieval and persistence of conversation history."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
 ---
 
 # MessageHistory
@@ -76204,6 +76952,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Moderation Processor | Processors"
 description: "Documentation for the ModerationProcessor in Mastra, which provides content moderation using LLM to detect inappropriate content across multiple categories."
+packages:
+  - "@mastra/core"
 ---
 
 # ModerationProcessor
@@ -76390,6 +77140,8 @@ export const agent = new Agent({
 ---
 title: "Reference: PII Detector | Processors"
 description: "Documentation for the PIIDetector in Mastra, which detects and redacts personally identifiable information (PII) from AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # PIIDetector
@@ -76584,6 +77336,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Processor Interface | Processors"
 description: "API reference for the Processor interface in Mastra, which defines the contract for transforming, validating, and controlling messages in agent pipelines."
+packages:
+  - "@mastra/core"
 ---
 
 # Processor Interface
@@ -77390,6 +78144,8 @@ export class WordCounter implements Processor {
 ---
 title: "Reference: Prompt Injection Detector | Processors"
 description: "Documentation for the PromptInjectionDetector in Mastra, which detects prompt injection attempts in user input."
+packages:
+  - "@mastra/core"
 ---
 
 # PromptInjectionDetector
@@ -77534,6 +78290,9 @@ export const agent = new Agent({
 ---
 title: "Reference: Semantic Recall Processor | Processors"
 description: "Documentation for the SemanticRecall processor in Mastra, which enables semantic search over conversation history using vector embeddings."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
 ---
 
 # SemanticRecall
@@ -77734,6 +78493,8 @@ When `scope` is set to `'resource'`, the processor can recall messages from othe
 ---
 title: "Reference: System Prompt Scrubber | Processors"
 description: "Documentation for the SystemPromptScrubber in Mastra, which detects and redacts system prompts from AI responses."
+packages:
+  - "@mastra/core"
 ---
 
 # SystemPromptScrubber
@@ -77891,6 +78652,9 @@ export const agent = new Agent({
 ---
 title: "Reference: Token Limiter Processor | Processors"
 description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in messages."
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
 ---
 
 # TokenLimiterProcessor
@@ -78055,6 +78819,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Tool Call Filter | Processors"
 description: "Documentation for the ToolCallFilter processor in Mastra, which filters out tool calls and results from messages."
+packages:
+  - "@mastra/core"
 ---
 
 # ToolCallFilter
@@ -78183,6 +78949,8 @@ export const agent = new Agent({
 ---
 title: "Reference: Unicode Normalizer | Processors"
 description: "Documentation for the UnicodeNormalizer in Mastra, which normalizes Unicode text to ensure consistent formatting and remove potentially problematic characters."
+packages:
+  - "@mastra/core"
 ---
 
 # UnicodeNormalizer
@@ -78305,6 +79073,9 @@ export const agent = new Agent({
 ---
 title: "Reference: Working Memory Processor | Processors"
 description: "Documentation for the WorkingMemory processor in Mastra, which injects persistent user/context data as system instructions."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
 ---
 
 # WorkingMemory
@@ -78529,6 +79300,8 @@ If no template is provided, the processor uses a default markdown template with 
 ---
 title: "Reference: Reference: .chunk() | RAG"
 description: Documentation for the chunk function in Mastra, which splits documents into smaller segments using various strategies.
+packages:
+  - "@mastra/rag"
 ---
 
 # Reference: .chunk()
@@ -78988,6 +79761,9 @@ interface DocumentNode {
 ---
 title: "Reference: DatabaseConfig | RAG"
 description: API reference for database-specific configuration types used with vector query tools in Mastra RAG systems.
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -79343,6 +80119,8 @@ const vectorTool = createVectorQueryTool({
 ---
 title: "Reference: MDocument | Document Processing | RAG"
 description: Documentation for the MDocument class in Mastra, which handles document processing and chunking.
+packages:
+  - "@mastra/rag"
 ---
 
 # MDocument
@@ -79477,6 +80255,8 @@ const metadata = doc.getMetadata();
 ---
 title: "Reference: Embed | RAG"
 description: Documentation for embedding functionality in Mastra using the AI SDK.
+packages:
+  - "@mastra/core"
 ---
 
 # Embed
@@ -79648,6 +80428,8 @@ For more detailed information about embeddings in the Vercel AI SDK, see:
 ---
 title: "Reference: ExtractParams | RAG"
 description: Documentation for metadata extraction configuration in Mastra.
+packages:
+  - "@mastra/rag"
 ---
 
 # ExtractParams
@@ -79905,6 +80687,8 @@ await doc.extractMetadata({ title: true });
 ---
 title: "Reference: GraphRAG | RAG"
 description: Documentation for the GraphRAG class in Mastra, which implements a graph-based approach to retrieval augmented generation.
+packages:
+  - "@mastra/rag"
 ---
 
 # GraphRAG
@@ -80094,6 +80878,8 @@ const results = await graphRag.query({
 ---
 title: "Reference: Metadata Filters | RAG"
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
+packages:
+  - "@mastra/pg"
 ---
 
 # Metadata Filters
@@ -80444,6 +81230,8 @@ const results = await store.query({
 ---
 title: "Reference: rerank() | RAG"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+packages:
+  - "@mastra/rag"
 ---
 
 # rerank()
@@ -80659,6 +81447,8 @@ The function returns an array of `RerankResult` objects:
 ---
 title: "Reference: rerankWithScorer() | RAG"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+packages:
+  - "@mastra/rag"
 ---
 
 # rerankWithScorer()
@@ -80874,6 +81664,8 @@ The function returns an array of `RerankResult` objects:
 ---
 title: "Reference: createRoute() | Server"
 description: "API reference for createRoute() function used to define type-safe routes with validation and OpenAPI generation."
+packages:
+  - "@mastra/server"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -81205,6 +81997,8 @@ Common status codes:
 ---
 title: "Reference: Express Adapter | Server"
 description: "API reference for the @mastra/express server adapter."
+packages:
+  - "@mastra/express"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -81467,6 +82261,8 @@ For custom middleware ordering, call each method separately instead of `init()`.
 ---
 title: "Reference: Hono Adapter | Server"
 description: "API reference for the @mastra/hono server adapter."
+packages:
+  - "@mastra/hono"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -81711,6 +82507,9 @@ For custom middleware ordering, call each method separately instead of `init()`.
 ---
 title: "Reference: MastraServer | Server"
 description: "API reference for the MastraServer abstract class used to create server adapters."
+packages:
+  - "@mastra/core"
+  - "@mastra/server"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -82059,6 +82858,8 @@ export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
 ---
 title: "Reference: Server Routes | Server"
 description: "API reference for HTTP routes registered by Mastra server adapters."
+packages:
+  - "@mastra/server"
 ---
 
 # Server Routes
@@ -82339,6 +83140,9 @@ Common status codes:
 ---
 title: "Reference: Cloudflare D1 Storage | Storage"
 description: Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
+packages:
+  - "@mastra/cloudflare-d1"
+  - "@mastra/core"
 ---
 
 # Cloudflare D1 Storage
@@ -82485,6 +83289,8 @@ Tables are created automatically when storage is initialized (and can be isolate
 ---
 title: "Reference: Cloudflare Storage | Storage"
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
+packages:
+  - "@mastra/cloudflare"
 ---
 
 # Cloudflare Storage
@@ -82583,6 +83389,11 @@ For Workers deployments, `keyPrefix` is used to isolate data within a namespace;
 ---
 title: "Reference: Storage Composition | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
+packages:
+  - "@mastra/clickhouse"
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/pg"
 ---
 
 # Storage Composition
@@ -82826,6 +83637,8 @@ const storage = new MastraStorage({
 ---
 title: "Reference: Convex Storage | Storage"
 description: Documentation for the Convex storage implementation in Mastra.
+packages:
+  - "@mastra/convex"
 ---
 
 # Convex Storage
@@ -82993,6 +83806,11 @@ Set these environment variables for your deployment:
 ---
 title: "Reference: DynamoDB Storage | Storage"
 description: "Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB."
+packages:
+  - "@mastra/dynamodb"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # DynamoDB Storage
@@ -83192,6 +84010,9 @@ This implementation uses a single-table design pattern with ElectroDB, which off
 ---
 title: "Reference: LanceDB Storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/lance"
 ---
 
 # LanceDB Storage
@@ -83330,6 +84151,10 @@ LanceStorage provides methods for managing tables:
 ---
 title: "Reference: libSQL Storage | Storage"
 description: Documentation for the libSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # libSQL Storage
@@ -83464,6 +84289,10 @@ const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ---
 title: "Reference: MongoDB Storage | Storage"
 description: Documentation for the MongoDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
 ---
 
 # MongoDB Storage
@@ -83726,6 +84555,9 @@ for await (const chunk of stream.textStream) {
 ---
 title: "Reference: MSSQL Storage | Storage"
 description: Documentation for the MSSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/mssql"
 ---
 
 # MSSQL Storage
@@ -83886,6 +84718,8 @@ This approach is intended for advanced scenarios where low-level access is requi
 ---
 title: "Reference: Storage Overview | Storage"
 description: Core data schema and table structure for Mastra's storage system.
+packages:
+  - "@mastra/core"
 ---
 
 import { SchemaTable } from "@site/src/components/SchemaTable";
@@ -84320,6 +85154,10 @@ Captures OpenTelemetry traces for monitoring and debugging.
 ---
 title: "Reference: PostgreSQL Storage | Storage"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # PostgreSQL Storage
@@ -84736,6 +85574,10 @@ PostgreSQL offers different index types optimized for specific scenarios:
 ---
 title: "Reference: Upstash Storage | Storage"
 description: Documentation for the Upstash storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/upstash"
 ---
 
 # Upstash Storage
@@ -84904,6 +85746,8 @@ for await (const chunk of stream.textStream) {
 ---
 title: "Reference: ChunkType | Streaming"
 description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -86256,6 +87100,8 @@ for await (const chunk of stream.fullStream) {
 ---
 title: "Reference: MastraModelOutput | Streaming"
 description: "Complete reference for MastraModelOutput - the stream object returned by agent.stream() with streaming and promise-based access to model outputs."
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -86736,6 +87582,8 @@ if (stream.error) {
 ---
 title: "Reference: Agent.stream() | Streaming"
 description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
@@ -87528,6 +88376,8 @@ await agent.stream("message for agent", {
 ---
 title: "Reference: Agent.streamLegacy() (Legacy) | Streaming"
 description: "Documentation for the legacy `Agent.streamLegacy()` method in Mastra agents. This method is deprecated and will be removed in a future version."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.streamLegacy() (Legacy)
@@ -88117,6 +88967,8 @@ const result = await agent.stream("message", {
 ---
 title: "Reference: Run.observeStream() | Streaming"
 description: Documentation for the `Run.observeStream()` method in workflows, which enables reopening the stream of an already active workflow run.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.observeStream()
@@ -88167,6 +89019,8 @@ The stream emits various event types during workflow execution. Each event has a
 ---
 title: "Reference: Run.resumeStream() | Streaming"
 description: Documentation for the `Run.resumeStream()` method in workflows, which enables real-time resumption and streaming of suspended workflow runs.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.resumeStream()
@@ -88332,6 +89186,8 @@ The stream emits various event types during workflow execution. Each event has a
 ---
 title: "Reference: Run.stream() | Streaming"
 description: Documentation for the `Run.stream()` method in workflows, which enables real-time streaming of responses.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.stream()
@@ -88541,6 +89397,8 @@ The stream emits various event types during workflow execution. Each event has a
 ---
 title: "Reference: Run.timeTravelStream() | Streaming"
 description: Documentation for the `Run.timeTravelStream()` method for streaming workflow time travel execution.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.timeTravelStream()
@@ -88714,6 +89572,8 @@ const result = await output.result;
 ---
 title: "Reference: LLM provider API keys (choose one or more) | Templates"
 description: "Complete guide to creating, using, and contributing Mastra templates"
+packages:
+  - "@mastra/core"
 ---
 
 # Overview
@@ -88918,6 +89778,9 @@ Templates provide an excellent way to learn Mastra patterns and accelerate devel
 ---
 title: "Reference: MastraMCPClient (Deprecated) | Tools & MCP"
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # MastraMCPClient (Deprecated)
@@ -89256,6 +90119,8 @@ Without `eventSourceInit`, authentication headers specified in `requestInit` won
 ---
 title: "Reference: createTool() | Tools & MCP"
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
+packages:
+  - "@mastra/core"
 ---
 
 # createTool()
@@ -89566,6 +90431,8 @@ Hook errors are caught and logged automatically, but do not prevent tool executi
 ---
 title: "Reference: createDocumentChunkerTool() | Tools & MCP"
 description: Documentation for the Document Chunker Tool in Mastra, which splits documents into smaller chunks for efficient processing and retrieval.
+packages:
+  - "@mastra/rag"
 ---
 
 # createDocumentChunkerTool()
@@ -89710,6 +90577,9 @@ The chunker is created as a Mastra tool with the following properties:
 ---
 title: "Reference: createGraphRAGTool() | Tools & MCP"
 description: Documentation for the GraphRAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
+packages:
+  - "@mastra/core"
+  - "@mastra/rag"
 ---
 
 # createGraphRAGTool()
@@ -89975,6 +90845,9 @@ For more information on request context, please see:
 ---
 title: "Reference: MCPClient | Tools & MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # MCPClient
@@ -90922,6 +91795,9 @@ const sseClientWithFetch = new MCPClient({
 ---
 title: "Reference: MCPServer | Tools & MCP"
 description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # MCPServer
@@ -92158,6 +93034,10 @@ The `extra` object contains:
 ---
 title: "Reference: createVectorQueryTool() | Tools & MCP"
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -92775,6 +93655,8 @@ The tool is created with:
 ---
 title: "Reference: Astra Vector Store | Vectors"
 description: Documentation for the AstraVector class in Mastra, which provides vector search using DataStax Astra DB.
+packages:
+  - "@mastra/astra"
 ---
 
 # Astra Vector Store
@@ -93036,6 +93918,8 @@ Required environment variables:
 ---
 title: "Reference: Chroma Vector Store | Vectors"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+packages:
+  - "@mastra/chroma"
 ---
 
 # Chroma Vector Store
@@ -93547,6 +94431,8 @@ try {
 ---
 title: "Reference: Convex Vector Store | Vectors"
 description: Documentation for the ConvexVector class in Mastra, which provides vector search using Convex.
+packages:
+  - "@mastra/convex"
 ---
 
 # Convex Vector Store
@@ -93979,6 +94865,8 @@ Vector similarity search is performed using cosine similarity, computed in the C
 ---
 title: "Reference: Couchbase Vector Store | Vectors"
 description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+packages:
+  - "@mastra/couchbase"
 ---
 
 # Couchbase Vector Store
@@ -94340,6 +95228,8 @@ try {
 ---
 title: "Reference: DuckDBVector Store | Vectors"
 description: Documentation for the DuckDBVector class in Mastra, which provides embedded high-performance vector search using DuckDB with HNSW indexing.
+packages:
+  - "@mastra/duckdb"
 ---
 
 # DuckDBVector Store
@@ -94805,6 +95695,8 @@ const store = new DuckDBVector({
 ---
 title: "Reference: ElasticSearch Vector Store | Vectors"
 description: Documentation for the ElasticSearchVector class in Mastra, which provides vector search using ElasticSearch.
+packages:
+  - "@mastra/elasticsearch"
 ---
 
 # ElasticSearch Vector Store
@@ -95118,6 +96010,8 @@ interface QueryResult {
 ---
 title: "Reference: Lance Vector Store | Vectors"
 description: "Documentation for the LanceVectorStore class in Mastra, which provides vector search using LanceDB, an embedded vector database based on the Lance columnar format."
+packages:
+  - "@mastra/lance"
 ---
 
 # Lance Vector Store
@@ -95587,6 +96481,11 @@ try {
 ---
 title: "Reference: libSQL Vector Store | Vectors"
 description: Documentation for the LibSQLVector class in Mastra, which provides vector search using libSQL with vector extensions.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # libSQL Vector Store
@@ -96029,6 +96928,11 @@ export const libsqlAgent = new Agent({
 ---
 title: "Reference: MongoDB Vector Store | Vectors"
 description: Documentation for the MongoDBVector class in Mastra, which provides vector search using MongoDB Atlas and Atlas Vector Search.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
 ---
 
 # MongoDB Vector Store
@@ -96433,6 +97337,8 @@ export const mongodbAgent = new Agent({
 ---
 title: "Reference: OpenSearch Vector Store | Vectors"
 description: Documentation for the OpenSearchVector class in Mastra, which provides vector search using OpenSearch.
+packages:
+  - "@mastra/opensearch"
 ---
 
 # OpenSearch Vector Store
@@ -96657,6 +97563,11 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ---
 title: "Reference: PG Vector Store | Vectors"
 description: Documentation for the PgVector class in Mastra, which provides vector search using PostgreSQL with pgvector extension.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # PG Vector Store
@@ -97353,6 +98264,8 @@ export const pgAgent = new Agent({
 ---
 title: "Reference: Pinecone Vector Store | Vectors"
 description: Documentation for the PineconeVector class in Mastra, which provides an interface to Pinecone's vector database.
+packages:
+  - "@mastra/pinecone"
 ---
 
 # Pinecone Vector Store
@@ -97709,6 +98622,8 @@ Pinecone supports hybrid search by combining dense and sparse vectors. To use hy
 ---
 title: "Reference: Qdrant Vector Store | Vectors"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+packages:
+  - "@mastra/qdrant"
 ---
 
 # Qdrant Vector Store
@@ -97983,6 +98898,8 @@ try {
 ---
 title: "Reference: Amazon S3 Vectors Store | Vectors"
 description: Documentation for the S3Vectors class in Mastra, which provides vector search using Amazon S3 Vectors (Preview).
+packages:
+  - "@mastra/s3vectors"
 ---
 
 # Amazon S3 Vectors Store
@@ -98380,6 +99297,8 @@ Typical environment variables when wiring your app:
 ---
 title: "Reference: Turbopuffer Vector Store | Vectors"
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
+packages:
+  - "@mastra/turbopuffer"
 ---
 
 # Turbopuffer Vector Store
@@ -98706,6 +99625,11 @@ try {
 ---
 title: "Reference: Upstash Vector Store | Vectors"
 description: Documentation for the UpstashVector class in Mastra, which provides vector search using Upstash Vector.
+packages:
+  - "@mastra/core"
+  - "@mastra/fastembed"
+  - "@mastra/memory"
+  - "@mastra/upstash"
 ---
 
 # Upstash Vector Store
@@ -99121,6 +100045,8 @@ export const upstashAgent = new Agent({
 ---
 title: "Reference: Cloudflare Vector Store | Vectors"
 description: Documentation for the CloudflareVector class in Mastra, which provides vector search using Cloudflare Vectorize.
+packages:
+  - "@mastra/vectorize"
 ---
 
 # Cloudflare Vector Store
@@ -99422,6 +100348,8 @@ Required environment variables:
 ---
 title: "Reference: Azure | Voice"
 description: "Documentation for the AzureVoice class, providing text-to-speech and speech-to-text capabilities using Azure Cognitive Services."
+packages:
+  - "@mastra/voice-azure"
 ---
 
 # Azure
@@ -99658,6 +100586,8 @@ For more information, see the [Azure Neural TTS documentation](https://learn.mic
 ---
 title: "Reference: Cloudflare | Voice"
 description: "Documentation for the CloudflareVoice class, providing text-to-speech capabilities using Cloudflare Workers AI."
+packages:
+  - "@mastra/voice-cloudflare"
 ---
 
 # Cloudflare
@@ -99815,6 +100745,10 @@ If you need speech-to-text capabilities in addition to text-to-speech, consider 
 ---
 title: "Reference: CompositeVoice | Voice"
 description: "Documentation for the CompositeVoice class, which enables combining multiple voice providers for flexible text-to-speech and speech-to-text operations."
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-playai"
 ---
 
 # CompositeVoice
@@ -100005,6 +100939,8 @@ const voice = new CompositeVoice({
 ---
 title: "Reference: Deepgram | Voice"
 description: "Documentation for the Deepgram voice implementation, providing text-to-speech and speech-to-text capabilities with multiple voice models and languages."
+packages:
+  - "@mastra/voice-deepgram"
 ---
 
 # Deepgram
@@ -100174,6 +101110,8 @@ Returns a list of available voice options.
 ---
 title: "Reference: ElevenLabs | Voice"
 description: "Documentation for the ElevenLabs voice implementation, offering high-quality text-to-speech capabilities with multiple voice models and natural-sounding synthesis."
+packages:
+  - "@mastra/voice-elevenlabs"
 ---
 
 # ElevenLabs
@@ -100395,6 +101333,9 @@ Returns: `Promise<string>` - A Promise that resolves to the transcribed text
 ---
 title: "Reference: Google Gemini Live Voice | Voice"
 description: "Documentation for the GeminiLiveVoice class, providing real-time multimodal voice interactions using Google's Gemini Live API with support for both Gemini API and Vertex AI."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-google-gemini-live"
 ---
 
 # Google Gemini Live Voice
@@ -101029,6 +101970,8 @@ voice.on("toolCall", ({ name, args, id }) => {
 ---
 title: "Reference: Google | Voice"
 description: "Documentation for the Google Voice implementation, providing text-to-speech and speech-to-text capabilities with support for both API key and Vertex AI authentication."
+packages:
+  - "@mastra/voice-google"
 ---
 
 # Google
@@ -101374,6 +102317,8 @@ For long-audio Text-to-Speech operations:
 ---
 title: "Reference: MastraVoice | Voice"
 description: "Documentation for the MastraVoice abstract base class, which defines the core interface for all voice services in Mastra, including speech-to-speech capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 # MastraVoice
@@ -101790,6 +102735,8 @@ MastraVoice includes built-in telemetry support through the `traced` method, whi
 ---
 title: "Reference: Murf | Voice"
 description: "Documentation for the Murf voice implementation, providing text-to-speech capabilities."
+packages:
+  - "@mastra/voice-murf"
 ---
 
 # Murf
@@ -102046,6 +102993,9 @@ This method is not supported by Murf and will throw an error. Murf does not prov
 ---
 title: "Reference: OpenAI Realtime Voice | Voice"
 description: "Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # OpenAI Realtime Voice
@@ -102425,6 +103375,8 @@ The following voice options are available:
 ---
 title: "Reference: OpenAI | Voice"
 description: "Documentation for the OpenAIVoice class, providing text-to-speech and speech-to-text capabilities."
+packages:
+  - "@mastra/voice-openai"
 ---
 
 # OpenAI
@@ -102597,6 +103549,8 @@ Returns an array of available voice options, where each node contains:
 ---
 title: "Reference: PlayAI | Voice"
 description: "Documentation for the PlayAI voice implementation, providing text-to-speech capabilities."
+packages:
+  - "@mastra/voice-playai"
 ---
 
 # PlayAI
@@ -102763,6 +103717,8 @@ This method is not supported by PlayAI and will throw an error. PlayAI does not 
 ---
 title: "Reference: Sarvam | Voice"
 description: "Documentation for the Sarvam class, providing text-to-speech and speech-to-text capabilities."
+packages:
+  - "@mastra/voice-sarvam"
 ---
 
 # Sarvam
@@ -103026,6 +103982,8 @@ Returns: `Promise<Array<{voiceId: SarvamVoiceId}>>`
 ---
 title: "Reference: Speechify | Voice"
 description: "Documentation for the Speechify voice implementation, providing text-to-speech capabilities."
+packages:
+  - "@mastra/voice-speechify"
 ---
 
 # Speechify
@@ -103176,6 +104134,9 @@ This method is not supported by Speechify and will throw an error. Speechify doe
 ---
 title: "Reference: voice.addInstructions() | Voice"
 description: "Documentation for the addInstructions() method available in voice providers, which adds instructions to guide the voice model's behavior."
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.addInstructions()
@@ -103250,6 +104211,9 @@ This method does not return a value.
 ---
 title: "Reference: voice.addTools() | Voice"
 description: "Documentation for the addTools() method available in voice providers, which equips voice models with function calling capabilities."
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.addTools()
@@ -103336,6 +104300,10 @@ This method does not return a value.
 ---
 title: "Reference: voice.answer() | Voice"
 description: "Documentation for the answer() method available in real-time voice providers, which triggers the voice provider to generate a response."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.answer()
@@ -103408,6 +104376,9 @@ Returns a `Promise<void>` that resolves when the response has been triggered.
 ---
 title: "Reference: voice.close() | Voice"
 description: "Documentation for the close() method available in voice providers, which disconnects from real-time voice services."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.close()
@@ -103467,6 +104438,10 @@ This method does not return a value.
 ---
 title: "Reference: voice.connect() | Voice"
 description: "Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.connect()
@@ -103593,6 +104568,8 @@ await voice.connect();
 ---
 title: "Reference: Voice Events | Voice"
 description: "Documentation for events emitted by voice providers, particularly for real-time voice interactions."
+packages:
+  - "@mastra/core"
 ---
 
 # Voice Events
@@ -103681,6 +104658,9 @@ These events are commonly implemented across real-time voice providers:
 ---
 title: "Reference: voice.getSpeakers() | Voice Providers"
 description: "Documentation for the getSpeakers() method available in voice providers, which retrieves available voice options."
+packages:
+  - "@mastra/voice-elevenlabs"
+  - "@mastra/voice-openai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -103975,6 +104955,12 @@ Different voice providers return different metadata for their voices:
 ---
 title: "Reference: voice.listen() | Voice"
 description: "Documentation for the listen() method available in all Mastra voice providers, which converts speech to text."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
 ---
 
 # voice.listen()
@@ -104213,6 +105199,8 @@ await voice.listen(microphoneStream);
 ---
 title: "Reference: voice.off() | Voice"
 description: "Documentation for the off() method available in voice providers, which removes event listeners for voice events."
+packages:
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.off()
@@ -104290,6 +105278,10 @@ This method does not return a value.
 ---
 title: "Reference: voice.on() | Voice"
 description: "Documentation for the on() method available in voice providers, which registers event listeners for voice events."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.on()
@@ -104425,6 +105417,10 @@ voice.on("speaker", (stream) => {
 ---
 title: "Reference: voice.send() | Voice"
 description: "Documentation for the send() method available in real-time voice providers, which streams audio data for continuous processing."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.send()
@@ -104509,6 +105505,12 @@ Returns a `Promise<void>` that resolves when the audio data has been accepted by
 ---
 title: "Reference: voice.speak() | Voice"
 description: "Documentation for the speak() method available in all Mastra voice providers, which converts text to speech."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
 ---
 
 # voice.speak()
@@ -104753,6 +105755,8 @@ await voice.speak("Hello, this is realtime speech!");
 ---
 title: "Reference: voice.updateConfig() | Voice"
 description: "Documentation for the updateConfig() method available in voice providers, which updates the configuration of a voice provider at runtime."
+packages:
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.updateConfig()
@@ -104848,6 +105852,8 @@ Different voice providers support different configuration options:
 ---
 title: "Reference: Run.cancel() | Workflows"
 description: Documentation for the `Run.cancel()` method in workflows, which cancels a workflow run.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.cancel()
@@ -104958,6 +105964,8 @@ const step = createStep({
 ---
 title: "Reference: Run.restart() | Workflows"
 description: Documentation for the `Run.restart()` method in workflows, which restarts an active workflow run that lost connection to the server.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.restart()
@@ -105101,6 +106109,8 @@ const restartedResult = await run.restart();
 ---
 title: "Reference: Run.resume() | Workflows"
 description: Documentation for the `Run.resume()` method in workflows, which resumes a suspended workflow run with new data.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.resume()
@@ -105300,6 +106310,8 @@ if (result.status === "suspended") {
 ---
 title: "Reference: Run.start() | Workflows"
 description: Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.start()
@@ -105493,6 +106505,8 @@ const result = await run.start({
 ---
 title: "Reference: Run.startAsync() | Workflows"
 description: Documentation for the `Run.startAsync()` method in workflows, which starts a workflow run without waiting for completion (fire-and-forget).
+packages:
+  - "@mastra/core"
 ---
 
 # Run.startAsync()
@@ -105639,6 +106653,8 @@ if (result?.status === 'success') {
 ---
 title: "Reference: Run.timeTravel() | Workflows"
 description: Documentation for the `Run.timeTravel()` method in workflows, which re-executes a workflow from a specific step.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.timeTravel()
@@ -105952,6 +106968,8 @@ const result = await run.timeTravel({
 ---
 title: "Reference: Run Class | Workflows"
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
+packages:
+  - "@mastra/core"
 ---
 
 # Run Class
@@ -106076,6 +107094,8 @@ A workflow run's `status` indicates its current execution state. The possible va
 ---
 title: "Reference: Step Class | Workflows"
 description: Documentation for the Step class in Mastra, which defines individual units of work within a workflow.
+packages:
+  - "@mastra/core"
 ---
 
 # Step Class
@@ -106301,6 +107321,8 @@ const agentStep = createStep(testAgent, {
 ---
 title: "Reference: Workflow.branch() | Workflows"
 description: Documentation for the `Workflow.branch()` method in workflows, which creates conditional branches between steps.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.branch()
@@ -106352,6 +107374,8 @@ workflow.branch([
 ---
 title: "Reference: Workflow.commit() | Workflows"
 description: Documentation for the `Workflow.commit()` method in workflows, which finalizes the workflow and returns the final result.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.commit()
@@ -106385,6 +107409,8 @@ workflow.then(step1).commit();
 ---
 title: "Reference: Workflow.createRun() | Workflows"
 description: Documentation for the `Workflow.createRun()` method in workflows, which creates a new workflow run instance.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.createRun()
@@ -106482,6 +107508,8 @@ console.log(storedRun.resourceId); // "user-123"
 ---
 title: "Reference: Workflow.dountil() | Workflows"
 description: Documentation for the `Workflow.dountil()` method in workflows, which creates a loop that executes a step until a condition is met.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.dountil()
@@ -106537,6 +107565,8 @@ workflow.dountil(step1, async ({ inputData }) => true);
 ---
 title: "Reference: Workflow.dowhile() | Workflows"
 description: Documentation for the `Workflow.dowhile()` method in workflows, which creates a loop that executes a step while a condition is met.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.dowhile()
@@ -106592,6 +107622,8 @@ workflow.dowhile(step1, async ({ inputData }) => true);
 ---
 title: "Reference: Workflow.foreach() | Workflows"
 description: Documentation for the `Workflow.foreach()` method in workflows, which creates a loop that executes a step for each item in an array.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.foreach()
@@ -106720,6 +107752,8 @@ workflow
 ---
 title: "Reference: Workflow.map() | Workflows"
 description: Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.map()
@@ -106842,6 +107876,8 @@ testWorkflow
 ---
 title: "Reference: Workflow.parallel() | Workflows"
 description: Documentation for the `Workflow.parallel()` method in workflows, which executes multiple steps in parallel.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.parallel()
@@ -106888,6 +107924,8 @@ workflow.parallel([step1, step2]);
 ---
 title: "Reference: Workflow.sendEvent() | Workflows"
 description: Documentation for the `Workflow.sendEvent()` method in workflows, which resumes execution when an event is sent.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.sendEvent()
@@ -106961,6 +107999,8 @@ setTimeout(() => {
 ---
 title: "Reference: Workflow.sleep() | Workflows"
 description: Documentation for the `Workflow.sleep()` method in workflows, which pauses execution for a specified number of milliseconds.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.sleep()
@@ -107026,6 +108066,8 @@ export const testWorkflow = createWorkflow({...})
 ---
 title: "Reference: Workflow.sleepUntil() | Workflows"
 description: Documentation for the `Workflow.sleepUntil()` method in workflows, which pauses execution until a specified date.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.sleepUntil()
@@ -107091,6 +108133,8 @@ export const testWorkflow = createWorkflow({...})
 ---
 title: "Reference: Workflow.then() | Workflows"
 description: Documentation for the `Workflow.then()` method in workflows, which creates sequential dependencies between steps.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.then()
@@ -107138,6 +108182,8 @@ workflow.then(step1).then(step2);
 ---
 title: "Reference: Workflow.waitForEvent() | Workflows"
 description: Documentation for the `Workflow.waitForEvent()` method in workflows, which pauses execution until an event is received.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.waitForEvent()
@@ -107207,6 +108253,8 @@ export const testWorkflow = createWorkflow({...})
 ---
 title: "Reference: Workflow Class | Workflows"
 description: Documentation for the `Workflow` class in Mastra, which enables you to create state machines for complex sequences of operations with conditional branching and data validation.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow Class

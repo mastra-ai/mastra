@@ -103,6 +103,47 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread).toEqual(updatedThread);
     });
 
+    it('should return consistent timestamps from getThreadById and listThreadsByResourceId (issue #11496)', async () => {
+      // This test verifies that timestamps are consistent across different retrieval methods.
+      // The bug was that listThreadsByResourceId returned timestamps from non-timezone-aware columns,
+      // while getThreadById used timezone-aware columns, causing inconsistent UTC timestamps.
+
+      const thread = createSampleThread();
+      await memoryStorage.saveThread({ thread });
+
+      // Update the thread to ensure updatedAt differs from createdAt
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const updatedThread = await memoryStorage.updateThread({
+        id: thread.id,
+        title: 'Updated for timestamp test',
+        metadata: { timestampTest: true },
+      });
+
+      // Get thread via getThreadById
+      const threadById = await memoryStorage.getThreadById({ threadId: thread.id });
+
+      // Get thread via listThreadsByResourceId
+      const { threads } = await memoryStorage.listThreadsByResourceId({
+        resourceId: thread.resourceId,
+        page: 0,
+        perPage: 10,
+      });
+      const threadFromList = threads.find(t => t.id === thread.id);
+
+      expect(threadById).toBeDefined();
+      expect(threadFromList).toBeDefined();
+
+      // Normalize to timestamps for comparison (handles both Date objects and ISO strings)
+      const getTimestamp = (date: Date | string) => (date instanceof Date ? date.getTime() : new Date(date).getTime());
+
+      // The timestamps should be identical between the two retrieval methods
+      expect(getTimestamp(threadFromList!.createdAt)).toBe(getTimestamp(threadById!.createdAt));
+      expect(getTimestamp(threadFromList!.updatedAt)).toBe(getTimestamp(threadById!.updatedAt));
+
+      // Also verify updatedAt from updateThread matches
+      expect(getTimestamp(threadFromList!.updatedAt)).toBe(getTimestamp(updatedThread.updatedAt));
+    });
+
     it('should delete thread', async () => {
       const thread = createSampleThread();
       await memoryStorage.saveThread({ thread });

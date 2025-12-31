@@ -12623,12 +12623,12 @@ describe('MastraInngestWorkflow', () => {
 
       const run = await promptEvalWorkflow.createRun();
 
-      const streamOutput = run.streamVNext({ inputData: { input: 'test' } });
+      const streamOutput = run.stream({ inputData: { input: 'test' } });
 
       for await (const _data of streamOutput.fullStream) {
       }
       const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
-      const resumeStreamOutput = run.resumeStreamVNext({ resumeData, step: promptAgent });
+      const resumeStreamOutput = run.resumeStream({ resumeData, step: promptAgent });
 
       for await (const _data of resumeStreamOutput.fullStream) {
       }
@@ -13751,7 +13751,7 @@ describe('MastraInngestWorkflow', () => {
       await resetInngest();
 
       const run = await workflow.createRun({ runId: 'structured-output-test' });
-      const streamOutput = run.streamVNext({
+      const streamOutput = run.stream({
         inputData: { prompt: 'Generate an article about testing' },
       });
 
