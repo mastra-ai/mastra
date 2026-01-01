@@ -1,15 +1,14 @@
 import { ContentStorage } from '../artifacts';
+import type { ListContentOptions } from '../artifacts';
 import { RegisteredLogger } from '../logger';
 
-import type { AnyArtifact, KnowledgeNamespaceInfo, KnowledgeSource } from './types';
+import type { AnyArtifact, KnowledgeNamespaceInfo } from './types';
 
 /**
- * Options for listing namespaces
+ * Options for listing namespaces.
+ * Extends the shared ListContentOptions.
  */
-export interface ListNamespacesOptions {
-  /** Only include namespaces from specific source types */
-  sourceTypes?: Array<'external' | 'local' | 'managed'>;
-}
+export interface ListNamespacesOptions extends ListContentOptions {}
 
 /**
  * Options for creating a namespace in storage

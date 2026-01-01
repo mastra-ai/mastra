@@ -1,5 +1,11 @@
-import type { BaseSearchResult, BaseSearchOptions, SearchMode } from '../artifacts';
+import type { BaseSearchResult, BaseSearchOptions, SearchMode, ContentSource } from '../artifacts';
 import type { KnowledgeStorage } from './base';
+
+/**
+ * Knowledge source types indicating where the namespace comes from and its access level.
+ * Alias for the shared ContentSource type.
+ */
+export type KnowledgeSource = ContentSource;
 
 /**
  * Supported artifact types for Knowledge storage
@@ -40,14 +46,6 @@ export interface TextArtifact extends Artifact {
 }
 
 export type AnyArtifact = FileArtifact | ImageArtifact | TextArtifact;
-
-/**
- * Knowledge source types indicating where the namespace comes from and its access level
- */
-export type KnowledgeSource =
-  | { type: 'external'; packagePath: string } // node_modules - read-only
-  | { type: 'local'; projectPath: string } // ./src/knowledge - read-write
-  | { type: 'managed'; mastraPath: string }; // .mastra/knowledge - read-write
 
 /**
  * Factory function for creating KnowledgeStorage instances.

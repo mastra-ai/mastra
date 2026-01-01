@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, readdir, unlink, rm, stat } from 'node:fs/promises';
 import { join, dirname, relative } from 'node:path';
 
+import { getSourceForPath, isWritableSource } from '@mastra/core/artifacts';
 import { KnowledgeStorage } from '@mastra/core/knowledge';
 import type {
   CreateNamespaceStorageOptions,
@@ -25,33 +26,12 @@ export class FilesystemStorage extends KnowledgeStorage {
   }
 
   /**
-   * Determine the source type for a given path.
-   * This is a heuristic based on path patterns.
-   */
-  #getSourceForPath(path: string): KnowledgeSource {
-    if (path.includes('node_modules')) {
-      return { type: 'external', packagePath: path };
-    } else if (path.includes('.mastra')) {
-      return { type: 'managed', mastraPath: path };
-    } else {
-      return { type: 'local', projectPath: path };
-    }
-  }
-
-  /**
-   * Check if a source is writable (not external)
-   */
-  #isWritableSource(source: KnowledgeSource): boolean {
-    return source.type !== 'external';
-  }
-
-  /**
    * Get the first writable path (for creating new namespaces)
    */
   #getWritablePath(): string | null {
     for (const path of this.paths) {
-      const source = this.#getSourceForPath(path);
-      if (this.#isWritableSource(source)) {
+      const source = getSourceForPath(path);
+      if (isWritableSource(source)) {
         return path;
       }
     }
@@ -67,7 +47,7 @@ export class FilesystemStorage extends KnowledgeStorage {
       try {
         const stats = await stat(namespacePath);
         if (stats.isDirectory()) {
-          return { path, source: this.#getSourceForPath(path) };
+          return { path, source: getSourceForPath(path) };
         }
       } catch {
         // Not found in this path
@@ -90,7 +70,7 @@ export class FilesystemStorage extends KnowledgeStorage {
     const seenNamespaces = new Set<string>();
 
     for (const basePath of this.paths) {
-      const source = this.#getSourceForPath(basePath);
+      const source = getSourceForPath(basePath);
 
       // Filter by source type if specified
       if (options?.sourceTypes && !options.sourceTypes.includes(source.type)) {
@@ -144,7 +124,7 @@ export class FilesystemStorage extends KnowledgeStorage {
     };
     await writeFile(metadataPath, JSON.stringify(metadata, null, 2));
 
-    const source = this.#getSourceForPath(writablePath);
+    const source = getSourceForPath(writablePath);
 
     return {
       namespace: options.namespace,
@@ -164,7 +144,7 @@ export class FilesystemStorage extends KnowledgeStorage {
       return; // Namespace doesn't exist, nothing to delete
     }
 
-    if (!this.#isWritableSource(found.source)) {
+    if (!isWritableSource(found.source)) {
       throw new Error(`Cannot delete namespace '${namespace}' from read-only source`);
     }
 
@@ -250,7 +230,7 @@ export class FilesystemStorage extends KnowledgeStorage {
       throw new Error(`Namespace '${namespace}' not found`);
     }
 
-    if (!this.#isWritableSource(found.source)) {
+    if (!isWritableSource(found.source)) {
       throw new Error(`Cannot add artifacts to read-only namespace '${namespace}'`);
     }
 
@@ -273,7 +253,7 @@ export class FilesystemStorage extends KnowledgeStorage {
       throw new Error(`Namespace '${namespace}' not found`);
     }
 
-    if (!this.#isWritableSource(found.source)) {
+    if (!isWritableSource(found.source)) {
       throw new Error(`Cannot delete artifacts from read-only namespace '${namespace}'`);
     }
 
@@ -297,7 +277,7 @@ export class FilesystemStorage extends KnowledgeStorage {
       return; // Namespace doesn't exist, nothing to clear
     }
 
-    if (!this.#isWritableSource(found.source)) {
+    if (!isWritableSource(found.source)) {
       throw new Error(`Cannot clear read-only namespace '${namespace}'`);
     }
 

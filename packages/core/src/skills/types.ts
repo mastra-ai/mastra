@@ -3,7 +3,13 @@
  * @see https://github.com/anthropics/skills
  */
 
-import type { BaseSearchResult, BaseSearchOptions, SearchMode } from '../artifacts';
+import type { BaseSearchResult, BaseSearchOptions, SearchMode, ContentSource } from '../artifacts';
+
+/**
+ * Skill source types indicating where the skill comes from and its access level.
+ * Alias for the shared ContentSource type.
+ */
+export type SkillSource = ContentSource;
 
 /**
  * Supported skill format types for system message injection
@@ -49,14 +55,6 @@ export interface Skill extends SkillMetadata {
   /** List of asset file paths (relative to assets/ directory) */
   assets: string[];
 }
-
-/**
- * Skill source types indicating where the skill comes from and its access level
- */
-export type SkillSource =
-  | { type: 'external'; packagePath: string } // node_modules - read-only
-  | { type: 'local'; projectPath: string } // ./src/skills - read-write
-  | { type: 'managed'; mastraPath: string }; // .mastra/skills - read-write (Studio-managed)
 
 /**
  * Search result when searching across skills

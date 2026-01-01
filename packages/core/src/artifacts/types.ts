@@ -2,6 +2,65 @@
  * Shared types for content storage and search (Skills & Knowledge)
  */
 
+// ============================================================================
+// Source Types
+// ============================================================================
+
+/**
+ * Source type identifier for content origin
+ */
+export type ContentSourceType = 'external' | 'local' | 'managed';
+
+/**
+ * Content source indicating where content comes from and its access level.
+ * Used by both Skills and Knowledge to track read-only vs read-write sources.
+ *
+ * - external: From node_modules packages (read-only)
+ * - local: From project source directory (read-write)
+ * - managed: From .mastra directory, typically Studio-managed (read-write)
+ */
+export type ContentSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Options for listing content entities (skills or namespaces)
+ */
+export interface ListContentOptions {
+  /** Only include entities from specific source types */
+  sourceTypes?: ContentSourceType[];
+}
+
+// ============================================================================
+// Source Utilities
+// ============================================================================
+
+/**
+ * Check if a source is writable (not external/read-only)
+ */
+export function isWritableSource(source: ContentSource): boolean {
+  return source.type !== 'external';
+}
+
+/**
+ * Determine the source type for a given path.
+ * Uses heuristics based on common path patterns.
+ */
+export function getSourceForPath(path: string): ContentSource {
+  if (path.includes('node_modules')) {
+    return { type: 'external', packagePath: path };
+  } else if (path.includes('.mastra')) {
+    return { type: 'managed', mastraPath: path };
+  } else {
+    return { type: 'local', projectPath: path };
+  }
+}
+
+// ============================================================================
+// Search Types
+// ============================================================================
+
 /**
  * Search mode options
  */

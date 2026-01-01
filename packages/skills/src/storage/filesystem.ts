@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
+import { getSourceForPath, isWritableSource } from '@mastra/core/artifacts';
 import { SkillsStorage } from '@mastra/core/skills';
 import type {
   ListSkillsOptions,
@@ -468,7 +469,7 @@ export class FilesystemStorage extends SkillsStorage {
     }
 
     // Build skill object
-    const source = this.#determineSource(writablePath);
+    const source = getSourceForPath(writablePath);
     const skill: Skill = {
       ...metadata,
       path: skillDir,
@@ -557,7 +558,7 @@ export class FilesystemStorage extends SkillsStorage {
 
     for (const skillsPath of this.paths) {
       const resolvedPath = resolve(skillsPath);
-      const source = this.#determineSource(resolvedPath);
+      const source = getSourceForPath(resolvedPath);
 
       this.#discoverSkillsInPath(resolvedPath, source);
     }
@@ -576,19 +577,6 @@ export class FilesystemStorage extends SkillsStorage {
     if (!this.#initialized) {
       await this.refresh();
     }
-  }
-
-  /**
-   * Determine the source type based on the path
-   */
-  #determineSource(skillsPath: string): SkillSource {
-    if (skillsPath.includes('node_modules')) {
-      return { type: 'external', packagePath: skillsPath };
-    }
-    if (skillsPath.includes('.mastra/skills')) {
-      return { type: 'managed', mastraPath: skillsPath };
-    }
-    return { type: 'local', projectPath: skillsPath };
   }
 
   /**
@@ -744,7 +732,7 @@ export class FilesystemStorage extends SkillsStorage {
    * Check if a skill is in a writable path (local or managed, not external)
    */
   #ensureWritable(skill: Skill): void {
-    if (skill.source.type === 'external') {
+    if (!isWritableSource(skill.source)) {
       throw new Error(`Cannot modify skill "${skill.name}" - it is in a read-only external path`);
     }
   }
@@ -756,8 +744,8 @@ export class FilesystemStorage extends SkillsStorage {
   #getFirstWritablePath(): string | null {
     for (const skillsPath of this.paths) {
       const resolvedPath = resolve(skillsPath);
-      const source = this.#determineSource(resolvedPath);
-      if (source.type !== 'external') {
+      const source = getSourceForPath(resolvedPath);
+      if (isWritableSource(source)) {
         return resolvedPath;
       }
     }

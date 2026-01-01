@@ -1,15 +1,14 @@
 import { ContentStorage } from '../artifacts';
+import type { ListContentOptions } from '../artifacts';
 import { RegisteredLogger } from '../logger';
 
 import type { Skill, SkillMetadata } from './types';
 
 /**
- * Options for listing skills
+ * Options for listing skills.
+ * Extends the shared ListContentOptions.
  */
-export interface ListSkillsOptions {
-  /** Only include skills from specific source types */
-  sourceTypes?: Array<'external' | 'local' | 'managed'>;
-}
+export interface ListSkillsOptions extends ListContentOptions {}
 
 /**
  * Options for creating a skill
