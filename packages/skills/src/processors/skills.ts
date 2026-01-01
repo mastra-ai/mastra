@@ -6,7 +6,7 @@ import z from 'zod';
 
 import { extractLines } from '../bm25';
 import { Skills } from '../skills';
-import type { SkillsBM25Config } from '../skills';
+import type { BM25SearchConfig } from '../search-engine';
 import type { SkillFormat, Skill } from '../types';
 
 // =========================================================================
@@ -24,7 +24,7 @@ export interface SkillsProcessorOptions {
   /** Validate skills on load (default: true) */
   validateSkills?: boolean;
   /** BM25 search configuration */
-  bm25Config?: SkillsBM25Config;
+  bm25Config?: BM25SearchConfig;
   /**
    * Pre-existing Skills instance.
    * If not provided and skillsPaths is set, a new Skills instance will be created.
@@ -79,7 +79,7 @@ export class SkillsProcessor extends BaseProcessor<'skills-processor'> {
   private skillsOptions?: {
     paths: string | string[];
     validateOnLoad: boolean;
-    bm25Config?: SkillsBM25Config;
+    bm25Config?: BM25SearchConfig;
   };
 
   constructor(opts?: SkillsProcessorOptions) {

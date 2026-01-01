@@ -31,7 +31,7 @@ export { KnowledgeStorage } from '@mastra/core/knowledge';
 export type { SkillsConfig } from './types';
 
 // Skills class (SKILL.md based)
-export { Skills, type SkillsBM25Config } from './skills';
+export { Skills } from './skills';
 
 // Knowledge class (namespace/artifact based)
 export * from './knowledge';

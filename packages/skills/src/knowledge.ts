@@ -8,9 +8,8 @@ import type {
   KnowledgeSearchResult,
 } from '@mastra/core/knowledge';
 
-import type { BM25Config, TokenizeOptions } from './bm25';
 import { SearchEngine } from './search-engine';
-import type { Embedder, SearchEngineConfig, SearchMode } from './search-engine';
+import type { Embedder, SearchEngineConfig, BM25SearchConfig } from './search-engine';
 import type { MastraVector } from '@mastra/core/vector';
 
 /** Default prefix for static knowledge artifacts */
@@ -26,16 +25,6 @@ export interface KnowledgeIndexConfig {
   embedder: Embedder;
   /** Index name prefix - will be combined with namespace */
   indexNamePrefix?: string;
-}
-
-/**
- * Configuration for BM25 keyword search
- */
-export interface KnowledgeBM25Config {
-  /** BM25 algorithm parameters */
-  bm25?: BM25Config;
-  /** Tokenization options */
-  tokenize?: TokenizeOptions;
 }
 
 /**
@@ -110,7 +99,7 @@ export class Knowledge implements MastraKnowledge {
   #indexConfig?: KnowledgeIndexConfig;
 
   /** Global BM25 config */
-  #bm25Config?: KnowledgeBM25Config;
+  #bm25Config?: BM25SearchConfig;
 
   /** Whether BM25 is enabled globally */
   #enableBM25: boolean;
@@ -135,7 +124,7 @@ export class Knowledge implements MastraKnowledge {
     /** Optional indexing configuration for semantic search */
     index?: KnowledgeIndexConfig;
     /** Optional BM25 configuration for keyword search */
-    bm25?: KnowledgeBM25Config | boolean;
+    bm25?: BM25SearchConfig | boolean;
     /** Prefix for static knowledge artifacts (default: 'static') */
     staticPrefix?: string;
   }) {
@@ -294,7 +283,7 @@ export class Knowledge implements MastraKnowledge {
     const searchResults = await state.searchEngine.search(query, {
       topK,
       minScore,
-      mode: mode as SearchMode,
+      mode,
       vectorWeight: hybrid?.vectorWeight,
       filter,
     });

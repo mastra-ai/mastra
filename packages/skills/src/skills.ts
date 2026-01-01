@@ -3,9 +3,8 @@ import { join, resolve } from 'node:path';
 import type { MastraVector } from '@mastra/core/vector';
 import matter from 'gray-matter';
 
-import type { BM25Config, TokenizeOptions } from './bm25';
 import { SearchEngine } from './search-engine';
-import type { Embedder, SearchEngineConfig } from './search-engine';
+import type { Embedder, SearchEngineConfig, BM25SearchConfig } from './search-engine';
 import { validateSkillMetadata, parseAllowedTools } from './schemas';
 import type {
   Skill,
@@ -40,16 +39,6 @@ export interface SkillsIndexConfig {
   embedder: Embedder;
   /** Index name for the vector store (default: skills-{id}) */
   indexName?: string;
-}
-
-/**
- * Configuration for BM25 search
- */
-export interface SkillsBM25Config {
-  /** BM25 algorithm parameters */
-  bm25?: BM25Config;
-  /** Tokenization options */
-  tokenize?: TokenizeOptions;
 }
 
 /**
@@ -94,7 +83,7 @@ export class Skills implements MastraSkills {
   constructor(
     config: SkillsConfig,
     options?: {
-      bm25?: SkillsBM25Config;
+      bm25?: BM25SearchConfig;
       index?: SkillsIndexConfig;
     },
   ) {
