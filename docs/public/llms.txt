@@ -344,6 +344,8 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Reference: Toxicity Scorer | Evals](https://mastra.ai/en/reference/evals/toxicity): Documentation for the Toxicity Scorer in Mastra, which evaluates LLM outputs for racist, biased, or toxic elements.
 - [Reference: Overview](https://mastra.ai/en/reference): Reference documentation on Mastra's APIs and tools
 - [Reference: PinoLogger | Observability](https://mastra.ai/en/reference/logging/pino-logger): Documentation for PinoLogger, which provides methods to record events at various severity levels.
+- [Reference: Clone Utility Methods | Memory](https://mastra.ai/en/reference/memory/clone-utilities): Documentation for utility methods to work with cloned threads in Mastra Memory.
+- [Reference: Memory.cloneThread() | Memory](https://mastra.ai/en/reference/memory/cloneThread): Documentation for the `Memory.cloneThread()` method in Mastra, which creates a copy of a conversation thread with all its messages.
 - [Reference: Memory.createThread() | Memory](https://mastra.ai/en/reference/memory/createThread): Documentation for the `Memory.createThread()` method in Mastra, which creates a new conversation thread in the memory system.
 - [Reference: Memory.deleteMessages() | Memory](https://mastra.ai/en/reference/memory/deleteMessages): Documentation for the `Memory.deleteMessages()` method in Mastra, which deletes multiple messages by their IDs.
 - [Reference: Memory.getThreadById() | Memory](https://mastra.ai/en/reference/memory/getThreadById): Documentation for the `Memory.getThreadById()` method in Mastra, which retrieves a specific thread by its ID.
