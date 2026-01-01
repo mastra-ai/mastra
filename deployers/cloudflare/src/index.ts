@@ -4,15 +4,18 @@ import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
 import virtual from '@rollup/plugin-virtual';
+import type { Unstable_RawConfig } from 'wrangler';
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
+/** @deprecated TODO remove deprecated fields in next major version */
 interface CFRoute {
   pattern: string;
   zone_name: string;
   custom_domain?: boolean;
 }
 
+/** @deprecated TODO remove deprecated fields in next major version */
 interface D1DatabaseBinding {
   binding: string;
   database_name: string;
@@ -20,56 +23,37 @@ interface D1DatabaseBinding {
   preview_database_id?: string;
 }
 
+/** @deprecated TODO remove deprecated fields in next major version */
 interface KVNamespaceBinding {
   binding: string;
   id: string;
 }
 
 export class CloudflareDeployer extends Deployer {
-  routes?: CFRoute[] = [];
-  workerNamespace?: string;
-  env?: Record<string, any>;
-  projectName?: string;
-  d1Databases?: D1DatabaseBinding[];
-  kvNamespaces?: KVNamespaceBinding[];
-
-  constructor({
-    env,
-    projectName = 'mastra',
-    routes,
-    workerNamespace,
-    d1Databases,
-    kvNamespaces,
-  }: {
-    env?: Record<string, any>;
-    projectName?: string;
-    routes?: CFRoute[];
-    workerNamespace?: string;
-    d1Databases?: D1DatabaseBinding[];
-    kvNamespaces?: KVNamespaceBinding[];
-  }) {
+  constructor(
+    readonly userConfig: Omit<Unstable_RawConfig, 'main'> &
+      // TODO remove deprecated fields in next major version
+      {
+        /** @deprecated `name` instead. */
+        projectName?: string;
+        routes?: CFRoute[];
+        /** @deprecated use `kv_namespaces` instead. */
+        workerNamespace?: string;
+        /** @deprecated use `d1_databases` instead. */
+        d1Databases?: D1DatabaseBinding[];
+        /** @deprecated use `kv_namespaces` instead. */
+        kvNamespaces?: KVNamespaceBinding[];
+      },
+  ) {
     super({ name: 'CLOUDFLARE' });
-
-    this.projectName = projectName;
-    this.routes = routes;
-    this.workerNamespace = workerNamespace;
-
-    if (env) {
-      this.env = env;
-    }
-
-    if (d1Databases) this.d1Databases = d1Databases;
-    if (kvNamespaces) this.kvNamespaces = kvNamespaces;
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
     const env = await this.loadEnvVars();
-    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.env);
+    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.userConfig.env);
 
-    const cfWorkerName = this.projectName;
-
-    const wranglerConfig: Record<string, any> = {
-      name: cfWorkerName,
+    const wranglerConfig: Unstable_RawConfig = {
+      name: 'mastra',
       main: './index.mjs',
       compatibility_date: '2025-04-01',
       compatibility_flags: ['nodejs_compat', 'nodejs_compat_populate_process_env'],
@@ -79,18 +63,9 @@ export class CloudflareDeployer extends Deployer {
         },
       },
       vars: envsAsObject,
+      ...this.userConfig,
     };
 
-    if (!this.workerNamespace && this.routes) {
-      wranglerConfig.routes = this.routes;
-    }
-
-    if (this.d1Databases?.length) {
-      wranglerConfig.d1_databases = this.d1Databases;
-    }
-    if (this.kvNamespaces?.length) {
-      wranglerConfig.kv_namespaces = this.kvNamespaces;
-    }
     await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
   }
 
