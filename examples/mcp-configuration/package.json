@@ -17,13 +17,14 @@
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "@modelcontextprotocol/sdk": "^1.13.0",
-    "chalk": "^5.4.1",
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "chalk": "5.4.1",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "mastra": "latest",
+    "@modelcontextprotocol/sdk": "^1.24.0",
     "tsx": "^4.19.3"
   },
   "pnpm": {
