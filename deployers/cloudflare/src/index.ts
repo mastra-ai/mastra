@@ -30,8 +30,10 @@ interface KVNamespaceBinding {
 }
 
 export class CloudflareDeployer extends Deployer {
+  readonly userConfig: Omit<Unstable_RawConfig, 'main'>;
+
   constructor(
-    readonly userConfig: Omit<Unstable_RawConfig, 'main'> &
+    userConfig: Omit<Unstable_RawConfig, 'main'> &
       // TODO remove deprecated fields in next major version
       {
         /** @deprecated `name` instead. */
@@ -45,6 +47,8 @@ export class CloudflareDeployer extends Deployer {
       },
   ) {
     super({ name: 'CLOUDFLARE' });
+
+    this.userConfig = { ...userConfig };
 
     if (!userConfig.name && userConfig.projectName) {
       this.userConfig.name = userConfig.projectName;
