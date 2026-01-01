@@ -10,7 +10,6 @@
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.15",
     "@ai-sdk/provider": "^2.0.0",
-    "@mastra/braintrust": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/evals": "latest",
@@ -18,12 +17,10 @@
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "@mastra/skills": "latest",
     "@mastra/observability": "latest",
     "@mastra/voice-openai": "latest",
     "ai": "^4.3.19",
     "ai-v5": "npm:ai@^5.0.93",
-    "braintrust": "^1.0.3",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
     "typescript": "^5.8.3",
@@ -39,9 +36,7 @@
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/observability": "link:../../observability/mastra",
-      "@mastra/braintrust": "link:../../observability/braintrust",
       "@mastra/evals": "link:../../packages/evals",
-      "@mastra/skills": "link:../../packages/skills",
       "mastra": "link:../../packages/cli"
     }
   },
@@ -49,7 +44,6 @@
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
-    "knowledge-demo": "npx bun src/knowledge-demo.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },

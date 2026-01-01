@@ -1,16 +1,9 @@
 import { Mastra } from '@mastra/core/mastra';
+import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability } from '@mastra/observability';
 
-import {
-  agentThatHarassesYou,
-  chefAgent,
-  chefAgentResponses,
-  dynamicAgent,
-  evalAgent,
-  supportAgent,
-} from './agents/index';
-import { supportKnowledge } from './knowledge/index.js';
+import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import {
@@ -38,7 +31,6 @@ import {
   sensitiveTopicBlocker,
   stepLoggerProcessor,
 } from './processors/index';
-import { ingestKnowledgeWorkflow } from './workflows/ingest-knowledge.js';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -60,7 +52,6 @@ const config = {
     dynamicAgent,
     agentThatHarassesYou,
     evalAgent,
-    supportAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
@@ -72,7 +63,6 @@ const config = {
     agentWithBranchingModeration,
     agentWithSequentialModeration,
   },
-  knowledge: supportKnowledge,
   processors: {
     moderationProcessor,
     piiDetectionProcessor,
@@ -95,7 +85,6 @@ const config = {
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
-    ingestKnowledgeWorkflow,
   },
   bundler: {
     sourcemap: true,
@@ -109,9 +98,7 @@ const config = {
     testScorer,
   },
   observability: new Observability({
-    default: {
-      enabled: true,
-    },
+    default: { enabled: true },
   }),
 };
 

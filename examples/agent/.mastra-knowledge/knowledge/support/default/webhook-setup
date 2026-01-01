@@ -1,8 +1,0 @@
-Setting up webhooks:
-1. Go to Settings > Integrations > Webhooks
-2. Click "Add Webhook"
-3. Enter your endpoint URL (must be HTTPS)
-4. Select events to subscribe to
-5. Save and note the signing secret
-
-All webhook payloads include a signature header (X-Signature) for verification. Use the signing secret to verify the payload hasn't been tampered with.

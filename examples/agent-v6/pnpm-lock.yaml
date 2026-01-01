@@ -6,7 +6,6 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
-  '@mastra/skills': link:../../packages/skills
   '@mastra/loggers': link:../../packages/loggers
   '@mastra/voice-openai': link:../../voice/openai
   '@mastra/memory': link:../../packages/memory
@@ -55,9 +54,6 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
-      '@mastra/skills':
-        specifier: link:../../packages/skills
-        version: link:../../packages/skills
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai

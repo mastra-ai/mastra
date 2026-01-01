@@ -9,9 +9,6 @@ import { myWorkflow } from '../workflows/index.js';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
 import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
 
-// Export knowledge-powered agents
-export { supportAgent } from './support-agent.js';
-
 const memory = new Memory();
 
 // Define schema directly compatible with OpenAI's requirements

@@ -1,8 +1,0 @@
-Setting up Two-Factor Authentication (2FA):
-1. Go to Settings > Security
-2. Click "Enable 2FA"
-3. Scan the QR code with an authenticator app (Google Authenticator, Authy, 1Password)
-4. Enter the 6-digit code to verify
-5. Save your backup codes in a secure location
-
-If you lose access to your authenticator, use a backup code to sign in, then reconfigure 2FA.
