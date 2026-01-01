@@ -993,6 +993,62 @@ ${formattedMessages}
   }
 
   /**
+   * Wrap observations in a thread attribution tag.
+   * Used in resource scope to track which thread observations came from.
+   */
+  private wrapWithThreadTag(threadId: string, observations: string): string {
+    return `<thread id="${threadId}">\n${observations}\n</thread>`;
+  }
+
+  /**
+   * Replace or append a thread section in the observation pool.
+   * If a section for this thread already exists, replace it.
+   * Otherwise, append the new section.
+   */
+  private replaceOrAppendThreadSection(
+    existingObservations: string,
+    threadId: string,
+    newThreadSection: string,
+  ): string {
+    // Pattern to match existing thread section for this threadId
+    const threadPattern = new RegExp(
+      `<thread id="${threadId}">\\s*[\\s\\S]*?\\s*</thread>`,
+      'g',
+    );
+
+    if (threadPattern.test(existingObservations)) {
+      // Replace existing section
+      return existingObservations.replace(threadPattern, newThreadSection);
+    } else {
+      // Append new section
+      return existingObservations
+        ? `${existingObservations}\n\n${newThreadSection}`
+        : newThreadSection;
+    }
+  }
+
+  /**
+   * Sort threads by their oldest unobserved message.
+   * Returns thread IDs in order from oldest to most recent.
+   * This ensures no thread's messages get "stuck" unobserved.
+   */
+  private sortThreadsByOldestMessage(
+    messagesByThread: Map<string, MastraDBMessage[]>,
+  ): string[] {
+    const threadOrder = Array.from(messagesByThread.entries())
+      .map(([threadId, messages]) => {
+        // Find oldest message timestamp
+        const oldestTimestamp = Math.min(
+          ...messages.map(m => (m.createdAt ? new Date(m.createdAt).getTime() : Date.now())),
+        );
+        return { threadId, oldestTimestamp };
+      })
+      .sort((a, b) => a.oldestTimestamp - b.oldestTimestamp);
+
+    return threadOrder.map(t => t.threadId);
+  }
+
+  /**
    * Process output - track messages and trigger Observer/Reflector.
    * Supports async buffering when bufferEvery is configured.
    */
@@ -1107,16 +1163,22 @@ ${formattedMessages}
 
       console.info(`[OM] Observer returned observations (${result.observations.length} chars)`);
 
-      // In resource scope, add thread header
-      let observationsWithHeader = result.observations;
+      // Build new observations
+      let newObservations: string;
       if (this.resourceScope) {
-        observationsWithHeader = `**Thread: ${threadId}**\n\n${result.observations}`;
+        // In resource scope: wrap with thread tag and replace/append
+        const threadSection = this.wrapWithThreadTag(threadId, result.observations);
+        newObservations = this.replaceOrAppendThreadSection(
+          record.activeObservations ?? '',
+          threadId,
+          threadSection,
+        );
+      } else {
+        // In thread scope: simple append
+        newObservations = record.activeObservations
+          ? `${record.activeObservations}\n\n${result.observations}`
+          : result.observations;
       }
-
-      // Combine with existing
-      const newObservations = record.activeObservations
-        ? `${record.activeObservations}\n\n${observationsWithHeader}`
-        : observationsWithHeader;
 
       const totalTokenCount = this.tokenCounter.countObservations(newObservations);
 
