@@ -54,6 +54,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build": "pnpm check && tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/evals",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
     "lint": "eslint ."

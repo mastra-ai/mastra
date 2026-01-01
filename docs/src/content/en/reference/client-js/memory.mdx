@@ -1,6 +1,8 @@
 ---
 title: "Reference: Memory API | Client SDK"
 description: Learn how to manage conversation threads and message history in Mastra using the client-js SDK.
+packages:
+  - "@mastra/client-js"
 ---
 
 # Memory API
@@ -68,6 +70,44 @@ Delete a thread and its messages:
 ```typescript
 await thread.delete();
 ```
+
+### Clone Thread
+
+Create a copy of a thread with all its messages:
+
+```typescript
+const { thread: clonedThread, clonedMessages } = await thread.clone();
+```
+
+Clone with options:
+
+```typescript
+const { thread: clonedThread, clonedMessages } = await thread.clone({
+  newThreadId: "custom-clone-id",
+  title: "Cloned Conversation",
+  metadata: { branch: "experiment-1" },
+  options: {
+    messageLimit: 10, // Only clone last 10 messages
+  },
+});
+```
+
+Clone with message filtering:
+
+```typescript
+const { thread: clonedThread } = await thread.clone({
+  options: {
+    messageFilter: {
+      startDate: new Date("2024-01-01"),
+      endDate: new Date("2024-01-31"),
+    },
+  },
+});
+```
+
+The clone response includes:
+- `thread`: The newly created cloned thread with clone metadata
+- `clonedMessages`: Array of the cloned messages with new IDs
 
 ## Message Operations
 

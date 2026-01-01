@@ -18,6 +18,9 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListMessagesInput,
   MemoryStorage,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -1055,7 +1058,290 @@ ${
     // This would require getting the messages first to know their threadId/resourceId
     // and then querying the vector store to delete associated embeddings
   }
+
+  /**
+   * Clone a thread and its messages to create a new independent thread.
+   * The cloned thread will have metadata tracking its source.
+   *
+   * If semantic recall is enabled, the cloned messages will also be embedded
+   * and added to the vector store for semantic search.
+   *
+   * @param args - Clone configuration options
+   * @param args.sourceThreadId - ID of the thread to clone
+   * @param args.newThreadId - ID for the new cloned thread (if not provided, a random UUID will be generated)
+   * @param args.resourceId - Resource ID for the new thread (defaults to source thread's resourceId)
+   * @param args.title - Title for the new cloned thread
+   * @param args.metadata - Additional metadata to merge with clone metadata
+   * @param args.options - Options for filtering which messages to include
+   * @param args.options.messageLimit - Maximum number of messages to copy (from most recent)
+   * @param args.options.messageFilter - Filter messages by date range or specific IDs
+   * @param memoryConfig - Optional memory configuration override
+   * @returns The newly created thread and the cloned messages
+   *
+   * @example
+   * ```typescript
+   * // Clone entire thread
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   * });
+   *
+   * // Clone with custom ID
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   *   newThreadId: 'my-custom-thread-id',
+   * });
+   *
+   * // Clone with message limit
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   *   title: 'My cloned conversation',
+   *   options: {
+   *     messageLimit: 10, // Only clone last 10 messages
+   *   },
+   * });
+   *
+   * // Clone with date filter
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   *   options: {
+   *     messageFilter: {
+   *       startDate: new Date('2024-01-01'),
+   *       endDate: new Date('2024-06-01'),
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  public async cloneThread(
+    args: StorageCloneThreadInput,
+    memoryConfig?: MemoryConfig,
+  ): Promise<StorageCloneThreadOutput> {
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.cloneThread(args);
+
+    // If semantic recall is enabled, embed the cloned messages
+    const config = this.getMergedThreadConfig(memoryConfig);
+    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
+      await this.embedClonedMessages(result.clonedMessages, config);
+    }
+
+    return result;
+  }
+
+  /**
+   * Embed cloned messages for semantic recall.
+   * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
+   */
+  private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfig): Promise<void> {
+    if (!this.vector || !this.embedder) {
+      return;
+    }
+
+    const embeddingData: Array<{
+      embeddings: number[][];
+      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+    }> = [];
+    let dimension: number | undefined;
+
+    // Process embeddings concurrently
+    await Promise.all(
+      messages.map(async message => {
+        let textForEmbedding: string | null = null;
+
+        if (
+          message.content?.content &&
+          typeof message.content.content === 'string' &&
+          message.content.content.trim() !== ''
+        ) {
+          textForEmbedding = message.content.content;
+        } else if (message.content?.parts && message.content.parts.length > 0) {
+          // Extract text from all text parts, concatenate
+          const joined = message.content.parts
+            .filter((part: { type: string }) => part.type === 'text')
+            .map((part: { type: string; text?: string }) => (part as { type: string; text: string }).text)
+            .join(' ')
+            .trim();
+          if (joined) textForEmbedding = joined;
+        }
+
+        if (!textForEmbedding) return;
+
+        const result = await this.embedMessageContent(textForEmbedding);
+        dimension = result.dimension;
+
+        embeddingData.push({
+          embeddings: result.embeddings,
+          metadata: result.chunks.map(() => ({
+            message_id: message.id,
+            thread_id: message.threadId,
+            resource_id: message.resourceId,
+          })),
+        });
+      }),
+    );
+
+    // Batch all vectors into a single upsert call
+    if (embeddingData.length > 0 && dimension !== undefined) {
+      const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+      // Flatten all embeddings and metadata into single arrays
+      const allVectors: number[][] = [];
+      const allMetadata: Array<{
+        message_id: string;
+        thread_id: string | undefined;
+        resource_id: string | undefined;
+      }> = [];
+
+      for (const data of embeddingData) {
+        allVectors.push(...data.embeddings);
+        allMetadata.push(...data.metadata);
+      }
+
+      await this.vector.upsert({
+        indexName,
+        vectors: allVectors,
+        metadata: allMetadata,
+      });
+    }
+  }
+
+  /**
+   * Get the clone metadata from a thread if it was cloned from another thread.
+   *
+   * @param thread - The thread to check
+   * @returns The clone metadata if the thread is a clone, null otherwise
+   *
+   * @example
+   * ```typescript
+   * const thread = await memory.getThreadById({ threadId: 'thread-123' });
+   * const cloneInfo = memory.getCloneMetadata(thread);
+   * if (cloneInfo) {
+   *   console.log(`This thread was cloned from ${cloneInfo.sourceThreadId}`);
+   * }
+   * ```
+   */
+  public getCloneMetadata(thread: StorageThreadType | null): ThreadCloneMetadata | null {
+    if (!thread?.metadata?.clone) {
+      return null;
+    }
+    return thread.metadata.clone as ThreadCloneMetadata;
+  }
+
+  /**
+   * Check if a thread is a clone of another thread.
+   *
+   * @param thread - The thread to check
+   * @returns True if the thread is a clone, false otherwise
+   *
+   * @example
+   * ```typescript
+   * const thread = await memory.getThreadById({ threadId: 'thread-123' });
+   * if (memory.isClone(thread)) {
+   *   console.log('This is a cloned thread');
+   * }
+   * ```
+   */
+  public isClone(thread: StorageThreadType | null): boolean {
+    return this.getCloneMetadata(thread) !== null;
+  }
+
+  /**
+   * Get the source thread that a cloned thread was created from.
+   *
+   * @param threadId - ID of the cloned thread
+   * @returns The source thread if found, null if the thread is not a clone or source doesn't exist
+   *
+   * @example
+   * ```typescript
+   * const sourceThread = await memory.getSourceThread('cloned-thread-123');
+   * if (sourceThread) {
+   *   console.log(`Original thread: ${sourceThread.title}`);
+   * }
+   * ```
+   */
+  public async getSourceThread(threadId: string): Promise<StorageThreadType | null> {
+    const thread = await this.getThreadById({ threadId });
+    const cloneMetadata = this.getCloneMetadata(thread);
+
+    if (!cloneMetadata) {
+      return null;
+    }
+
+    return this.getThreadById({ threadId: cloneMetadata.sourceThreadId });
+  }
+
+  /**
+   * List all threads that were cloned from a specific source thread.
+   *
+   * @param sourceThreadId - ID of the source thread
+   * @param resourceId - Optional resource ID to filter by
+   * @returns Array of threads that are clones of the source thread
+   *
+   * @example
+   * ```typescript
+   * const clones = await memory.listClones('original-thread-123', 'user-456');
+   * console.log(`Found ${clones.length} clones of this thread`);
+   * ```
+   */
+  public async listClones(sourceThreadId: string, resourceId?: string): Promise<StorageThreadType[]> {
+    // If resourceId is provided, use it to scope the search
+    // Otherwise, get the source thread's resourceId
+    let targetResourceId = resourceId;
+
+    if (!targetResourceId) {
+      const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+      if (!sourceThread) {
+        return [];
+      }
+      targetResourceId = sourceThread.resourceId;
+    }
+
+    // List all threads for the resource and filter for clones
+    const { threads } = await this.listThreadsByResourceId({
+      resourceId: targetResourceId,
+      perPage: false, // Get all threads
+    });
+
+    return threads.filter(thread => {
+      const cloneMetadata = this.getCloneMetadata(thread);
+      return cloneMetadata?.sourceThreadId === sourceThreadId;
+    });
+  }
+
+  /**
+   * Get the clone history chain for a thread (all ancestors back to the original).
+   *
+   * @param threadId - ID of the thread to get history for
+   * @returns Array of threads from oldest ancestor to the given thread (inclusive)
+   *
+   * @example
+   * ```typescript
+   * const history = await memory.getCloneHistory('deeply-cloned-thread');
+   * // Returns: [originalThread, firstClone, secondClone, deeplyClonedThread]
+   * ```
+   */
+  public async getCloneHistory(threadId: string): Promise<StorageThreadType[]> {
+    const history: StorageThreadType[] = [];
+    let currentThreadId: string | null = threadId;
+
+    while (currentThreadId) {
+      const thread = await this.getThreadById({ threadId: currentThreadId });
+      if (!thread) {
+        break;
+      }
+
+      history.unshift(thread); // Add to beginning to maintain order from oldest to newest
+
+      const cloneMetadata = this.getCloneMetadata(thread);
+      currentThreadId = cloneMetadata?.sourceThreadId ?? null;
+    }
+
+    return history;
+  }
 }
 
 // Re-export memory processors from @mastra/core for backward compatibility
 export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';
+
+// Re-export clone-related types for convenience
+export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';

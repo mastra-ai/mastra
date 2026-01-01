@@ -1,6 +1,11 @@
 ---
 title: "Reference: Memory Class | Memory"
 description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # Memory Class
@@ -81,6 +86,14 @@ export const agent = new Agent({
         "Number of most recent messages to retrieve. Set to false to disable.",
       isOptional: true,
       defaultValue: "10",
+    },
+    {
+      name: "readOnly",
+      type: "boolean",
+      description:
+        "When true, prevents memory from saving new messages. Useful for read-only operations like previews or internal routing agents.",
+      isOptional: true,
+      defaultValue: "false",
     },
     {
       name: "semanticRecall",
@@ -214,3 +227,5 @@ export const agent = new Agent({
 - [getThreadById](/reference/v1/memory/getThreadById)
 - [listThreadsByResourceId](/reference/v1/memory/listThreadsByResourceId)
 - [deleteMessages](/reference/v1/memory/deleteMessages)
+- [cloneThread](/reference/v1/memory/cloneThread)
+- [Clone Utility Methods](/reference/v1/memory/clone-utilities)

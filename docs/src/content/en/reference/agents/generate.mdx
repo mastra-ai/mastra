@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.generate() | Agents"
 description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
+packages:
+  - "@mastra/core"
 ---
 
 import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
@@ -331,7 +333,7 @@ const limitedResult = await agent.generate("Write a short poem about coding", {
               type: "MemoryConfig",
               isOptional: true,
               description:
-                "Additional memory configuration options for conversation management.",
+                "Additional memory configuration options including lastMessages, readOnly, semanticRecall, and workingMemory.",
             },
           ],
         },

@@ -38,6 +38,8 @@ import {
   searchMemoryResponseSchema,
   deleteThreadResponseSchema,
   deleteMessagesResponseSchema,
+  cloneThreadBodySchema,
+  cloneThreadResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -487,6 +489,42 @@ export const DELETE_THREAD_ROUTE = createRoute({
       return { result: 'Thread deleted' };
     } catch (error) {
       return handleError(error, 'Error deleting thread');
+    }
+  },
+});
+
+export const CLONE_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/api/memory/threads/:threadId/clone',
+  responseType: 'json',
+  pathParamSchema: threadIdPathParams,
+  queryParamSchema: agentIdQuerySchema,
+  bodySchema: cloneThreadBodySchema,
+  responseSchema: cloneThreadResponseSchema,
+  summary: 'Clone thread',
+  description: 'Creates a copy of a conversation thread with all its messages',
+  tags: ['Memory'],
+  handler: async ({ mastra, agentId, threadId, newThreadId, resourceId, title, metadata, options, requestContext }) => {
+    try {
+      validateBody({ threadId });
+
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not initialized' });
+      }
+
+      const result = await memory.cloneThread({
+        sourceThreadId: threadId!,
+        newThreadId,
+        resourceId,
+        title,
+        metadata,
+        options,
+      });
+
+      return result;
+    } catch (error) {
+      return handleError(error, 'Error cloning thread');
     }
   },
 });
