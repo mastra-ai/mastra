@@ -473,22 +473,25 @@ export class MemoryPG extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array, filtering out non-string values to avoid TypeError
-    const threadIds = (Array.isArray(threadId) ? threadId : [threadId]).filter(
-      (id): id is string => typeof id === 'string',
-    );
+    // Validate that either threadId or resourceId is provided
+    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
+    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+    if (!hasThreadId && !hasResourceId) {
       throw new MastraError(
         {
-          id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          id: createStorageErrorId('PG', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? String(threadId) : String(threadId) },
+          category: ErrorCategory.USER,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
         },
-        new Error('threadId must be a non-empty string or array of non-empty strings'),
+        new Error('Either threadId or resourceId must be provided'),
       );
     }
+
+    // Normalize threadId to array (only if provided)
+    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
 
     // Validate page parameter
     if (page < 0) {
@@ -498,7 +501,7 @@ export class MemoryPG extends MemoryStorage {
         category: ErrorCategory.USER,
         text: 'Page number must be non-negative',
         details: {
-          threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+          threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
           page,
         },
       });
@@ -515,12 +518,20 @@ export class MemoryPG extends MemoryStorage {
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
 
-      // Build WHERE conditions - use IN for multiple thread IDs
-      const threadPlaceholders = threadIds.map((_, i) => `$${i + 1}`).join(', ');
-      const conditions: string[] = [`thread_id IN (${threadPlaceholders})`];
-      const queryParams: any[] = [...threadIds];
-      let paramIndex = threadIds.length + 1;
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
 
+      // Add thread filter only if threadIds are provided
+      if (threadIds.length > 0) {
+        const threadPlaceholders = threadIds.map((_, i) => `$${paramIndex + i}`).join(', ');
+        conditions.push(`thread_id IN (${threadPlaceholders})`);
+        queryParams.push(...threadIds);
+        paramIndex += threadIds.length;
+      }
+
+      // Add resourceId filter (can be used alone or with threadId)
       if (resourceId) {
         conditions.push(`"resourceId" = $${paramIndex++}`);
         queryParams.push(resourceId);
@@ -629,7 +640,7 @@ export class MemoryPG extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
             resourceId: resourceId ?? '',
           },
         },

@@ -126,20 +126,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    // Validate that either threadId or resourceId is provided
+    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
+    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+    if (!hasThreadId && !hasResourceId) {
       throw new MastraError(
         {
-          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          id: createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+          category: ErrorCategory.USER,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
         },
-        new Error('threadId must be a non-empty string or array of non-empty strings'),
+        new Error('Either threadId or resourceId must be provided'),
       );
     }
+
+    // Normalize threadId to array (only if provided)
+    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
 
     if (page < 0) {
       throw new MastraError(
@@ -163,9 +168,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       const collection = await this.operations.getCollection(TABLE_MESSAGES);
 
-      // Build query conditions - use $in for multiple thread IDs
-      const query: any = { thread_id: threadIds.length === 1 ? threadIds[0] : { $in: threadIds } };
+      // Build query conditions
+      const query: any = {};
 
+      // Add thread filter only if threadIds are provided
+      if (threadIds.length > 0) {
+        query.thread_id = threadIds.length === 1 ? threadIds[0] : { $in: threadIds };
+      }
+
+      // Add resourceId filter (can be used alone or with threadId)
       if (resourceId) {
         query.resourceId = resourceId;
       }
@@ -267,7 +278,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
             resourceId: resourceId ?? '',
           },
         },

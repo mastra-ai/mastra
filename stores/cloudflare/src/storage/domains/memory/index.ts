@@ -757,22 +757,49 @@ export class MemoryStorageCloudflare extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    // Validate that either threadId or resourceId is provided
+    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 : threadId.trim().length > 0);
+    const hasResourceId = resourceId !== undefined && resourceId.trim().length > 0;
 
-    // Validate each threadId is a non-empty string (avoid TypeError on non-string inputs)
+    if (!hasThreadId && !hasResourceId) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
+        },
+        new Error('Either threadId or resourceId must be provided'),
+      );
+    }
+
+    // Normalize threadId to array (may be empty if querying by resourceId only)
+    const threadIds = threadId ? (Array.isArray(threadId) ? threadId : [threadId]) : [];
+
+    // Validate each threadId is a non-empty string if provided
     const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
 
-    if (threadIds.length === 0 || threadIds.some(id => !isValidThreadId(id))) {
+    if (threadIds.length > 0 && threadIds.some(id => !isValidThreadId(id))) {
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId) },
+          details: { threadId: Array.isArray(threadId) ? JSON.stringify(threadId) : String(threadId ?? '') },
         },
         new Error('threadId must be a non-empty string or array of non-empty strings'),
       );
+    }
+
+    // If no threadIds provided but resourceId is, fetch all threads for the resource
+    let effectiveThreadIds = threadIds;
+    if (effectiveThreadIds.length === 0 && hasResourceId) {
+      const resourceThreads = await this.listThreadsByResourceId({ resourceId: resourceId! });
+      effectiveThreadIds = resourceThreads.threads.map(t => t.id);
+      if (effectiveThreadIds.length === 0) {
+        // No threads for this resource, return empty with pagination info
+        return { messages: [], total: 0, page: 0, perPage: normalizePerPage(perPageInput, 40), hasMore: false };
+      }
     }
 
     const perPage = normalizePerPage(perPageInput, 40);
@@ -797,7 +824,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Step 1: Get thread messages from all specified threads (for pagination)
       const threadMessageIds = new Set<string>();
-      for (const tid of threadIds) {
+      for (const tid of effectiveThreadIds) {
         try {
           const threadMessagesKey = this.getThreadMessagesKey(tid);
           const allIds = await this.getFullOrder(threadMessagesKey);
@@ -811,7 +838,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       const threadMessages = await this.fetchAndParseMessagesFromMultipleThreads(
         Array.from(threadMessageIds),
         undefined,
-        threadIds.length === 1 ? threadIds[0] : undefined,
+        effectiveThreadIds.length === 1 ? effectiveThreadIds[0] : undefined,
       );
 
       // Filter thread messages by resourceId if specified
@@ -992,7 +1019,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
             error instanceof Error ? error.message : String(error)
           }`,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
             resourceId: resourceId ?? '',
           },
         },

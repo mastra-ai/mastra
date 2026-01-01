@@ -271,20 +271,25 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    // Validate that either threadId or resourceId is provided
+    const isValidThreadId = (id: unknown): boolean => typeof id === 'string' && id.trim().length > 0;
+    const hasThreadId = threadId !== undefined && (Array.isArray(threadId) ? threadId.length > 0 && threadId.every(isValidThreadId) : isValidThreadId(threadId));
+    const hasResourceId = resourceId !== undefined && resourceId !== null && resourceId.trim() !== '';
 
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+    if (!hasThreadId && !hasResourceId) {
       throw new MastraError(
         {
-          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+          category: ErrorCategory.USER,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
         },
-        new Error('threadId must be a non-empty string or array of non-empty strings'),
+        new Error('Either threadId or resourceId must be provided'),
       );
     }
+
+    // Normalize threadId to array (only if provided)
+    const threadIds = hasThreadId ? (Array.isArray(threadId) ? threadId : [threadId!]) : [];
 
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
@@ -317,16 +322,31 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         direction,
       });
 
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-      const results = await query.go();
+      // Determine which thread IDs to query
+      let effectiveThreadIds = threadIds;
 
-      let allThreadMessages = results.data
-        .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
+      // If no threadIds but resourceId is provided, get all threads for the resource
+      if (effectiveThreadIds.length === 0 && hasResourceId) {
+        const resourceThreads = await this.listThreadsByResourceId({ resourceId: resourceId! });
+        effectiveThreadIds = resourceThreads.threads.map(t => t.id);
+      }
 
-      // Apply resourceId filter
-      if (resourceId) {
+      // Step 1: Get paginated messages from the thread(s) first (without excluding included ones)
+      let allThreadMessages: MastraDBMessage[] = [];
+
+      for (const tid of effectiveThreadIds) {
+        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId: tid });
+        const results = await query.go();
+
+        const threadMessages = results.data
+          .map((data: any) => this.parseMessageData(data))
+          .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
+
+        allThreadMessages.push(...threadMessages);
+      }
+
+      // Apply resourceId filter (for cases where threadId was provided with resourceId)
+      if (resourceId && threadIds.length > 0) {
         allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => msg.resourceId === resourceId);
       }
 
@@ -438,7 +458,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
             resourceId: resourceId ?? '',
           },
         },
