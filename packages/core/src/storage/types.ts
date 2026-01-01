@@ -60,17 +60,10 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
-export type StorageListMessagesInput = {
-  /**
-   * Thread ID(s) to query messages from.
-   * Required unless resourceId is provided.
-   */
-  threadId?: string | string[];
-  /**
-   * Resource ID to query messages from.
-   * When provided without threadId, queries ALL messages for the resource.
-   */
-  resourceId?: string;
+/**
+ * Common options for listing messages (pagination, filtering, ordering)
+ */
+type StorageListMessagesOptions = {
   include?: {
     id: string;
     threadId?: string;
@@ -95,6 +88,32 @@ export type StorageListMessagesInput = {
   };
   orderBy?: StorageOrderBy;
 };
+
+/**
+ * Input for listing messages - requires either threadId OR resourceId.
+ * This is a discriminated union to ensure at least one is provided.
+ */
+export type StorageListMessagesInput =
+  | (StorageListMessagesOptions & {
+      /**
+       * Thread ID(s) to query messages from.
+       */
+      threadId: string | string[];
+      /**
+       * Optional resource ID to further filter messages.
+       */
+      resourceId?: string;
+    })
+  | (StorageListMessagesOptions & {
+      /**
+       * When querying by resourceId only, threadId must be undefined.
+       */
+      threadId?: undefined;
+      /**
+       * Resource ID to query ALL messages for the resource across all threads.
+       */
+      resourceId: string;
+    });
 
 export type StorageListMessagesOutput = PaginationInfo & {
   messages: MastraDBMessage[];
