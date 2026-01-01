@@ -3,7 +3,7 @@
  * @see https://github.com/anthropics/skills
  */
 
-import type { BaseSearchResult, BaseSearchOptions, SearchMode, ContentSource } from '../artifacts';
+import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../artifacts';
 
 /**
  * Skill source types indicating where the skill comes from and its access level.
@@ -65,11 +65,6 @@ export interface SkillSearchResult extends BaseSearchResult {
   /** Source file (SKILL.md or reference path) */
   source: string;
 }
-
-/**
- * Search mode for skill queries (alias for shared SearchMode)
- */
-export type SkillSearchMode = SearchMode;
 
 /**
  * Options for searching skills

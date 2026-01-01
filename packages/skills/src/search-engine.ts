@@ -1,7 +1,11 @@
+import type { SearchMode, LineRange } from '@mastra/core/artifacts';
 import type { MastraVector, VectorFilter } from '@mastra/core/vector';
 
 import { BM25Index, tokenize, findLineRange } from './bm25';
-import type { BM25Config, TokenizeOptions, BM25SearchResult, LineRange } from './bm25';
+import type { BM25Config, TokenizeOptions, BM25SearchResult } from './bm25';
+
+// Re-export SearchMode for consumers
+export type { SearchMode };
 
 // =============================================================================
 // Types
@@ -35,11 +39,6 @@ export interface BM25SearchConfig {
   /** Tokenization options */
   tokenize?: TokenizeOptions;
 }
-
-/**
- * Search mode options
- */
-export type SearchMode = 'vector' | 'bm25' | 'hybrid';
 
 /**
  * A document to be indexed

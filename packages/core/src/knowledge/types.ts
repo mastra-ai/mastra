@@ -1,4 +1,4 @@
-import type { BaseSearchResult, BaseSearchOptions, SearchMode, ContentSource } from '../artifacts';
+import type { BaseSearchResult, BaseSearchOptions, ContentSource } from '../artifacts';
 import type { KnowledgeStorage } from './base';
 
 /**
@@ -52,11 +52,6 @@ export type AnyArtifact = FileArtifact | ImageArtifact | TextArtifact;
  * Used by Knowledge to create storage for new namespaces dynamically.
  */
 export type KnowledgeStorageFactory = (namespace: string) => Promise<KnowledgeStorage>;
-
-/**
- * Search mode for knowledge queries (alias for shared SearchMode)
- */
-export type KnowledgeSearchMode = SearchMode;
 
 /**
  * Search result from knowledge

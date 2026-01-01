@@ -6,6 +6,11 @@
  * taking into account term frequency and document length normalization.
  */
 
+import type { LineRange } from '@mastra/core/artifacts';
+
+// Re-export LineRange for consumers who import from bm25
+export type { LineRange };
+
 /**
  * BM25 configuration parameters
  */
@@ -42,16 +47,6 @@ export interface BM25Document {
   length: number;
   /** Optional metadata */
   metadata?: Record<string, unknown>;
-}
-
-/**
- * Line range indicating where content was found
- */
-export interface LineRange {
-  /** Starting line number (1-indexed) */
-  start: number;
-  /** Ending line number (1-indexed, inclusive) */
-  end: number;
 }
 
 /**

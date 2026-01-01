@@ -20,7 +20,6 @@ export type {
   TextArtifact,
   AnyArtifact,
   MastraKnowledge,
-  KnowledgeSearchMode,
   KnowledgeSearchResult as CoreKnowledgeSearchResult,
   KnowledgeSearchOptions as CoreKnowledgeSearchOptions,
 } from '@mastra/core/knowledge';

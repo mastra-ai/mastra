@@ -8,7 +8,6 @@ export type {
   SkillSource,
   SkillSearchResult,
   SkillSearchOptions,
-  SkillSearchMode,
   MastraSkills,
   CreateSkillInput,
   UpdateSkillInput,
