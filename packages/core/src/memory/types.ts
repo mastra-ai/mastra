@@ -44,6 +44,61 @@ export type StorageThreadType = {
 };
 
 /**
+ * Thread-specific Observational Memory metadata.
+ * Stored on thread.metadata.mastra.om to keep thread-specific data
+ * separate from the shared resource-level OM record.
+ */
+export type ThreadOMMetadata = {
+  /** The current task being worked on in this thread */
+  currentTask?: string;
+  /** Suggested response for continuing this thread's conversation */
+  suggestedResponse?: string;
+};
+
+/**
+ * Structure for Mastra-specific thread metadata.
+ * Stored on thread.metadata.mastra
+ */
+export type ThreadMastraMetadata = {
+  om?: ThreadOMMetadata;
+};
+
+/**
+ * Helper to get OM metadata from a thread's metadata object.
+ * Returns undefined if not present.
+ */
+export function getThreadOMMetadata(threadMetadata?: Record<string, unknown>): ThreadOMMetadata | undefined {
+  if (!threadMetadata) return undefined;
+  const mastra = threadMetadata.mastra as ThreadMastraMetadata | undefined;
+  return mastra?.om;
+}
+
+/**
+ * Helper to set OM metadata on a thread's metadata object.
+ * Creates the nested structure if it doesn't exist.
+ * Returns a new metadata object (does not mutate the original).
+ */
+export function setThreadOMMetadata(
+  threadMetadata: Record<string, unknown> | undefined,
+  omMetadata: ThreadOMMetadata,
+): Record<string, unknown> {
+  const existing = threadMetadata ?? {};
+  const existingMastra = (existing.mastra as ThreadMastraMetadata) ?? {};
+  const existingOM = existingMastra.om ?? {};
+
+  return {
+    ...existing,
+    mastra: {
+      ...existingMastra,
+      om: {
+        ...existingOM,
+        ...omMetadata,
+      },
+    },
+  };
+}
+
+/**
  * Memory-specific context passed via RequestContext under the 'MastraMemory' key
  * This provides processors with access to memory-related execution context
  */

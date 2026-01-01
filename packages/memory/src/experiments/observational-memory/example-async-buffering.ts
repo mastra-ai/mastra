@@ -210,7 +210,6 @@ async function main() {
 
   const record = await om.getRecord(threadId, resourceId);
   console.log(`\n   Observation tokens: ${record?.observationTokenCount || 0}`);
-  console.log(`   Reflections: ${record?.metadata.reflectionCount || 0}`);
   console.log(`   Total messages: ${timings.length}`);
 
   console.log('\n   🎯 ASYNC BUFFERING BENEFITS:');

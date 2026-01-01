@@ -179,8 +179,6 @@ async function main() {
   console.log(`   Total messages sent: ~24 user + ~24 assistant = ~48`);
   console.log(`   Messages observed: ${record?.observedMessageIds.length || 0}`);
   console.log(`   Observation tokens: ${record?.observationTokenCount || 0}`);
-  const reflections = record?.metadata?.reflectionCount || 0;
-  console.log(`   Reflections: ${reflections} ${reflections > 0 ? '🔄' : ''}`);
 
   // ═══════════════════════════════════════════════════════════════════
   // RECALL TESTS - Easy

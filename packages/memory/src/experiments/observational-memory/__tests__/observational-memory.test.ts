@@ -277,10 +277,10 @@ describe('Storage Operations', () => {
       const afterSwap = new Date();
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.metadata.lastObservedAt).toBeDefined();
+      expect(record?.lastObservedAt).toBeDefined();
       // lastObservedAt should be set to approximately now
-      expect(record!.metadata.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
-      expect(record!.metadata.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
+      expect(record!.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
+      expect(record!.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
     });
   });
 

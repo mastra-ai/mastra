@@ -94,10 +94,8 @@ async function showOMState() {
   const record = await om.getRecord(threads.work, resourceId);
   if (record) {
     console.log('\n📊 OM State:');
-    console.log(`   Observed threads: ${record.observedThreadIds?.join(', ') || 'none'}`);
     console.log(`   Observation tokens: ${record.observationTokenCount}`);
     console.log(`   Observed message IDs: ${record.observedMessageIds.length}`);
-    console.log(`   Reflections: ${record.metadata.reflectionCount}`);
   }
 }
 
@@ -208,7 +206,6 @@ async function main() {
 
   if (observations) {
     console.log(`\nTotal observation length: ${observations.length} chars`);
-    console.log(`Threads observed: ${record?.observedThreadIds?.join(', ')}`);
     console.log('\n' + '-'.repeat(80));
     // Show first 3000 chars
     console.log(observations.slice(0, 3000));
@@ -470,8 +467,6 @@ async function main() {
   const pct = Math.round((totalPassed / totalFacts) * 100);
   console.log(`\n🎯 Cross-Thread Recall: ${totalPassed}/${totalFacts} facts (${pct}%)`);
   console.log(`💾 Token Efficiency: ${savingsPct}% savings`);
-  console.log(`🔗 Threads Observed: ${finalRecord?.observedThreadIds?.length || 0}`);
-  console.log(`📝 Reflections: ${finalRecord?.metadata.reflectionCount || 0}`);
   console.log(`💬 Total Messages: ${messageCount}`);
 
   if (pct >= 80 && savingsPct >= 20) {

@@ -153,7 +153,6 @@ async function showOMState() {
     console.log('\n📊 OM State:');
     console.log(`   Observation tokens: ${record.observationTokenCount}`);
     console.log(`   Observed messages: ${record.observedMessageIds.length}`);
-    console.log(`   Reflections: ${record.metadata.reflectionCount}`);
   }
 }
 
@@ -359,7 +358,6 @@ async function main() {
   console.log(`   💾 Token Savings: ${savingsPct}%`);
   console.log(`   🔧 Research tool calls: ${researchToolCalls}`);
   console.log(`   🧠 Recall tool calls: 0 (no tools available!)`);
-  console.log(`   📝 Reflections: ${record?.metadata.reflectionCount || 0}`);
   console.log(`   💬 Total messages: ${messageCount}`);
 
   if (pct >= 70) {

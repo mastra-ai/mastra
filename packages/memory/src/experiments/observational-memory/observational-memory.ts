@@ -8,6 +8,7 @@ import type {
   ProcessOutputResultArgs,
 } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import {
   buildObserverSystemPrompt,
@@ -618,7 +619,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private async callObserver(
     existingObservations: string | undefined,
     messagesToObserve: MastraDBMessage[],
-  ): Promise<{ observations: string; suggestedContinuation?: string }> {
+  ): Promise<{ observations: string; currentTask?: string; suggestedContinuation?: string }> {
     const agent = this.getObserverAgent();
     const prompt = buildObserverPrompt(existingObservations, messagesToObserve);
 
@@ -634,6 +635,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     return {
       observations: parsed.observations,
+      currentTask: parsed.currentTask,
       suggestedContinuation: parsed.suggestedContinuation,
     };
   }
@@ -707,24 +709,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * In resource scope mode, filters continuity messages to only show
    * the message for the current thread.
    */
-  private formatObservationsForContext(
-    observations: string,
-    suggestedContinuation?: string,
-    currentThreadId?: string,
-    threadSuggestedResponses?: Record<string, string>,
-  ): string {
+  /**
+   * Format observations for injection into the Actor's context.
+   * @param observations - The observations to inject
+   * @param suggestedResponse - Thread-specific suggested response (from thread metadata)
+   */
+  private formatObservationsForContext(observations: string, suggestedResponse?: string): string {
     // Optimize observations to save tokens
     const optimized = optimizeObservationsForContext(observations);
 
     let content = `<observations>
 ${optimized}
 </observations>`;
-
-    // In resource scope, use per-thread suggested response if available
-    let suggestedResponse = suggestedContinuation;
-    if (this.resourceScope && currentThreadId && threadSuggestedResponses?.[currentThreadId]) {
-      suggestedResponse = threadSuggestedResponses[currentThreadId];
-    }
 
     if (suggestedResponse) {
       content += `
@@ -794,19 +790,20 @@ ${suggestedResponse}
       `[OM processInputStep] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, observedMsgIds: ${record.observedMessageIds.length}`,
     );
 
+    // Fetch thread metadata to get suggested response
+    const thread = await this.storage.getThreadById({ threadId });
+    const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+    const suggestedResponse = threadOMMetadata?.suggestedResponse;
+
     // Inject observations as a system message (every step)
     if (record.activeObservations) {
       const observationSystemMessage = this.formatObservationsForContext(
         record.activeObservations,
-        record.suggestedContinuation,
-        threadId, // Current thread for suggested response filtering
-        record.threadSuggestedResponses, // Per-thread suggested responses (resource scope)
+        suggestedResponse,
       );
       console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
       if (this.resourceScope) {
-        console.info(
-          `[OM processInputStep] Resource scope: observations from ${record.observedThreadIds?.length || 0} threads`,
-        );
+        console.info(`[OM processInputStep] Resource scope enabled`);
       }
       messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
@@ -818,7 +815,7 @@ ${suggestedResponse}
 
       // Load unobserved messages from storage using cursor-based query
       // This is more efficient than loading all messages and filtering by ID
-      const lastObservedAt = record.metadata.lastObservedAt;
+      const lastObservedAt = record.lastObservedAt;
       const historicalMessages = await this.loadUnobservedMessages(threadId, lastObservedAt);
 
       if (historicalMessages.length > 0) {
@@ -1013,10 +1010,25 @@ ${suggestedResponse}
         observations: newObservations,
         messageIds: messageIdsToObserve,
         tokenCount: totalTokenCount,
-        suggestedContinuation: result.suggestedContinuation,
-        currentThreadId: this.resourceScope ? threadId : undefined,
         lastObservedAt: new Date(),
       });
+
+      // Save thread-specific metadata (currentTask, suggestedResponse)
+      if (result.suggestedContinuation || result.currentTask) {
+        const thread = await this.storage.getThreadById({ threadId });
+        if (thread) {
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            suggestedResponse: result.suggestedContinuation,
+            currentTask: result.currentTask,
+          });
+          await this.storage.updateThread({
+            id: threadId,
+            title: thread.title ?? '',
+            metadata: newMetadata,
+          });
+          console.info(`[OM] Updated thread metadata with suggestedResponse and currentTask`);
+        }
+      }
 
       console.info(`[OM] Observations stored successfully`);
 
@@ -1069,8 +1081,10 @@ ${suggestedResponse}
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
-        suggestedContinuation: reflectResult.suggestedContinuation,
       });
+
+      // Note: Thread metadata updates for suggestedResponse happen in the calling context
+      // (processOutputResult or reflect()) where threadId is available
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
     }
@@ -1116,8 +1130,10 @@ ${suggestedResponse}
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
-        suggestedContinuation: reflectResult.suggestedContinuation,
       });
+
+      // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread
+      // and doesn't need to be updated during reflection - it was set during observation
 
       console.info(`[OM] Manual reflection complete, new generation created`);
     } finally {

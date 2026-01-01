@@ -205,6 +205,9 @@ export interface ObserverResult {
   /** The extracted observations in markdown format */
   observations: string;
 
+  /** The current task extracted from observations (for thread metadata) */
+  currentTask?: string;
+
   /** Suggested continuation message for the Actor */
   suggestedContinuation?: string;
 
@@ -315,6 +318,7 @@ export function parseObserverOutput(output: string): ObserverResult {
 
   return {
     observations,
+    currentTask: parsed.currentTask || undefined,
     suggestedContinuation: parsed.suggestedResponse || undefined,
     rawOutput: output,
   };

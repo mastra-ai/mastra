@@ -112,7 +112,7 @@ async function main() {
   const observations = await om.getObservations(thread1, resourceId);
   const record = await om.getRecord(thread1, resourceId);
 
-  console.log(`\nObserved threads: ${record?.observedThreadIds?.join(', ') || 'none'}`);
+  console.log(`\nObserved threads: ${[] /* TODO: track observed threads */?.join(', ') || 'none'}`);
   console.log(`Observation tokens: ${record?.observationTokenCount || 0}`);
 
   if (observations) {

@@ -46,7 +46,6 @@ export type {
   ObservationalMemoryRecord,
   ObservationalMemoryScope,
   ObservationalMemoryOriginType,
-  ObservationalMemoryMetadata,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
   UpdateBufferedObservationsInput,
