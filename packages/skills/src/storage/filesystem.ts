@@ -1,7 +1,14 @@
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import { SkillsStorage } from '@mastra/core/skills';
-import type { ListSkillsOptions, Skill, SkillMetadata, SkillSource } from '@mastra/core/skills';
+import type {
+  ListSkillsOptions,
+  CreateSkillOptions,
+  UpdateSkillOptions,
+  Skill,
+  SkillMetadata,
+  SkillSource,
+} from '@mastra/core/skills';
 import matter from 'gray-matter';
 import z from 'zod';
 
@@ -170,6 +177,375 @@ export class FilesystemStorage extends SkillsStorage {
 
     const skill = this.#skillsCache.get(skillName);
     return skill?.references ?? [];
+  }
+
+  async setReference(skillName: string, referencePath: string, content: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const refFilePath = join(skill.path, 'references', referencePath);
+    const refDir = dirname(refFilePath);
+
+    // Create directory if it doesn't exist
+    if (!existsSync(refDir)) {
+      mkdirSync(refDir, { recursive: true });
+    }
+
+    writeFileSync(refFilePath, content, 'utf-8');
+
+    // Update cache
+    if (!skill.references.includes(referencePath)) {
+      skill.references.push(referencePath);
+    }
+  }
+
+  async deleteReference(skillName: string, referencePath: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const refFilePath = join(skill.path, 'references', referencePath);
+
+    if (existsSync(refFilePath)) {
+      rmSync(refFilePath);
+    }
+
+    // Update cache
+    const index = skill.references.indexOf(referencePath);
+    if (index !== -1) {
+      skill.references.splice(index, 1);
+    }
+  }
+
+  // ============================================================================
+  // Script Operations
+  // ============================================================================
+
+  async getScript(skillName: string, scriptPath: string): Promise<string | null> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) return null;
+
+    const scriptFilePath = join(skill.path, 'scripts', scriptPath);
+
+    if (!existsSync(scriptFilePath)) {
+      return null;
+    }
+
+    try {
+      return readFileSync(scriptFilePath, 'utf-8');
+    } catch {
+      return null;
+    }
+  }
+
+  async listScripts(skillName: string): Promise<string[]> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    return skill?.scripts ?? [];
+  }
+
+  async setScript(skillName: string, scriptPath: string, content: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const scriptFilePath = join(skill.path, 'scripts', scriptPath);
+    const scriptDir = dirname(scriptFilePath);
+
+    if (!existsSync(scriptDir)) {
+      mkdirSync(scriptDir, { recursive: true });
+    }
+
+    writeFileSync(scriptFilePath, content, 'utf-8');
+
+    if (!skill.scripts.includes(scriptPath)) {
+      skill.scripts.push(scriptPath);
+    }
+  }
+
+  async deleteScript(skillName: string, scriptPath: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const scriptFilePath = join(skill.path, 'scripts', scriptPath);
+
+    if (existsSync(scriptFilePath)) {
+      rmSync(scriptFilePath);
+    }
+
+    const index = skill.scripts.indexOf(scriptPath);
+    if (index !== -1) {
+      skill.scripts.splice(index, 1);
+    }
+  }
+
+  // ============================================================================
+  // Asset Operations
+  // ============================================================================
+
+  async getAsset(skillName: string, assetPath: string): Promise<Buffer | null> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) return null;
+
+    const assetFilePath = join(skill.path, 'assets', assetPath);
+
+    if (!existsSync(assetFilePath)) {
+      return null;
+    }
+
+    try {
+      return readFileSync(assetFilePath);
+    } catch {
+      return null;
+    }
+  }
+
+  async listAssets(skillName: string): Promise<string[]> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    return skill?.assets ?? [];
+  }
+
+  async setAsset(skillName: string, assetPath: string, content: Buffer | string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const assetFilePath = join(skill.path, 'assets', assetPath);
+    const assetDir = dirname(assetFilePath);
+
+    if (!existsSync(assetDir)) {
+      mkdirSync(assetDir, { recursive: true });
+    }
+
+    writeFileSync(assetFilePath, content);
+
+    if (!skill.assets.includes(assetPath)) {
+      skill.assets.push(assetPath);
+    }
+  }
+
+  async deleteAsset(skillName: string, assetPath: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(skillName);
+    if (!skill) {
+      throw new Error(`Skill "${skillName}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const assetFilePath = join(skill.path, 'assets', assetPath);
+
+    if (existsSync(assetFilePath)) {
+      rmSync(assetFilePath);
+    }
+
+    const index = skill.assets.indexOf(assetPath);
+    if (index !== -1) {
+      skill.assets.splice(index, 1);
+    }
+  }
+
+  // ============================================================================
+  // CRUD Operations
+  // ============================================================================
+
+  async createSkill(options: CreateSkillOptions, targetPath?: string): Promise<Skill> {
+    await this.#ensureInitialized();
+
+    const { metadata, instructions, references, scripts, assets } = options;
+
+    // Check if skill already exists
+    if (this.#skillsCache.has(metadata.name)) {
+      throw new Error(`Skill "${metadata.name}" already exists`);
+    }
+
+    // Determine target path (must be writable)
+    const writablePath = targetPath ?? this.#getFirstWritablePath();
+    if (!writablePath) {
+      throw new Error('No writable path available for creating skills');
+    }
+
+    // Validate the skill metadata
+    if (this.validateOnLoad) {
+      const validation = this.#validateSkillMetadata(metadata, metadata.name);
+      if (!validation.valid) {
+        throw new Error(`Invalid skill metadata:\n${validation.errors.join('\n')}`);
+      }
+    }
+
+    // Create skill directory
+    const skillDir = join(writablePath, metadata.name);
+    if (existsSync(skillDir)) {
+      throw new Error(`Directory "${skillDir}" already exists`);
+    }
+    mkdirSync(skillDir, { recursive: true });
+
+    // Build SKILL.md content
+    const skillMdContent = this.#buildSkillMd(metadata, instructions);
+    writeFileSync(join(skillDir, 'SKILL.md'), skillMdContent, 'utf-8');
+
+    // Create reference files
+    const refPaths: string[] = [];
+    if (references) {
+      const refsDir = join(skillDir, 'references');
+      mkdirSync(refsDir, { recursive: true });
+      for (const ref of references) {
+        const refPath = join(refsDir, ref.path);
+        const refDir = dirname(refPath);
+        if (!existsSync(refDir)) {
+          mkdirSync(refDir, { recursive: true });
+        }
+        writeFileSync(refPath, ref.content, 'utf-8');
+        refPaths.push(ref.path);
+      }
+    }
+
+    // Create script files
+    const scriptPaths: string[] = [];
+    if (scripts) {
+      const scriptsDir = join(skillDir, 'scripts');
+      mkdirSync(scriptsDir, { recursive: true });
+      for (const script of scripts) {
+        const scriptPath = join(scriptsDir, script.path);
+        const scriptDir = dirname(scriptPath);
+        if (!existsSync(scriptDir)) {
+          mkdirSync(scriptDir, { recursive: true });
+        }
+        writeFileSync(scriptPath, script.content, 'utf-8');
+        scriptPaths.push(script.path);
+      }
+    }
+
+    // Create asset files
+    const assetPaths: string[] = [];
+    if (assets) {
+      const assetsDir = join(skillDir, 'assets');
+      mkdirSync(assetsDir, { recursive: true });
+      for (const asset of assets) {
+        const assetPath = join(assetsDir, asset.path);
+        const assetDir = dirname(assetPath);
+        if (!existsSync(assetDir)) {
+          mkdirSync(assetDir, { recursive: true });
+        }
+        writeFileSync(assetPath, asset.content);
+        assetPaths.push(asset.path);
+      }
+    }
+
+    // Build skill object
+    const source = this.#determineSource(writablePath);
+    const skill: Skill = {
+      ...metadata,
+      path: skillDir,
+      instructions,
+      source,
+      references: refPaths,
+      scripts: scriptPaths,
+      assets: assetPaths,
+    };
+
+    // Update cache
+    this.#skillsCache.set(metadata.name, skill);
+
+    return skill;
+  }
+
+  async updateSkill(name: string, options: UpdateSkillOptions): Promise<Skill> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(name);
+    if (!skill) {
+      throw new Error(`Skill "${name}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const { metadata: updatedMetadata, instructions: updatedInstructions } = options;
+
+    // Merge metadata
+    const newMetadata: SkillMetadata = {
+      name: skill.name, // Name cannot be changed
+      description: updatedMetadata?.description ?? skill.description,
+      license: updatedMetadata?.license ?? skill.license,
+      compatibility: updatedMetadata?.compatibility ?? skill.compatibility,
+      metadata: updatedMetadata?.metadata ?? skill.metadata,
+    };
+
+    const newInstructions = updatedInstructions ?? skill.instructions;
+
+    // Validate if enabled
+    if (this.validateOnLoad) {
+      const validation = this.#validateSkillMetadata(newMetadata, name);
+      if (!validation.valid) {
+        throw new Error(`Invalid skill metadata:\n${validation.errors.join('\n')}`);
+      }
+    }
+
+    // Write updated SKILL.md
+    const skillMdContent = this.#buildSkillMd(newMetadata, newInstructions);
+    writeFileSync(join(skill.path, 'SKILL.md'), skillMdContent, 'utf-8');
+
+    // Update cached skill
+    const updatedSkill: Skill = {
+      ...skill,
+      ...newMetadata,
+      instructions: newInstructions,
+    };
+    this.#skillsCache.set(name, updatedSkill);
+
+    return updatedSkill;
+  }
+
+  async deleteSkill(name: string): Promise<void> {
+    await this.#ensureInitialized();
+
+    const skill = this.#skillsCache.get(name);
+    if (!skill) {
+      throw new Error(`Skill "${name}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    // Delete the entire skill directory
+    rmSync(skill.path, { recursive: true, force: true });
+
+    // Remove from cache
+    this.#skillsCache.delete(name);
   }
 
   // ============================================================================
@@ -362,5 +738,51 @@ export class FilesystemStorage extends SkillsStorage {
         callback(entryPath);
       }
     }
+  }
+
+  /**
+   * Check if a skill is in a writable path (local or managed, not external)
+   */
+  #ensureWritable(skill: Skill): void {
+    if (skill.source.type === 'external') {
+      throw new Error(`Cannot modify skill "${skill.name}" - it is in a read-only external path`);
+    }
+  }
+
+  /**
+   * Get the first writable path from configured paths.
+   * Writable paths are 'local' or 'managed' (not 'external'/node_modules).
+   */
+  #getFirstWritablePath(): string | null {
+    for (const skillsPath of this.paths) {
+      const resolvedPath = resolve(skillsPath);
+      const source = this.#determineSource(resolvedPath);
+      if (source.type !== 'external') {
+        return resolvedPath;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build SKILL.md content from metadata and instructions
+   */
+  #buildSkillMd(metadata: SkillMetadata, instructions: string): string {
+    const frontmatter: Record<string, unknown> = {
+      name: metadata.name,
+      description: metadata.description,
+    };
+
+    if (metadata.license) {
+      frontmatter.license = metadata.license;
+    }
+    if (metadata.compatibility) {
+      frontmatter.compatibility = metadata.compatibility;
+    }
+    if (metadata.metadata) {
+      frontmatter.metadata = metadata.metadata;
+    }
+
+    return matter.stringify(instructions, frontmatter);
   }
 }

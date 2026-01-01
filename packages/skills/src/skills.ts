@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { readFileSync, readdirSync, statSync, existsSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 import type { MastraVector } from '@mastra/core/vector';
 import matter from 'gray-matter';
 
@@ -14,6 +14,8 @@ import type {
   SkillSearchResult,
   SkillSearchOptions,
   MastraSkills,
+  CreateSkillInput,
+  UpdateSkillInput,
 } from './types';
 
 // =========================================================================
@@ -289,6 +291,207 @@ export class Skills implements MastraSkills {
     return skill?.assets ?? [];
   }
 
+  // =========================================================================
+  // CRUD Operations
+  // =========================================================================
+
+  /**
+   * Create a new skill.
+   * Creates a skill directory with SKILL.md and optional reference/script/asset files.
+   *
+   * @param input - Skill creation input
+   * @throws Error if no writable path is available or skill already exists
+   */
+  async create(input: CreateSkillInput): Promise<Skill> {
+    const { metadata, instructions, references, scripts, assets } = input;
+
+    // Check if skill already exists
+    if (this.#skills.has(metadata.name)) {
+      throw new Error(`Skill "${metadata.name}" already exists`);
+    }
+
+    // Find first writable path
+    const writablePath = this.#getFirstWritablePath();
+    if (!writablePath) {
+      throw new Error('No writable path available for creating skills');
+    }
+
+    // Validate the skill metadata
+    if (this.validateOnLoad) {
+      const validation = this.#validateSkillMetadata(metadata, metadata.name, instructions);
+      if (!validation.valid) {
+        throw new Error(`Invalid skill metadata:\n${validation.errors.join('\n')}`);
+      }
+    }
+
+    // Create skill directory
+    const skillDir = join(writablePath, metadata.name);
+    if (existsSync(skillDir)) {
+      throw new Error(`Directory "${skillDir}" already exists`);
+    }
+    mkdirSync(skillDir, { recursive: true });
+
+    // Build SKILL.md content
+    const skillMdContent = this.#buildSkillMd(metadata, instructions);
+    writeFileSync(join(skillDir, 'SKILL.md'), skillMdContent, 'utf-8');
+
+    // Create reference files
+    const refPaths: string[] = [];
+    if (references) {
+      const refsDir = join(skillDir, 'references');
+      mkdirSync(refsDir, { recursive: true });
+      for (const ref of references) {
+        const refPath = join(refsDir, ref.path);
+        const refDir = dirname(refPath);
+        if (!existsSync(refDir)) {
+          mkdirSync(refDir, { recursive: true });
+        }
+        writeFileSync(refPath, ref.content, 'utf-8');
+        refPaths.push(ref.path);
+      }
+    }
+
+    // Create script files
+    const scriptPaths: string[] = [];
+    if (scripts) {
+      const scriptsDir = join(skillDir, 'scripts');
+      mkdirSync(scriptsDir, { recursive: true });
+      for (const script of scripts) {
+        const scriptPath = join(scriptsDir, script.path);
+        const scriptDir = dirname(scriptPath);
+        if (!existsSync(scriptDir)) {
+          mkdirSync(scriptDir, { recursive: true });
+        }
+        writeFileSync(scriptPath, script.content, 'utf-8');
+        scriptPaths.push(script.path);
+      }
+    }
+
+    // Create asset files
+    const assetPaths: string[] = [];
+    if (assets) {
+      const assetsDir = join(skillDir, 'assets');
+      mkdirSync(assetsDir, { recursive: true });
+      for (const asset of assets) {
+        const assetPath = join(assetsDir, asset.path);
+        const assetDir = dirname(assetPath);
+        if (!existsSync(assetDir)) {
+          mkdirSync(assetDir, { recursive: true });
+        }
+        writeFileSync(assetPath, asset.content);
+        assetPaths.push(asset.path);
+      }
+    }
+
+    // Build skill object
+    const source = this.#determineSource(writablePath);
+    const indexableContent = this.#buildIndexableContent(instructions, skillDir, refPaths);
+
+    const skill: InternalSkill = {
+      ...metadata,
+      path: skillDir,
+      instructions,
+      source,
+      references: refPaths,
+      scripts: scriptPaths,
+      assets: assetPaths,
+      indexableContent,
+    };
+
+    // Update cache and index
+    this.#skills.set(metadata.name, skill);
+    this.#indexSkill(skill);
+
+    // Return without internal indexableContent field
+    const { indexableContent: _, ...skillData } = skill;
+    return skillData;
+  }
+
+  /**
+   * Update an existing skill.
+   * Only works for skills in writable paths (local or managed).
+   *
+   * @param name - Name of the skill to update
+   * @param input - Update input (partial metadata and/or instructions)
+   * @throws Error if skill doesn't exist or is in a read-only path
+   */
+  async update(name: string, input: UpdateSkillInput): Promise<Skill> {
+    const skill = this.#skills.get(name);
+    if (!skill) {
+      throw new Error(`Skill "${name}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    const { metadata: updatedMetadata, instructions: updatedInstructions } = input;
+
+    // Merge metadata
+    const newMetadata: SkillMetadata = {
+      name: skill.name, // Name cannot be changed
+      description: updatedMetadata?.description ?? skill.description,
+      license: updatedMetadata?.license ?? skill.license,
+      compatibility: updatedMetadata?.compatibility ?? skill.compatibility,
+      metadata: updatedMetadata?.metadata ?? skill.metadata,
+      allowedTools: skill.allowedTools, // Preserve allowedTools
+    };
+
+    const newInstructions = updatedInstructions ?? skill.instructions;
+
+    // Validate if enabled
+    if (this.validateOnLoad) {
+      const validation = this.#validateSkillMetadata(newMetadata, name, newInstructions);
+      if (!validation.valid) {
+        throw new Error(`Invalid skill metadata:\n${validation.errors.join('\n')}`);
+      }
+    }
+
+    // Write updated SKILL.md
+    const skillMdContent = this.#buildSkillMd(newMetadata, newInstructions);
+    writeFileSync(join(skill.path, 'SKILL.md'), skillMdContent, 'utf-8');
+
+    // Update cached skill
+    const indexableContent = this.#buildIndexableContent(newInstructions, skill.path, skill.references);
+    const updatedSkill: InternalSkill = {
+      ...skill,
+      ...newMetadata,
+      instructions: newInstructions,
+      indexableContent,
+    };
+    this.#skills.set(name, updatedSkill);
+
+    // Re-index the skill
+    this.#indexSkill(updatedSkill);
+
+    // Return without internal indexableContent field
+    const { indexableContent: _, ...skillData } = updatedSkill;
+    return skillData;
+  }
+
+  /**
+   * Delete a skill.
+   * Only works for skills in writable paths (local or managed).
+   *
+   * @param name - Name of the skill to delete
+   * @throws Error if skill doesn't exist or is in a read-only path
+   */
+  async delete(name: string): Promise<void> {
+    const skill = this.#skills.get(name);
+    if (!skill) {
+      throw new Error(`Skill "${name}" not found`);
+    }
+
+    this.#ensureWritable(skill);
+
+    // Delete the entire skill directory
+    rmSync(skill.path, { recursive: true, force: true });
+
+    // Remove from cache
+    this.#skills.delete(name);
+
+    // Note: SearchEngine doesn't currently support removing individual documents,
+    // so a full refresh() would be needed to remove from index
+  }
+
   /**
    * Refresh skills from disk (re-scan directories)
    */
@@ -546,5 +749,54 @@ export class Skills implements MastraSkills {
         // Skip files that can't be read
       }
     }
+  }
+
+  /**
+   * Check if a skill is in a writable path (local or managed, not external)
+   */
+  #ensureWritable(skill: InternalSkill): void {
+    if (skill.source.type === 'external') {
+      throw new Error(`Cannot modify skill "${skill.name}" - it is in a read-only external path`);
+    }
+  }
+
+  /**
+   * Get the first writable path from configured paths.
+   * Writable paths are 'local' or 'managed' (not 'external'/node_modules).
+   */
+  #getFirstWritablePath(): string | null {
+    for (const skillsPath of this.paths) {
+      const resolvedPath = resolve(skillsPath);
+      const source = this.#determineSource(resolvedPath);
+      if (source.type !== 'external') {
+        return resolvedPath;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Build SKILL.md content from metadata and instructions
+   */
+  #buildSkillMd(metadata: SkillMetadata, instructions: string): string {
+    const frontmatter: Record<string, unknown> = {
+      name: metadata.name,
+      description: metadata.description,
+    };
+
+    if (metadata.license) {
+      frontmatter.license = metadata.license;
+    }
+    if (metadata.compatibility) {
+      frontmatter.compatibility = metadata.compatibility;
+    }
+    if (metadata.metadata) {
+      frontmatter.metadata = metadata.metadata;
+    }
+    if (metadata.allowedTools && metadata.allowedTools.length > 0) {
+      frontmatter['allowed-tools'] = metadata.allowedTools.join(' ');
+    }
+
+    return matter.stringify(instructions, frontmatter);
   }
 }

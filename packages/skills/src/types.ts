@@ -10,6 +10,8 @@ export type {
   SkillSearchOptions,
   SkillSearchMode,
   MastraSkills,
+  CreateSkillInput,
+  UpdateSkillInput,
 } from '@mastra/core/skills';
 
 /**

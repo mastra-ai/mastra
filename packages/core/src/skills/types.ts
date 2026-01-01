@@ -3,6 +3,8 @@
  * @see https://github.com/anthropics/skills
  */
 
+import type { BaseSearchResult, BaseSearchOptions, SearchMode } from '../artifacts';
+
 /**
  * Supported skill format types for system message injection
  */
@@ -59,60 +61,52 @@ export type SkillSource =
 /**
  * Search result when searching across skills
  */
-export interface SkillSearchResult {
+export interface SkillSearchResult extends BaseSearchResult {
   /** Skill name */
   skillName: string;
   /** Source file (SKILL.md or reference path) */
   source: string;
-  /** Matched content */
-  content: string;
-  /** Relevance score */
-  score: number;
-  /** Line number range (if available) */
-  lineRange?: {
-    start: number;
-    end: number;
-  };
-  /** Score breakdown for hybrid search */
-  scoreDetails?: {
-    /** Vector similarity score (0-1) */
-    vector?: number;
-    /** BM25 relevance score */
-    bm25?: number;
-  };
 }
 
 /**
- * Search mode for skill queries
+ * Search mode for skill queries (alias for shared SearchMode)
  */
-export type SkillSearchMode = 'vector' | 'bm25' | 'hybrid';
+export type SkillSearchMode = SearchMode;
 
 /**
  * Options for searching skills
  */
-export interface SkillSearchOptions {
-  /** Maximum number of results to return (default: 5) */
-  topK?: number;
-  /** Minimum score threshold */
-  minScore?: number;
+export interface SkillSearchOptions extends BaseSearchOptions {
   /** Only search within specific skill names */
   skillNames?: string[];
   /** Include reference files in search (default: true) */
   includeReferences?: boolean;
-  /**
-   * Search mode to use:
-   * - 'vector': Semantic similarity search using embeddings
-   * - 'bm25': Keyword-based search using BM25 algorithm
-   * - 'hybrid': Combine both vector and BM25 scores
-   *
-   * If not specified, auto-detects based on configuration.
-   */
-  mode?: SkillSearchMode;
-  /** Hybrid search configuration (only applies when mode is 'hybrid') */
-  hybrid?: {
-    /** Weight for vector similarity score (0-1). BM25 weight is (1 - vectorWeight). @default 0.5 */
-    vectorWeight?: number;
-  };
+}
+
+/**
+ * Options for creating a skill
+ */
+export interface CreateSkillInput {
+  /** Skill metadata (name, description, etc.) */
+  metadata: SkillMetadata;
+  /** Markdown instructions (body of SKILL.md) */
+  instructions: string;
+  /** Optional reference files to include */
+  references?: Array<{ path: string; content: string }>;
+  /** Optional script files to include */
+  scripts?: Array<{ path: string; content: string }>;
+  /** Optional asset files to include */
+  assets?: Array<{ path: string; content: Buffer | string }>;
+}
+
+/**
+ * Options for updating a skill
+ */
+export interface UpdateSkillInput {
+  /** Updated metadata (partial - only provided fields are updated) */
+  metadata?: Partial<SkillMetadata>;
+  /** Updated instructions */
+  instructions?: string;
 }
 
 /**
@@ -120,10 +114,19 @@ export interface SkillSearchOptions {
  * The actual Skills class in @mastra/skills implements this interface.
  *
  * Skills manages discovery, parsing, and search of skills following the Agent Skills spec.
+ *
+ * CRUD operations (create, update, delete) only work for writable sources:
+ * - 'local' (./src/skills) - read-write
+ * - 'managed' (.mastra/skills) - read-write
+ * - 'external' (node_modules) - read-only
  */
 export interface MastraSkills {
   /** Unique identifier for this skills instance */
   id: string;
+
+  // ============================================================================
+  // Read Operations
+  // ============================================================================
 
   /**
    * List all discovered skills (metadata only)
@@ -145,6 +148,42 @@ export interface MastraSkills {
    */
   search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
 
+  // ============================================================================
+  // CRUD Operations (for writable sources only)
+  // ============================================================================
+
+  /**
+   * Create a new skill.
+   * Creates a skill directory with SKILL.md and optional reference/script/asset files.
+   *
+   * @param input - Skill creation input
+   * @throws Error if no writable path is available or skill already exists
+   */
+  create(input: CreateSkillInput): Promise<Skill>;
+
+  /**
+   * Update an existing skill.
+   * Only works for skills in writable paths (local or managed).
+   *
+   * @param name - Name of the skill to update
+   * @param input - Update input (partial metadata and/or instructions)
+   * @throws Error if skill doesn't exist or is in a read-only path
+   */
+  update(name: string, input: UpdateSkillInput): Promise<Skill>;
+
+  /**
+   * Delete a skill.
+   * Only works for skills in writable paths (local or managed).
+   *
+   * @param name - Name of the skill to delete
+   * @throws Error if skill doesn't exist or is in a read-only path
+   */
+  delete(name: string): Promise<void>;
+
+  // ============================================================================
+  // Reference Operations
+  // ============================================================================
+
   /**
    * Get reference file content from a skill
    */
@@ -154,6 +193,10 @@ export interface MastraSkills {
    * Get all reference file paths for a skill
    */
   getReferences(skillName: string): string[];
+
+  // ============================================================================
+  // Script Operations
+  // ============================================================================
 
   /**
    * Get script file content from a skill
@@ -165,6 +208,10 @@ export interface MastraSkills {
    */
   getScripts(skillName: string): string[];
 
+  // ============================================================================
+  // Asset Operations
+  // ============================================================================
+
   /**
    * Get asset file content from a skill (returns Buffer for binary files)
    */
@@ -174,6 +221,10 @@ export interface MastraSkills {
    * Get all asset file paths for a skill
    */
   getAssets(skillName: string): string[];
+
+  // ============================================================================
+  // Refresh
+  // ============================================================================
 
   /**
    * Refresh skills from disk (re-scan directories)

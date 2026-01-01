@@ -1,4 +1,4 @@
-import { MastraBase } from '../base';
+import { ContentStorage } from '../artifacts';
 import { RegisteredLogger } from '../logger';
 
 import type { AnyArtifact, KnowledgeNamespaceInfo } from './types';
@@ -24,7 +24,7 @@ export interface CreateNamespaceStorageOptions {
  * This class lives in @mastra/core so that storage adapters
  * can be built in separate packages.
  */
-export abstract class KnowledgeStorage extends MastraBase {
+export abstract class KnowledgeStorage extends ContentStorage {
   /**
    * Base path/prefix for this storage instance.
    * All namespaces are created within this base.
@@ -34,14 +34,6 @@ export abstract class KnowledgeStorage extends MastraBase {
   constructor({ basePath }: { basePath: string }) {
     super({ component: RegisteredLogger.KNOWLEDGE, name: basePath });
     this.basePath = basePath;
-  }
-
-  /**
-   * Initialize the storage backend.
-   * Called once before first use.
-   */
-  async init(): Promise<void> {
-    // Default no-op - adapters override if they need initialization
   }
 
   // ============================================================================

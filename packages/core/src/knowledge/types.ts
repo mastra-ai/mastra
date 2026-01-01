@@ -1,3 +1,4 @@
+import type { BaseSearchResult, BaseSearchOptions, SearchMode } from '../artifacts';
 import type { KnowledgeStorage } from './base';
 
 /**
@@ -47,55 +48,24 @@ export type AnyArtifact = FileArtifact | ImageArtifact | TextArtifact;
 export type KnowledgeStorageFactory = (namespace: string) => Promise<KnowledgeStorage>;
 
 /**
- * Search mode for knowledge queries
+ * Search mode for knowledge queries (alias for shared SearchMode)
  */
-export type KnowledgeSearchMode = 'vector' | 'bm25' | 'hybrid';
+export type KnowledgeSearchMode = SearchMode;
 
 /**
  * Search result from knowledge
  */
-export interface KnowledgeSearchResult {
+export interface KnowledgeSearchResult extends BaseSearchResult {
   /** Artifact key */
   key: string;
-  /** Content of the artifact */
-  content: string;
-  /** Similarity/relevance score (higher is more relevant) */
-  score: number;
-  /** Additional metadata stored with the artifact */
-  metadata?: Record<string, unknown>;
-  /** Line range where query terms were found (if available) */
-  lineRange?: {
-    /** Starting line number (1-indexed) */
-    start: number;
-    /** Ending line number (1-indexed, inclusive) */
-    end: number;
-  };
-  /** Score breakdown for hybrid search */
-  scoreDetails?: {
-    /** Vector similarity score (0-1) */
-    vector?: number;
-    /** BM25 relevance score */
-    bm25?: number;
-  };
 }
 
 /**
  * Options for searching knowledge
  */
-export interface KnowledgeSearchOptions {
-  /** Maximum number of results to return (default: 5) */
-  topK?: number;
-  /** Minimum similarity score threshold */
-  minScore?: number;
+export interface KnowledgeSearchOptions extends BaseSearchOptions {
   /** Metadata filter (only applies to vector search) */
   filter?: Record<string, unknown>;
-  /** Search mode */
-  mode?: KnowledgeSearchMode;
-  /** Hybrid search configuration */
-  hybrid?: {
-    /** Weight for vector similarity score (0-1) */
-    vectorWeight?: number;
-  };
 }
 
 /**
