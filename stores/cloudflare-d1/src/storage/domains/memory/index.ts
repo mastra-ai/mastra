@@ -661,15 +661,23 @@ export class MemoryStorageD1 extends MemoryStorage {
     try {
       const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
 
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      // Step 1: Get paginated messages (conditionally by thread or resource)
       let query = `
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${fullTableName}
-        WHERE thread_id = ?
+        WHERE 1=1
       `;
-      const queryParams: any[] = [threadId];
+      const queryParams: any[] = [];
 
-      if (resourceId) {
+      // Add thread_id filter only if threadIds are provided
+      if (threadIds.length > 0) {
+        const placeholders = threadIds.map(() => '?').join(', ');
+        query += ` AND thread_id IN (${placeholders})`;
+        queryParams.push(...threadIds);
+      }
+
+      // Add resourceId filter
+      if (hasResourceId) {
         query += ` AND resourceId = ?`;
         queryParams.push(resourceId);
       }
@@ -714,10 +722,18 @@ export class MemoryStorageD1 extends MemoryStorage {
       const paginatedCount = paginatedMessages.length;
 
       // Get total count
-      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
-      const countParams: any[] = [threadId];
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE 1=1`;
+      const countParams: any[] = [];
 
-      if (resourceId) {
+      // Add thread_id filter only if threadIds are provided
+      if (threadIds.length > 0) {
+        const placeholders = threadIds.map(() => '?').join(', ');
+        countQuery += ` AND thread_id IN (${placeholders})`;
+        countParams.push(...threadIds);
+      }
+
+      // Add resourceId filter
+      if (hasResourceId) {
         countQuery += ` AND resourceId = ?`;
         countParams.push(resourceId);
       }
