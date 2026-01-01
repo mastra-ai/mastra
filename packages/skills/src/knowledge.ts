@@ -73,7 +73,7 @@ export type { KnowledgeSearchResult } from '@mastra/core/knowledge';
  * ```typescript
  * const knowledge = new Knowledge({
  *   id: 'my-knowledge',
- *   storage: new FilesystemStorage({ basePath: './knowledge-data' }),
+ *   storage: new FilesystemStorage({ paths: './knowledge-data' }),
  *   bm25: true, // Enable BM25 for all namespaces
  *   index: { vectorStore, embedder }, // Optional vector search
  * });

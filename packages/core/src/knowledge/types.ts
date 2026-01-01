@@ -42,6 +42,14 @@ export interface TextArtifact extends Artifact {
 export type AnyArtifact = FileArtifact | ImageArtifact | TextArtifact;
 
 /**
+ * Knowledge source types indicating where the namespace comes from and its access level
+ */
+export type KnowledgeSource =
+  | { type: 'external'; packagePath: string } // node_modules - read-only
+  | { type: 'local'; projectPath: string } // ./src/knowledge - read-write
+  | { type: 'managed'; mastraPath: string }; // .mastra/knowledge - read-write
+
+/**
  * Factory function for creating KnowledgeStorage instances.
  * Used by Knowledge to create storage for new namespaces dynamically.
  */
@@ -76,6 +84,8 @@ export interface KnowledgeNamespaceInfo {
   namespace: string;
   /** Optional description */
   description?: string;
+  /** Source of the namespace (external package, local project, or managed) */
+  source: KnowledgeSource;
   /** Number of artifacts in the namespace */
   artifactCount: number;
   /** Whether BM25 search is enabled */

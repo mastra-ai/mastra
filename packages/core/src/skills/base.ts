@@ -53,15 +53,8 @@ export interface UpdateSkillOptions {
  * can be built in separate packages.
  */
 export abstract class SkillsStorage extends ContentStorage {
-  /**
-   * Paths to search for skills.
-   */
-  paths: string[];
-
   constructor({ paths }: { paths: string | string[] }) {
-    const pathsArray = Array.isArray(paths) ? paths : [paths];
-    super({ component: RegisteredLogger.SKILLS, name: pathsArray.join(', ') });
-    this.paths = pathsArray;
+    super({ component: RegisteredLogger.SKILLS, paths });
   }
 
   // ============================================================================
@@ -203,13 +196,4 @@ export abstract class SkillsStorage extends ContentStorage {
    * Only works for skills in writable paths.
    */
   abstract deleteAsset(skillName: string, assetPath: string): Promise<void>;
-
-  // ============================================================================
-  // Refresh
-  // ============================================================================
-
-  /**
-   * Refresh the skill cache by re-scanning all paths.
-   */
-  abstract refresh(): Promise<void>;
 }

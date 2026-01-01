@@ -21,7 +21,7 @@ describe('Knowledge', () => {
     await mkdir(testDir, { recursive: true });
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
     });
   });
 
@@ -253,7 +253,7 @@ describe('Knowledge with indexing', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       index: {
         vectorStore,
         embedder: mockEmbedder,
@@ -431,7 +431,7 @@ describe('Knowledge with indexing', () => {
     it('should throw error when no search is configured', async () => {
       const knowledgeWithoutIndex = new Knowledge({
         id: 'no-index',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
       });
 
       await expect(knowledgeWithoutIndex.search(NS, 'test query')).rejects.toThrow(
@@ -511,7 +511,7 @@ Line 5: Conclusion of the guide`;
     it('should return false when index is not configured', () => {
       const knowledgeWithoutIndex = new Knowledge({
         id: 'no-index',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
       });
       expect(knowledgeWithoutIndex.canSearch).toBe(false);
     });
@@ -528,7 +528,7 @@ describe('Knowledge with BM25', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       bm25: true, // Enable BM25 with default config
     });
   });
@@ -715,7 +715,7 @@ Sixth line ends`;
     it('should return false when BM25 is not configured', () => {
       const knowledgeWithoutBM25 = new Knowledge({
         id: 'no-bm25',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
       });
       expect(knowledgeWithoutBM25.canBM25Search).toBe(false);
     });
@@ -725,7 +725,7 @@ Sixth line ends`;
     it('should accept custom BM25 parameters', async () => {
       const customKnowledge = new Knowledge({
         id: 'custom-bm25',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
         bm25: {
           bm25: { k1: 2.0, b: 0.5 },
         },
@@ -744,7 +744,7 @@ Sixth line ends`;
     it('should accept custom tokenization options', async () => {
       const customKnowledge = new Knowledge({
         id: 'custom-tokenize',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
         bm25: {
           tokenize: {
             lowercase: true,
@@ -802,7 +802,7 @@ describe('Knowledge with hybrid search', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       index: {
         vectorStore,
         embedder: mockEmbedder,
@@ -942,7 +942,7 @@ Line 5: Conclusion`;
     it('should return false when only index is configured', async () => {
       const vectorOnlyKnowledge = new Knowledge({
         id: 'vector-only',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
         index: {
           vectorStore,
           embedder: mockEmbedder,
@@ -955,7 +955,7 @@ Line 5: Conclusion`;
     it('should return false when only BM25 is configured', () => {
       const bm25OnlyKnowledge = new Knowledge({
         id: 'bm25-only',
-        storage: new FilesystemStorage({ basePath: testDir }),
+        storage: new FilesystemStorage({ paths: testDir }),
         bm25: true,
       });
       expect(bm25OnlyKnowledge.canHybridSearch).toBe(false);
@@ -971,7 +971,7 @@ describe('FilesystemStorage', () => {
   beforeEach(async () => {
     testDir = join(tmpdir(), `fs-storage-test-${Date.now()}`);
     await mkdir(testDir, { recursive: true });
-    storage = new FilesystemStorage({ basePath: testDir });
+    storage = new FilesystemStorage({ paths: testDir });
     // Create the namespace
     await storage.createNamespace({ namespace: NS });
   });

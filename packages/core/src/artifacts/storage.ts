@@ -5,14 +5,25 @@ import { RegisteredLogger } from '../logger';
  * Abstract base class for content storage backends (Skills & Knowledge).
  *
  * Provides common infrastructure for storing and retrieving searchable content.
+ * Both Skills and Knowledge support multiple container paths, allowing content
+ * from different sources (local, managed, external packages).
+ *
  * Domain-specific storage classes (KnowledgeStorage, SkillsStorage) extend this.
  *
  * This class lives in @mastra/core so that storage adapters
  * can be built in separate packages.
  */
 export abstract class ContentStorage extends MastraBase {
-  constructor({ component, name }: { component: RegisteredLogger; name: string }) {
-    super({ component, name });
+  /**
+   * Paths to search for content.
+   * Each path is a container that holds entities (skills or namespaces).
+   */
+  paths: string[];
+
+  constructor({ component, paths }: { component: RegisteredLogger; paths: string | string[] }) {
+    const pathsArray = Array.isArray(paths) ? paths : [paths];
+    super({ component, name: pathsArray.join(', ') });
+    this.paths = pathsArray;
   }
 
   /**
@@ -22,4 +33,9 @@ export abstract class ContentStorage extends MastraBase {
   async init(): Promise<void> {
     // Default no-op - adapters override if they need initialization
   }
+
+  /**
+   * Refresh the content cache by re-scanning all paths.
+   */
+  abstract refresh(): Promise<void>;
 }

@@ -1,7 +1,15 @@
 import { ContentStorage } from '../artifacts';
 import { RegisteredLogger } from '../logger';
 
-import type { AnyArtifact, KnowledgeNamespaceInfo } from './types';
+import type { AnyArtifact, KnowledgeNamespaceInfo, KnowledgeSource } from './types';
+
+/**
+ * Options for listing namespaces
+ */
+export interface ListNamespacesOptions {
+  /** Only include namespaces from specific source types */
+  sourceTypes?: Array<'external' | 'local' | 'managed'>;
+}
 
 /**
  * Options for creating a namespace in storage
@@ -17,23 +25,21 @@ export interface CreateNamespaceStorageOptions {
  * Abstract base class for knowledge storage backends.
  * Implementations handle the actual persistence of artifacts.
  *
- * Storage backends support multiple namespaces within a single instance.
- * For filesystem storage, namespaces are subdirectories.
- * For key-value stores, namespaces can be prefixes.
+ * Storage backends support multiple paths (external packages, local project, managed).
+ * For filesystem storage, each path contains namespaces as subdirectories.
+ * For key-value stores, paths can be prefixes.
+ *
+ * CRUD operations (create, update, delete) only work for writable sources:
+ * - 'local' (./src/knowledge) - read-write
+ * - 'managed' (.mastra/knowledge) - read-write
+ * - 'external' (node_modules) - read-only
  *
  * This class lives in @mastra/core so that storage adapters
  * can be built in separate packages.
  */
 export abstract class KnowledgeStorage extends ContentStorage {
-  /**
-   * Base path/prefix for this storage instance.
-   * All namespaces are created within this base.
-   */
-  basePath: string;
-
-  constructor({ basePath }: { basePath: string }) {
-    super({ component: RegisteredLogger.KNOWLEDGE, name: basePath });
-    this.basePath = basePath;
+  constructor({ paths }: { paths: string | string[] }) {
+    super({ component: RegisteredLogger.KNOWLEDGE, paths });
   }
 
   // ============================================================================
@@ -41,9 +47,9 @@ export abstract class KnowledgeStorage extends ContentStorage {
   // ============================================================================
 
   /**
-   * List all namespaces in this storage.
+   * List all namespaces from all configured paths.
    */
-  abstract listNamespaces(): Promise<KnowledgeNamespaceInfo[]>;
+  abstract listNamespaces(options?: ListNamespacesOptions): Promise<KnowledgeNamespaceInfo[]>;
 
   /**
    * Create a new namespace.

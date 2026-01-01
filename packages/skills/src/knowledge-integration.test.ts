@@ -78,7 +78,7 @@ describe('StaticKnowledge Processor', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
     });
   });
 
@@ -337,7 +337,7 @@ describe('RetrievedKnowledge Processor', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       index: {
         vectorStore,
         embedder,
@@ -574,7 +574,7 @@ describe('RetrievedKnowledge Processor with BM25', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       bm25: true, // Enable BM25 only
     });
   });
@@ -695,7 +695,7 @@ describe('RetrievedKnowledge Processor with Hybrid Search', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       index: {
         vectorStore,
         embedder,
@@ -840,7 +840,7 @@ describe('Combined StaticKnowledge + RetrievedKnowledge', () => {
 
     knowledge = new Knowledge({
       id: 'test-knowledge',
-      storage: new FilesystemStorage({ basePath: testDir }),
+      storage: new FilesystemStorage({ paths: testDir }),
       index: {
         vectorStore,
         embedder,

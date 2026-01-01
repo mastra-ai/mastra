@@ -104,7 +104,7 @@ export interface RetrievedKnowledgeOptions {
  * ```typescript
  * // Vector search (semantic similarity)
  * const knowledge = new Knowledge({
- *   storage: new FilesystemStorage({ namespace: './docs' }),
+ *   storage: new FilesystemStorage({ paths: './docs' }),
  *   index: {
  *     vectorStore: myVectorStore,
  *     embedder: async (text) => embed(text),
@@ -121,7 +121,7 @@ export interface RetrievedKnowledgeOptions {
  *
  * // BM25 keyword search
  * const knowledge = new Knowledge({
- *   storage: new FilesystemStorage({ namespace: './docs' }),
+ *   storage: new FilesystemStorage({ paths: './docs' }),
  *   bm25: true, // enable BM25
  * });
  *
@@ -133,7 +133,7 @@ export interface RetrievedKnowledgeOptions {
  *
  * // Hybrid search (combines vector + BM25)
  * const knowledge = new Knowledge({
- *   storage: new FilesystemStorage({ namespace: './docs' }),
+ *   storage: new FilesystemStorage({ paths: './docs' }),
  *   index: { vectorStore, embedder, indexName: 'docs' },
  *   bm25: true,
  * });

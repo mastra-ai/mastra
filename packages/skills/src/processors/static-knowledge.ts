@@ -40,7 +40,7 @@ export interface StaticKnowledgeOptions {
  * @example
  * ```typescript
  * const knowledge = new Knowledge({
- *   storage: new FilesystemStorage({ namespace: './knowledge' }),
+ *   storage: new FilesystemStorage({ paths: './knowledge' }),
  * });
  *
  * // Add static artifacts
