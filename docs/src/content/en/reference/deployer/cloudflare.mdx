@@ -18,6 +18,7 @@ import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
+    name: "hello-mastra",
     routes: [
       {
         pattern: "example.com/*",
