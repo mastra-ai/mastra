@@ -1,0 +1,87 @@
+# Skills + Knowledge Example
+
+This example demonstrates both Skills and Knowledge primitives working together with Mastra agents.
+
+## Overview
+
+- **Skills**: Domain-specific instructions (SKILL.md files) that agents activate on-demand using tools
+- **Knowledge**: Factual content (FAQs, docs) that is automatically retrieved based on user queries
+
+## Structure
+
+```
+examples/skills-knowledge/
+├── skills/                    # Skills directory (auto-discovered)
+│   └── brand-guidelines/
+│       └── SKILL.md           # Brand guidelines skill
+├── .mastra-knowledge/         # Knowledge storage
+│   └── knowledge/support/     # Support FAQ knowledge base
+├── src/
+│   ├── mastra/
+│   │   ├── agents/
+│   │   │   ├── skills-agent.ts    # Agent using SkillsProcessor
+│   │   │   └── knowledge-agent.ts # Agent using RetrievedKnowledge
+│   │   ├── knowledge/
+│   │   │   └── index.ts           # Knowledge setup and sample data
+│   │   └── index.ts               # Mastra instance
+│   ├── demo.ts                # Combined demo
+│   ├── demo-skills.ts         # Skills-only demo
+│   └── demo-knowledge.ts      # Knowledge-only demo
+└── package.json
+```
+
+## Running the Demos
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run combined demo (recommended)
+pnpm demo
+
+# Run skills-only demo
+pnpm demo:skills
+
+# Run knowledge-only demo
+pnpm demo:knowledge
+```
+
+## Key Concepts
+
+### Skills (SkillsProcessor)
+
+Skills are domain expertise packaged as SKILL.md files. The agent decides when to activate them.
+
+```typescript
+import { SkillsProcessor } from '@mastra/skills';
+
+const agent = new Agent({
+  inputProcessors: [new SkillsProcessor()],
+  // ...
+});
+```
+
+### Knowledge (RetrievedKnowledge)
+
+Knowledge is factual content that's automatically retrieved based on the user's query.
+
+```typescript
+import { RetrievedKnowledge, StaticKnowledge } from '@mastra/skills';
+
+const agent = new Agent({
+  inputProcessors: [
+    new StaticKnowledge({ format: 'markdown' }), // Always included
+    new RetrievedKnowledge({ topK: 3, mode: 'bm25' }), // Query-based
+  ],
+  // ...
+});
+```
+
+## Comparison
+
+| Aspect    | Skills                 | Knowledge             |
+| --------- | ---------------------- | --------------------- |
+| Content   | SKILL.md files         | Arbitrary documents   |
+| Retrieval | Tool-based (on-demand) | Processor (automatic) |
+| Use case  | Domain expertise       | Factual content       |
+| Example   | Brand guidelines       | FAQ documents         |
