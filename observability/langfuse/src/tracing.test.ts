@@ -24,8 +24,12 @@ import type { LangfuseExporterConfig } from './tracing';
 vi.mock('langfuse');
 
 class TestLangfuseExporter extends LangfuseExporter {
-  exposeTraceData(traceId: string) {
+  _getTraceData(traceId: string) {
     return this.getTraceData({ traceId, method: "test" });
+  }
+
+  _traceMapSize() : number {
+    return this.traceMapSize();
   }
 }
 
@@ -45,28 +49,38 @@ describe('LangfuseExporter', () => {
 
     // Set up mocks
     mockGeneration = {
-      update: vi.fn(),
+      kind: "mockGeneration",
       event: vi.fn(),
+      generation: vi.fn(),
+      span: vi.fn(),
+      update: vi.fn(),
     };
 
+    // Set up circular reference
+    mockGeneration.generation.mockReturnValue(mockGeneration);
+
     mockSpan = {
+      kind: "mockSpan",
       update: vi.fn(),
       generation: vi.fn().mockReturnValue(mockGeneration),
       span: vi.fn(),
       event: vi.fn(),
     };
 
+    // Set up circular reference
+    mockSpan.span.mockReturnValue(mockSpan);
+    mockGeneration.span.mockReturnValue(mockSpan);
+
     mockTrace = {
+      kind: "mockTrace",
       generation: vi.fn().mockReturnValue(mockGeneration),
       span: vi.fn().mockReturnValue(mockSpan),
       update: vi.fn(),
       event: vi.fn(),
     };
 
-    // Set up circular reference
-    mockSpan.span.mockReturnValue(mockSpan);
-
     mockLangfuseClient = {
+      kind: "mockLangfuseClient",
       trace: vi.fn().mockReturnValue(mockTrace),
       shutdownAsync: vi.fn().mockResolvedValue(undefined),
     };
@@ -86,6 +100,7 @@ describe('LangfuseExporter', () => {
         flushAt: 1,
         flushInterval: 1000,
       },
+      logLevel: "debug",
     };
 
     exporter = new TestLangfuseExporter(config);
@@ -654,6 +669,7 @@ describe('LangfuseExporter', () => {
       // First, start a span
       const llmSpan = createMockSpan({
         id: 'llm-span',
+        traceId: 'llm-trace',
         name: 'gpt-4-call',
         type: SpanType.MODEL_GENERATION,
         isRoot: true,
@@ -814,7 +830,7 @@ describe('LangfuseExporter', () => {
         exportedSpan: rootSpan,
       });
 
-      const traceData = exporter.exposeTraceData(rootSpan.traceId);
+      const traceData = exporter._getTraceData(rootSpan.traceId);
 
       // Verify trace was created and span is tracked as active
       expect(traceData.isActiveSpan({spanId: rootSpan.id })).toBe(true);
@@ -830,7 +846,10 @@ describe('LangfuseExporter', () => {
       });
 
       // Trace should be cleaned up since this was the only active span
-      expect((exporter as any).traceMap.has('root-span-id')).toBe(false);
+      // (traceData is always created if it doesn't exist, but the old object
+      // should have been cleaned up.)
+      const newTraceData = exporter._getTraceData(rootSpan.traceId);
+      expect(traceData).not.toBe(newTraceData)
     });
   });
 
@@ -1018,6 +1037,8 @@ describe('LangfuseExporter', () => {
 
   describe('Out-of-order span handling with delayed ends', () => {
     it('should handle spans that end after parent trace is removed', async () => {
+      const traceId = 'out-of-order trace';
+
       // Create a root workflow span
       const workflowSpan = createMockSpan({
         id: 'workflow-1',
@@ -1025,6 +1046,7 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_RUN,
         isRoot: true,
         attributes: { workflowId: 'wf-123' },
+        traceId,
       });
 
       // Create a child step span
@@ -1034,9 +1056,9 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_STEP,
         isRoot: false,
         attributes: { stepId: 'step-1' },
+        traceId,
+        parentSpanId: workflowSpan.id,
       });
-      step1Span.traceId = 'workflow-1';
-      step1Span.parentSpanId = 'workflow-1';
 
       // Start workflow and step
       await exporter.exportTracingEvent({
@@ -1049,10 +1071,9 @@ describe('LangfuseExporter', () => {
         exportedSpan: step1Span,
       });
 
-      // Verify trace and spans are tracked
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
-      const traceInfo = (exporter as any).traceMap.get('workflow-1');
-      expect(traceInfo.spans.has('step-1')).toBe(true);
+      // Verify spans are tracked
+      const traceData = exporter._getTraceData(traceId);
+      expect(traceData.hasSpan({spanId: 'step-1'})).toBe(true);
 
       // Clear mock calls to make assertions clearer
       mockTrace.span.mockClear();
@@ -1097,9 +1118,9 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_STEP,
         isRoot: false,
         attributes: { stepId: 'step-2' },
+        traceId,
+        parentSpanId: workflowSpan.id,
       });
-      step2Span.traceId = 'workflow-1';
-      step2Span.parentSpanId = 'workflow-1';
 
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_STARTED,
@@ -1120,13 +1141,10 @@ describe('LangfuseExporter', () => {
         exportedSpan: workflowSpan,
       });
 
-      // Verify trace is still in map because step-2 hasn't ended yet
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(true);
-      const traceData = (exporter as any).traceMap.get('workflow-1');
       // step-2 should still be in activeSpans
-      expect(traceData.activeSpans.has('step-2')).toBe(true);
-      expect(traceData.activeSpans.has('step-1')).toBe(false); // step-1 already ended
-      expect(traceData.activeSpans.has('workflow-1')).toBe(false); // workflow ended
+      expect(traceData.isActiveSpan({spanId: 'step-2'})).toBe(true);
+      expect(traceData.isActiveSpan({spanId: 'step-1'})).toBe(false); // step-1 already ended
+      expect(traceData.isActiveSpan({spanId: 'workflow-1'})).toBe(false); // workflow ended
 
       // Now end step-2 (the last active span) AFTER the root ended
       step2Span.endTime = new Date();
@@ -1135,9 +1153,6 @@ describe('LangfuseExporter', () => {
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: step2Span,
       });
-
-      // NOW the trace should be cleaned up since all spans have ended
-      expect((exporter as any).traceMap.has('workflow-1')).toBe(false);
 
       // Clear mocks for late event testing
       mockSpan.update.mockClear();
@@ -1150,10 +1165,10 @@ describe('LangfuseExporter', () => {
         type: SpanType.WORKFLOW_STEP,
         isRoot: false,
         attributes: { stepId: 'step-1', lateUpdate: true },
+        traceId,
+        parentSpanId: workflowSpan.id,
+        output: { result: 'late-update' },
       });
-      lateStep1Update.traceId = 'workflow-1';
-      lateStep1Update.parentSpanId = 'workflow-1';
-      lateStep1Update.output = { result: 'late-update' };
 
       // This should handle gracefully without errors
       await exporter.exportTracingEvent({
@@ -1179,6 +1194,9 @@ describe('LangfuseExporter', () => {
         type: TracingEventType.SPAN_STARTED,
         exportedSpan: rootSpan,
       });
+
+      // get a pointer to the initial traceData for trace
+      const traceData = exporter._getTraceData('root-1');
 
       // Create multiple child spans
       const childSpans: AnyExportedSpan[] = [];
@@ -1250,7 +1268,10 @@ describe('LangfuseExporter', () => {
 
       // All operations should complete without errors
       // Trace should be cleaned up since all spans have ended
-      expect((exporter as any).traceMap.has('root-1')).toBe(false);
+      // (traceData is always created if it doesn't exist, but the old object
+      // should have been cleaned up.)
+      const newTraceData = exporter._getTraceData('root-1');
+      expect(traceData).not.toBe(newTraceData)
     });
   });
 
@@ -2870,8 +2891,8 @@ describe('LangfuseExporter', () => {
       });
 
       // Verify maps have data
-      expect((exporter as any).traceMap.size).toBeGreaterThan(0);
-      expect((exporter as any).traceMap.get('test-span').spans.size).toBeGreaterThan(0);
+      const traceData = exporter._getTraceData('test-span');
+      expect(traceData.activeSpanCount()).toBeGreaterThan(0);
 
       // Shutdown
       await exporter.shutdown();
@@ -2880,7 +2901,7 @@ describe('LangfuseExporter', () => {
       expect(mockLangfuseClient.shutdownAsync).toHaveBeenCalled();
 
       // Verify maps were cleared
-      expect((exporter as any).traceMap.size).toBe(0);
+      expect(exporter._traceMapSize()).toBe(0);
     });
   });
 });

@@ -56,8 +56,36 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
     this.#activeSpanIds.add(args.spanId); //Track span as active
   }
 
+  hasSpan(args: { spanId: string}): boolean {
+    const { spanId } = args;
+    // if (this.#rootSpanId == spanId) {
+    //     return this.#rootSpan;
+    // }
+    return this.#spans.has(spanId);
+  }
+
+  getSpan(args: { spanId: string}): TRootData | TSpanData | undefined {
+    const { spanId } = args;
+    // if (this.#rootSpanId == spanId) {
+    //     return this.#rootSpan;
+    // }
+    return this.#spans.get(spanId);
+  }
+
+  endSpan(args: { spanId: string}): void {
+    this.#activeSpanIds.delete(args.spanId);
+  }
+
   isActiveSpan(args: { spanId: string}) : boolean {
     return this.#activeSpanIds.has(args.spanId);
+  }
+
+  activeSpanCount() : number {
+    return this.#activeSpanIds.size;
+  }
+
+  addEvent(args: { eventId: string; eventData: TEventData }) {
+    this.#events.set(args.eventId, args.eventData);
   }
 
   addMetadata(args: { spanId: string; metadata: TMetadata}): void {
@@ -66,22 +94,6 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
 
   getMetadata(args: { spanId: string }) : TMetadata | undefined {
     return this.#metadata.get(args.spanId);
-  }
-
-  getSpan(args: { spanId: string}): TRootData | TSpanData | undefined {
-    const { spanId } = args;
-    if (this.#rootSpanId == spanId) {
-        return this.#rootSpan;
-    }
-    return this.#spans.get(spanId);
-  }
-
-  endSpan(args: { spanId: string}): void {
-    this.#activeSpanIds.delete(args.spanId);
-  }
-
-  addEvent(args: { eventId: string; eventData: TEventData }) {
-    this.#events.set(args.eventId, args.eventData);
   }
 
   getParent(args: {span: AnyExportedSpan} ): TRootData | TSpanData | TEventData | undefined {
@@ -184,7 +196,12 @@ export abstract class TrackingExporter<
     const { exportedSpan } = await this._preExportTracingEvent(event);
 
     if (!traceData.hasRoot()) {
-        if (event.exportedSpan.isRootSpan) {
+        if (exportedSpan.isRootSpan) {
+            this.logger.debug(`${this.name}: Building root`, {
+                traceId: exportedSpan.traceId,
+                spanId: exportedSpan.id,
+                method,
+            });
             const rootData = await this._buildRoot({ span: exportedSpan, traceData })
             if (rootData) {
                 traceData.addRoot({rootId: exportedSpan.id, rootData});
@@ -204,27 +221,70 @@ export abstract class TrackingExporter<
 
     switch (method) {
         case 'handleEventSpan':
+            this.logger.debug(`${this.name}: handling event`, {
+                traceId: exportedSpan.traceId,
+                spanId: exportedSpan.id,
+                method,
+            });
             const eventData = await this._buildEvent({ span: exportedSpan, traceData });
             if (eventData) {
+                 this.logger.debug(`${this.name}: adding event to traceData`, {
+                    traceId: exportedSpan.traceId,
+                    spanId: exportedSpan.id,
+                    method,
+                });
                 traceData.addEvent({ eventId: exportedSpan.id, eventData });
             } else {
+                this.logger.debug(`${this.name}: adding event early queue`, {
+                    traceId: exportedSpan.traceId,
+                    spanId: exportedSpan.id,
+                    method,
+                });
                 traceData.addEarly({event})
             }
             break;
         case 'handleSpanStart':
+            this.logger.debug(`${this.name}: handling span start`, {
+                traceId: exportedSpan.traceId,
+                spanId: exportedSpan.id,
+                method,
+            });
             const spanData = await this._buildSpan({ span: exportedSpan, traceData });
             if (spanData) {
+                this.logger.debug(`${this.name}: adding span to traceData`, {
+                    traceId: exportedSpan.traceId,
+                    spanId: exportedSpan.id,
+                    method,
+                });
                 traceData.addSpan({ spanId: exportedSpan.id, spanData });
             } else {
+                this.logger.debug(`${this.name}: adding span early queue`, {
+                    traceId: exportedSpan.traceId,
+                    spanId: exportedSpan.id,
+                    method,
+                });
                 traceData.addEarly({event})
             }
             break;
         case 'handleSpanUpdate':
+            this.logger.debug(`${this.name}: handling span update`, {
+                traceId: exportedSpan.traceId,
+                spanId: exportedSpan.id,
+                method,
+            });
             await this._updateSpan({span: exportedSpan, traceData })
             break;
         case 'handleSpanEnd':
+            this.logger.debug(`${this.name}: handling span end`, {
+                traceId: exportedSpan.traceId,
+                spanId: exportedSpan.id,
+                method,
+            });
             traceData.endSpan({spanId: exportedSpan.id})
             await this._finishSpan({span: exportedSpan, traceData })
+            if (traceData.activeSpanCount() == 0) {
+              this.clearTraceData({ traceId: event.exportedSpan.traceId, method })
+            }
             break;
     }
 
@@ -293,6 +353,27 @@ export abstract class TrackingExporter<
     return this.#traceMap.get(traceId)!
   }
 
+  protected clearTraceData(args: { traceId: string, method: string}): void {
+    const { traceId, method } = args;
+
+    // TODO: Ideally this should scheduled for some time in the future
+    // and not occur immediately.
+    if (this.#traceMap.has(traceId)) {
+        this.#traceMap.delete(traceId)
+        this.logger.debug(`${this.name}: Deleted trace data cache`, {
+            traceId,
+            method,
+        });
+    }
+  }
+
+  protected traceMapSize(): number {
+    return this.#traceMap.size;
+  }
+
+  protected clearTraceMap(): void {
+    this.#traceMap.clear();
+  }
 
 //   async shutdown(): Promise<void> {
 //     if (this.client) {

@@ -115,15 +115,33 @@ export class LangfuseExporter extends TrackingExporter<
     const langfuseSpan =
       span.type === SpanType.MODEL_GENERATION ? langfuseParent.generation(payload) : langfuseParent.span(payload);
 
+    this.logger.debug(`${this.name}: built span`, {
+          traceId: span.traceId,
+          spanId: langfuseSpan.id,
+          method: "_buildSpan",
+      });
+
     return langfuseSpan;
   }
 
   protected async _updateSpan(args: { span: AnyExportedSpan, traceData: LangfuseTraceData }): Promise<void> {
     const { span, traceData } = args;
     const langfuseSpan = traceData.getSpan({spanId: span.id})
-    // use update for both update & end, so that we can use the
-    // end time we set when ending the span.
-    langfuseSpan?.update(this.buildSpanPayload(span, false, traceData));
+    if (langfuseSpan) {
+        this.logger.debug(`${this.name}: found span for update`, {
+          traceId: span.traceId,
+          spanId: langfuseSpan.id,
+          method: "_updateSpan",
+      });
+
+      const updatePayload = this.buildSpanPayload(span, false, traceData);
+
+      console.log(updatePayload)
+
+      // use update for both update & end, so that we can use the
+      // end time we set when ending the span.
+      langfuseSpan.update(updatePayload);
+    }
   }
 
   protected async _finishSpan(args: { span: AnyExportedSpan, traceData: LangfuseTraceData }): Promise<void> {
@@ -319,11 +337,18 @@ export class LangfuseExporter extends TrackingExporter<
     }
   }
 
-  // async shutdown(): Promise<void> {
-  //   if (this.client) {
-  //     await this.client.shutdownAsync();
-  //   }
-  //   this.traceMap.clear();
-  //   await super.shutdown();
-  // }
+
+  async shutdown(): Promise<void> {
+    if (this.client) {
+      await this.client.shutdownAsync();
+    }
+    //TODO: This should be re-written to first stop accepting new spans,
+    // then close all existing spans with some shutdown message
+    // then waiting for the client to flush everything
+    //
+    // If the flush is extracted into some method outside shutdown,
+    // it should optionally end any existing spans.
+    this.clearTraceMap();
+    await super.shutdown();
+  }
 }
