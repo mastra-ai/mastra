@@ -713,14 +713,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Format observations for injection into the Actor's context.
    * @param observations - The observations to inject
    * @param suggestedResponse - Thread-specific suggested response (from thread metadata)
+   * @param unobservedContextBlocks - Formatted <unobserved-context> blocks from other threads
    */
-  private formatObservationsForContext(observations: string, suggestedResponse?: string): string {
+  private formatObservationsForContext(
+    observations: string,
+    suggestedResponse?: string,
+    unobservedContextBlocks?: string,
+  ): string {
     // Optimize observations to save tokens
     const optimized = optimizeObservationsForContext(observations);
 
     let content = `<observations>
 ${optimized}
 </observations>`;
+
+    // Add unobserved context from other threads (resource scope only)
+    if (unobservedContextBlocks) {
+      content += `\n\n${unobservedContextBlocks}`;
+    }
 
     if (suggestedResponse) {
       content += `
@@ -790,48 +800,78 @@ ${suggestedResponse}
       `[OM processInputStep] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, observedMsgIds: ${record.observedMessageIds.length}`,
     );
 
-    // Fetch thread metadata to get suggested response
-    const thread = await this.storage.getThreadById({ threadId });
-    const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
-    const suggestedResponse = threadOMMetadata?.suggestedResponse;
-
-    // Inject observations as a system message (every step)
-    if (record.activeObservations) {
-      const observationSystemMessage = this.formatObservationsForContext(
-        record.activeObservations,
-        suggestedResponse,
-      );
-      console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
-      if (this.resourceScope) {
-        console.info(`[OM processInputStep] Resource scope enabled`);
-      }
-      messageList.addSystem(observationSystemMessage, 'observational-memory');
-    }
-
     // Historical message loading should only happen once per request (on step 0)
     // Use state to track this so we don't re-load on subsequent steps
+    let unobservedContextBlocks: string | undefined;
+
     if (!state.initialSetupDone) {
       state.initialSetupDone = true;
 
       // Load unobserved messages from storage using cursor-based query
-      // This is more efficient than loading all messages and filtering by ID
+      // In resource scope, this loads messages from ALL threads for the resource
       const lastObservedAt = record.lastObservedAt;
-      const historicalMessages = await this.loadUnobservedMessages(threadId, lastObservedAt);
+      const historicalMessages = await this.loadUnobservedMessages(threadId, resourceId, lastObservedAt);
 
       if (historicalMessages.length > 0) {
         console.info(
           `[OM processInputStep] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
         );
 
-        // Add historical messages to messageList (excluding system messages)
-        for (const msg of historicalMessages) {
-          if (msg.role !== 'system') {
-            messageList.add(msg, 'memory');
+        if (this.resourceScope && resourceId) {
+          // Resource scope: group messages by thread
+          const messagesByThread = this.groupMessagesByThread(historicalMessages);
+
+          // Format other threads' messages as <unobserved-context> blocks
+          unobservedContextBlocks = this.formatUnobservedContextBlocks(messagesByThread, threadId);
+          if (unobservedContextBlocks) {
+            console.info(
+              `[OM processInputStep] Including unobserved context from ${messagesByThread.size - 1} other threads`,
+            );
+          }
+
+          // Store in state so we can access it when injecting observations
+          state.unobservedContextBlocks = unobservedContextBlocks;
+
+          // Add only current thread's messages to messageList
+          const currentThreadMessages = messagesByThread.get(threadId) || [];
+          for (const msg of currentThreadMessages) {
+            if (msg.role !== 'system') {
+              messageList.add(msg, 'memory');
+            }
+          }
+        } else {
+          // Thread scope: add all messages to messageList
+          for (const msg of historicalMessages) {
+            if (msg.role !== 'system') {
+              messageList.add(msg, 'memory');
+            }
           }
         }
       }
     } else {
       console.info(`[OM processInputStep] Step ${stepNumber}: skipping historical message load (already done)`);
+      // Retrieve unobserved context blocks from state for subsequent steps
+      unobservedContextBlocks = state.unobservedContextBlocks as string | undefined;
+    }
+
+    // Fetch thread metadata to get suggested response
+    const thread = await this.storage.getThreadById({ threadId });
+    const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+    const suggestedResponse = threadOMMetadata?.suggestedResponse;
+
+    // Inject observations as a system message (every step)
+    // This happens after historical message loading so we have unobservedContextBlocks
+    if (record.activeObservations) {
+      const observationSystemMessage = this.formatObservationsForContext(
+        record.activeObservations,
+        suggestedResponse,
+        unobservedContextBlocks,
+      );
+      console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
+      if (this.resourceScope) {
+        console.info(`[OM processInputStep] Resource scope enabled`);
+      }
+      messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
 
     // Safety net: also filter by observed IDs in case of edge cases
@@ -857,10 +897,34 @@ ${suggestedResponse}
   /**
    * Load messages from storage that haven't been observed yet.
    * Uses cursor-based query with lastObservedAt timestamp for efficiency.
+   *
+   * In resource scope mode, loads messages for the entire resource (all threads).
+   * In thread scope mode, loads messages for just the current thread.
    */
-  private async loadUnobservedMessages(threadId: string, lastObservedAt?: Date): Promise<MastraDBMessage[]> {
+  private async loadUnobservedMessages(
+    threadId: string,
+    resourceId: string | undefined,
+    lastObservedAt?: Date,
+  ): Promise<MastraDBMessage[]> {
+    // Determine which thread IDs to query
+    let threadIds: string[];
+
+    if (this.resourceScope && resourceId) {
+      // Resource scope: get all threads for this resource
+      const threadsResult = await this.storage.listThreadsByResourceId({ resourceId });
+      threadIds = threadsResult.threads.map(t => t.id);
+
+      // If no threads found, fall back to current thread
+      if (threadIds.length === 0) {
+        threadIds = [threadId];
+      }
+    } else {
+      // Thread scope: just the current thread
+      threadIds = [threadId];
+    }
+
     const result = await this.storage.listMessages({
-      threadId,
+      threadId: threadIds,
       perPage: false, // Get all messages (no pagination limit)
       orderBy: { field: 'createdAt', direction: 'ASC' },
       filter: lastObservedAt
@@ -873,6 +937,59 @@ ${suggestedResponse}
     });
 
     return result.messages;
+  }
+
+  /**
+   * Group messages by threadId for resource-scoped processing.
+   */
+  private groupMessagesByThread(messages: MastraDBMessage[]): Map<string, MastraDBMessage[]> {
+    const grouped = new Map<string, MastraDBMessage[]>();
+    for (const msg of messages) {
+      if (!msg.threadId) continue;
+      const existing = grouped.get(msg.threadId) || [];
+      existing.push(msg);
+      grouped.set(msg.threadId, existing);
+    }
+    return grouped;
+  }
+
+  /**
+   * Format unobserved messages from other threads as <unobserved-context> blocks.
+   * These are injected into the Actor's context so it has awareness of activity
+   * in other threads for the same resource.
+   */
+  private formatUnobservedContextBlocks(
+    messagesByThread: Map<string, MastraDBMessage[]>,
+    currentThreadId: string,
+  ): string {
+    const blocks: string[] = [];
+
+    for (const [threadId, messages] of messagesByThread) {
+      // Skip current thread - those go in normal message history
+      if (threadId === currentThreadId) continue;
+
+      // Skip if no messages
+      if (messages.length === 0) continue;
+
+      // Format messages with timestamps
+      const formattedMessages = messages
+        .filter(msg => msg.role !== 'system') // Exclude system messages
+        .map(msg => {
+          const timestamp = msg.createdAt ? new Date(msg.createdAt).toISOString() : 'unknown';
+          const content =
+            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          return `[${timestamp}] ${msg.role}: ${content}`;
+        })
+        .join('\n');
+
+      if (formattedMessages) {
+        blocks.push(`<unobserved-context thread="${threadId}">
+${formattedMessages}
+</unobserved-context>`);
+      }
+    }
+
+    return blocks.join('\n\n');
   }
 
   /**

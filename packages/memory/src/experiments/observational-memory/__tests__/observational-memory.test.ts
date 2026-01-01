@@ -133,7 +133,7 @@ describe('Storage Operations', () => {
         id: initial.id,
         observations: '- 🔴 Test observation',
         messageIds: ['msg-1'],
-        tokenCount: 100,
+        tokenCount: 100, lastObservedAt: new Date(),
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
@@ -233,7 +233,7 @@ describe('Storage Operations', () => {
         id: initial.id,
         observations: '- 🔴 Active observation',
         messageIds: ['msg-0'],
-        tokenCount: 50,
+        tokenCount: 50, lastObservedAt: new Date(),
       });
 
       // Add buffered observations
@@ -254,16 +254,20 @@ describe('Storage Operations', () => {
       expect(record?.observedMessageIds).toContain('msg-2');
     });
 
-    it('should set lastObservedAt when swapping buffered to active', async () => {
+    it('should update lastObservedAt when swapping buffered to active', async () => {
+      const beforeInit = new Date();
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
         scope: 'thread',
         config: {},
       });
+      const afterInit = new Date();
 
-      // Initially, lastObservedAt should be undefined
-      expect(initial.metadata.lastObservedAt).toBeUndefined();
+      // Initially, lastObservedAt is set to creation time
+      expect(initial.lastObservedAt).toBeDefined();
+      expect(initial.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeInit.getTime());
+      expect(initial.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterInit.getTime());
 
       // Add buffered observations
       await storage.updateBufferedObservations({
@@ -278,7 +282,7 @@ describe('Storage Operations', () => {
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.lastObservedAt).toBeDefined();
-      // lastObservedAt should be set to approximately now
+      // lastObservedAt should be updated to swap time
       expect(record!.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
       expect(record!.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
     });
@@ -298,14 +302,13 @@ describe('Storage Operations', () => {
         observations: '- 🔴 Test observation',
         messageIds: ['msg-1', 'msg-2'],
         tokenCount: 100,
-        suggestedContinuation: 'Continue with...',
+        lastObservedAt: new Date(),
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toBe('- 🔴 Test observation');
       expect(record?.observedMessageIds).toEqual(['msg-1', 'msg-2']);
       expect(record?.observationTokenCount).toBe(100);
-      expect(record?.suggestedContinuation).toBe('Continue with...');
     });
 
     it('should set lastObservedAt when provided', async () => {
@@ -316,8 +319,8 @@ describe('Storage Operations', () => {
         config: {},
       });
 
-      // Initially, lastObservedAt should be undefined
-      expect(initial.metadata.lastObservedAt).toBeUndefined();
+      // Initially, lastObservedAt is set to createdAt
+      expect(initial.lastObservedAt).toBeDefined();
 
       const observedAt = new Date('2025-01-15T10:00:00Z');
       await storage.updateActiveObservations({
@@ -329,10 +332,10 @@ describe('Storage Operations', () => {
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.metadata.lastObservedAt).toEqual(observedAt);
+      expect(record?.lastObservedAt).toEqual(observedAt);
     });
 
-    it('should preserve lastObservedAt if not provided in update', async () => {
+    it('should update lastObservedAt on each observation', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -350,17 +353,21 @@ describe('Storage Operations', () => {
         lastObservedAt: firstObservedAt,
       });
 
-      // Second update without lastObservedAt - should preserve the previous value
+      const afterFirst = await storage.getObservationalMemory(threadId, resourceId);
+      expect(afterFirst?.lastObservedAt).toEqual(firstObservedAt);
+
+      // Second update with a new lastObservedAt
+      const secondObservedAt = new Date('2025-01-15T11:00:00Z');
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Second observation',
         messageIds: ['msg-2'],
         tokenCount: 150,
-        // Note: no lastObservedAt provided
+        lastObservedAt: secondObservedAt,
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
-      expect(record?.metadata.lastObservedAt).toEqual(firstObservedAt);
+      expect(record?.lastObservedAt).toEqual(secondObservedAt);
     });
   });
 
@@ -413,7 +420,7 @@ describe('Storage Operations', () => {
         id: initial.id,
         observations: '- 🔴 Original observations (very long...)',
         messageIds: ['msg-1', 'msg-2', 'msg-3'],
-        tokenCount: 30000,
+        tokenCount: 30000, lastObservedAt: new Date(),
       });
 
       const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
@@ -422,12 +429,10 @@ describe('Storage Operations', () => {
         currentRecord: currentRecord!,
         reflection: '- 🔴 Condensed reflection',
         tokenCount: 5000,
-        suggestedContinuation: 'Continue by...',
       });
 
       expect(newRecord.activeObservations).toBe('- 🔴 Condensed reflection');
       expect(newRecord.observationTokenCount).toBe(5000);
-      expect(newRecord.previousGenerationId).toBe(initial.id);
       expect(newRecord.originType).toBe('reflection');
       // After reflection, observedMessageIds are RESET since old messages are now "baked into" the reflection.
       // The previous DB record retains its observedMessageIds as historical record.
@@ -456,7 +461,7 @@ describe('Storage Operations', () => {
       });
 
       const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
-      expect(currentRecord?.metadata.lastObservedAt).toEqual(oldObservedAt);
+      expect(currentRecord?.lastObservedAt).toEqual(oldObservedAt);
 
       const beforeReflection = new Date();
       const newRecord = await storage.createReflectionGeneration({
@@ -467,14 +472,14 @@ describe('Storage Operations', () => {
       const afterReflection = new Date();
 
       // New record should have a fresh lastObservedAt (approximately now)
-      expect(newRecord.metadata.lastObservedAt).toBeDefined();
-      expect(newRecord.metadata.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeReflection.getTime());
-      expect(newRecord.metadata.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterReflection.getTime());
+      expect(newRecord.lastObservedAt).toBeDefined();
+      expect(newRecord.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeReflection.getTime());
+      expect(newRecord.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterReflection.getTime());
 
       // Previous record should retain its original lastObservedAt
       const history = await storage.getObservationalMemoryHistory(threadId, resourceId);
       const previousRecord = history?.find(r => r.id === initial.id);
-      expect(previousRecord?.metadata.lastObservedAt).toEqual(oldObservedAt);
+      expect(previousRecord?.lastObservedAt).toEqual(oldObservedAt);
     });
   });
 
@@ -491,7 +496,7 @@ describe('Storage Operations', () => {
         id: initial.id,
         observations: '- Gen 1',
         messageIds: [],
-        tokenCount: 100,
+        tokenCount: 100, lastObservedAt: new Date(),
       });
 
       const gen1 = await storage.getObservationalMemory(threadId, resourceId);
@@ -521,7 +526,7 @@ describe('Storage Operations', () => {
           id: current.id,
           observations: `- Gen ${i}`,
           messageIds: [],
-          tokenCount: 100,
+          tokenCount: 100, lastObservedAt: new Date(),
         });
         const record = await storage.getObservationalMemory(threadId, resourceId);
         if (i < 4) {
@@ -1139,7 +1144,7 @@ describe('ObservationalMemory Integration', () => {
         id: record.id,
         observations: '- 🔴 Test observation',
         messageIds: [],
-        tokenCount: 50,
+        tokenCount: 50, lastObservedAt: new Date(),
       });
 
       const obs = await om.getObservations(threadId, resourceId);
@@ -1161,7 +1166,7 @@ describe('ObservationalMemory Integration', () => {
         id: record.id,
         observations: '- 🔴 Test',
         messageIds: [],
-        tokenCount: 50,
+        tokenCount: 50, lastObservedAt: new Date(),
       });
 
       // Verify it exists
@@ -1189,7 +1194,7 @@ describe('ObservationalMemory Integration', () => {
         id: gen1.id,
         observations: '- 🔴 Generation 1',
         messageIds: [],
-        tokenCount: 100,
+        tokenCount: 100, lastObservedAt: new Date(),
       });
 
       // Create reflection (new generation)
@@ -1433,8 +1438,8 @@ describe('ObservationalMemory Integration', () => {
       });
 
       // 4. New record should have fresh lastObservedAt
-      expect(newRecord.metadata.lastObservedAt).toBeDefined();
-      const reflectionTime = newRecord.metadata.lastObservedAt!;
+      expect(newRecord.lastObservedAt).toBeDefined();
+      const reflectionTime = newRecord.lastObservedAt!;
 
       // 5. Create post-reflection messages
       const postReflectionMsg: MastraDBMessage = {
@@ -1489,7 +1494,7 @@ describe('Scenario: Basic Observation Flow', () => {
       id: record.id,
       observations: '- 🔴 User asked about X',
       messageIds,
-      tokenCount: 100,
+      tokenCount: 100, lastObservedAt: new Date(),
     });
 
     // Verify messages are tracked
@@ -1557,6 +1562,7 @@ describe('Scenario: Reflection Creates New Generation', () => {
       observations: '- 🔴 Observation 1\n- 🟡 Observation 2\n- 🟡 Observation 3\n... (many more)',
       messageIds: ['msg-1', 'msg-2', 'msg-3', 'msg-4', 'msg-5'],
       tokenCount: 25000, // Exceeds reflector threshold
+      lastObservedAt: new Date(),
     });
 
     const gen1Record = await storage.getObservationalMemory('thread-1', 'resource-1');
@@ -1566,15 +1572,12 @@ describe('Scenario: Reflection Creates New Generation', () => {
       currentRecord: gen1Record!,
       reflection: '- 🔴 Condensed: User working on project X',
       tokenCount: 500,
-      suggestedContinuation: 'Continue with implementation...',
     });
 
     // New generation has reflection as active observations
     expect(gen2.activeObservations).toBe('- 🔴 Condensed: User working on project X');
     expect(gen2.observationTokenCount).toBe(500);
-    expect(gen2.previousGenerationId).toBe(gen1.id);
     expect(gen2.originType).toBe('reflection');
-    expect(gen2.suggestedContinuation).toBe('Continue with implementation...');
 
     // After reflection, observedMessageIds are RESET since old messages are now "baked into" the reflection.
     // The previous DB record (gen1) retains its observedMessageIds as historical record.
@@ -1753,7 +1756,7 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
       id: record.id,
       observations: '- 🔴 User name is Alice\n- 🔴 User works at TechCorp',
       messageIds: ['session1-msg1', 'session1-msg2'],
-      tokenCount: 100,
+      tokenCount: 100, lastObservedAt: new Date(),
     });
 
     // Verify observations are stored at resource level
@@ -1995,7 +1998,7 @@ For personal expense tracking...
         id: record.id,
         observations: observationsWithKeyFact,
         messageIds: answerSession.map((_, i) => `answer-session-msg-${i}`),
-        tokenCount: 200,
+        tokenCount: 200, lastObservedAt: new Date(),
       });
 
       // Retrieve and verify
@@ -2027,7 +2030,7 @@ For personal expense tracking...
 
 **Current Task:** Continue conversation`,
         messageIds: ['session1-msg1'],
-        tokenCount: 50,
+        tokenCount: 50, lastObservedAt: new Date(),
       });
 
       // Session 2: Contains the key fact
@@ -2041,7 +2044,7 @@ For personal expense tracking...
 
 **Current Task:** Help with expense tracking`,
         messageIds: ['session1-msg1', 'session2-msg1', 'session2-msg2'],
-        tokenCount: 100,
+        tokenCount: 100, lastObservedAt: new Date(),
       });
 
       // Session 3 (after key fact): more conversation
@@ -2055,7 +2058,7 @@ For personal expense tracking...
 
 **Current Task:** Compare expense tracking options`,
         messageIds: ['session1-msg1', 'session2-msg1', 'session2-msg2', 'session3-msg1'],
-        tokenCount: 150,
+        tokenCount: 150, lastObservedAt: new Date(),
       });
 
       // Final verification - key fact must still be present
@@ -2435,7 +2438,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
 
 **Current Task:** Continue helping user.`,
         messageIds: ['pre-existing-msg-1'],
-        tokenCount: 100,
+        tokenCount: 100, lastObservedAt: new Date(),
       });
 
       const om = new ObservationalMemory({
