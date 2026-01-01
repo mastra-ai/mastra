@@ -1446,6 +1446,291 @@ describe('ObservationalMemory Integration', () => {
       expect(result.messages.map(m => m.id)).not.toContain('pre-reflection-msg');
     });
   });
+
+  describe('resource-scoped message loading (listMessages by resourceId)', () => {
+    const resourceId = 'test-resource-for-messages';
+
+    it('should load all messages for a resource across multiple threads', async () => {
+      const thread1Id = 'thread-1';
+      const thread2Id = 'thread-2';
+      const thread3Id = 'thread-3';
+
+      // Create threads for the resource
+      await storage.saveThread({
+        thread: {
+          id: thread1Id,
+          resourceId,
+          title: 'Thread 1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread2Id,
+          resourceId,
+          title: 'Thread 2',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread3Id,
+          resourceId,
+          title: 'Thread 3',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages in different threads
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-t1-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Message in thread 1' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'msg-t2-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Message in thread 2' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: thread2Id,
+          resourceId,
+        },
+        {
+          id: 'msg-t3-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Message in thread 3' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:02:00Z'),
+          threadId: thread3Id,
+          resourceId,
+        },
+        {
+          id: 'msg-t1-2',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Response in thread 1' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:03:00Z'),
+          threadId: thread1Id,
+          resourceId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query all messages for the resource (no threadId)
+      const result = await storage.listMessages({
+        resourceId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+
+      // Should get all 4 messages from all threads
+      expect(result.messages.length).toBe(4);
+      expect(result.messages.map(m => m.id)).toEqual(['msg-t1-1', 'msg-t2-1', 'msg-t3-1', 'msg-t1-2']);
+    });
+
+    it('should filter messages by dateRange.start when querying by resourceId', async () => {
+      const thread1Id = 'thread-date-1';
+      const thread2Id = 'thread-date-2';
+
+      // Create threads
+      await storage.saveThread({
+        thread: {
+          id: thread1Id,
+          resourceId,
+          title: 'Thread 1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread2Id,
+          resourceId,
+          title: 'Thread 2',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages at different times across threads
+      const oldTime = new Date('2025-01-01T08:00:00Z');
+      const cursorTime = new Date('2025-01-01T12:00:00Z');
+      const newTime = new Date('2025-01-01T14:00:00Z');
+
+      const messages: MastraDBMessage[] = [
+        // Old messages (before cursor)
+        {
+          id: 'old-t1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Old message thread 1' }] },
+          type: 'text',
+          createdAt: oldTime,
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'old-t2',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Old message thread 2' }] },
+          type: 'text',
+          createdAt: new Date(oldTime.getTime() + 1000),
+          threadId: thread2Id,
+          resourceId,
+        },
+        // New messages (after cursor)
+        {
+          id: 'new-t1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'New message thread 1' }] },
+          type: 'text',
+          createdAt: newTime,
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'new-t2',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'New message thread 2' }] },
+          type: 'text',
+          createdAt: new Date(newTime.getTime() + 1000),
+          threadId: thread2Id,
+          resourceId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query with dateRange.start (simulating lastObservedAt cursor)
+      const result = await storage.listMessages({
+        resourceId,
+        perPage: false,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        filter: {
+          dateRange: {
+            start: cursorTime,
+          },
+        },
+      });
+
+      // Should only get new messages from both threads
+      expect(result.messages.length).toBe(2);
+      expect(result.messages.map(m => m.id)).toEqual(['new-t1', 'new-t2']);
+      expect(result.messages.map(m => m.id)).not.toContain('old-t1');
+      expect(result.messages.map(m => m.id)).not.toContain('old-t2');
+    });
+
+    it('should return empty array when no messages exist after cursor for resource', async () => {
+      const threadId = 'thread-empty';
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages before the cursor
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'before-cursor',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Before cursor' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T08:00:00Z'),
+          threadId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query with cursor after all messages
+      const result = await storage.listMessages({
+        resourceId,
+        perPage: false,
+        filter: {
+          dateRange: {
+            start: new Date('2025-01-01T12:00:00Z'),
+          },
+        },
+      });
+
+      expect(result.messages.length).toBe(0);
+    });
+
+    it('should not return messages from other resources', async () => {
+      const otherResourceId = 'other-resource';
+      const thread1Id = 'thread-res-1';
+      const thread2Id = 'thread-other-res';
+
+      // Create threads for different resources
+      await storage.saveThread({
+        thread: {
+          id: thread1Id,
+          resourceId,
+          title: 'Thread for target resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      await storage.saveThread({
+        thread: {
+          id: thread2Id,
+          resourceId: otherResourceId,
+          title: 'Thread for other resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create messages in both resources
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'target-msg',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Target resource message' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:00:00Z'),
+          threadId: thread1Id,
+          resourceId,
+        },
+        {
+          id: 'other-msg',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Other resource message' }] },
+          type: 'text',
+          createdAt: new Date('2025-01-01T10:01:00Z'),
+          threadId: thread2Id,
+          resourceId: otherResourceId,
+        },
+      ];
+
+      await storage.saveMessages({ messages });
+
+      // Query for target resource only
+      const result = await storage.listMessages({
+        resourceId,
+        perPage: false,
+      });
+
+      // Should only get message from target resource
+      expect(result.messages.length).toBe(1);
+      expect(result.messages[0].id).toBe('target-msg');
+      expect(result.messages.map(m => m.id)).not.toContain('other-msg');
+    });
+  });
 });
 
 // =============================================================================
