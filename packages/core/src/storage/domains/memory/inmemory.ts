@@ -624,31 +624,37 @@ export class InMemoryMemory extends MemoryStorage {
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     const { threadId, resourceId, scope, config } = input;
     const key = this.getObservationalMemoryKey(threadId, resourceId);
+    const now = new Date();
 
     const record: ObservationalMemoryRecord = {
       id: crypto.randomUUID(),
       scope,
       threadId,
       resourceId,
+      // Timestamps at top level
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: now,
       originType: 'initial',
       activeObservations: '',
+      // Buffering (for async observation/reflection)
+      bufferedObservations: undefined,
+      bufferedReflection: undefined,
+      // Message tracking
       observedMessageIds: [],
       bufferedMessageIds: [],
       bufferingMessageIds: [],
-      // Resource scope fields
-      observedThreadIds: scope === 'resource' ? [] : undefined,
-      threadSuggestedResponses: scope === 'resource' ? {} : undefined,
-      config,
-      metadata: {
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        reflectionCount: 0,
-      },
+      // Token tracking
       totalTokensObserved: 0,
       observationTokenCount: 0,
       pendingMessageTokens: 0,
+      // State flags
       isReflecting: false,
       isObserving: false,
+      // Configuration
+      config,
+      // Extensible metadata (optional)
+      metadata: {},
     };
 
     // Add as first record (most recent)
@@ -659,23 +665,13 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    const {
-      id,
-      observations,
-      messageIds,
-      tokenCount,
-      suggestedContinuation,
-      currentThreadId,
-      threadSuggestedResponses,
-      lastObservedAt,
-    } = input;
+    const { id, observations, messageIds, tokenCount, lastObservedAt } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
     record.activeObservations = observations;
-    record.suggestedContinuation = suggestedContinuation;
     record.observationTokenCount = tokenCount;
     record.totalTokensObserved += tokenCount;
     // Reset pending tokens since we've now observed them
@@ -688,40 +684,19 @@ export class InMemoryMemory extends MemoryStorage {
     }
     record.observedMessageIds = Array.from(observedSet);
 
-    // Track observed thread IDs (resource scope only)
-    if (currentThreadId && record.observedThreadIds) {
-      const threadSet = new Set(record.observedThreadIds);
-      threadSet.add(currentThreadId);
-      record.observedThreadIds = Array.from(threadSet);
-    }
-
-    // Update per-thread suggested responses (from Reflector)
-    if (threadSuggestedResponses && record.threadSuggestedResponses) {
-      record.threadSuggestedResponses = {
-        ...record.threadSuggestedResponses,
-        ...threadSuggestedResponses,
-      };
-    }
-
-    // Update lastObservedAt for cursor-based message loading
-    if (lastObservedAt) {
-      record.metadata.lastObservedAt = lastObservedAt;
-    }
-
-    record.metadata.updatedAt = new Date();
+    // Update timestamps (top-level, not in metadata)
+    record.lastObservedAt = lastObservedAt;
+    record.updatedAt = new Date();
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
-    const { id, observations, messageIds, suggestedContinuation } = input;
+    const { id, observations, messageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
     record.bufferedObservations = observations;
-    if (suggestedContinuation) {
-      record.suggestedContinuation = suggestedContinuation;
-    }
 
     // Add messageIds to bufferedMessageIds
     const bufferedSet = new Set(record.bufferedMessageIds);
@@ -730,7 +705,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
     record.bufferedMessageIds = Array.from(bufferedSet);
 
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async swapBufferedToActive(id: string): Promise<void> {
@@ -762,9 +737,9 @@ export class InMemoryMemory extends MemoryStorage {
     record.bufferedMessageIds = [];
     record.bufferingMessageIds = [];
 
-    // Update lastObservedAt for cursor-based message loading
-    record.metadata.lastObservedAt = new Date();
-    record.metadata.updatedAt = new Date();
+    // Update timestamps (top-level, not in metadata)
+    record.lastObservedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async markMessagesAsBuffering(id: string, messageIds: string[]): Promise<void> {
@@ -778,7 +753,7 @@ export class InMemoryMemory extends MemoryStorage {
       bufferingSet.add(msgId);
     }
     record.bufferingMessageIds = Array.from(bufferingSet);
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async markMessagesAsBuffered(id: string, messageIds: string[]): Promise<void> {
@@ -798,41 +773,38 @@ export class InMemoryMemory extends MemoryStorage {
 
     record.bufferingMessageIds = Array.from(bufferingSet);
     record.bufferedMessageIds = Array.from(bufferedSet);
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
-    const { currentRecord, reflection, tokenCount, suggestedContinuation } = input;
+    const { currentRecord, reflection, tokenCount } = input;
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
+    const now = new Date();
 
     const newRecord: ObservationalMemoryRecord = {
       id: crypto.randomUUID(),
       scope: currentRecord.scope,
       threadId: currentRecord.threadId,
       resourceId: currentRecord.resourceId,
+      // Timestamps at top level
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: now, // Reset since we're starting fresh after reflection
       originType: 'reflection',
-      previousGenerationId: currentRecord.id,
       activeObservations: reflection,
-      suggestedContinuation,
       // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
       // The previous DB record retains its observedMessageIds as historical record.
       observedMessageIds: [],
       bufferedMessageIds: [],
       bufferingMessageIds: [],
       config: currentRecord.config,
-      metadata: {
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        reflectionCount: currentRecord.metadata.reflectionCount + 1,
-        lastReflectionAt: new Date(),
-        // Reset lastObservedAt since we're starting fresh after reflection
-        lastObservedAt: new Date(),
-      },
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,
       pendingMessageTokens: currentRecord.pendingMessageTokens ?? 0,
       isReflecting: false,
       isObserving: false,
+      // Extensible metadata (optional)
+      metadata: {},
     };
 
     // Add as first record (most recent)
@@ -849,7 +821,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.bufferedReflection = reflection;
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async swapReflectionToActive(id: string): Promise<ObservationalMemoryRecord> {
@@ -882,7 +854,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.isReflecting = isReflecting;
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
@@ -892,7 +864,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.isObserving = isObserving;
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
@@ -907,7 +879,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     record.pendingMessageTokens = (record.pendingMessageTokens ?? 0) + tokenCount;
-    record.metadata.updatedAt = new Date();
+    record.updatedAt = new Date();
   }
 
   /**

@@ -247,21 +247,15 @@ export type ObservationalMemoryScope = 'thread' | 'resource';
 export type ObservationalMemoryOriginType = 'initial' | 'reflection';
 
 /**
- * Metadata for observational memory record
- */
-export interface ObservationalMemoryMetadata {
-  createdAt: Date;
-  updatedAt: Date;
-  /** Number of reflections performed */
-  reflectionCount: number;
-  /** When the last reflection occurred */
-  lastReflectionAt?: Date;
-  /** When messages were last observed (for cursor-based message queries) */
-  lastObservedAt?: Date;
-}
-
-/**
  * Core database record for observational memory
+ *
+ * For resource scope: One active record per resource, containing observations from ALL threads.
+ * For thread scope: One record per thread.
+ *
+ * Derived values (not stored, computed at runtime):
+ * - reflectionCount: count records with originType: 'reflection'
+ * - lastReflectionAt: createdAt of most recent reflection record
+ * - previousGeneration: record with next-oldest createdAt
  */
 export interface ObservationalMemoryRecord {
   // Identity
@@ -274,43 +268,37 @@ export interface ObservationalMemoryRecord {
   /** Resource ID (always present) */
   resourceId: string;
 
+  // Timestamps (top-level for easy querying)
+  /** When this record was created */
+  createdAt: Date;
+  /** When this record was last updated */
+  updatedAt: Date;
+  /** Single cursor for message loading - when we last observed ANY thread for this resource */
+  lastObservedAt: Date;
+
   // Generation tracking
   /** How this record was created */
   originType: ObservationalMemoryOriginType;
-  /** Links to previous generation */
-  previousGenerationId?: string;
 
   // Observation content
-  /** Currently active observations (markdown) */
+  /**
+   * Currently active observations.
+   * For resource scope: Contains <thread id="...">...</thread> sections for attribution.
+   * For thread scope: Plain observation text.
+   */
   activeObservations: string;
-  /** Observations waiting to be activated */
+  /** Observations waiting to be activated (async buffering) */
   bufferedObservations?: string;
-  /** Reflection waiting to be swapped in */
+  /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
 
-  // Suggested continuation from Observer/Reflector
-  /** Suggested continuation for the Actor agent */
-  suggestedContinuation?: string;
-
   // Message tracking
-  /** Messages included in active observations */
+  /** Messages included in active observations (for ID-based safety filtering) */
   observedMessageIds: string[];
-  /** Messages included in buffered observations */
+  /** Messages included in buffered observations (async buffering) */
   bufferedMessageIds: string[];
-  /** Messages currently being observed (async) */
+  /** Messages currently being observed (async buffering) */
   bufferingMessageIds: string[];
-
-  // Thread tracking (resource scope only)
-  /** Thread IDs that have been observed (resource scope only) */
-  observedThreadIds?: string[];
-  /** Per-thread suggested responses from Observer/Reflector */
-  threadSuggestedResponses?: Record<string, string>;
-
-  // Configuration & metadata
-  /** Current configuration (stored as JSON) */
-  config: Record<string, unknown>;
-  /** Metadata */
-  metadata: ObservationalMemoryMetadata;
 
   // Token tracking
   /** Running total of all tokens observed */
@@ -325,6 +313,14 @@ export interface ObservationalMemoryRecord {
   isReflecting: boolean;
   /** Is observation currently in progress? */
   isObserving: boolean;
+
+  // Configuration
+  /** Current configuration (stored as JSON) */
+  config: Record<string, unknown>;
+
+  // Extensible metadata (app-specific, optional)
+  /** Optional metadata for app-specific extensions */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -345,13 +341,8 @@ export interface UpdateActiveObservationsInput {
   observations: string;
   messageIds: string[];
   tokenCount: number;
-  suggestedContinuation?: string;
-  /** Current thread ID (for resource scope thread tracking) */
-  currentThreadId?: string;
-  /** Per-thread suggested responses (from Observer/Reflector) */
-  threadSuggestedResponses?: Record<string, string>;
   /** Timestamp when these observations were created (for cursor-based message loading) */
-  lastObservedAt?: Date;
+  lastObservedAt: Date;
 }
 
 /**
@@ -365,11 +356,10 @@ export interface UpdateBufferedObservationsInput {
 }
 
 /**
- * Input for creating a reflection generation
+ * Input for creating a reflection generation (creates a new record, archives the old one)
  */
 export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
-  suggestedContinuation?: string;
 }
