@@ -194,10 +194,12 @@ describe('InMemoryStore - Message Fetching', () => {
     store = new InMemoryStore();
   });
 
-  it('listMessages should throw error if threadId is an empty string or whitespace only', async () => {
-    await expect(store.listMessages({ threadId: '' })).rejects.toThrow('threadId must be a non-empty string');
+  it('listMessages should throw error if neither threadId nor resourceId is provided', async () => {
+    // Empty threadId without resourceId should throw
+    await expect(store.listMessages({ threadId: '' })).rejects.toThrow('Either threadId or resourceId must be provided');
 
-    await expect(store.listMessages({ threadId: '   ' })).rejects.toThrow('threadId must be a non-empty string');
+    // Whitespace-only threadId without resourceId should throw
+    await expect(store.listMessages({ threadId: '   ' })).rejects.toThrow('Either threadId or resourceId must be provided');
   });
 });
 
