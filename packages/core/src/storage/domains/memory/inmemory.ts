@@ -110,16 +110,24 @@ export class InMemoryMemory extends MemoryStorage {
     page = 0,
     orderBy,
   }: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
-
-    this.logger.debug(`MockStore: listMessages called for threads ${threadIds.join(', ')}`);
-
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
-      throw new Error('threadId must be a non-empty string or array of non-empty strings');
+    // Validate: at least one of threadId or resourceId must be provided
+    if (!threadId && !resourceId) {
+      throw new Error('Either threadId or resourceId must be provided');
     }
 
-    const threadIdSet = new Set(threadIds);
+    // Normalize threadId to array (may be undefined if querying by resourceId only)
+    const threadIds = threadId ? (Array.isArray(threadId) ? threadId : [threadId]) : undefined;
+
+    if (threadIds) {
+      this.logger.debug(`MockStore: listMessages called for threads ${threadIds.join(', ')}`);
+      if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+        throw new Error('threadId must be a non-empty string or array of non-empty strings');
+      }
+    } else {
+      this.logger.debug(`MockStore: listMessages called for resourceId ${resourceId}`);
+    }
+
+    const threadIdSet = threadIds ? new Set(threadIds) : undefined;
 
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
@@ -140,9 +148,11 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    // Step 1: Get regular paginated messages from the thread(s) first
+    // Step 1: Get messages matching threadId(s) and/or resourceId
     let threadMessages = Array.from(this.collection.messages.values()).filter((msg: any) => {
-      if (!threadIdSet.has(msg.thread_id)) return false;
+      // If threadIds provided, message must be in one of them
+      if (threadIdSet && !threadIdSet.has(msg.thread_id)) return false;
+      // If resourceId provided, message must match it
       if (resourceId && msg.resourceId !== resourceId) return false;
       return true;
     });
@@ -641,9 +651,7 @@ export class InMemoryMemory extends MemoryStorage {
       bufferedObservations: undefined,
       bufferedReflection: undefined,
       // Message tracking
-      observedMessageIds: [],
-      bufferedMessageIds: [],
-      bufferingMessageIds: [],
+      // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
       // Token tracking
       totalTokensObserved: 0,
       observationTokenCount: 0,
@@ -665,7 +673,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
-    const { id, observations, messageIds, tokenCount, lastObservedAt } = input;
+    const { id, observations, tokenCount, lastObservedAt } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
@@ -677,34 +685,21 @@ export class InMemoryMemory extends MemoryStorage {
     // Reset pending tokens since we've now observed them
     record.pendingMessageTokens = 0;
 
-    // Add messageIds to observedMessageIds (deduplicated)
-    const observedSet = new Set(record.observedMessageIds);
-    for (const msgId of messageIds) {
-      observedSet.add(msgId);
-    }
-    record.observedMessageIds = Array.from(observedSet);
-
     // Update timestamps (top-level, not in metadata)
+    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
     record.lastObservedAt = lastObservedAt;
     record.updatedAt = new Date();
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
-    const { id, observations, messageIds } = input;
+    const { id, observations } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
     record.bufferedObservations = observations;
-
-    // Add messageIds to bufferedMessageIds
-    const bufferedSet = new Set(record.bufferedMessageIds);
-    for (const msgId of messageIds) {
-      bufferedSet.add(msgId);
-    }
-    record.bufferedMessageIds = Array.from(bufferedSet);
-
+    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
     record.updatedAt = new Date();
   }
 
@@ -725,54 +720,32 @@ export class InMemoryMemory extends MemoryStorage {
       record.activeObservations = record.bufferedObservations;
     }
 
-    // Move buffered message IDs to observed
-    const observedSet = new Set(record.observedMessageIds);
-    for (const msgId of record.bufferedMessageIds) {
-      observedSet.add(msgId);
-    }
-    record.observedMessageIds = Array.from(observedSet);
-
     // Clear buffered state
+    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
     record.bufferedObservations = undefined;
-    record.bufferedMessageIds = [];
-    record.bufferingMessageIds = [];
 
     // Update timestamps (top-level, not in metadata)
     record.lastObservedAt = new Date();
     record.updatedAt = new Date();
   }
 
-  async markMessagesAsBuffering(id: string, messageIds: string[]): Promise<void> {
+  async markMessagesAsBuffering(id: string, _messageIds: string[]): Promise<void> {
+    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
+    // This method is retained for interface compatibility but is a no-op
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
-
-    const bufferingSet = new Set(record.bufferingMessageIds);
-    for (const msgId of messageIds) {
-      bufferingSet.add(msgId);
-    }
-    record.bufferingMessageIds = Array.from(bufferingSet);
     record.updatedAt = new Date();
   }
 
-  async markMessagesAsBuffered(id: string, messageIds: string[]): Promise<void> {
+  async markMessagesAsBuffered(id: string, _messageIds: string[]): Promise<void> {
+    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
+    // This method is retained for interface compatibility but is a no-op
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
       throw new Error(`Observational memory record not found: ${id}`);
     }
-
-    // Move from buffering to buffered
-    const bufferingSet = new Set(record.bufferingMessageIds);
-    const bufferedSet = new Set(record.bufferedMessageIds);
-
-    for (const msgId of messageIds) {
-      bufferingSet.delete(msgId);
-      bufferedSet.add(msgId);
-    }
-
-    record.bufferingMessageIds = Array.from(bufferingSet);
-    record.bufferedMessageIds = Array.from(bufferedSet);
     record.updatedAt = new Date();
   }
 
@@ -794,9 +767,7 @@ export class InMemoryMemory extends MemoryStorage {
       activeObservations: reflection,
       // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
       // The previous DB record retains its observedMessageIds as historical record.
-      observedMessageIds: [],
-      bufferedMessageIds: [],
-      bufferingMessageIds: [],
+      // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
       config: currentRecord.config,
       totalTokensObserved: currentRecord.totalTokensObserved,
       observationTokenCount: tokenCount,

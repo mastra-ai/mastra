@@ -102,8 +102,8 @@ async function showState(label: string) {
   );
   console.log(`   Buffered reflection: ${record?.bufferedReflection ? 'YES' : 'NO'}`);
   console.log(`   Is observing: ${record?.isObserving || false}`);
-  console.log(`   Observed message IDs: ${record?.observedMessageIds?.length || 0}`);
-  console.log(`   Buffering message IDs: ${record?.bufferingMessageIds?.length || 0}`);
+  // Observed message IDs: removed (cursor-based tracking)
+  // Buffering message IDs: removed (cursor-based tracking)
 }
 
 async function main() {

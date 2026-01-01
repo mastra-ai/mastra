@@ -184,6 +184,12 @@ Common labels to use:
 - worked_well, avoid_this, follow_up_needed, didnt_work
 - tool_use, task
 
+=== IMPORTANT: THREAD ATTRIBUTION ===
+
+Do NOT add thread identifiers, thread IDs, or <thread> tags to your observations.
+Thread attribution is handled externally by the system.
+Simply output your observations without any thread-related markup.
+
 Remember: These observations are the assistant's ONLY memory. Make them count.
 
 User messages are extremely important. If the user asks a question or gives a new task, make it clear in <current-task> that this is the priority. If the assistant needs to respond to the user, indicate in <suggested-response> that it should pause for user reply before continuing other tasks.`;

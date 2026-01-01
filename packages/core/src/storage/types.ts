@@ -61,7 +61,15 @@ export type PaginationInfo = {
 export type MastraMessageFormat = 'v1' | 'v2';
 
 export type StorageListMessagesInput = {
-  threadId: string | string[];
+  /**
+   * Thread ID(s) to query messages from.
+   * Required unless resourceId is provided.
+   */
+  threadId?: string | string[];
+  /**
+   * Resource ID to query messages from.
+   * When provided without threadId, queries ALL messages for the resource.
+   */
   resourceId?: string;
   include?: {
     id: string;
@@ -292,13 +300,8 @@ export interface ObservationalMemoryRecord {
   /** Reflection waiting to be swapped in (async buffering) */
   bufferedReflection?: string;
 
-  // Message tracking
-  /** Messages included in active observations (for ID-based safety filtering) */
-  observedMessageIds: string[];
-  /** Messages included in buffered observations (async buffering) */
-  bufferedMessageIds: string[];
-  /** Messages currently being observed (async buffering) */
-  bufferingMessageIds: string[];
+  // Note: Message tracking via IDs has been removed in favor of cursor-based
+  // tracking via lastObservedAt. This is more efficient for long conversations.
 
   // Token tracking
   /** Running total of all tokens observed */
@@ -334,24 +337,24 @@ export interface CreateObservationalMemoryInput {
 }
 
 /**
- * Input for updating active observations
+ * Input for updating active observations.
+ * Uses cursor-based message tracking via lastObservedAt instead of message IDs.
  */
 export interface UpdateActiveObservationsInput {
   id: string;
   observations: string;
-  messageIds: string[];
   tokenCount: number;
   /** Timestamp when these observations were created (for cursor-based message loading) */
   lastObservedAt: Date;
 }
 
 /**
- * Input for updating buffered observations
+ * Input for updating buffered observations.
+ * Note: Async buffering is currently disabled but types are retained for future use.
  */
 export interface UpdateBufferedObservationsInput {
   id: string;
   observations: string;
-  messageIds: string[];
   suggestedContinuation?: string;
 }
 

@@ -95,7 +95,7 @@ async function showOMState() {
   if (record) {
     console.log('\n📊 OM State:');
     console.log(`   Observation tokens: ${record.observationTokenCount}`);
-    console.log(`   Observed message IDs: ${record.observedMessageIds.length}`);
+    console.log(`   Last observed at: ${record.lastObservedAt?.toISOString() || 'never'}`);
   }
 }
 
@@ -422,8 +422,10 @@ async function main() {
   // OM approach
   const finalRecord = await om.getRecord(threads.work, resourceId);
   const observationTokens = finalRecord?.observationTokenCount || 0;
-  const observedIds = new Set(finalRecord?.observedMessageIds || []);
-  const unobservedMessages = allMessages.filter(m => !observedIds.has(m.id));
+  const lastObservedAt = finalRecord?.lastObservedAt;
+  const unobservedMessages = lastObservedAt
+    ? allMessages.filter(m => m.createdAt && m.createdAt > lastObservedAt)
+    : allMessages;
   const unobservedTokens = tokenCounter.countMessages(unobservedMessages);
   const omTotalTokens = observationTokens + unobservedTokens;
 

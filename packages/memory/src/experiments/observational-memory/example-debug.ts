@@ -75,7 +75,7 @@ async function chat(message: string, label: string) {
   const record = await om.getRecord(threadId, resourceId);
   console.log(`📊 [${label}] OM State:`);
   console.log(`   - Has observations: ${record?.activeObservations ? 'YES ✅' : 'NO'}`);
-  console.log(`   - Observed msg IDs: ${record?.observedMessageIds.length || 0}`);
+  console.log(`   - Last observed at: ${record?.lastObservedAt?.toISOString() || 'never'}`);
   console.log(`   - Observation tokens: ${record?.observationTokenCount || 0}`);
   console.log(`   - Reflections: ${record?.metadata?.reflectionCount || 0}`);
 
@@ -177,7 +177,7 @@ async function main() {
 
   const record = await om.getRecord(threadId, resourceId);
   console.log(`   Total messages sent: ~24 user + ~24 assistant = ~48`);
-  console.log(`   Messages observed: ${record?.observedMessageIds.length || 0}`);
+  console.log(`   Last observed at: ${record?.lastObservedAt?.toISOString() || 'never'}`);
   console.log(`   Observation tokens: ${record?.observationTokenCount || 0}`);
 
   // ═══════════════════════════════════════════════════════════════════
@@ -320,9 +320,8 @@ async function main() {
   // Final state
   const finalRecord = await om.getRecord(threadId, resourceId);
   console.log('\n📊 FINAL OM STATS:');
-  console.log(`   - Total observed messages: ${finalRecord?.observedMessageIds.length || 0}`);
+  console.log(`   - Last observed at: ${finalRecord?.lastObservedAt?.toISOString() || 'never'}`);
   console.log(`   - Final observation tokens: ${finalRecord?.observationTokenCount || 0}`);
-  console.log(`   - Reflections: ${finalRecord?.metadata?.reflectionCount || 0}`);
 
   // ═══════════════════════════════════════════════════════════════════
   // TOKEN COMPARISON: Message History vs Observational Memory
@@ -346,8 +345,10 @@ async function main() {
 
   // Count tokens for OM approach (observations + unobserved messages)
   const observationTokens = finalRecord?.observationTokenCount || 0;
-  const observedMessageIds = new Set(finalRecord?.observedMessageIds || []);
-  const unobservedMessages = allMessages.messages.filter(m => !observedMessageIds.has(m.id));
+  const lastObservedAt = finalRecord?.lastObservedAt;
+  const unobservedMessages = lastObservedAt
+    ? allMessages.messages.filter(m => m.createdAt && new Date(m.createdAt) > lastObservedAt)
+    : allMessages.messages;
   const unobservedTokens = tokenCounter.countMessages(unobservedMessages);
   const omTotalTokens = observationTokens + unobservedTokens;
 

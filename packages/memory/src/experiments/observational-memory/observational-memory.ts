@@ -602,14 +602,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   // }
 
   /**
-   * Get unobserved messages
+   * Get unobserved messages.
+   * With cursor-based loading via lastObservedAt, all messages returned from
+   * loadUnobservedMessages are already unobserved. This method is kept for
+   * compatibility with processOutputResult which receives messages from messageList.
    */
   private getUnobservedMessages(allMessages: MastraDBMessage[], record: ObservationalMemoryRecord): MastraDBMessage[] {
-    const observedSet = new Set([...record.observedMessageIds, ...record.bufferedMessageIds]);
+    // With cursor-based loading, messages after lastObservedAt are unobserved.
+    // Filter by createdAt timestamp instead of message IDs.
+    const lastObservedAt = record.lastObservedAt;
+    if (!lastObservedAt) {
+      // No observations yet - all messages are unobserved
+      return allMessages;
+    }
 
     return allMessages.filter(msg => {
-      if (!msg.id) return true;
-      return !observedSet.has(msg.id);
+      if (!msg.createdAt) return true; // Include messages without timestamps
+      const msgDate = new Date(msg.createdAt);
+      return msgDate >= lastObservedAt;
     });
   }
 
@@ -797,7 +807,7 @@ ${suggestedResponse}
 
     const record = await this.getOrCreateRecord(threadId, resourceId);
     console.info(
-      `[OM processInputStep] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, observedMsgIds: ${record.observedMessageIds.length}`,
+      `[OM processInputStep] Record found - observations: ${record.activeObservations ? 'YES' : 'NO'}, lastObservedAt: ${record.lastObservedAt?.toISOString() ?? 'never'}`,
     );
 
     // Historical message loading should only happen once per request (on step 0)
@@ -874,19 +884,6 @@ ${suggestedResponse}
       messageList.addSystem(observationSystemMessage, 'observational-memory');
     }
 
-    // Safety net: also filter by observed IDs in case of edge cases
-    // (e.g., messages created at exact same timestamp as lastObservedAt)
-    // This runs every step to ensure new messages from tool calls are filtered
-    const observedIds = [...record.observedMessageIds, ...record.bufferedMessageIds];
-    if (observedIds.length > 0) {
-      const beforeCount = messageList.get.all.db().length;
-      messageList.removeByIds(observedIds);
-      const afterCount = messageList.get.all.db().length;
-      if (beforeCount !== afterCount) {
-        console.info(`[OM processInputStep] Safety filter removed ${beforeCount - afterCount} messages by ID`);
-      }
-    }
-
     // Log what agent will actually see
     const finalMessages = messageList.get.all.db();
     console.info(`[OM processInputStep] Agent will see: observations + ${finalMessages.length} unobserved messages`);
@@ -906,25 +903,12 @@ ${suggestedResponse}
     resourceId: string | undefined,
     lastObservedAt?: Date,
   ): Promise<MastraDBMessage[]> {
-    // Determine which thread IDs to query
-    let threadIds: string[];
-
-    if (this.resourceScope && resourceId) {
-      // Resource scope: get all threads for this resource
-      const threadsResult = await this.storage.listThreadsByResourceId({ resourceId });
-      threadIds = threadsResult.threads.map(t => t.id);
-
-      // If no threads found, fall back to current thread
-      if (threadIds.length === 0) {
-        threadIds = [threadId];
-      }
-    } else {
-      // Thread scope: just the current thread
-      threadIds = [threadId];
-    }
-
     const result = await this.storage.listMessages({
-      threadId: threadIds,
+      // In resource scope, query by resourceId directly (no need to list threads first)
+      // In thread scope, query by threadId
+      ...(this.resourceScope && resourceId
+        ? { resourceId }
+        : { threadId }),
       perPage: false, // Get all messages (no pagination limit)
       orderBy: { field: 'createdAt', direction: 'ASC' },
       filter: lastObservedAt
@@ -1167,7 +1151,7 @@ ${formattedMessages}
     threadId: string,
     unobservedMessages: MastraDBMessage[],
   ): Promise<void> {
-    const messageIdsToObserve = unobservedMessages.map(m => m.id).filter((id): id is string => !!id);
+    // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
 
     // Emit debug event for observation triggered
     this.emitDebugEvent({
@@ -1224,12 +1208,11 @@ ${formattedMessages}
 
       const totalTokenCount = this.tokenCounter.countObservations(newObservations);
 
-      console.info(`[OM] Storing observations: ${totalTokenCount} tokens, ${messageIdsToObserve.length} message IDs`);
+      console.info(`[OM] Storing observations: ${totalTokenCount} tokens`);
 
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: newObservations,
-        messageIds: messageIdsToObserve,
         tokenCount: totalTokenCount,
         lastObservedAt: new Date(),
       });
@@ -1330,15 +1313,13 @@ ${formattedMessages}
       }
 
       let currentObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
-      let allMessageIds: string[] = [];
 
       // Observe each thread in order
       for (const threadId of threadOrder) {
         const threadMessages = messagesByThread.get(threadId) ?? [];
         if (threadMessages.length === 0) continue;
 
-        const messageIds = threadMessages.map(m => m.id).filter((id): id is string => !!id);
-        allMessageIds = [...allMessageIds, ...messageIds];
+        // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
 
         console.info(`[OM] Observing thread ${threadId} with ${threadMessages.length} messages`);
 
@@ -1404,14 +1385,11 @@ ${formattedMessages}
       const totalTokenCount = this.tokenCounter.countObservations(currentObservations);
       const now = new Date();
 
-      console.info(
-        `[OM] All threads observed. Storing ${totalTokenCount} tokens, ${allMessageIds.length} message IDs`,
-      );
+      console.info(`[OM] All threads observed. Storing ${totalTokenCount} tokens`);
 
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: currentObservations,
-        messageIds: allMessageIds,
         tokenCount: totalTokenCount,
         lastObservedAt: now,
       });

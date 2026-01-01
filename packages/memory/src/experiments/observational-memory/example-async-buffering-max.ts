@@ -117,8 +117,7 @@ async function getState() {
     hasBufferedRef: !!record?.bufferedReflection,
     isObserving: record?.isObserving || false,
     isReflecting: record?.isReflecting || false,
-    observedMsgCount: record?.observedMessageIds?.length || 0,
-    bufferingMsgCount: record?.bufferingMessageIds?.length || 0,
+    lastObservedAt: record?.lastObservedAt,
     reflectionCount: record?.metadata?.reflectionCount || 0,
   };
 }
@@ -141,23 +140,20 @@ async function chat(message: string, label: string): Promise<void> {
 
   console.log(`   📊 After: ${stateAfter.msgTokens} msg tokens, ${stateAfter.obsTokens} obs tokens`);
 
-  // Determine which path was taken
+  // Determine which path was taken (simplified: cursor-based tracking)
   let path: 'fast' | 'wait' | 'sync' | 'normal' = 'normal';
-  const observationTriggered =
-    stateAfter.obsTokens > stateBefore.obsTokens || stateAfter.observedMsgCount > stateBefore.observedMsgCount;
+  const observationTriggered = stateAfter.obsTokens > stateBefore.obsTokens;
 
   if (observationTriggered) {
     if (stateBefore.hasBufferedObs) {
       path = 'fast'; // Had buffered content ready
-    } else if (stateBefore.bufferingMsgCount > 0) {
-      path = 'wait'; // Had to wait for buffering
     } else {
-      path = 'sync'; // Fell back to sync
+      path = 'sync'; // Fell back to sync (buffering disabled)
     }
   }
 
-  const icon = path === 'fast' ? '⚡' : path === 'wait' ? '⏳' : path === 'sync' ? '🔄' : '✓';
-  const pathLabel = path === 'fast' ? 'FAST SWAP' : path === 'wait' ? 'WAITED' : path === 'sync' ? 'SYNC' : '';
+  const icon = path === 'fast' ? '⚡' : path === 'sync' ? '🔄' : '✓';
+  const pathLabel = path === 'fast' ? 'FAST SWAP' : path === 'sync' ? 'SYNC' : '';
 
   console.log(`   ${icon} ${duration}ms ${pathLabel ? `(${pathLabel})` : ''}`);
   console.log(`   📊 Tokens: ${stateBefore.msgTokens} → ${stateAfter.msgTokens} msg, ${stateAfter.obsTokens} obs`);
@@ -193,8 +189,7 @@ async function showDetailedState(label: string) {
   console.log(`   Buffered obs:       ${state.hasBufferedObs ? '✅ READY' : '❌ none'}`);
   console.log(`   Buffered reflect:   ${state.hasBufferedRef ? '✅ READY' : '❌ none'}`);
   console.log(`   Is observing:       ${state.isObserving ? '🔄 YES' : 'no'}`);
-  console.log(`   Observed messages:  ${state.observedMsgCount}`);
-  console.log(`   Buffering messages: ${state.bufferingMsgCount}`);
+  console.log(`   Last observed at: ${state.lastObservedAt?.toISOString() || 'never'}`);
   console.log(`   Reflections:        ${state.reflectionCount}`);
 
   // Progress bars
