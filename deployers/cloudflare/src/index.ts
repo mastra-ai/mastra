@@ -46,13 +46,13 @@ export class CloudflareDeployer extends Deployer {
   ) {
     super({ name: 'CLOUDFLARE' });
 
-    if (userConfig.projectName) {
+    if (!userConfig.name && userConfig.projectName) {
       this.userConfig.name = userConfig.projectName;
     }
-    if (userConfig.d1Databases) {
+    if (!userConfig.d1_databases && userConfig.d1Databases) {
       this.userConfig.d1_databases = userConfig.d1Databases;
     }
-    if (userConfig.kvNamespaces) {
+    if (!userConfig.kv_namespaces && userConfig.kvNamespaces) {
       this.userConfig.kv_namespaces = userConfig.kvNamespaces;
     }
   }
