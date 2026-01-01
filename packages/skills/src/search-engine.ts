@@ -50,6 +50,12 @@ export interface IndexDocument {
   content: string;
   /** Optional metadata to store with the document */
   metadata?: Record<string, unknown>;
+  /**
+   * For chunked documents: the starting line number of this chunk in the original document.
+   * When provided, lineRange in search results will be adjusted to reflect original document lines.
+   * (1-indexed)
+   */
+  startLineOffset?: number;
 }
 
 /**
@@ -167,20 +173,29 @@ export class SearchEngine {
    * Index a document for search
    */
   async index(doc: IndexDocument): Promise<void> {
+    // Merge startLineOffset into metadata for retrieval at search time
+    const metadata: Record<string, unknown> = {
+      ...doc.metadata,
+    };
+    if (doc.startLineOffset !== undefined) {
+      metadata._startLineOffset = doc.startLineOffset;
+    }
+
     // BM25 indexing (always synchronous and immediate)
     if (this.#bm25Index) {
-      this.#bm25Index.add(doc.id, doc.content, doc.metadata);
+      this.#bm25Index.add(doc.id, doc.content, metadata);
     }
 
     // Vector indexing
     if (this.#vectorConfig) {
+      const docWithMergedMetadata = { ...doc, metadata };
       if (this.#lazyVectorIndex) {
         // Store for later indexing
-        this.#pendingVectorDocs.push(doc);
+        this.#pendingVectorDocs.push(docWithMergedMetadata);
         this.#vectorIndexBuilt = false;
       } else {
         // Index immediately
-        await this.#indexVector(doc);
+        await this.#indexVector(docWithMergedMetadata);
       }
     }
   }
@@ -367,14 +382,20 @@ export class SearchEngine {
     const results = this.#bm25Index.search(query, topK, minScore);
     const queryTokens = tokenize(query, this.#tokenizeOptions);
 
-    return results.map(result => ({
-      id: result.id,
-      content: result.content,
-      score: result.score,
-      lineRange: findLineRange(result.content, queryTokens, this.#tokenizeOptions),
-      metadata: result.metadata,
-      scoreDetails: { bm25: result.score },
-    }));
+    return results.map(result => {
+      const rawLineRange = findLineRange(result.content, queryTokens, this.#tokenizeOptions);
+      const lineRange = this.#adjustLineRange(rawLineRange, result.metadata);
+      const { _startLineOffset, ...cleanMetadata } = result.metadata ?? {};
+
+      return {
+        id: result.id,
+        content: result.content,
+        score: result.score,
+        lineRange,
+        metadata: Object.keys(cleanMetadata).length > 0 ? cleanMetadata : undefined,
+        scoreDetails: { bm25: result.score },
+      };
+    });
   }
 
   /**
@@ -416,13 +437,16 @@ export class SearchEngine {
       const content = (result.metadata?.text as string) ?? '';
 
       // Extract metadata, excluding internal fields
-      const { id: _id, text: _text, ...restMetadata } = result.metadata ?? {};
+      const { id: _id, text: _text, _startLineOffset, ...restMetadata } = result.metadata ?? {};
+
+      const rawLineRange = findLineRange(content, queryTokens, this.#tokenizeOptions);
+      const lineRange = this.#adjustLineRange(rawLineRange, result.metadata);
 
       results.push({
         id,
         content,
         score: result.score,
-        lineRange: findLineRange(content, queryTokens, this.#tokenizeOptions),
+        lineRange,
         metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
         scoreDetails: { vector: result.score },
       });
@@ -524,5 +548,27 @@ export class SearchEngine {
       ...r,
       score: ((r.scoreDetails?.bm25 ?? r.score) - minScore) / range,
     }));
+  }
+
+  /**
+   * Adjust line range for chunked documents.
+   * If the document has a _startLineOffset in metadata, adjust the line range
+   * to reflect the original document's line numbers.
+   */
+  #adjustLineRange(lineRange: LineRange | undefined, metadata?: Record<string, unknown>): LineRange | undefined {
+    if (!lineRange) return undefined;
+
+    const startLineOffset = metadata?._startLineOffset;
+    if (typeof startLineOffset !== 'number') {
+      return lineRange;
+    }
+
+    // Adjust line numbers: chunk lines are 1-indexed relative to chunk,
+    // offset is 1-indexed relative to original document
+    // So line 1 in chunk with offset 10 becomes line 10 in original
+    return {
+      start: lineRange.start + startLineOffset - 1,
+      end: lineRange.end + startLineOffset - 1,
+    };
   }
 }

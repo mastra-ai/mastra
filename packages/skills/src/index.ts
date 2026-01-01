@@ -75,6 +75,8 @@ export {
   tokenize,
   findLineRange,
   extractLines,
+  charIndexToLineNumber,
+  charRangeToLineRange,
   DEFAULT_STOPWORDS,
   type BM25Config,
   type BM25Document,

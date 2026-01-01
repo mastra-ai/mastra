@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { BM25Index, tokenize, findLineRange, extractLines, DEFAULT_STOPWORDS } from './bm25';
+import {
+  BM25Index,
+  tokenize,
+  findLineRange,
+  extractLines,
+  charIndexToLineNumber,
+  charRangeToLineRange,
+  DEFAULT_STOPWORDS,
+} from './bm25';
 
 describe('tokenize', () => {
   it('should tokenize text into words', () => {
@@ -415,5 +423,107 @@ Line 5`;
     const result = extractLines('');
     expect(result.content).toBe('');
     expect(result.totalLines).toBe(1); // Empty string splits to ['']
+  });
+});
+
+describe('charIndexToLineNumber', () => {
+  const content = `Line 1
+Line 2
+Line 3
+Line 4`;
+
+  it('should return line 1 for character index 0', () => {
+    expect(charIndexToLineNumber(content, 0)).toBe(1);
+  });
+
+  it('should return correct line for character in first line', () => {
+    // 'L' at position 0 -> line 1
+    expect(charIndexToLineNumber(content, 0)).toBe(1);
+    // 'i' at position 1 -> line 1
+    expect(charIndexToLineNumber(content, 1)).toBe(1);
+    // ' ' at position 4 -> line 1
+    expect(charIndexToLineNumber(content, 4)).toBe(1);
+    // '1' at position 5 -> line 1
+    expect(charIndexToLineNumber(content, 5)).toBe(1);
+  });
+
+  it('should return line 2 for character after first newline', () => {
+    // First line is "Line 1\n" (7 chars including newline)
+    // Index 7 is first char of line 2
+    expect(charIndexToLineNumber(content, 7)).toBe(2);
+  });
+
+  it('should return line 3 for character in third line', () => {
+    // "Line 1\n" = 7 chars, "Line 2\n" = 7 chars
+    // Index 14 is first char of line 3
+    expect(charIndexToLineNumber(content, 14)).toBe(3);
+  });
+
+  it('should return last line for character at end', () => {
+    // Total content length
+    expect(charIndexToLineNumber(content, content.length)).toBe(4);
+  });
+
+  it('should return undefined for negative index', () => {
+    expect(charIndexToLineNumber(content, -1)).toBeUndefined();
+  });
+
+  it('should return undefined for index beyond content length', () => {
+    expect(charIndexToLineNumber(content, content.length + 1)).toBeUndefined();
+  });
+
+  it('should handle single line content', () => {
+    expect(charIndexToLineNumber('single line', 5)).toBe(1);
+  });
+
+  it('should handle empty content', () => {
+    expect(charIndexToLineNumber('', 0)).toBe(1);
+  });
+});
+
+describe('charRangeToLineRange', () => {
+  const content = `Line 1
+Line 2
+Line 3
+Line 4`;
+
+  it('should convert character range within single line', () => {
+    // "Line" (0-3) on first line
+    const range = charRangeToLineRange(content, 0, 4);
+    expect(range).toEqual({ start: 1, end: 1 });
+  });
+
+  it('should convert character range spanning multiple lines', () => {
+    // From start of line 1 to end of line 3
+    // "Line 1\n" = 7, "Line 2\n" = 7, "Line 3" = 6 (total 20, but we want index 20)
+    const range = charRangeToLineRange(content, 0, 21);
+    expect(range).toEqual({ start: 1, end: 3 });
+  });
+
+  it('should convert character range starting mid-document', () => {
+    // Start at line 2 (index 7), end at line 3
+    const range = charRangeToLineRange(content, 7, 21);
+    expect(range).toEqual({ start: 2, end: 3 });
+  });
+
+  it('should return undefined for invalid start index', () => {
+    expect(charRangeToLineRange(content, -1, 10)).toBeUndefined();
+  });
+
+  it('should return undefined for invalid end index', () => {
+    expect(charRangeToLineRange(content, 0, content.length + 10)).toBeUndefined();
+  });
+
+  it('should handle single character range', () => {
+    const range = charRangeToLineRange(content, 0, 1);
+    expect(range).toEqual({ start: 1, end: 1 });
+  });
+
+  it('should handle range ending at newline', () => {
+    // "Line 1\n" ends at index 6 (the newline)
+    // endCharIdx is exclusive, so charRangeToLineRange(content, 0, 7) includes the newline
+    // But we look at index 6 (7-1) which is the newline, still on line 1
+    const range = charRangeToLineRange(content, 0, 7);
+    expect(range).toEqual({ start: 1, end: 1 });
   });
 });

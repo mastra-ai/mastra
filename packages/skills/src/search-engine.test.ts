@@ -445,4 +445,101 @@ Line 3`;
       expect(serialized).toBeDefined();
     });
   });
+
+  describe('Chunk line offset tracking', () => {
+    let engine: SearchEngine;
+
+    beforeEach(() => {
+      engine = new SearchEngine({ bm25: {} });
+    });
+
+    it('should adjust lineRange when startLineOffset is provided', async () => {
+      // Simulating a chunk from lines 10-15 of original document
+      const chunk = `This is chunk content
+with machine learning
+on multiple lines`;
+
+      await engine.index({
+        id: 'chunk1',
+        content: chunk,
+        startLineOffset: 10, // This chunk starts at line 10 in original doc
+      });
+
+      const results = await engine.search('machine');
+
+      // 'machine' is on line 2 of the chunk
+      // With offset 10, it should report line 11 (10 + 2 - 1)
+      expect(results[0]?.lineRange).toEqual({ start: 11, end: 11 });
+    });
+
+    it('should not adjust lineRange when no offset is provided', async () => {
+      const content = `Line 1
+Line 2 has machine
+Line 3`;
+
+      await engine.index({ id: 'doc1', content });
+
+      const results = await engine.search('machine');
+
+      // Should report actual line 2, no adjustment
+      expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
+    });
+
+    it('should handle chunks spanning multiple lines with offset', async () => {
+      // Chunk starting at line 20, containing matches on chunk lines 1 and 3
+      const chunk = `First line has learning
+Second line has nothing
+Third line has learning too`;
+
+      await engine.index({
+        id: 'chunk1',
+        content: chunk,
+        startLineOffset: 20,
+      });
+
+      const results = await engine.search('learning');
+
+      // 'learning' appears on chunk lines 1 and 3
+      // With offset 20: start = 20 + 1 - 1 = 20, end = 20 + 3 - 1 = 22
+      expect(results[0]?.lineRange).toEqual({ start: 20, end: 22 });
+    });
+
+    it('should not include _startLineOffset in returned metadata', async () => {
+      await engine.index({
+        id: 'chunk1',
+        content: 'test content',
+        metadata: { category: 'test' },
+        startLineOffset: 10,
+      });
+
+      const results = await engine.search('test');
+
+      // Should have category but not _startLineOffset
+      expect(results[0]?.metadata?.category).toBe('test');
+      expect(results[0]?.metadata?._startLineOffset).toBeUndefined();
+    });
+
+    it('should handle multiple chunks with different offsets', async () => {
+      await engine.index({
+        id: 'chunk1',
+        content: 'First chunk with learning',
+        startLineOffset: 1,
+      });
+
+      await engine.index({
+        id: 'chunk2',
+        content: 'Second chunk with learning',
+        startLineOffset: 50,
+      });
+
+      const results = await engine.search('learning');
+
+      // Both chunks should have their line ranges adjusted correctly
+      const chunk1Result = results.find(r => r.id === 'chunk1');
+      const chunk2Result = results.find(r => r.id === 'chunk2');
+
+      expect(chunk1Result?.lineRange).toEqual({ start: 1, end: 1 });
+      expect(chunk2Result?.lineRange).toEqual({ start: 50, end: 50 });
+    });
+  });
 });

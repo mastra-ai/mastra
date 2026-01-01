@@ -238,6 +238,51 @@ export function extractLines(
 }
 
 /**
+ * Convert a character index to a line number.
+ * Useful for converting RAG chunk character offsets to line numbers.
+ *
+ * @param content - The full document content
+ * @param charIndex - The character index (0-indexed)
+ * @returns The line number (1-indexed), or undefined if charIndex is out of bounds
+ */
+export function charIndexToLineNumber(content: string, charIndex: number): number | undefined {
+  if (charIndex < 0 || charIndex > content.length) {
+    return undefined;
+  }
+
+  // Count newlines before the character index
+  let lineNumber = 1;
+  for (let i = 0; i < charIndex && i < content.length; i++) {
+    if (content[i] === '\n') {
+      lineNumber++;
+    }
+  }
+
+  return lineNumber;
+}
+
+/**
+ * Convert character range to line range.
+ * Useful for converting RAG chunk character offsets to line ranges.
+ *
+ * @param content - The full document content
+ * @param startCharIdx - Start character index (0-indexed)
+ * @param endCharIdx - End character index (0-indexed, exclusive)
+ * @returns LineRange (1-indexed) or undefined if indices are out of bounds
+ */
+export function charRangeToLineRange(content: string, startCharIdx: number, endCharIdx: number): LineRange | undefined {
+  const startLine = charIndexToLineNumber(content, startCharIdx);
+  // For end, we want the line containing the last character (endCharIdx - 1)
+  const endLine = charIndexToLineNumber(content, Math.max(0, endCharIdx - 1));
+
+  if (startLine === undefined || endLine === undefined) {
+    return undefined;
+  }
+
+  return { start: startLine, end: endLine };
+}
+
+/**
  * Compute term frequencies for a list of tokens
  */
 function computeTermFrequencies(tokens: string[]): Map<string, number> {
