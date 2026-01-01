@@ -36,8 +36,7 @@ export class CloudflareDeployer extends Deployer {
       {
         /** @deprecated `name` instead. */
         projectName?: string;
-        routes?: CFRoute[];
-        /** @deprecated use `kv_namespaces` instead. */
+        /** @deprecated this parameter is not used internally. */
         workerNamespace?: string;
         /** @deprecated use `d1_databases` instead. */
         d1Databases?: D1DatabaseBinding[];
@@ -46,6 +45,16 @@ export class CloudflareDeployer extends Deployer {
       },
   ) {
     super({ name: 'CLOUDFLARE' });
+
+    if (userConfig.projectName) {
+      this.userConfig.name = userConfig.projectName;
+    }
+    if (userConfig.d1Databases) {
+      this.userConfig.d1_databases = userConfig.d1Databases;
+    }
+    if (userConfig.kvNamespaces) {
+      this.userConfig.kv_namespaces = userConfig.kvNamespaces;
+    }
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
