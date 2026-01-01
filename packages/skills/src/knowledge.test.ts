@@ -435,7 +435,7 @@ describe('Knowledge with indexing', () => {
       });
 
       await expect(knowledgeWithoutIndex.search(NS, 'test query')).rejects.toThrow(
-        'Knowledge search requires either index or bm25 configuration',
+        'No search configuration available. Provide bm25 or vector config.',
       );
     });
 

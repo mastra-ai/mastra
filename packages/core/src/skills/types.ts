@@ -142,9 +142,8 @@ export interface MastraSkills {
 
   /**
    * Search across all skills content.
-   * Returns a Promise when using vector or hybrid search modes.
    */
-  search(query: string, options?: SkillSearchOptions): SkillSearchResult[] | Promise<SkillSearchResult[]>;
+  search(query: string, options?: SkillSearchOptions): Promise<SkillSearchResult[]>;
 
   /**
    * Get reference file content from a skill

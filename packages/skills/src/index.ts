@@ -84,3 +84,16 @@ export {
   type TokenizeOptions,
   type LineRange,
 } from './bm25';
+
+// SearchEngine (unified search infrastructure)
+export {
+  SearchEngine,
+  type Embedder,
+  type VectorConfig,
+  type BM25SearchConfig,
+  type SearchMode,
+  type IndexDocument,
+  type SearchResult,
+  type SearchOptions,
+  type SearchEngineConfig,
+} from './search-engine';

@@ -5,7 +5,8 @@ import { createTool } from '@mastra/core/tools';
 import z from 'zod';
 
 import { extractLines } from '../bm25';
-import type { Knowledge, SearchMode, SearchOptions } from '../knowledge';
+import type { Knowledge, SearchOptions } from '../knowledge';
+import type { SearchMode } from '../search-engine';
 
 /**
  * Options for the RetrievedKnowledge processor

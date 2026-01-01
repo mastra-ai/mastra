@@ -7,20 +7,14 @@ import type {
   KnowledgeSearchOptions,
   KnowledgeSearchResult,
 } from '@mastra/core/knowledge';
-import type { MastraVector } from '@mastra/core/vector';
 
-import { BM25Index, tokenize, findLineRange } from './bm25';
-import type { BM25Config, TokenizeOptions, BM25SearchResult } from './bm25';
+import type { BM25Config, TokenizeOptions } from './bm25';
+import { SearchEngine } from './search-engine';
+import type { Embedder, SearchEngineConfig, SearchMode } from './search-engine';
+import type { MastraVector } from '@mastra/core/vector';
 
 /** Default prefix for static knowledge artifacts */
 export const STATIC_PREFIX = 'static';
-
-/**
- * Embedder interface - any function that takes text and returns embeddings
- */
-export interface Embedder {
-  (text: string): Promise<number[]>;
-}
 
 /**
  * Configuration for Knowledge indexing (vector search)
@@ -63,19 +57,12 @@ export interface StaticArtifact {
 }
 
 /**
- * Internal namespace state - tracks BM25 index and vector config per namespace
+ * Internal namespace state - tracks search engine per namespace
  */
 interface NamespaceState {
-  bm25Index?: BM25Index;
+  searchEngine: SearchEngine;
   vectorIndexName?: string;
-  enableBM25: boolean;
-  hasVectorConfig: boolean;
 }
-
-/**
- * Search mode options
- */
-export type SearchMode = 'vector' | 'bm25' | 'hybrid';
 
 /**
  * Options for searching knowledge (re-export for convenience)
@@ -84,28 +71,6 @@ export interface SearchOptions extends KnowledgeSearchOptions {}
 
 // Re-export types for convenience
 export type { KnowledgeSearchResult } from '@mastra/core/knowledge';
-
-/**
- * Normalize BM25 scores to 0-1 range using min-max normalization
- */
-function normalizeBM25Scores(results: BM25SearchResult[]): BM25SearchResult[] {
-  if (results.length === 0) return results;
-
-  const scores = results.map(r => r.score);
-  const maxScore = Math.max(...scores);
-  const minScore = Math.min(...scores);
-  const range = maxScore - minScore;
-
-  if (range === 0) {
-    // All scores are the same, normalize to 1
-    return results.map(r => ({ ...r, score: 1 }));
-  }
-
-  return results.map(r => ({
-    ...r,
-    score: (r.score - minScore) / range,
-  }));
-}
 
 /**
  * Knowledge - manages multiple namespaces of knowledge artifacts.
@@ -153,7 +118,7 @@ export class Knowledge implements MastraKnowledge {
   /** Prefix for static artifacts */
   #staticPrefix: string;
 
-  /** Per-namespace state (BM25 indexes, etc.) */
+  /** Per-namespace state (search engines, etc.) */
   #namespaceStates: Map<string, NamespaceState> = new Map();
 
   constructor({
@@ -203,8 +168,8 @@ export class Knowledge implements MastraKnowledge {
       const state = this.#namespaceStates.get(ns.namespace);
       return {
         ...ns,
-        hasBM25: state?.enableBM25 ?? this.#enableBM25,
-        hasVector: state?.hasVectorConfig ?? !!this.#indexConfig,
+        hasBM25: state?.searchEngine.canBM25 ?? this.#enableBM25,
+        hasVector: state?.searchEngine.canVector ?? !!this.#indexConfig,
       };
     });
   }
@@ -216,28 +181,39 @@ export class Knowledge implements MastraKnowledge {
       description: options.description,
     });
 
-    // Initialize namespace state
+    // Initialize namespace state with a SearchEngine
     const enableBM25 = options.enableBM25 ?? this.#enableBM25;
     const hasVectorConfig = !!options.vectorConfig || !!this.#indexConfig;
 
-    const state: NamespaceState = {
-      enableBM25,
-      hasVectorConfig,
-    };
+    // Build SearchEngine config for this namespace
+    const searchEngineConfig: SearchEngineConfig = {};
 
-    // Create BM25 index if enabled
-    if (enableBM25 && this.#bm25Config) {
-      state.bm25Index = new BM25Index(this.#bm25Config.bm25, this.#bm25Config.tokenize);
-    } else if (enableBM25) {
-      state.bm25Index = new BM25Index();
+    if (enableBM25) {
+      searchEngineConfig.bm25 = {
+        bm25: this.#bm25Config?.bm25,
+        tokenize: this.#bm25Config?.tokenize,
+      };
     }
 
-    // Determine vector index name (use underscores for SQL compatibility)
-    if (hasVectorConfig) {
-      const prefix = (this.#indexConfig?.indexNamePrefix || this.id).replace(/-/g, '_');
+    let vectorIndexName: string | undefined;
+    if (hasVectorConfig && this.#indexConfig) {
+      const prefix = (this.#indexConfig.indexNamePrefix || this.id).replace(/-/g, '_');
       const safeNamespace = options.namespace.replace(/-/g, '_');
-      state.vectorIndexName = options.vectorConfig?.indexName || `${prefix}_${safeNamespace}`;
+      vectorIndexName = options.vectorConfig?.indexName || `${prefix}_${safeNamespace}`;
+
+      searchEngineConfig.vector = {
+        vectorStore: this.#indexConfig.vectorStore,
+        embedder: this.#indexConfig.embedder,
+        indexName: vectorIndexName,
+      };
     }
+
+    const searchEngine = new SearchEngine(searchEngineConfig);
+
+    const state: NamespaceState = {
+      searchEngine,
+      vectorIndexName,
+    };
 
     this.#namespaceStates.set(options.namespace, state);
 
@@ -270,7 +246,7 @@ export class Knowledge implements MastraKnowledge {
     options?: { skipIndex?: boolean; metadata?: Record<string, unknown> },
   ): Promise<void> {
     // Ensure namespace exists and get/create its state
-    await this.#ensureNamespaceState(namespace);
+    const state = await this.#ensureNamespaceState(namespace);
 
     // Store the artifact
     await this.storage.add(namespace, artifact);
@@ -280,7 +256,7 @@ export class Knowledge implements MastraKnowledge {
 
     // Index if not skipped and not static
     if (!options?.skipIndex && !isStatic) {
-      await this.#indexArtifact(namespace, artifact, options?.metadata);
+      await this.#indexArtifact(state, artifact, options?.metadata);
     }
   }
 
@@ -291,22 +267,10 @@ export class Knowledge implements MastraKnowledge {
   async delete(namespace: string, key: string): Promise<void> {
     await this.storage.delete(namespace, key);
 
-    // Remove from indexes
+    // Remove from search engine
     const state = this.#namespaceStates.get(namespace);
-
-    if (state?.bm25Index) {
-      state.bm25Index.remove(key);
-    }
-
-    if (this.#indexConfig && state?.vectorIndexName) {
-      try {
-        await this.#indexConfig.vectorStore.deleteVector({
-          indexName: state.vectorIndexName,
-          id: key,
-        });
-      } catch {
-        // Vector may not exist, ignore
-      }
+    if (state) {
+      await state.searchEngine.remove(key);
     }
   }
 
@@ -326,19 +290,29 @@ export class Knowledge implements MastraKnowledge {
     const state = await this.#ensureNamespaceState(namespace);
     const { topK = 5, minScore, filter, mode, hybrid } = options;
 
-    // Determine the effective search mode
-    const effectiveMode = this.#determineSearchMode(state, mode);
+    // Search using the SearchEngine
+    const searchResults = await state.searchEngine.search(query, {
+      topK,
+      minScore,
+      mode: mode as SearchMode,
+      vectorWeight: hybrid?.vectorWeight,
+      filter,
+    });
 
-    if (effectiveMode === 'bm25') {
-      return this.#searchBM25(state, query, topK, minScore);
-    }
+    // Transform to KnowledgeSearchResult
+    return searchResults.map(result => {
+      // Extract metadata, excluding internal fields
+      const { key: _key, type: _type, text: _text, namespace: _ns, ...restMetadata } = result.metadata ?? {};
 
-    if (effectiveMode === 'vector') {
-      return this.#searchVector(state, query, topK, minScore, filter);
-    }
-
-    // Hybrid search
-    return this.#searchHybrid(state, query, topK, minScore, filter, hybrid?.vectorWeight ?? 0.5);
+      return {
+        key: result.id,
+        content: result.content,
+        score: result.score,
+        lineRange: result.lineRange,
+        metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
+        scoreDetails: result.scoreDetails,
+      };
+    });
   }
 
   async getNamespaceCapabilities(namespace: string): Promise<{
@@ -348,13 +322,10 @@ export class Knowledge implements MastraKnowledge {
   }> {
     const state = await this.#ensureNamespaceState(namespace);
 
-    const canBM25 = !!state.bm25Index;
-    const canVector = !!this.#indexConfig && !!state.vectorIndexName;
-
     return {
-      canVectorSearch: canVector,
-      canBM25Search: canBM25,
-      canHybridSearch: canVector && canBM25,
+      canVectorSearch: state.searchEngine.canVector,
+      canBM25Search: state.searchEngine.canBM25,
+      canHybridSearch: state.searchEngine.canHybrid,
     };
   }
 
@@ -402,29 +373,39 @@ export class Knowledge implements MastraKnowledge {
         state = this.#namespaceStates.get(namespace)!;
       } else {
         // Initialize state for existing namespace
-        state = {
-          enableBM25: this.#enableBM25,
-          hasVectorConfig: !!this.#indexConfig,
-        };
+        const searchEngineConfig: SearchEngineConfig = {};
 
         if (this.#enableBM25) {
-          state.bm25Index = this.#bm25Config
-            ? new BM25Index(this.#bm25Config.bm25, this.#bm25Config.tokenize)
-            : new BM25Index();
+          searchEngineConfig.bm25 = {
+            bm25: this.#bm25Config?.bm25,
+            tokenize: this.#bm25Config?.tokenize,
+          };
         }
 
+        let vectorIndexName: string | undefined;
         if (this.#indexConfig) {
           const prefix = (this.#indexConfig.indexNamePrefix || this.id).replace(/-/g, '_');
           const safeNamespace = namespace.replace(/-/g, '_');
-          state.vectorIndexName = `${prefix}_${safeNamespace}`;
+          vectorIndexName = `${prefix}_${safeNamespace}`;
+
+          searchEngineConfig.vector = {
+            vectorStore: this.#indexConfig.vectorStore,
+            embedder: this.#indexConfig.embedder,
+            indexName: vectorIndexName,
+          };
         }
+
+        const searchEngine = new SearchEngine(searchEngineConfig);
+
+        state = {
+          searchEngine,
+          vectorIndexName,
+        };
 
         this.#namespaceStates.set(namespace, state);
 
-        // Rebuild BM25 index from existing artifacts
-        if (state.bm25Index) {
-          await this.#rebuildBM25Index(namespace, state);
-        }
+        // Rebuild index from existing artifacts
+        await this.#rebuildIndex(namespace, state);
       }
     }
 
@@ -432,11 +413,9 @@ export class Knowledge implements MastraKnowledge {
   }
 
   /**
-   * Rebuild the BM25 index from existing artifacts in storage
+   * Rebuild the search index from existing artifacts in storage
    */
-  async #rebuildBM25Index(namespace: string, state: NamespaceState): Promise<void> {
-    if (!state.bm25Index) return;
-
+  async #rebuildIndex(namespace: string, state: NamespaceState): Promise<void> {
     try {
       // List all artifact keys (excluding static/ prefix which shouldn't be indexed)
       const keys = await this.storage.list(namespace);
@@ -449,8 +428,12 @@ export class Knowledge implements MastraKnowledge {
 
         try {
           const content = await this.storage.get(namespace, key);
-          // Add to BM25 index with basic metadata
-          state.bm25Index.add(key, content, { key, type: 'text' });
+          // Add to search engine
+          await state.searchEngine.index({
+            id: key,
+            content,
+            metadata: { key, type: 'text' },
+          });
         } catch {
           // Skip artifacts that can't be read
         }
@@ -461,56 +444,30 @@ export class Knowledge implements MastraKnowledge {
   }
 
   /**
-   * Index an artifact in both BM25 and vector stores
+   * Index an artifact using the SearchEngine
    */
   async #indexArtifact(
-    namespace: string,
+    state: NamespaceState,
     artifact: AnyArtifact,
     additionalMetadata?: Record<string, unknown>,
   ): Promise<void> {
-    const state = this.#namespaceStates.get(namespace);
-    if (!state) return;
-
     const content = this.#getArtifactContent(artifact);
 
-    // BM25 indexing
-    if (state.bm25Index) {
-      const metadata: Record<string, unknown> = {
-        key: artifact.key,
-        type: artifact.type,
-        ...additionalMetadata,
-      };
-      state.bm25Index.add(artifact.key, content, metadata);
+    const metadata: Record<string, unknown> = {
+      key: artifact.key,
+      type: artifact.type,
+      ...additionalMetadata,
+    };
+
+    if (artifact.type === 'image' && 'mimeType' in artifact) {
+      metadata.mimeType = artifact.mimeType;
     }
 
-    // Vector indexing
-    if (this.#indexConfig && state.vectorIndexName) {
-      const { vectorStore, embedder } = this.#indexConfig;
-
-      // Generate embedding
-      const embedding = await embedder(content);
-
-      // Prepare metadata
-      const metadata: Record<string, unknown> = {
-        key: artifact.key,
-        type: artifact.type,
-        text: content,
-        namespace,
-        ...additionalMetadata,
-      };
-
-      if (artifact.type === 'image' && 'mimeType' in artifact) {
-        metadata.mimeType = artifact.mimeType;
-      }
-
-      // Upsert to vector store
-      await vectorStore.upsert({
-        indexName: state.vectorIndexName,
-        vectors: [embedding],
-        metadata: [metadata],
-        ids: [artifact.key],
-      });
-    }
+    await state.searchEngine.index({
+      id: artifact.key,
+      content,
+      metadata,
+    });
   }
 
   /**
@@ -522,253 +479,6 @@ export class Knowledge implements MastraKnowledge {
     }
     // For Buffer content, convert to string
     return artifact.content.toString('utf-8');
-  }
-
-  /**
-   * Determine the effective search mode based on configuration
-   */
-  #determineSearchMode(
-    state: NamespaceState,
-    requestedMode?: 'vector' | 'bm25' | 'hybrid',
-  ): 'vector' | 'bm25' | 'hybrid' {
-    const canVector = !!this.#indexConfig && !!state.vectorIndexName;
-    const canBM25 = !!state.bm25Index;
-
-    if (requestedMode) {
-      // Validate the requested mode is available
-      if (requestedMode === 'vector' && !canVector) {
-        throw new Error('Vector search requires index configuration. Provide index config when creating Knowledge.');
-      }
-      if (requestedMode === 'bm25' && !canBM25) {
-        throw new Error('BM25 search requires bm25 configuration. Provide bm25 config when creating Knowledge.');
-      }
-      if (requestedMode === 'hybrid' && (!canVector || !canBM25)) {
-        throw new Error('Hybrid search requires both index and bm25 configuration.');
-      }
-      return requestedMode;
-    }
-
-    // Auto-determine mode based on available configuration
-    if (canVector && canBM25) {
-      return 'hybrid';
-    }
-    if (canVector) {
-      return 'vector';
-    }
-    if (canBM25) {
-      return 'bm25';
-    }
-
-    throw new Error('Knowledge search requires either index or bm25 configuration.');
-  }
-
-  /**
-   * Perform BM25 keyword search
-   */
-  #searchBM25(state: NamespaceState, query: string, topK: number, minScore?: number): KnowledgeSearchResult[] {
-    if (!state.bm25Index) {
-      throw new Error('BM25 search requires bm25 configuration.');
-    }
-
-    const results = state.bm25Index.search(query, topK, minScore);
-
-    // Tokenize query for line range finding
-    const queryTokens = tokenize(query, this.#bm25Config?.tokenize);
-
-    return results.map(result => {
-      // Extract metadata, excluding internal fields
-      const { key: _key, type: _type, ...restMetadata } = result.metadata ?? {};
-
-      // Find line range where query terms appear
-      const lineRange = findLineRange(result.content, queryTokens, this.#bm25Config?.tokenize);
-
-      return {
-        key: result.id,
-        content: result.content,
-        score: result.score,
-        lineRange,
-        metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
-        scoreDetails: {
-          bm25: result.score,
-        },
-      };
-    });
-  }
-
-  /**
-   * Perform vector search
-   */
-  async #searchVector(
-    state: NamespaceState,
-    query: string,
-    topK: number,
-    minScore?: number,
-    filter?: Record<string, unknown>,
-  ): Promise<KnowledgeSearchResult[]> {
-    if (!this.#indexConfig || !state.vectorIndexName) {
-      throw new Error('Vector search requires index configuration.');
-    }
-
-    const { vectorStore, embedder } = this.#indexConfig;
-
-    // Generate embedding for the query
-    const queryEmbedding = await embedder(query);
-
-    // Query the vector store
-    const results = await vectorStore.query({
-      indexName: state.vectorIndexName,
-      queryVector: queryEmbedding,
-      topK,
-      filter: filter as any,
-    });
-
-    // Tokenize query for line range finding
-    const queryTokens = tokenize(query, this.#bm25Config?.tokenize);
-
-    // Transform results and apply minScore filter
-    const searchResults: KnowledgeSearchResult[] = [];
-
-    for (const result of results) {
-      // Skip results below minimum score
-      if (minScore !== undefined && result.score < minScore) {
-        continue;
-      }
-
-      const key = result.metadata?.key as string;
-      const content = result.metadata?.text as string;
-
-      if (key && content) {
-        // Extract metadata, excluding internal fields
-        const { key: _key, text: _text, type: _type, namespace: _ns, ...restMetadata } = result.metadata ?? {};
-
-        // Find line range where query terms appear
-        const lineRange = findLineRange(content, queryTokens, this.#bm25Config?.tokenize);
-
-        searchResults.push({
-          key,
-          content,
-          score: result.score,
-          lineRange,
-          metadata: Object.keys(restMetadata).length > 0 ? restMetadata : undefined,
-          scoreDetails: {
-            vector: result.score,
-          },
-        });
-      }
-    }
-
-    return searchResults;
-  }
-
-  /**
-   * Perform hybrid search combining vector and BM25 scores
-   */
-  async #searchHybrid(
-    state: NamespaceState,
-    query: string,
-    topK: number,
-    minScore?: number,
-    filter?: Record<string, unknown>,
-    vectorWeight: number = 0.5,
-  ): Promise<KnowledgeSearchResult[]> {
-    if (!this.#indexConfig || !state.bm25Index || !state.vectorIndexName) {
-      throw new Error('Hybrid search requires both index and bm25 configuration.');
-    }
-
-    // Get more results than requested to account for merging
-    const expandedTopK = Math.min(topK * 2, 50);
-
-    // Perform both searches in parallel
-    const [vectorResults, bm25Results] = await Promise.all([
-      this.#searchVector(state, query, expandedTopK, undefined, filter),
-      Promise.resolve(this.#searchBM25(state, query, expandedTopK, undefined)),
-    ]);
-
-    // Normalize BM25 scores to 0-1 range for fair combination
-    const normalizedBM25 = normalizeBM25Scores(
-      bm25Results.map(r => ({
-        id: r.key,
-        content: r.content,
-        score: r.scoreDetails?.bm25 ?? r.score,
-        metadata: r.metadata,
-      })),
-    );
-
-    // Create a map of BM25 scores by key
-    const bm25ScoreMap = new Map<string, { score: number; content: string; metadata?: Record<string, unknown> }>();
-    for (const result of normalizedBM25) {
-      bm25ScoreMap.set(result.id, {
-        score: result.score,
-        content: result.content,
-        metadata: result.metadata,
-      });
-    }
-
-    // Create a map of vector scores by key
-    const vectorScoreMap = new Map<string, { score: number; content: string; metadata?: Record<string, unknown> }>();
-    for (const result of vectorResults) {
-      vectorScoreMap.set(result.key, {
-        score: result.scoreDetails?.vector ?? result.score,
-        content: result.content,
-        metadata: result.metadata,
-      });
-    }
-
-    // Create a map of lineRange from BM25 results (which computes lineRange)
-    const lineRangeMap = new Map<string, { start: number; end: number } | undefined>();
-    for (const result of bm25Results) {
-      lineRangeMap.set(result.key, result.lineRange);
-    }
-    // Also get lineRange from vector results if BM25 didn't have it
-    for (const result of vectorResults) {
-      if (!lineRangeMap.has(result.key)) {
-        lineRangeMap.set(result.key, result.lineRange);
-      }
-    }
-
-    // Combine scores from both search methods
-    const combinedResults = new Map<string, KnowledgeSearchResult>();
-    const allKeys = new Set([...vectorScoreMap.keys(), ...bm25ScoreMap.keys()]);
-
-    const bm25Weight = 1 - vectorWeight;
-
-    for (const key of allKeys) {
-      const vectorData = vectorScoreMap.get(key);
-      const bm25Data = bm25ScoreMap.get(key);
-
-      const vectorScore = vectorData?.score ?? 0;
-      const bm25Score = bm25Data?.score ?? 0;
-
-      // Weighted combination of scores
-      const combinedScore = vectorWeight * vectorScore + bm25Weight * bm25Score;
-
-      // Use content and metadata from whichever source has it
-      const content = vectorData?.content ?? bm25Data?.content ?? '';
-      const metadata = vectorData?.metadata ?? bm25Data?.metadata;
-
-      combinedResults.set(key, {
-        key,
-        content,
-        score: combinedScore,
-        lineRange: lineRangeMap.get(key),
-        metadata,
-        scoreDetails: {
-          vector: vectorScore,
-          bm25: bm25Data ? bm25Results.find(r => r.key === key)?.scoreDetails?.bm25 : undefined,
-        },
-      });
-    }
-
-    // Sort by combined score and apply filters
-    let results = Array.from(combinedResults.values());
-    results.sort((a, b) => b.score - a.score);
-
-    // Apply minScore filter
-    if (minScore !== undefined) {
-      results = results.filter(r => r.score >= minScore);
-    }
-
-    return results.slice(0, topK);
   }
 
   // ============================================================================

@@ -135,8 +135,8 @@ describe('SkillsProcessor', () => {
       );
       expect(skillsMessage).toBeDefined();
       expect(skillsMessage?.content).toContain('# Available Skills');
-      expect(skillsMessage?.content).toContain('- **pdf-processing**:');
-      expect(skillsMessage?.content).toContain('- **data-analysis**:');
+      expect(skillsMessage?.content).toContain('- **pdf-processing** [local]');
+      expect(skillsMessage?.content).toContain('- **data-analysis** [local]');
     });
   });
 

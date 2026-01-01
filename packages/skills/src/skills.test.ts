@@ -133,24 +133,24 @@ describe('Skills', () => {
       });
     });
 
-    it('should search skill content', () => {
-      const results = skills.search('pdf processing');
+    it('should search skill content', async () => {
+      const results = await skills.search('pdf processing');
 
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].skillName).toBe('pdf-processing');
     });
 
-    it('should search across multiple skills', () => {
+    it('should search across multiple skills', async () => {
       // Search for a generic term
-      const results = skills.search('data', { topK: 10 });
+      const results = await skills.search('data', { topK: 10 });
 
       // Should find matches in both skills
       const skillNames = new Set(results.map(r => r.skillName));
       expect(skillNames.size).toBeGreaterThanOrEqual(1);
     });
 
-    it('should filter by skill names', () => {
-      const results = skills.search('processing', {
+    it('should filter by skill names', async () => {
+      const results = await skills.search('processing', {
         skillNames: ['pdf-processing'],
       });
 
@@ -159,25 +159,25 @@ describe('Skills', () => {
       }
     });
 
-    it('should include reference files in search', () => {
+    it('should include reference files in search', async () => {
       // Search for content that might be in reference files
-      const results = skills.search('reference', { includeReferences: true });
+      const results = await skills.search('reference', { includeReferences: true });
 
       // Should find matches in reference files
       const hasReferenceSource = results.some(r => r.source.includes('references/'));
       expect(hasReferenceSource || results.length > 0).toBe(true);
     });
 
-    it('should exclude references when specified', () => {
-      const results = skills.search('processing', { includeReferences: false });
+    it('should exclude references when specified', async () => {
+      const results = await skills.search('processing', { includeReferences: false });
 
       for (const result of results) {
         expect(result.source).toBe('SKILL.md');
       }
     });
 
-    it('should limit results by topK', () => {
-      const results = skills.search('skill', { topK: 1 });
+    it('should limit results by topK', async () => {
+      const results = await skills.search('skill', { topK: 1 });
 
       expect(results.length).toBeLessThanOrEqual(1);
     });
