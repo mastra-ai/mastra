@@ -993,11 +993,23 @@ ${formattedMessages}
   }
 
   /**
+   * Strip any thread tags that the Observer might have added.
+   * Thread attribution is handled externally by the system, not by the Observer.
+   * This is a defense-in-depth measure.
+   */
+  private stripThreadTags(observations: string): string {
+    // Remove any <thread...> or </thread> tags the Observer might add
+    return observations.replace(/<thread[^>]*>|<\/thread>/gi, '').trim();
+  }
+
+  /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
   private wrapWithThreadTag(threadId: string, observations: string): string {
-    return `<thread id="${threadId}">\n${observations}\n</thread>`;
+    // First strip any thread tags the Observer might have added
+    const cleanObservations = this.stripThreadTags(observations);
+    return `<thread id="${threadId}">\n${cleanObservations}\n</thread>`;
   }
 
   /**
@@ -1097,11 +1109,25 @@ ${formattedMessages}
 
     if (shouldObserveNow) {
       // ════════════════════════════════════════════════════════════
-      // SYNC PATH: Do synchronous observation (blocking)
+      // LOCKING: Check if observation is already in progress
+      // This prevents race conditions when multiple threads are active
       // ════════════════════════════════════════════════════════════
-      console.info(`[OM] Observation threshold exceeded (${totalPendingTokens} > ${threshold}), triggering Observer`);
+      if (record.isObserving) {
+        console.info(`[OM] Observation already in progress for ${record.id}, skipping`);
+      } else {
+        // ════════════════════════════════════════════════════════════
+        // SYNC PATH: Do synchronous observation (blocking)
+        // ════════════════════════════════════════════════════════════
+        console.info(`[OM] Observation threshold exceeded (${totalPendingTokens} > ${threshold}), triggering Observer`);
 
-      await this.doSynchronousObservation(record, threadId, unobservedMessages);
+        if (this.resourceScope && resourceId) {
+          // Resource scope: observe ALL threads with unobserved messages
+          await this.doResourceScopedObservation(record, threadId, resourceId);
+        } else {
+          // Thread scope: observe only current thread
+          await this.doSynchronousObservation(record, threadId, unobservedMessages);
+        }
+      }
     } else if (currentSessionTokens > 0) {
       // ═══════════════════════════════════════════════════════════════════
       // Observation not triggered - accumulate pending tokens for next check
@@ -1156,27 +1182,43 @@ ${formattedMessages}
       })),
     });
 
+    // ════════════════════════════════════════════════════════════
+    // LOCKING: Acquire lock and re-check
+    // ════════════════════════════════════════════════════════════
     await this.storage.setObservingFlag(record.id, true);
 
     try {
-      const result = await this.callObserver(record.activeObservations, unobservedMessages);
+      // Re-check: reload record to see if another request already observed
+      const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+      if (freshRecord && freshRecord.lastObservedAt && record.lastObservedAt) {
+        if (freshRecord.lastObservedAt > record.lastObservedAt) {
+          console.info(`[OM] Another request already observed, skipping (lastObservedAt updated)`);
+          return;
+        }
+      }
+
+      const result = await this.callObserver(
+        freshRecord?.activeObservations ?? record.activeObservations,
+        unobservedMessages,
+      );
 
       console.info(`[OM] Observer returned observations (${result.observations.length} chars)`);
 
-      // Build new observations
+      // Build new observations (use freshRecord if available)
+      const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
       let newObservations: string;
       if (this.resourceScope) {
         // In resource scope: wrap with thread tag and replace/append
         const threadSection = this.wrapWithThreadTag(threadId, result.observations);
         newObservations = this.replaceOrAppendThreadSection(
-          record.activeObservations ?? '',
+          existingObservations,
           threadId,
           threadSection,
         );
       } else {
         // In thread scope: simple append
-        newObservations = record.activeObservations
-          ? `${record.activeObservations}\n\n${result.observations}`
+        newObservations = existingObservations
+          ? `${existingObservations}\n\n${result.observations}`
           : result.observations;
       }
 
@@ -1234,11 +1276,169 @@ ${formattedMessages}
   }
 
   /**
+   * Resource-scoped observation: observe ALL threads with unobserved messages.
+   * Threads are observed in oldest-first order to ensure no thread's messages
+   * get "stuck" unobserved forever.
+   *
+   * Key differences from thread-scoped observation:
+   * 1. Loads messages from ALL threads for the resource
+   * 2. Observes threads one-by-one in oldest-first order
+   * 3. Only updates lastObservedAt AFTER all threads are observed
+   * 4. Only triggers reflection AFTER all threads are observed
+   */
+  private async doResourceScopedObservation(
+    record: ObservationalMemoryRecord,
+    currentThreadId: string,
+    resourceId: string,
+  ): Promise<void> {
+    console.info(`[OM] Starting resource-scoped observation for resource ${resourceId}`);
+
+    // Load ALL unobserved messages for the resource
+    const allUnobservedMessages = await this.loadUnobservedMessages(
+      currentThreadId,
+      resourceId,
+      record.lastObservedAt,
+    );
+
+    if (allUnobservedMessages.length === 0) {
+      console.info(`[OM] No unobserved messages found for resource ${resourceId}`);
+      return;
+    }
+
+    // Group by thread
+    const messagesByThread = this.groupMessagesByThread(allUnobservedMessages);
+    console.info(`[OM] Found ${messagesByThread.size} threads with unobserved messages`);
+
+    // Sort threads by oldest message (oldest first)
+    const threadOrder = this.sortThreadsByOldestMessage(messagesByThread);
+    console.info(`[OM] Thread observation order: ${threadOrder.join(', ')}`);
+
+    // ════════════════════════════════════════════════════════════
+    // LOCKING: Acquire lock and re-check
+    // Another request may have already observed while we were loading messages
+    // ════════════════════════════════════════════════════════════
+    await this.storage.setObservingFlag(record.id, true);
+
+    try {
+      // Re-check: reload record to see if another request already observed
+      const freshRecord = await this.storage.getObservationalMemory(null, resourceId);
+      if (freshRecord && freshRecord.lastObservedAt && record.lastObservedAt) {
+        if (freshRecord.lastObservedAt > record.lastObservedAt) {
+          console.info(`[OM] Another request already observed, skipping (lastObservedAt updated)`);
+          return;
+        }
+      }
+
+      let currentObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      let allMessageIds: string[] = [];
+
+      // Observe each thread in order
+      for (const threadId of threadOrder) {
+        const threadMessages = messagesByThread.get(threadId) ?? [];
+        if (threadMessages.length === 0) continue;
+
+        const messageIds = threadMessages.map(m => m.id).filter((id): id is string => !!id);
+        allMessageIds = [...allMessageIds, ...messageIds];
+
+        console.info(`[OM] Observing thread ${threadId} with ${threadMessages.length} messages`);
+
+        // Emit debug event for observation triggered
+        this.emitDebugEvent({
+          type: 'observation_triggered',
+          timestamp: new Date(),
+          threadId,
+          resourceId,
+          previousObservations: currentObservations,
+          messages: threadMessages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          })),
+        });
+
+        // Call observer for this thread's messages
+        const result = await this.callObserver(currentObservations, threadMessages);
+        console.info(`[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars)`);
+
+        // Wrap with thread tag and replace/append
+        const threadSection = this.wrapWithThreadTag(threadId, result.observations);
+        currentObservations = this.replaceOrAppendThreadSection(
+          currentObservations,
+          threadId,
+          threadSection,
+        );
+
+        // Update thread-specific metadata (currentTask, suggestedResponse)
+        if (result.suggestedContinuation || result.currentTask) {
+          const thread = await this.storage.getThreadById({ threadId });
+          if (thread) {
+            const newMetadata = setThreadOMMetadata(thread.metadata, {
+              suggestedResponse: result.suggestedContinuation,
+              currentTask: result.currentTask,
+            });
+            await this.storage.updateThread({
+              id: threadId,
+              title: thread.title ?? '',
+              metadata: newMetadata,
+            });
+            console.info(`[OM] Updated thread ${threadId} metadata with suggestedResponse and currentTask`);
+          }
+        }
+
+        // Emit debug event for observation complete
+        this.emitDebugEvent({
+          type: 'observation_complete',
+          timestamp: new Date(),
+          threadId,
+          resourceId,
+          observations: currentObservations,
+          rawObserverOutput: result.observations,
+          previousObservations: record.activeObservations,
+          messages: threadMessages.map(m => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          })),
+        });
+      }
+
+      // After ALL threads observed, update the record with final observations
+      const totalTokenCount = this.tokenCounter.countObservations(currentObservations);
+      const now = new Date();
+
+      console.info(
+        `[OM] All threads observed. Storing ${totalTokenCount} tokens, ${allMessageIds.length} message IDs`,
+      );
+
+      await this.storage.updateActiveObservations({
+        id: record.id,
+        observations: currentObservations,
+        messageIds: allMessageIds,
+        tokenCount: totalTokenCount,
+        lastObservedAt: now,
+      });
+
+      console.info(`[OM] Resource-scoped observation complete`);
+
+      // Check for reflection AFTER all threads are observed
+      await this.maybeReflect({ ...record, activeObservations: currentObservations }, totalTokenCount);
+    } finally {
+      await this.storage.setObservingFlag(record.id, false);
+    }
+  }
+
+  /**
    * Check if reflection needed and trigger if so.
    * SIMPLIFIED: Always uses synchronous reflection (async buffering disabled).
    */
   private async maybeReflect(record: ObservationalMemoryRecord, observationTokens: number): Promise<void> {
     if (!this.shouldReflect(observationTokens)) {
+      return;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // LOCKING: Check if reflection is already in progress
+    // ════════════════════════════════════════════════════════════
+    if (record.isReflecting) {
+      console.info(`[OM] Reflection already in progress for ${record.id}, skipping`);
       return;
     }
 

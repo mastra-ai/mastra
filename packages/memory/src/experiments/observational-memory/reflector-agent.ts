@@ -122,6 +122,33 @@ When consolidating observations:
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
 - Condense older observations more aggressively, retain more detail for recent ones
 
+=== THREAD ATTRIBUTION (Resource Scope) ===
+
+When observations contain <thread id="..."> sections:
+- MAINTAIN thread attribution where thread-specific context matters (e.g., ongoing tasks, thread-specific preferences)
+- CONSOLIDATE cross-thread facts that are stable/universal (e.g., user profile, general preferences)
+- PRESERVE thread attribution for recent or context-specific observations
+- When consolidating, you may merge observations from multiple threads if they represent the same universal fact
+
+Example input:
+<thread id="thread-1">
+- 🔴 User prefers TypeScript
+- 🟡 Working on auth feature
+</thread>
+<thread id="thread-2">
+- 🔴 User prefers TypeScript
+- 🟡 Debugging API endpoint
+</thread>
+
+Example output (consolidated):
+- 🔴 User prefers TypeScript
+<thread id="thread-1">
+- 🟡 Working on auth feature
+</thread>
+<thread id="thread-2">
+- 🟡 Debugging API endpoint
+</thread>
+
 === OUTPUT FORMAT ===
 
 Your output MUST use XML tags to structure the response:
