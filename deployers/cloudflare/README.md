@@ -5,9 +5,7 @@ A Cloudflare Workers deployer for Mastra applications.
 ## Features
 
 - Deploy Mastra applications to Cloudflare Workers
-- Configure custom domains and routes
 - Automatic environment variable configuration
-- Supports all Wrangler configuration options
 
 ## Installation
 
@@ -17,15 +15,14 @@ pnpm add @mastra/deployer-cloudflare
 
 ## Usage
 
-The Cloudflare deployer is used as part of the Mastra framework:
+Cloudflare deployer is used as part of the Mastra framework:
 
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 
 const deployer = new CloudflareDeployer({
-  name: 'your-worker-name',
-  account_id: 'your-account-id',
+  name: 'your-project-name',
   routes: [
     {
       pattern: 'example.com/*',
@@ -33,8 +30,9 @@ const deployer = new CloudflareDeployer({
       custom_domain: true,
     },
   ],
-  // Add any other Wrangler configuration options here
-  // See: https://developers.cloudflare.com/workers/wrangler/configuration/
+  assets: {
+    directory: './assets/',
+  },
 });
 
 const mastra = new Mastra({
