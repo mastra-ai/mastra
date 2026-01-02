@@ -77,7 +77,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           return { relevantContext: [], sources: [] };
         }
 
-        const queryFilter = enableFilter ? parseFilterValue(filter, logger) : {};
+        const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
         if (logger) {
           logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue });
         }
