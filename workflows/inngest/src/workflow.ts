@@ -145,7 +145,10 @@ export class InngestWorkflow<
       withNestedWorkflows: false,
     });
 
-    if (!existingRun && shouldPersistSnapshot) {
+    // Check if run exists in persistent storage (not just in-memory)
+    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
+    if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,

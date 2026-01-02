@@ -240,7 +240,6 @@ export const workflowRunResultQuerySchema = z.object({
           'error',
           'payload',
           'steps',
-          'metadata',
           'activeStepsPath',
           'serializedStepGraph',
         ]);
@@ -249,11 +248,11 @@ export const workflowRunResultQuerySchema = z.object({
       },
       {
         message:
-          'Invalid field name. Available fields: status, result, error, payload, steps, metadata, activeStepsPath, serializedStepGraph',
+          'Invalid field name. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph',
       },
     )
     .describe(
-      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, metadata, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
+      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.',
     ),
   withNestedWorkflows: z
     .enum(['true', 'false'])

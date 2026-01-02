@@ -1610,13 +1610,16 @@ export class Workflow<
       withNestedWorkflows: false,
     });
 
+    // Check if run exists in persistent storage (not just in-memory)
+    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
     // If a run exists in storage, update the run's status to reflect the actual state
     // This fixes the issue where createRun checks storage but doesn't use the stored data
-    if (existingRun && existingRun.status) {
+    if (existsInStorage && existingRun.status) {
       run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
     }
 
-    if (!existingRun && shouldPersistSnapshot) {
+    if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
@@ -1981,8 +1984,13 @@ export class Workflow<
    * Converts an in-memory Run to a WorkflowState for API responses.
    * Used as a fallback when storage is not available.
    *
-   * Note: createdAt/updatedAt are set to current time since in-memory runs
-   * don't persist timestamps. These are approximate values.
+   * Limitations of in-memory fallback:
+   * - createdAt/updatedAt are set to current time (approximate values)
+   * - steps is empty {} because in-memory Run objects don't maintain step results
+   *   in the WorkflowState format - step data is only available from persisted snapshots
+   *
+   * The returned object includes `isFromInMemory: true` so callers can distinguish
+   * between persisted and in-memory runs.
    */
   #getInMemoryRunAsWorkflowState(runId: string): WorkflowState | null {
     const inMemoryRun = this.#runs.get(runId);
@@ -1994,6 +2002,7 @@ export class Workflow<
       workflowName: this.id,
       createdAt: new Date(),
       updatedAt: new Date(),
+      isFromInMemory: true,
       status: inMemoryRun.workflowRunStatus,
       steps: {},
     };

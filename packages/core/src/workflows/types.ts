@@ -275,6 +275,17 @@ export interface WorkflowState {
   createdAt: Date;
   updatedAt: Date;
 
+  /**
+   * Indicates whether this result came from in-memory storage rather than persistent storage.
+   * When true, the data is approximate:
+   * - createdAt/updatedAt are set to current time
+   * - steps is empty {} (step data only available from persisted snapshots)
+   *
+   * This flag is useful for callers that need to distinguish between persisted and in-memory runs,
+   * e.g., to decide whether to persist an initial snapshot.
+   */
+  isFromInMemory?: boolean;
+
   // Execution State
   status: WorkflowRunStatus;
   // Optional detailed fields (can be excluded for performance)
@@ -303,6 +314,7 @@ export interface WorkflowState {
 /**
  * Valid field names for filtering WorkflowState responses.
  * Use with getWorkflowRunById to reduce payload size.
+ * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.
  */
 export type WorkflowStateField =
   | 'status'
@@ -310,7 +322,6 @@ export type WorkflowStateField =
   | 'error'
   | 'payload'
   | 'steps'
-  | 'metadata'
   | 'activeStepsPath'
   | 'serializedStepGraph';
 

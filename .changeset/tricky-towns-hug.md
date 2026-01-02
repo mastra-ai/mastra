@@ -15,7 +15,7 @@ Unified `getWorkflowRunById` and `getWorkflowRunExecutionResult` into a single A
 - `getWorkflowRunById` now returns a unified `WorkflowState` object containing metadata (runId, workflowName, resourceId, createdAt, updatedAt) along with processed execution state (status, result, error, payload, steps)
 - Added optional `fields` parameter to request only specific fields for better performance
 - Added optional `withNestedWorkflows` parameter to control nested workflow step inclusion
-- Deprecated `getWorkflowRunExecutionResult` (still works but now calls `getWorkflowRunById` internally)
+- Removed `getWorkflowRunExecutionResult` - use `getWorkflowRunById` instead (breaking change)
 
 **Before:**
 

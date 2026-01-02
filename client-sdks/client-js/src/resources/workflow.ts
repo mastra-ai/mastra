@@ -89,7 +89,7 @@ export class Workflow extends BaseResource {
    * @param runId - The ID of the workflow run to retrieve
    * @param options - Optional configuration
    * @param options.requestContext - Optional request context to pass as query parameter
-   * @param options.fields - Optional array of fields to return (e.g., ['status', 'result']). Available fields: status, result, error, payload, steps, metadata, activeStepsPath, serializedStepGraph. Omitting this returns all fields.
+   * @param options.fields - Optional array of fields to return (e.g., ['status', 'result']). Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.
    * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
    * @returns Promise containing the workflow run details with metadata and processed execution state
    */
@@ -138,7 +138,7 @@ export class Workflow extends BaseResource {
    * @param runId - The ID of the workflow run to retrieve the execution result for
    * @param options - Optional configuration
    * @param options.requestContext - Optional request context to pass as query parameter
-   * @param options.fields - Optional array of fields to return (e.g., ['status', 'result']). Available fields: status, result, error, payload, steps, metadata, activeStepsPath, serializedStepGraph. Omitting this returns all fields.
+   * @param options.fields - Optional array of fields to return (e.g., ['status', 'result']). Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.
    * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
    * @returns Promise containing the workflow run execution result
    */
