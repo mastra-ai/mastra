@@ -229,20 +229,33 @@ export class StoreMemoryLance extends MemoryStorage {
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    // Normalize threadId to array
-    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+    // Check if threadId is a valid non-empty string or array of non-empty strings
+    const hasThreadId =
+      threadId !== undefined &&
+      (typeof threadId === 'string'
+        ? threadId.trim().length > 0
+        : Array.isArray(threadId) && threadId.length > 0 && threadId.every(id => typeof id === 'string' && id.trim().length > 0));
 
-    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+    // Either threadId or resourceId must be provided
+    if (!hasThreadId && !resourceId) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          id: createStorageErrorId('LANCE', 'LIST_MESSAGES', 'INVALID_PARAMS'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+          category: ErrorCategory.USER,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''), resourceId: resourceId ?? '' },
         },
-        new Error('threadId must be a non-empty string or array of non-empty strings'),
+        new Error('Either threadId or resourceId must be provided'),
       );
     }
+
+    // Normalize threadId to array only if present
+    const threadIds = hasThreadId
+      ? (Array.isArray(threadId) ? threadId : [threadId!])
+          .filter(id => id !== undefined && id !== null)
+          .map(id => (typeof id === 'string' ? id : String(id)).trim())
+          .filter(id => id.length > 0)
+      : [];
 
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
@@ -266,12 +279,16 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const table = await this.client.openTable(TABLE_MESSAGES);
 
-      // Build query conditions for multiple threads
-      const threadCondition =
-        threadIds.length === 1
-          ? `thread_id = '${this.escapeSql(threadIds[0]!)}'`
-          : `thread_id IN (${threadIds.map(t => `'${this.escapeSql(t)}'`).join(', ')})`;
-      const conditions: string[] = [threadCondition];
+      // Build query conditions - threadId is optional if resourceId is provided
+      const conditions: string[] = [];
+
+      if (threadIds.length > 0) {
+        const threadCondition =
+          threadIds.length === 1
+            ? `thread_id = '${this.escapeSql(threadIds[0]!)}'`
+            : `thread_id IN (${threadIds.map(t => `'${this.escapeSql(t)}'`).join(', ')})`;
+        conditions.push(threadCondition);
+      }
 
       if (resourceId) {
         conditions.push(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
@@ -293,7 +310,7 @@ export class StoreMemoryLance extends MemoryStorage {
         conditions.push(`\`createdAt\` <= ${endTime}`);
       }
 
-      const whereClause = conditions.join(' AND ');
+      const whereClause = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
 
       // Get total count
       const total = await table.countRows(whereClause);
@@ -405,7 +422,7 @@ export class StoreMemoryLance extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            threadId: Array.isArray(threadId) ? threadId.join(',') : (threadId ?? ''),
             resourceId: resourceId ?? '',
           },
         },
