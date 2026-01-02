@@ -161,13 +161,15 @@ export function mockAgentMethods(agent: Agent) {
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
 
   // Helper to create a mock Response object for datastream-response routes
+  // Note: Do NOT set Transfer-Encoding header explicitly.
+  // Runtimes automatically add this header for streaming responses,
+  // and setting it explicitly causes duplicate headers which break HTTP protocol.
   const createMockResponse = () => {
     const stream = createMockStream();
     return new Response(stream, {
       status: 200,
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
       },
     });
   };
