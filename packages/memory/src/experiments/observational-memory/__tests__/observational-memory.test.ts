@@ -3111,9 +3111,9 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
-          { type: 'text-end', id: 'text-1' },
+          // { type: 'text-start', id: 'text-1' },
+          // { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
+          // { type: 'text-end', id: 'text-1' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
         ]),
       }),
@@ -3184,16 +3184,16 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       processedCount++;
 
       // Log progress every 10 sessions
-      if (processedCount % 10 === 0 || sessionId === answerSessionId) {
-        const record = await storage.getObservationalMemory(null, resourceId);
-        const hasKeyFact = record?.activeObservations?.includes('Business Administration') ?? false;
-        console.log(
-          `   [${processedCount}/${sessionsWithDates.length}] ${sessionId.substring(0, 12)}... ` +
-            `(${date}) - observations: ${record?.observationTokenCount ?? 0} tokens` +
-            (sessionId === answerSessionId ? ' ⭐ ANSWER SESSION' : '') +
-            (hasKeyFact ? ' ✅ KEY FACT FOUND' : ''),
-        );
-      }
+      // if (processedCount % 10 === 0 || sessionId === answerSessionId) {
+      const record = await storage.getObservationalMemory(null, resourceId);
+      const hasKeyFact = record?.activeObservations?.includes('Business Administration') ?? false;
+      console.log(
+        `[TEST PROGRESS]   [${processedCount}/${sessionsWithDates.length}] ${sessionId.substring(0, 12)}... ` +
+          `(${date}) - observations: ${record?.observationTokenCount ?? 0} tokens` +
+          (sessionId === answerSessionId ? ' ⭐ ANSWER SESSION' : '') +
+          (hasKeyFact ? ' ✅ KEY FACT FOUND' : ''),
+      );
+      // }
     }
 
     // 7. Check observations after processing all sessions
