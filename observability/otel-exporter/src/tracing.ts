@@ -112,7 +112,7 @@ export class OtelExporter extends BaseExporter {
         } catch (grpcError) {
           this.logger.error(
             `[OtelExporter] Failed to load gRPC metadata. Install required packages:\n` +
-            `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
+              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js\n`,
             grpcError,
           );
           this.isDisabled = true;
