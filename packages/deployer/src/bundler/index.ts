@@ -14,12 +14,15 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
-import { getPackageName, slash } from '../build/utils';
+import { getPackageName, slash, getEsbuildPlatform } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
 
 export type { BundlerOptions } from '../build/types';
+
+// Detect runtime platform once at module load
+const BUNDLER_PLATFORM = getEsbuildPlatform();
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
 
@@ -121,7 +124,7 @@ export abstract class Bundler extends MastraBundler {
       {
         outputDir: join(outputDirectory, this.analyzeOutputDir),
         projectRoot: outputDirectory,
-        platform: 'node',
+        platform: BUNDLER_PLATFORM,
       },
       this.logger,
     );
@@ -178,7 +181,7 @@ export abstract class Bundler extends MastraBundler {
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
       analyzedBundleInfo,
-      'node',
+      BUNDLER_PLATFORM,
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
@@ -296,7 +299,7 @@ export abstract class Bundler extends MastraBundler {
         {
           outputDir: analyzeDir,
           projectRoot,
-          platform: 'node',
+          platform: BUNDLER_PLATFORM,
           bundlerOptions: internalBundlerOptions,
         },
         this.logger,

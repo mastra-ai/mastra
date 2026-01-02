@@ -2,13 +2,16 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions, getEsbuildPlatform } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
+
+// Detect runtime platform once at module load
+const BUNDLER_PLATFORM = getEsbuildPlatform();
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -67,7 +70,7 @@ export class DevBundler extends Bundler {
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
-      'node',
+      BUNDLER_PLATFORM,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
