@@ -13567,6 +13567,198 @@ describe('MastraInngestWorkflow', () => {
       const inngestFunction = workflow.getFunction();
       expect(inngestFunction).toBeDefined();
     });
+
+    it('should execute workflow via cron schedule', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra-cron-test',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      // Get current time and schedule cron for 1 minute from now
+      const now = new Date();
+      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
+
+      // Convert to cron format: minute hour day month dayOfWeek
+      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
+
+      const workflow = createWorkflow({
+        id: 'cron-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+        cron: cronSchedule,
+        inputData: { value: 'cron-input' },
+      } as any);
+
+      workflow.then(step1).commit();
+
+      expect(workflow).toBeDefined();
+      expect(workflow.id).toBe('cron-test');
+
+      // Set up Mastra with storage and server
+      const mastra = new Mastra({
+        logger: false,
+        workflows: {
+          'cron-test': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      // Calculate wait time (1 minute + 10 seconds buffer)
+      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
+      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+
+      // Wait for cron to trigger
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
+      // Check storage for workflow runs
+      const { runs, total } = await workflow.listWorkflowRuns();
+
+      expect(total).toBeGreaterThanOrEqual(1);
+      expect(runs.length).toBeGreaterThanOrEqual(1);
+
+      // Verify the most recent run was successful
+      const mostRecentRun = runs[0];
+      expect(mostRecentRun).toBeDefined();
+      expect(mostRecentRun.workflowName).toBe('cron-test');
+      expect(mostRecentRun.snapshot).toBeDefined();
+
+      // Verify the run was created after we scheduled it
+      const runCreatedAt = new Date(mostRecentRun.createdAt || 0);
+      expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
+
+      srv.close();
+    }, 120000); // 2 minute timeout
+
+    it('should execute workflow via cron schedule with initialState', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra-cron-initial-state-test',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ inputData }) => {
+          return { result: 'step1: ' + inputData.value };
+        },
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      // Get current time and schedule cron for 1 minute from now
+      const now = new Date();
+      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
+
+      // Convert to cron format: minute hour day month dayOfWeek
+      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
+
+      const workflow = createWorkflow({
+        id: 'cron-initial-state-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        stateSchema: z.object({ count: z.number() }),
+        steps: [step1],
+        cron: cronSchedule,
+        inputData: { value: 'cron-input' },
+        initialState: { count: 0 },
+      } as any);
+
+      workflow.then(step1).commit();
+
+      expect(workflow).toBeDefined();
+      expect(workflow.id).toBe('cron-initial-state-test');
+
+      // Set up Mastra with storage and server
+      const mastra = new Mastra({
+        logger: false,
+        workflows: {
+          'cron-initial-state-test': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+        storage: new DefaultStorage({
+          id: 'test-storage-initial-state',
+          url: ':memory:',
+        }),
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      // Calculate wait time (1 minute + 10 seconds buffer)
+      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
+      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+
+      // Wait for cron to trigger
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+
+      // Check storage for workflow runs
+      const { runs, total } = await workflow.listWorkflowRuns();
+
+      expect(total).toBeGreaterThanOrEqual(1);
+      expect(runs.length).toBeGreaterThanOrEqual(1);
+
+      // Verify the most recent run was successful
+      const mostRecentRun = runs[0];
+      expect(mostRecentRun).toBeDefined();
+      expect(mostRecentRun.workflowName).toBe('cron-initial-state-test');
+      expect(mostRecentRun.snapshot).toBeDefined();
+
+      // Verify the run was created after we scheduled it
+      const runCreatedAt = new Date(mostRecentRun.createdAt || 0);
+      expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
+
+      srv.close();
+    }, 120000); // 2 minute timeout
   });
 
   describe('serve function with user-supplied functions', () => {

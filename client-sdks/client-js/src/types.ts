@@ -306,6 +306,27 @@ export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
 };
 
+export interface CloneMemoryThreadParams {
+  newThreadId?: string;
+  resourceId?: string;
+  title?: string;
+  metadata?: Record<string, any>;
+  options?: {
+    messageLimit?: number;
+    messageFilter?: {
+      startDate?: Date;
+      endDate?: Date;
+      messageIds?: string[];
+    };
+  };
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type CloneMemoryThreadResponse = {
+  thread: StorageThreadType;
+  clonedMessages: MastraDBMessage[];
+};
+
 export interface GetLogsParams {
   transportId: string;
   fromDate?: Date;

@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/abacus",
+          label: "Abacus",
+        },
+        {
+          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },

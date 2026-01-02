@@ -17,7 +17,12 @@ import type { z } from 'zod';
 import { InngestExecutionEngine } from './execution-engine';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
-import type { InngestEngineType, InngestFlowControlConfig, InngestWorkflowConfig } from './types';
+import type {
+  InngestEngineType,
+  InngestFlowControlConfig,
+  InngestFlowCronConfig,
+  InngestWorkflowConfig,
+} from './types';
 
 export class InngestWorkflow<
   TEngineType = InngestEngineType,
@@ -32,10 +37,13 @@ export class InngestWorkflow<
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
+  private cronFunction: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
+  private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
 
   constructor(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>, inngest: Inngest) {
-    const { concurrency, rateLimit, throttle, debounce, priority, ...workflowParams } = params;
+    const { concurrency, rateLimit, throttle, debounce, priority, cron, inputData, initialState, ...workflowParams } =
+      params;
 
     super(workflowParams as WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>);
 
@@ -49,6 +57,10 @@ export class InngestWorkflow<
 
     this.#mastra = params.mastra!;
     this.inngest = inngest;
+
+    if (cron) {
+      this.cronConfig = { cron, inputData, initialState };
+    }
   }
 
   async listWorkflowRuns(args?: {
@@ -160,6 +172,31 @@ export class InngestWorkflow<
     return run;
   }
 
+  //createCronFunction is only called if cronConfig.cron is defined.
+  private createCronFunction() {
+    if (this.cronFunction) {
+      return this.cronFunction;
+    }
+    this.cronFunction = this.inngest.createFunction(
+      {
+        id: `workflow.${this.id}.cron`,
+        retries: 0,
+        cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        ...this.flowControlConfig,
+      },
+      { cron: this.cronConfig?.cron ?? '' },
+      async () => {
+        const run = await this.createRun();
+        const result = await run.start({
+          inputData: this.cronConfig?.inputData,
+          initialState: this.cronConfig?.initialState,
+        });
+        return { result, runId: run.runId };
+      },
+    );
+    return this.cronFunction;
+  }
+
   getFunction() {
     if (this.function) {
       return this.function;
@@ -268,6 +305,10 @@ export class InngestWorkflow<
   }
 
   getFunctions() {
-    return [this.getFunction(), ...this.getNestedFunctions(this.executionGraph.steps)];
+    return [
+      this.getFunction(),
+      ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
+      ...this.getNestedFunctions(this.executionGraph.steps),
+    ];
   }
 }

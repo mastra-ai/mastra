@@ -6,6 +6,8 @@ import type {
   UpdateMemoryThreadParams,
   ListMemoryThreadMessagesParams,
   ListMemoryThreadMessagesResponse,
+  CloneMemoryThreadParams,
+  CloneMemoryThreadResponse,
 } from '../types';
 
 import { requestContextQueryString } from '../utils';
@@ -105,6 +107,22 @@ export class MemoryThread extends BaseResource {
       {
         method: 'POST',
         body: { messageIds },
+      },
+    );
+  }
+
+  /**
+   * Clones the thread with all its messages to a new thread
+   * @param params - Clone parameters including optional new thread ID, title, metadata, and message filters
+   * @returns Promise containing the cloned thread and copied messages
+   */
+  clone(params: CloneMemoryThreadParams = {}): Promise<CloneMemoryThreadResponse> {
+    const { requestContext, ...body } = params;
+    return this.request(
+      `/api/memory/threads/${this.threadId}/clone?agentId=${this.agentId}${requestContextQueryString(requestContext, '&')}`,
+      {
+        method: 'POST',
+        body,
       },
     );
   }
