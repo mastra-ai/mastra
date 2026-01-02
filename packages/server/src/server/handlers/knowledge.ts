@@ -1,4 +1,4 @@
-import type { MastraKnowledge, KnowledgeSearchMode } from '@mastra/core/knowledge';
+import type { MastraKnowledge } from '@mastra/core/knowledge';
 import { HTTPException } from '../http-exception';
 import {
   namespacePathParams,
@@ -443,7 +443,7 @@ export const SEARCH_KNOWLEDGE_ROUTE = createRoute({
       const results = await knowledge.search(namespace, query, {
         topK: topK || 5,
         minScore,
-        mode: mode as KnowledgeSearchMode | undefined,
+        mode,
       });
 
       // Determine the effective mode used

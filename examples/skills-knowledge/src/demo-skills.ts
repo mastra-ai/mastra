@@ -7,7 +7,8 @@
  * Run with: pnpm demo:skills
  */
 
-import { skills, mastra } from './mastra/index';
+import { mastra } from './mastra';
+import { skills } from './mastra/skills';
 
 async function main() {
   console.log('='.repeat(60));

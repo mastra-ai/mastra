@@ -6,7 +6,7 @@ import { KnowledgeFilesystemStorage, Knowledge } from '@mastra/skills';
  */
 export const supportKnowledge = new Knowledge({
   id: 'support-knowledge',
-  storage: new KnowledgeFilesystemStorage({ basePath: '../../.mastra-knowledge/knowledge/support' }),
+  storage: new KnowledgeFilesystemStorage({ paths: ['../../.mastra-knowledge/knowledge/support'] }),
   bm25: true,
 });
 

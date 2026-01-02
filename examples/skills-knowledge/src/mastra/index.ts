@@ -1,18 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
-import { Skills } from '@mastra/skills';
-
-import { docsAgent, supportAgent } from './agents/index';
-import { supportKnowledge } from './knowledge/index';
-import { ingestKnowledgeWorkflow } from './workflows/index';
-
-/**
- * Skills instance - discovers skills from the skills/ directory.
- */
-export const skills = new Skills({
-  id: 'demo-skills',
-  paths: ['./skills'],
-});
+import { docsAgent, supportAgent } from './agents';
+import { supportKnowledge } from './knowledge';
+import { ingestKnowledgeWorkflow } from './workflows';
 
 /**
  * Storage for Mastra (threads, memory, etc.)
@@ -36,6 +26,3 @@ export const mastra = new Mastra({
   },
   storage,
 });
-
-// Re-export for convenience
-export { skills, supportKnowledge };
