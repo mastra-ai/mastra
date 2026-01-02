@@ -25,12 +25,12 @@ function resolveSkillsPath(): string {
 }
 
 /**
- * Skills processor - provides skill activation tools to the agent.
- * When the agent needs domain-specific knowledge (like brand guidelines),
- * it can activate the appropriate skill using the provided tools.
+ * Skills processor with explicit paths - this agent has its OWN skills.
+ *
+ * This demonstrates agent-level skills that are NOT shared with Mastra instance.
+ * The agent only sees skills from the configured paths.
  */
 const skillsProcessor = new SkillsProcessor({
-  // Skills are auto-discovered from the configured paths
   skillsPaths: [resolveSkillsPath()],
 });
 
@@ -38,9 +38,9 @@ const skillsProcessor = new SkillsProcessor({
  * Documentation agent that uses skills for brand-consistent writing.
  *
  * This agent demonstrates:
- * 1. SkillsProcessor - provides skill activation tools
+ * 1. SkillsProcessor with skillsPaths - agent has its own skill discovery
  * 2. Tool-based skill activation - agent decides when to use skills
- * 3. SKILL.md format - skills are defined in markdown with frontmatter
+ * 3. Skills are specific to this agent (not inherited from Mastra)
  */
 export const docsAgent = new Agent({
   id: 'docs-agent',
@@ -64,5 +64,6 @@ Available actions:
   model: openai('gpt-4o-mini'),
 
   // SkillsProcessor adds tools for skill management
+  // Uses explicit skillsPaths - does NOT inherit from Mastra
   inputProcessors: [skillsProcessor],
 });
