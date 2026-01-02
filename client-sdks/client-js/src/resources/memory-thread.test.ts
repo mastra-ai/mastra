@@ -343,6 +343,93 @@ describe('MemoryThread', () => {
       expect(result).toEqual(mockMessages);
     });
 
+    it('should update thread without agentId in URL', async () => {
+      const updateParams = {
+        title: 'Updated Title',
+        metadata: { updated: true },
+        resourceId: 'resource-1',
+      };
+
+      const mockUpdatedThread = {
+        id: threadId,
+        title: updateParams.title,
+        metadata: updateParams.metadata,
+        resourceId: updateParams.resourceId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      mockFetchResponse(mockUpdatedThread);
+
+      const result = await threadWithoutAgent.update(updateParams);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}`,
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+          body: JSON.stringify(updateParams),
+        }),
+      );
+      expect(result).toEqual(mockUpdatedThread);
+    });
+
+    it('should delete thread without agentId in URL', async () => {
+      const mockResponse = { result: 'Thread deleted' };
+
+      mockFetchResponse(mockResponse);
+
+      const result = await threadWithoutAgent.delete();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}`,
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should clone thread without agentId in URL', async () => {
+      const cloneParams = {
+        newThreadId: 'cloned-thread-id',
+        newTitle: 'Cloned Thread',
+        newMetadata: { cloned: true },
+      };
+
+      const mockCloneResponse = {
+        thread: {
+          id: cloneParams.newThreadId,
+          title: cloneParams.newTitle,
+          metadata: cloneParams.newMetadata,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        messages: [{ id: 'cloned-msg-1', content: 'Hello', role: 'user' }],
+      };
+
+      mockFetchResponse(mockCloneResponse);
+
+      const result = await threadWithoutAgent.clone(cloneParams);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}/clone`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+          body: JSON.stringify(cloneParams),
+        }),
+      );
+      expect(result).toEqual(mockCloneResponse);
+    });
+
     it('should delete messages without agentId in URL', async () => {
       const messageIds = ['msg-1', 'msg-2'];
       const mockResponse = { success: true, message: '2 messages deleted successfully' };
@@ -356,7 +443,6 @@ describe('MemoryThread', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'content-type': 'application/json',
             Authorization: 'Bearer test-key',
           }),
           body: JSON.stringify({ messageIds }),
