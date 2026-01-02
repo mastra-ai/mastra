@@ -984,6 +984,25 @@ ${formattedMessages}
   }
 
   /**
+   * Get the maximum createdAt timestamp from a list of messages.
+   * Used to set lastObservedAt to the most recent message timestamp instead of current time.
+   * This ensures historical data (like LongMemEval fixtures) works correctly.
+   */
+  private getMaxMessageTimestamp(messages: MastraDBMessage[]): Date {
+    let maxTime = 0;
+    for (const msg of messages) {
+      if (msg.createdAt) {
+        const msgTime = new Date(msg.createdAt).getTime();
+        if (msgTime > maxTime) {
+          maxTime = msgTime;
+        }
+      }
+    }
+    // If no valid timestamps found, fall back to current time
+    return maxTime > 0 ? new Date(maxTime) : new Date();
+  }
+
+  /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
@@ -1189,11 +1208,15 @@ ${formattedMessages}
 
       console.info(`[OM] Storing observations: ${totalTokenCount} tokens`);
 
+      // Use the max message timestamp as cursor instead of current time
+      // This ensures historical data (like LongMemEval fixtures) works correctly
+      const lastObservedAt = this.getMaxMessageTimestamp(unobservedMessages);
+
       await this.storage.updateActiveObservations({
         id: record.id,
         observations: newObservations,
         tokenCount: totalTokenCount,
-        lastObservedAt: new Date(),
+        lastObservedAt,
       });
 
       // Save thread-specific metadata (currentTask, suggestedResponse)
@@ -1384,7 +1407,10 @@ ${formattedMessages}
 
       // After ALL threads observed, update the record with final observations
       const totalTokenCount = this.tokenCounter.countObservations(currentObservations);
-      const now = new Date();
+      
+      // Use the max message timestamp as cursor instead of current time
+      // This ensures historical data (like LongMemEval fixtures) works correctly
+      const lastObservedAt = this.getMaxMessageTimestamp(allUnobservedMessages);
 
       console.info(`[OM] All threads observed. Storing ${totalTokenCount} tokens`);
 
@@ -1392,7 +1418,7 @@ ${formattedMessages}
         id: record.id,
         observations: currentObservations,
         tokenCount: totalTokenCount,
-        lastObservedAt: now,
+        lastObservedAt,
       });
 
       console.info(`[OM] Resource-scoped observation complete`);

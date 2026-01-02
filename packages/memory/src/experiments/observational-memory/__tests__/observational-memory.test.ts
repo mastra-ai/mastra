@@ -3102,7 +3102,9 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [{ type: 'text', text: 'Acknowledged.' }],
+        content: [
+          // { type: 'text', text: 'Acknowledged.' }
+        ],
         warnings: [],
       }),
       doStream: async () => ({

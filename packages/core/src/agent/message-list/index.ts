@@ -1590,7 +1590,9 @@ export class MessageList {
     }
 
     this.lastCreatedAt = nowTime;
-    return now;
+    // Return the provided startDate if available, otherwise use current time
+    // This preserves historical timestamps for input messages (e.g., LongMemEval fixtures)
+    return startDate || now;
   }
 
   private newMessageId(): string {
@@ -1939,7 +1941,9 @@ export class MessageList {
       typeof coreMessage.metadata === 'object' &&
       'createdAt' in coreMessage.metadata
         ? coreMessage.metadata.createdAt
-        : undefined;
+        : 'createdAt' in coreMessage
+          ? coreMessage.createdAt
+          : undefined;
 
     return {
       id,
