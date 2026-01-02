@@ -300,8 +300,11 @@ export interface ObservationalMemoryRecord {
   createdAt: Date;
   /** When this record was last updated */
   updatedAt: Date;
-  /** Single cursor for message loading - when we last observed ANY thread for this resource */
-  lastObservedAt: Date;
+  /** 
+   * Single cursor for message loading - when we last observed ANY thread for this resource.
+   * Undefined means no observations have been made yet (all messages are "unobserved").
+   */
+  lastObservedAt?: Date;
 
   // Generation tracking
   /** How this record was created */

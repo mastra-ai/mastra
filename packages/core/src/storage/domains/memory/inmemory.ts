@@ -643,7 +643,9 @@ export class InMemoryMemory extends MemoryStorage {
       // Timestamps at top level
       createdAt: now,
       updatedAt: now,
-      lastObservedAt: now,
+      // lastObservedAt starts undefined - all messages are "unobserved" initially
+      // This ensures historical data (like LongMemEval fixtures) works correctly
+      lastObservedAt: undefined,
       originType: 'initial',
       activeObservations: '',
       // Buffering (for async observation/reflection)
