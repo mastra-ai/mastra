@@ -2050,7 +2050,6 @@ export class Workflow<
     // Build the result based on requested fields
     const includeAllFields = !fields || fields.length === 0;
     const fieldsSet = new Set(fields ?? []);
-    const includeMetadata = includeAllFields || fieldsSet.has('metadata');
 
     // Get steps if needed
     let steps: Record<string, any> = {};
