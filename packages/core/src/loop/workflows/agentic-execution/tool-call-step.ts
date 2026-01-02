@@ -343,6 +343,12 @@ export function createToolCallStep<
           await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
+        //this is to avoid passing resume data to the tool if it's not needed
+        const resumeDataToPassToToolOptions =
+          toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+            ? undefined
+            : resumeData;
+
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
@@ -389,7 +395,7 @@ export function createToolCallStep<
               },
             );
           },
-          resumeData,
+          resumeData: resumeDataToPassToToolOptions,
         };
 
         const result = await tool.execute(args, toolOptions);
