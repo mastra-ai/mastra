@@ -3073,6 +3073,8 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
    */
   // TODO: Re-enable once per-resource architecture is working properly
   // This test requires cross-session memory (resourceScope: true) to work correctly
+  // NOTE: This test processes all 54 LongMemEval sessions with real API calls.
+  // It takes 10+ minutes to run. Run manually with: npx vitest run -t "FULL BENCHMARK"
   it.skip('FULL BENCHMARK: should process all 54 sessions and recall key fact', async () => {
     // 1. Create storage
     const storage = createInMemoryStorage();
@@ -3118,14 +3120,19 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       }),
     });
 
-    // 4. Create Agent with mock model for ingestion, ObservationalMemory as processors
+    // 4. Create MessageHistory for realistic message persistence (output only - OM handles input)
+    const messageHistory = new MessageHistory({ storage });
+
+    // 5. Create Agent with mock model for ingestion
+    // - Input: OM loads messages and injects observations
+    // - Output: MessageHistory saves messages, then OM observes them
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Test Agent',
       instructions: 'You are a helpful assistant. Process and store conversation history.',
       model: mockAgentModel,
       inputProcessors: [om],
-      outputProcessors: [om],
+      outputProcessors: [messageHistory, om],
     });
 
     // 5. Sort sessions chronologically (oldest first) - exactly like prepare.ts
@@ -3212,7 +3219,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       instructions: 'You are a helpful assistant. Answer questions based on the conversation history.',
       model: 'google/gemini-2.5-flash',
       inputProcessors: [om],
-      outputProcessors: [om],
+      outputProcessors: [messageHistory, om],
     });
 
     const result = await evalAgent.generate(questionData.question, {
