@@ -1,4 +1,5 @@
 import { createTool } from '@mastra/core/tools';
+import type { MastraVector } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
@@ -10,8 +11,9 @@ import { defaultGraphOptions } from './types';
 
 export const createGraphRAGTool = (options: GraphRagToolOptions) => {
   const { model, id, description } = options;
+  const storeName = options['vectorStoreName'] ? options.vectorStoreName : 'DirectVectorStore';
 
-  const toolId = id || `GraphRAG ${options.vectorStoreName} ${options.indexName} Tool`;
+  const toolId = id || `GraphRAG ${storeName} ${options.indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription();
   const graphOptions = {
     ...defaultGraphOptions,
@@ -31,7 +33,8 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     execute: async (inputData, context) => {
       const { requestContext, mastra } = context || {};
       const indexName: string = requestContext?.get('indexName') ?? options.indexName;
-      const vectorStoreName: string = requestContext?.get('vectorStoreName') ?? options.vectorStoreName;
+      const vectorStoreName: string =
+        'vectorStore' in options ? storeName : (requestContext?.get('vectorStoreName') ?? storeName);
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
       const includeSources: boolean = requestContext?.get('includeSources') ?? options.includeSources ?? true;
@@ -62,7 +65,19 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
             : typeof topK === 'string' && !isNaN(Number(topK))
               ? Number(topK)
               : 10;
-        const vectorStore = mastra?.getVector(vectorStoreName);
+
+        let vectorStore: MastraVector | undefined = undefined;
+        if ('vectorStore' in options) {
+          const vectorStoreOption = options.vectorStore;
+          // Support dynamic vector store resolution for multi-tenant setups
+          if (typeof vectorStoreOption === 'function') {
+            vectorStore = await vectorStoreOption({ requestContext, mastra });
+          } else {
+            vectorStore = vectorStoreOption;
+          }
+        } else if (mastra) {
+          vectorStore = mastra.getVector(vectorStoreName);
+        }
 
         if (!vectorStore) {
           if (logger) {

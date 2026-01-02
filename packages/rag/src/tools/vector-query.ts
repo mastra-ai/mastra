@@ -62,7 +62,13 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
 
         let vectorStore: MastraVector | undefined = undefined;
         if ('vectorStore' in options) {
-          vectorStore = options.vectorStore;
+          const vectorStoreOption = options.vectorStore;
+          // Support dynamic vector store resolution for multi-tenant setups
+          if (typeof vectorStoreOption === 'function') {
+            vectorStore = await vectorStoreOption({ requestContext, mastra });
+          } else {
+            vectorStore = vectorStoreOption;
+          }
         } else if (mastra) {
           vectorStore = mastra.getVector(vectorStoreName);
         }

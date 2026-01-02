@@ -130,4 +130,116 @@ describe('createGraphRAGTool', () => {
       );
     });
   });
+
+  describe('dynamic vectorStore (multi-tenant schema support)', () => {
+    it('should support vectorStore as a function that receives requestContext', async () => {
+      // Simulate multi-tenant setup where each tenant has a different schema
+      const tenantAVectorStore = { id: 'tenant-a-store' } as any;
+      const tenantBVectorStore = { id: 'tenant-b-store' } as any;
+
+      const vectorStoreResolver = vi.fn(({ requestContext }: { requestContext?: RequestContext }) => {
+        const schemaId = requestContext?.get('schemaId');
+        return schemaId === 'tenant-a' ? tenantAVectorStore : tenantBVectorStore;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'tenant_embeddings',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      // Test with tenant A context
+      const tenantAContext = new RequestContext();
+      tenantAContext.set('schemaId', 'tenant-a');
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: tenantAContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ requestContext: tenantAContext }));
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: tenantAVectorStore,
+        }),
+      );
+
+      vi.clearAllMocks();
+      mockGraphRAGInstances.length = 0;
+
+      // Test with tenant B context
+      const tenantBContext = new RequestContext();
+      tenantBContext.set('schemaId', 'tenant-b');
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: tenantBContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ requestContext: tenantBContext }));
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: tenantBVectorStore,
+        }),
+      );
+    });
+
+    it('should support async vectorStore resolver function', async () => {
+      const asyncVectorStore = { id: 'async-resolved-store' } as any;
+
+      const asyncVectorStoreResolver = vi.fn(async ({ requestContext }: { requestContext?: RequestContext }) => {
+        // Simulate async operation (e.g., fetching from DB or initializing per-tenant store)
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return asyncVectorStore;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: asyncVectorStore,
+        }),
+      );
+    });
+
+    it('should pass mastra instance to vectorStore resolver function', async () => {
+      const vectorStoreResolver = vi.fn(({ mastra }: { mastra?: any }) => {
+        // Use mastra to get a custom vector store
+        return { id: 'mastra-resolved-store' } as any;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { mastra: mockMastra as any, requestContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ mastra: mockMastra }));
+    });
+
+    it('should still support static vectorStore (existing behavior)', async () => {
+      const staticVectorStore = { id: 'static-store' } as any;
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: staticVectorStore,
+      });
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: new RequestContext() });
+
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: staticVectorStore,
+        }),
+      );
+    });
+  });
 });

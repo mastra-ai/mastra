@@ -1,6 +1,36 @@
+import type { MastraUnion } from '@mastra/core/action';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
 
 import type { RerankConfig } from '../rerank';
+
+/**
+ * Context passed to dynamic vector store resolver functions.
+ * Enables multi-tenant setups where the vector store is selected based on request context.
+ */
+export interface VectorStoreResolverContext {
+  /** The request context containing tenant/schema information */
+  requestContext?: RequestContext;
+  /** The Mastra instance for accessing registered resources */
+  mastra?: MastraUnion;
+}
+
+/**
+ * A function that dynamically resolves a vector store based on the execution context.
+ * Useful for multi-tenant applications where each tenant has a separate schema/database.
+ *
+ * @example
+ * ```typescript
+ * const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+ *   const schemaId = requestContext?.get('schemaId');
+ *   return new PgVector({
+ *     connectionString: process.env.DATABASE_URL,
+ *     schemaName: `tenant_${schemaId}`,
+ *   });
+ * };
+ * ```
+ */
+export type VectorStoreResolver = (context: VectorStoreResolverContext) => MastraVector | Promise<MastraVector>;
 
 export interface PineconeConfig {
   namespace?: string;
@@ -71,7 +101,26 @@ export type VectorQueryToolOptions = {
       }
     | {
         vectorStoreName?: string;
-        vectorStore: MastraVector;
+        /**
+         * The vector store instance or a resolver function for dynamic selection.
+         *
+         * For multi-tenant applications, pass a function that receives the request context
+         * and returns the appropriate vector store for the current tenant/schema.
+         *
+         * @example Static vector store
+         * ```typescript
+         * vectorStore: new PgVector({ connectionString: '...' })
+         * ```
+         *
+         * @example Dynamic resolver for multi-tenant
+         * ```typescript
+         * vectorStore: async ({ requestContext }) => {
+         *   const schemaId = requestContext?.get('schemaId');
+         *   return getVectorStoreForSchema(schemaId);
+         * }
+         * ```
+         */
+        vectorStore: MastraVector | VectorStoreResolver;
       }
   );
 
@@ -79,7 +128,6 @@ export type GraphRagToolOptions = {
   id?: string;
   description?: string;
   indexName: string;
-  vectorStoreName: string;
   model: MastraEmbeddingModel<string>;
   enableFilter?: boolean;
   includeSources?: boolean;
@@ -89,7 +137,35 @@ export type GraphRagToolOptions = {
     restartProb?: number;
     threshold?: number;
   };
-} & ProviderOptions;
+} & ProviderOptions &
+  (
+    | {
+        vectorStoreName: string;
+      }
+    | {
+        vectorStoreName?: string;
+        /**
+         * The vector store instance or a resolver function for dynamic selection.
+         *
+         * For multi-tenant applications, pass a function that receives the request context
+         * and returns the appropriate vector store for the current tenant/schema.
+         *
+         * @example Static vector store
+         * ```typescript
+         * vectorStore: new PgVector({ connectionString: '...' })
+         * ```
+         *
+         * @example Dynamic resolver for multi-tenant
+         * ```typescript
+         * vectorStore: async ({ requestContext }) => {
+         *   const schemaId = requestContext?.get('schemaId');
+         *   return getVectorStoreForSchema(schemaId);
+         * }
+         * ```
+         */
+        vectorStore: MastraVector | VectorStoreResolver;
+      }
+  );
 
 export type ProviderOptions = {
   /**
