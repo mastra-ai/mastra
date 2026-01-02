@@ -290,8 +290,8 @@ export const findExportTool = {
         output.push('## Type Definition', '', `\`${exportInfo.types}\``, '', '```typescript');
 
         const lines = typesContent.split('\n');
-        const exportPattern = new RegExp(`\\b${args.exportName}\\b`);
-        let startLine = lines.findIndex(line => exportPattern.test(line));
+        // Use string search instead of regex to avoid ReDoS vulnerability
+        let startLine = lines.findIndex(line => line.includes(args.exportName));
 
         if (startLine === -1) {
           output.push(typesContent.slice(0, 2000));
@@ -460,11 +460,15 @@ export const searchEmbeddedDocsTool = {
               const end = Math.min(lines.length, i + 3);
               const excerpt = lines.slice(start, end).join('\n').slice(0, 300);
 
+              // Count occurrences using string split to avoid ReDoS vulnerability
+              const contentLower = content.toLowerCase();
+              const occurrences = contentLower.split(queryLower).length - 1;
+
               results.push({
                 pkg,
                 file: path.relative(docsPath, file),
                 excerpt,
-                score: (content.toLowerCase().match(new RegExp(queryLower, 'g')) || []).length,
+                score: occurrences,
               });
               break;
             }
