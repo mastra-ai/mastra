@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
+import type { MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
@@ -12,6 +12,7 @@ import {
   baseSchema,
   coerceTopK,
   parseFilterValue,
+  resolveVectorStore,
 } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
@@ -63,18 +64,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       try {
         const topKValue = coerceTopK(topK);
 
-        let vectorStore: MastraVector | undefined = undefined;
-        if ('vectorStore' in options) {
-          const vectorStoreOption = options.vectorStore;
-          // Support dynamic vector store resolution for multi-tenant setups
-          if (typeof vectorStoreOption === 'function') {
-            vectorStore = await vectorStoreOption({ requestContext, mastra });
-          } else {
-            vectorStore = vectorStoreOption;
-          }
-        } else if (mastra) {
-          vectorStore = mastra.getVector(vectorStoreName);
-        }
+        const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
