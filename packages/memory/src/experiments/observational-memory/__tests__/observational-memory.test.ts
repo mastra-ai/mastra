@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
+  buildObserverSystemPrompt,
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
@@ -1992,13 +1993,12 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(formatted).toContain('2024');
   });
 
-  it('observer prompt should require Current Task section', () => {
-    const messages = [createTestMessage('Help me build a todo app', 'user')];
+  it('observer system prompt should require Current Task section', () => {
+    const systemPrompt = buildObserverSystemPrompt();
 
-    const prompt = buildObserverPrompt(undefined, messages);
-
-    expect(prompt).toContain('**Current Task:**');
-    expect(prompt).toContain('MUST end your observations');
+    // Check for XML-based current task requirement in the system prompt
+    expect(systemPrompt).toContain('<current-task>');
+    expect(systemPrompt).toContain('MUST use XML tags');
   });
 });
 
