@@ -28,7 +28,7 @@ class TestLangfuseExporter extends LangfuseExporter {
     return this.getTraceData({ traceId, method: "test" });
   }
 
-  _traceMapSize() : number {
+  get _traceMapSize() : number {
     return this.traceMapSize();
   }
 }
@@ -2901,7 +2901,7 @@ describe('LangfuseExporter', () => {
       expect(mockLangfuseClient.shutdownAsync).toHaveBeenCalled();
 
       // Verify maps were cleared
-      expect(exporter._traceMapSize()).toBe(0);
+      expect(exporter._traceMapSize).toBe(0);
     });
   });
 });

@@ -64,7 +64,7 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
     return this.#spans.has(spanId);
   }
 
-  getSpan(args: { spanId: string}): TRootData | TSpanData | undefined {
+  getSpan(args: { spanId: string}): TSpanData | undefined {
     const { spanId } = args;
     // if (this.#rootSpanId == spanId) {
     //     return this.#rootSpan;
@@ -376,10 +376,19 @@ export abstract class TrackingExporter<
   }
 
 //   async shutdown(): Promise<void> {
+//     // End all active spans
+//     for (const [_traceId, spanData] of this.#traceMap) {
+//       for (const [_spanId, span] of spanData.spans) {
+//         span.end();
+//       }
+//       // Loggers don't have an explicit shutdown method
+//     }
+
 //     if (this.client) {
 //       await this.client.shutdownAsync();
 //     }
 //     this.traceMap.clear();
 //     await super.shutdown();
 //   }
+
 }
