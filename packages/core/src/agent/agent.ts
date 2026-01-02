@@ -3008,6 +3008,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       messages,
       threadId,
       resourceId,
+      abortSignal: options?.abortSignal,
+      onAbort: options?.onAbort,
     });
   }
 
