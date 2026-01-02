@@ -906,9 +906,7 @@ ${suggestedResponse}
     const result = await this.storage.listMessages({
       // In resource scope, query by resourceId directly (no need to list threads first)
       // In thread scope, query by threadId
-      ...(this.resourceScope && resourceId
-        ? { resourceId }
-        : { threadId }),
+      ...(this.resourceScope && resourceId ? { resourceId } : { threadId }),
       perPage: false, // Get all messages (no pagination limit)
       orderBy: { field: 'createdAt', direction: 'ASC' },
       filter: lastObservedAt
@@ -960,8 +958,7 @@ ${suggestedResponse}
         .filter(msg => msg.role !== 'system') // Exclude system messages
         .map(msg => {
           const timestamp = msg.createdAt ? new Date(msg.createdAt).toISOString() : 'unknown';
-          const content =
-            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
           return `[${timestamp}] ${msg.role}: ${content}`;
         })
         .join('\n');
@@ -1007,9 +1004,7 @@ ${formattedMessages}
     newThreadSection: string,
   ): string {
     // Always append - preserves temporal ordering of when observations were made
-    return existingObservations
-      ? `${existingObservations}\n\n${newThreadSection}`
-      : newThreadSection;
+    return existingObservations ? `${existingObservations}\n\n${newThreadSection}` : newThreadSection;
   }
 
   /**
@@ -1017,9 +1012,7 @@ ${formattedMessages}
    * Returns thread IDs in order from oldest to most recent.
    * This ensures no thread's messages get "stuck" unobserved.
    */
-  private sortThreadsByOldestMessage(
-    messagesByThread: Map<string, MastraDBMessage[]>,
-  ): string[] {
+  private sortThreadsByOldestMessage(messagesByThread: Map<string, MastraDBMessage[]>): string[] {
     const threadOrder = Array.from(messagesByThread.entries())
       .map(([threadId, messages]) => {
         // Find oldest message timestamp
@@ -1184,11 +1177,7 @@ ${formattedMessages}
       if (this.resourceScope) {
         // In resource scope: wrap with thread tag and replace/append
         const threadSection = this.wrapWithThreadTag(threadId, result.observations);
-        newObservations = this.replaceOrAppendThreadSection(
-          existingObservations,
-          threadId,
-          threadSection,
-        );
+        newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
       } else {
         // In thread scope: simple append
         newObservations = existingObservations
@@ -1268,30 +1257,28 @@ ${formattedMessages}
     console.info(`[OM] Starting resource-scoped observation for resource ${resourceId}`);
 
     // Load unobserved messages from OTHER threads in the resource from DB
-    const dbMessages = await this.loadUnobservedMessages(
-      currentThreadId,
-      resourceId,
-      record.lastObservedAt,
-    );
+    const dbMessages = await this.loadUnobservedMessages(currentThreadId, resourceId, record.lastObservedAt);
 
     // Merge DB messages with current thread's messages from messageList
     // Current thread messages may not be in DB yet, so we need to include them
     // Use a Map to dedupe by message ID
     const messageMap = new Map<string, MastraDBMessage>();
-    
+
     // Add DB messages first
     for (const msg of dbMessages) {
       if (msg.id) messageMap.set(msg.id, msg);
     }
-    
+
     // Add/override with current thread messages (they're more up-to-date)
     for (const msg of currentThreadMessages) {
       if (msg.id) messageMap.set(msg.id, msg);
     }
-    
+
     const allUnobservedMessages = Array.from(messageMap.values());
-    
-    console.info(`[OM] Merged messages: ${dbMessages.length} from DB + ${currentThreadMessages.length} from current session = ${allUnobservedMessages.length} total (after dedup)`);
+
+    console.info(
+      `[OM] Merged messages: ${dbMessages.length} from DB + ${currentThreadMessages.length} from current session = ${allUnobservedMessages.length} total (after dedup)`,
+    );
 
     if (allUnobservedMessages.length === 0) {
       console.info(`[OM] No unobserved messages found for resource ${resourceId}`);
@@ -1333,10 +1320,10 @@ ${formattedMessages}
 
         console.info(`[OM] Observing thread ${threadId} with ${threadMessages.length} messages`);
         // Debug: show first 200 chars of each message
-        for (const msg of threadMessages) {
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          console.info(`[OM]   ${msg.role}: ${content.substring(0, 200)}...`);
-        }
+        // for (const msg of threadMessages) {
+        // const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+        // console.info(`[OM]   ${msg.role}: ${content.substring(0, 200)}...`);
+        // }
 
         // Emit debug event for observation triggered
         this.emitDebugEvent({
@@ -1353,16 +1340,14 @@ ${formattedMessages}
 
         // Call observer for this thread's messages
         const result = await this.callObserver(currentObservations, threadMessages);
-        console.info(`[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars):`);
+        console.info(
+          `[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars):`,
+        );
         console.info(`[OM]   Observations: ${result.observations.substring(0, 500)}...`);
 
         // Wrap with thread tag and replace/append
         const threadSection = this.wrapWithThreadTag(threadId, result.observations);
-        currentObservations = this.replaceOrAppendThreadSection(
-          currentObservations,
-          threadId,
-          threadSection,
-        );
+        currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
         // Update thread-specific metadata (currentTask, suggestedResponse)
         if (result.suggestedContinuation || result.currentTask) {

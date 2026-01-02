@@ -290,16 +290,8 @@ export function buildObserverPrompt(
 
   prompt += `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n`;
 
-  // Find and emphasize the most recent user message
-  const hasUserMessages = messagesToObserve.some(m => m.role === `user`);
-  if (hasUserMessages) {
-    prompt += `## IMPORTANT: user messages are CRITICAL and should be given HIGH PRIORITY in your observations:\n\n`;
-    prompt += `Make sure your observations clearly capture what the user wants from each message, and ensure the Current Task section reflects this.\n\n---\n\n`;
-  }
-
   prompt += `## Your Task\n\n`;
-  prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.\n\n`;
-  prompt += `IMPORTANT: You MUST end your observations with a "**Current Task:**" line that clearly states what the assistant should do next based on the most recent user request.`;
+  prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
   return prompt;
 }
