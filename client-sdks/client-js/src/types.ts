@@ -274,7 +274,11 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
   resourceId: string;
-  agentId: string;
+  /**
+   * Optional agentId. When not provided and storage is configured on the server,
+   * threads will be retrieved using storage directly.
+   */
+  agentId?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
@@ -304,6 +308,27 @@ export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'thr
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
+};
+
+export interface CloneMemoryThreadParams {
+  newThreadId?: string;
+  resourceId?: string;
+  title?: string;
+  metadata?: Record<string, any>;
+  options?: {
+    messageLimit?: number;
+    messageFilter?: {
+      startDate?: Date;
+      endDate?: Date;
+      messageIds?: string[];
+    };
+  };
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type CloneMemoryThreadResponse = {
+  thread: StorageThreadType;
+  clonedMessages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {
