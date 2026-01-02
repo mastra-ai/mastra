@@ -181,11 +181,13 @@ describe('createGraphRAGTool', () => {
     it('should support async vectorStore resolver function', async () => {
       const asyncVectorStore = { id: 'async-resolved-store' } as any;
 
-      const asyncVectorStoreResolver = vi.fn(async ({ requestContext }: { requestContext?: RequestContext }) => {
-        // Simulate async operation (e.g., fetching from DB or initializing per-tenant store)
-        await new Promise(resolve => setTimeout(resolve, 10));
-        return asyncVectorStore;
-      });
+      const asyncVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          // Simulate async operation (e.g., fetching from DB or initializing per-tenant store)
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return asyncVectorStore;
+        },
+      );
 
       const tool = createGraphRAGTool({
         indexName: 'testIndex',
@@ -206,7 +208,7 @@ describe('createGraphRAGTool', () => {
     });
 
     it('should pass mastra instance to vectorStore resolver function', async () => {
-      const vectorStoreResolver = vi.fn(({ mastra }: { mastra?: any }) => {
+      const vectorStoreResolver = vi.fn(({ mastra: _mastra }: { mastra?: any }) => {
         // Use mastra to get a custom vector store
         return { id: 'mastra-resolved-store' } as any;
       });
