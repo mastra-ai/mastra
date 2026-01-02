@@ -5,4 +5,5 @@ export { FileService } from '../services/fs';
 export { Deps } from '../services/deps';
 export { getServerOptions } from './serverOptions';
 export { getBundlerOptions } from './bundlerOptions';
-export { normalizeStudioBase } from './utils';
+export { normalizeStudioBase, detectRuntime, getEsbuildPlatform } from './utils';
+export type { RuntimePlatform } from './utils';
