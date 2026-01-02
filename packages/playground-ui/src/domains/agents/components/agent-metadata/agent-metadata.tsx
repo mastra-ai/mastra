@@ -1,5 +1,6 @@
 import { Badge } from '@/ds/components/Badge';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
+import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
@@ -80,6 +81,8 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   const agentWorkflows = agent.workflows ?? {};
   const workflows = Object.keys(agentWorkflows).map(key => ({ id: key, ...agentWorkflows[key] }));
+
+  const skills = (agent as any).skills ?? [];
 
   return (
     <AgentMetadataWrapper>
@@ -181,6 +184,16 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         <AgentMetadataWorkflowList workflows={workflows} />
       </AgentMetadataSection>
 
+      <AgentMetadataSection
+        title="Skills"
+        hint={{
+          link: 'https://mastra.ai/en/docs/skills/overview',
+          title: 'Skills documentation',
+        }}
+      >
+        <AgentMetadataSkillList skills={skills} agentId={agentId} />
+      </AgentMetadataSection>
+
       <AgentMetadataSection title="Scorers">
         <AgentMetadataScorerList entityId={agent.name} entityType="AGENT" />
       </AgentMetadataSection>
@@ -274,6 +287,36 @@ export const AgentMetadataScorerList = ({ entityId, entityType }: AgentMetadataS
         <AgentMetadataListItem key={scorer.id}>
           <Link href={paths.scorerLink(scorer.id)} data-testid="scorer-badge">
             <Badge icon={<GaugeIcon className="text-icon3" />}>{scorer.scorer.config.name}</Badge>
+          </Link>
+        </AgentMetadataListItem>
+      ))}
+    </AgentMetadataList>
+  );
+};
+
+export interface AgentMetadataSkillListProps {
+  skills: Array<{
+    name: string;
+    description: string;
+    license?: string;
+    allowedTools?: string[];
+  }>;
+  agentId: string;
+}
+
+export const AgentMetadataSkillList = ({ skills, agentId }: AgentMetadataSkillListProps) => {
+  const { Link, paths } = useLinkComponent();
+
+  if (skills.length === 0) {
+    return <AgentMetadataListEmpty>No skills</AgentMetadataListEmpty>;
+  }
+
+  return (
+    <AgentMetadataList>
+      {skills.map(skill => (
+        <AgentMetadataListItem key={skill.name}>
+          <Link href={paths.agentSkillLink(agentId, skill.name)} data-testid="skill-badge">
+            <Badge icon={<SkillIcon className="text-accent2" />}>{skill.name}</Badge>
           </Link>
         </AgentMetadataListItem>
       ))}

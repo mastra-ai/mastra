@@ -50,6 +50,20 @@ export const listSkillsResponseSchema = z.object({
 
 export const getSkillResponseSchema = skillSchema;
 
+/**
+ * Agent skill response schema - similar to skillSchema but with optional fields
+ * for when full skill details aren't available (e.g., inherited skills without
+ * direct access to the Skills instance).
+ */
+export const getAgentSkillResponseSchema = skillMetadataSchema.extend({
+  path: z.string().optional(),
+  instructions: z.string().optional(),
+  source: skillSourceSchema.optional(),
+  references: z.array(z.string()).optional(),
+  scripts: z.array(z.string()).optional(),
+  assets: z.array(z.string()).optional(),
+});
+
 export const skillReferenceResponseSchema = z.object({
   skillName: z.string(),
   referencePath: z.string(),

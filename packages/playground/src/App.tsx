@@ -57,6 +57,7 @@ import { StudioSettingsPage } from './pages/settings';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
@@ -68,6 +69,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  skillLink: (skillName: string) => `/skills/${skillName}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
