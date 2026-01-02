@@ -30,7 +30,7 @@ importers:
         specifier: ^1.24.0
         version: 1.25.1(hono@4.11.3)(zod@3.25.76)
       chalk:
-        specifier: 5.4.1
+        specifier: ^5.4.1
         version: 5.4.1
       zod:
         specifier: ^3.25.76
