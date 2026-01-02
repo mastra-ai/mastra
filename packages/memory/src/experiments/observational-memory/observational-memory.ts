@@ -997,30 +997,19 @@ ${formattedMessages}
   }
 
   /**
-   * Replace or append a thread section in the observation pool.
-   * If a section for this thread already exists, replace it.
-   * Otherwise, append the new section.
+   * Always append new thread sections to preserve temporal ordering.
+   * Each observation call creates a new <thread id="..."> block, showing
+   * when observations were made chronologically.
    */
   private replaceOrAppendThreadSection(
     existingObservations: string,
-    threadId: string,
+    _threadId: string,
     newThreadSection: string,
   ): string {
-    // Pattern to match existing thread section for this threadId
-    const threadPattern = new RegExp(
-      `<thread id="${threadId}">\\s*[\\s\\S]*?\\s*</thread>`,
-      'g',
-    );
-
-    if (threadPattern.test(existingObservations)) {
-      // Replace existing section
-      return existingObservations.replace(threadPattern, newThreadSection);
-    } else {
-      // Append new section
-      return existingObservations
-        ? `${existingObservations}\n\n${newThreadSection}`
-        : newThreadSection;
-    }
+    // Always append - preserves temporal ordering of when observations were made
+    return existingObservations
+      ? `${existingObservations}\n\n${newThreadSection}`
+      : newThreadSection;
   }
 
   /**
@@ -1106,7 +1095,8 @@ ${formattedMessages}
 
         if (this.resourceScope && resourceId) {
           // Resource scope: observe ALL threads with unobserved messages
-          await this.doResourceScopedObservation(record, threadId, resourceId);
+          // Pass current thread's messages from messageList since they may not be in DB yet
+          await this.doResourceScopedObservation(record, threadId, resourceId, unobservedMessages);
         } else {
           // Thread scope: observe only current thread
           await this.doSynchronousObservation(record, threadId, unobservedMessages);
@@ -1273,15 +1263,35 @@ ${formattedMessages}
     record: ObservationalMemoryRecord,
     currentThreadId: string,
     resourceId: string,
+    currentThreadMessages: MastraDBMessage[],
   ): Promise<void> {
     console.info(`[OM] Starting resource-scoped observation for resource ${resourceId}`);
 
-    // Load ALL unobserved messages for the resource
-    const allUnobservedMessages = await this.loadUnobservedMessages(
+    // Load unobserved messages from OTHER threads in the resource from DB
+    const dbMessages = await this.loadUnobservedMessages(
       currentThreadId,
       resourceId,
       record.lastObservedAt,
     );
+
+    // Merge DB messages with current thread's messages from messageList
+    // Current thread messages may not be in DB yet, so we need to include them
+    // Use a Map to dedupe by message ID
+    const messageMap = new Map<string, MastraDBMessage>();
+    
+    // Add DB messages first
+    for (const msg of dbMessages) {
+      if (msg.id) messageMap.set(msg.id, msg);
+    }
+    
+    // Add/override with current thread messages (they're more up-to-date)
+    for (const msg of currentThreadMessages) {
+      if (msg.id) messageMap.set(msg.id, msg);
+    }
+    
+    const allUnobservedMessages = Array.from(messageMap.values());
+    
+    console.info(`[OM] Merged messages: ${dbMessages.length} from DB + ${currentThreadMessages.length} from current session = ${allUnobservedMessages.length} total (after dedup)`);
 
     if (allUnobservedMessages.length === 0) {
       console.info(`[OM] No unobserved messages found for resource ${resourceId}`);
@@ -1322,6 +1332,11 @@ ${formattedMessages}
         // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
 
         console.info(`[OM] Observing thread ${threadId} with ${threadMessages.length} messages`);
+        // Debug: show first 200 chars of each message
+        for (const msg of threadMessages) {
+          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          console.info(`[OM]   ${msg.role}: ${content.substring(0, 200)}...`);
+        }
 
         // Emit debug event for observation triggered
         this.emitDebugEvent({
@@ -1338,7 +1353,8 @@ ${formattedMessages}
 
         // Call observer for this thread's messages
         const result = await this.callObserver(currentObservations, threadMessages);
-        console.info(`[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars)`);
+        console.info(`[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars):`);
+        console.info(`[OM]   Observations: ${result.observations.substring(0, 500)}...`);
 
         // Wrap with thread tag and replace/append
         const threadSection = this.wrapWithThreadTag(threadId, result.observations);

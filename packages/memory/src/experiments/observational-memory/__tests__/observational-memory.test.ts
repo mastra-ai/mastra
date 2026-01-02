@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { MessageHistory } from '@mastra/core/processors';
 import { InMemoryMemory } from '@mastra/core/storage';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai-v5/test';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -132,8 +133,9 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Test observation',
-        
-        tokenCount: 100, lastObservedAt: new Date(),
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
       });
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
@@ -213,15 +215,15 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Active observation',
-        
-        tokenCount: 50, lastObservedAt: new Date(),
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
       });
 
       // Add buffered observations
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🟡 Buffered observation',
-        
       });
 
       await storage.swapBufferedToActive(initial.id);
@@ -252,7 +254,6 @@ describe('Storage Operations', () => {
       await storage.updateBufferedObservations({
         id: initial.id,
         observations: '- 🟡 Buffered observation',
-        
       });
 
       const beforeSwap = new Date();
@@ -279,7 +280,7 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Test observation',
-        
+
         tokenCount: 100,
         lastObservedAt: new Date(),
       });
@@ -305,7 +306,7 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Test observation',
-        
+
         tokenCount: 100,
         lastObservedAt: observedAt,
       });
@@ -327,7 +328,7 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 First observation',
-        
+
         tokenCount: 100,
         lastObservedAt: firstObservedAt,
       });
@@ -340,7 +341,7 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Second observation',
-        
+
         tokenCount: 150,
         lastObservedAt: secondObservedAt,
       });
@@ -398,8 +399,9 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Original observations (very long...)',
-        
-        tokenCount: 30000, lastObservedAt: new Date(),
+
+        tokenCount: 30000,
+        lastObservedAt: new Date(),
       });
 
       const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
@@ -431,7 +433,7 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Original observations',
-        
+
         tokenCount: 30000,
         lastObservedAt: oldObservedAt,
       });
@@ -471,8 +473,9 @@ describe('Storage Operations', () => {
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- Gen 1',
-        
-        tokenCount: 100, lastObservedAt: new Date(),
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
       });
 
       const gen1 = await storage.getObservationalMemory(threadId, resourceId);
@@ -501,8 +504,9 @@ describe('Storage Operations', () => {
         await storage.updateActiveObservations({
           id: current.id,
           observations: `- Gen ${i}`,
-          
-          tokenCount: 100, lastObservedAt: new Date(),
+
+          tokenCount: 100,
+          lastObservedAt: new Date(),
         });
         const record = await storage.getObservationalMemory(threadId, resourceId);
         if (i < 4) {
@@ -1119,8 +1123,9 @@ describe('ObservationalMemory Integration', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: '- 🔴 Test observation',
-        
-        tokenCount: 50, lastObservedAt: new Date(),
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
       });
 
       const obs = await om.getObservations(threadId, resourceId);
@@ -1141,8 +1146,9 @@ describe('ObservationalMemory Integration', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: '- 🔴 Test',
-        
-        tokenCount: 50, lastObservedAt: new Date(),
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
       });
 
       // Verify it exists
@@ -1169,8 +1175,9 @@ describe('ObservationalMemory Integration', () => {
       await storage.updateActiveObservations({
         id: gen1.id,
         observations: '- 🔴 Generation 1',
-        
-        tokenCount: 100, lastObservedAt: new Date(),
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
       });
 
       // Create reflection (new generation)
@@ -1236,7 +1243,7 @@ describe('ObservationalMemory Integration', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: '- 🔴 User discussed old topics',
-        
+
         tokenCount: 100,
         lastObservedAt: observedAt,
       });
@@ -1400,7 +1407,7 @@ describe('ObservationalMemory Integration', () => {
       await storage.updateActiveObservations({
         id: record.id,
         observations: '- 🔴 Pre-reflection observations',
-        
+
         tokenCount: 30000, // High token count to trigger reflection
         lastObservedAt: firstObservedAt,
       });
@@ -1820,7 +1827,7 @@ describe('Scenario: Reflection Creates New Generation', () => {
     await storage.updateActiveObservations({
       id: gen1.id,
       observations: '- 🔴 Observation 1\n- 🟡 Observation 2\n- 🟡 Observation 3\n... (many more)',
-      
+
       tokenCount: 25000, // Exceeds reflector threshold
       lastObservedAt: new Date(),
     });
@@ -1848,7 +1855,6 @@ describe('Scenario: Reflection Creates New Generation', () => {
     expect(current?.activeObservations).toBe('- 🔴 Condensed: User working on project X');
   });
 });
-
 
 // =============================================================================
 // Unit Tests: Current Task Validation
@@ -1882,7 +1888,7 @@ The user wants to refactor the API
     it('should return false when missing', () => {
       const observations = `- 🔴 User preference
 - 🟡 Some observation
-- 🟢 Minor note`;
+- ������ Minor note`;
 
       expect(hasCurrentTaskSection(observations)).toBe(false);
     });
@@ -1948,10 +1954,8 @@ Help user set up React project
       const matches = result.observations.match(/current-task/gi);
       expect(matches?.length).toBe(2); // opening and closing tags
     });
-
   });
 });
-
 
 // =============================================================================
 // Scenario Tests: Information Recall
@@ -2014,8 +2018,9 @@ describe('Scenario: Cross-session memory (resource scope)', () => {
     await storage.updateActiveObservations({
       id: record.id,
       observations: '- 🔴 User name is Alice\n- 🔴 User works at TechCorp',
-      
-      tokenCount: 100, lastObservedAt: new Date(),
+
+      tokenCount: 100,
+      lastObservedAt: new Date(),
     });
 
     // Verify observations are stored at resource level
@@ -2168,7 +2173,7 @@ describe('Thread Attribution Helpers', () => {
       expect(result).toBe(`${existing}\n\n${newSection}`);
     });
 
-    it('should replace existing thread section', () => {
+    it('should always append new thread sections (preserves temporal ordering)', () => {
       const existing = `<thread id="thread-1">
 - 🔴 Old observation
 </thread>
@@ -2181,9 +2186,13 @@ describe('Thread Attribution Helpers', () => {
 
       const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
 
+      // Should append, not replace - preserves temporal ordering
       expect(result).toContain(newSection);
       expect(result).toContain('<thread id="thread-2">');
-      expect(result).not.toContain('Old observation');
+      // Old observation is preserved (appended, not replaced)
+      expect(result).toContain('Old observation');
+      // New section is appended at the end
+      expect(result).toBe(`${existing}\n\n${newSection}`);
     });
   });
 
@@ -2205,12 +2214,7 @@ describe('Thread Attribution Helpers', () => {
             { ...createTestMessage('msg4'), createdAt: new Date(now - 5000) },
           ],
         ],
-        [
-          'thread-middle',
-          [
-            { ...createTestMessage('msg5'), createdAt: new Date(now - 5000) },
-          ],
-        ],
+        ['thread-middle', [{ ...createTestMessage('msg5'), createdAt: new Date(now - 5000) }]],
       ]);
 
       const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
@@ -2221,14 +2225,8 @@ describe('Thread Attribution Helpers', () => {
     it('should handle threads with missing timestamps', () => {
       const now = Date.now();
       const messagesByThread = new Map<string, MastraDBMessage[]>([
-        [
-          'thread-with-date',
-          [{ ...createTestMessage('msg1'), createdAt: new Date(now - 10000) }],
-        ],
-        [
-          'thread-no-date',
-          [{ ...createTestMessage('msg2'), createdAt: undefined as any }],
-        ],
+        ['thread-with-date', [{ ...createTestMessage('msg1'), createdAt: new Date(now - 10000) }]],
+        ['thread-no-date', [{ ...createTestMessage('msg2'), createdAt: undefined as any }]],
       ]);
 
       const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
@@ -2455,7 +2453,7 @@ describe('Locking Behavior', () => {
     await storage.updateActiveObservations({
       id: (await storage.getObservationalMemory('thread-1', 'resource-1'))!.id,
       observations: largeObservations,
-      
+
       tokenCount: 500, // Exceeds threshold of 100
       lastObservedAt: new Date(),
     });
@@ -2608,13 +2606,11 @@ describe('Reflection with Thread Attribution', () => {
     const initialRecord = await storage.getObservationalMemory(null, 'resource-1');
 
     // Add observations that exceed the reflection threshold
-    const largeObservations = Array(50)
-      .fill('- 🟡 This is an observation that takes up space')
-      .join('\n');
+    const largeObservations = Array(50).fill('- 🟡 This is an observation that takes up space').join('\n');
     await storage.updateActiveObservations({
       id: initialRecord!.id,
       observations: largeObservations,
-      
+
       tokenCount: 500, // Above threshold
       lastObservedAt: new Date(),
     });
@@ -2703,7 +2699,7 @@ describe('Reflection with Thread Attribution', () => {
     await storage.updateActiveObservations({
       id: initialRecord!.id,
       observations: multiThreadObservations,
-      
+
       tokenCount: 500,
       lastObservedAt: new Date(),
     });
@@ -2798,8 +2794,7 @@ describe('Reflection with Thread Attribution', () => {
   });
 });
 
-// TODO: Re-enable after full resource-scope implementation is complete
-describe.skip('LongMemEval End-to-End Test (Question e47becba)', () => {
+describe('LongMemEval End-to-End Test (Question e47becba)', () => {
   const questionData = firstQuestion as LongMemEvalQuestionData;
 
   // Find the session that contains the answer
@@ -2917,7 +2912,6 @@ For personal expense tracking...
     });
   });
 
-
   describe('Storage Integration', () => {
     it('should store and retrieve observations containing the key fact', async () => {
       const storage = createInMemoryStorage();
@@ -2940,7 +2934,8 @@ For personal expense tracking...
       await storage.updateActiveObservations({
         id: record.id,
         observations: observationsWithKeyFact,
-        tokenCount: 200, lastObservedAt: new Date(),
+        tokenCount: 200,
+        lastObservedAt: new Date(),
       });
 
       // Retrieve and verify
@@ -2971,8 +2966,9 @@ For personal expense tracking...
         observations: `- 🟡 **Random Topic:** User discussed weather [context]
 
 **Current Task:** Continue conversation`,
-        
-        tokenCount: 50, lastObservedAt: new Date(),
+
+        tokenCount: 50,
+        lastObservedAt: new Date(),
       });
 
       // Session 2: Contains the key fact
@@ -2985,8 +2981,9 @@ For personal expense tracking...
 - 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
 
 **Current Task:** Help with expense tracking`,
-        
-        tokenCount: 100, lastObservedAt: new Date(),
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
       });
 
       // Session 3 (after key fact): more conversation
@@ -2999,8 +2996,9 @@ For personal expense tracking...
 - 🟡 **Follow-up:** User is exploring Mint app for finances [task]
 
 **Current Task:** Compare expense tracking options`,
-        
-        tokenCount: 150, lastObservedAt: new Date(),
+
+        tokenCount: 150,
+        lastObservedAt: new Date(),
       });
 
       // Final verification - key fact must still be present
@@ -3054,7 +3052,7 @@ For personal expense tracking...
  * REQUIRES: GOOGLE_GENERATIVE_AI_API_KEY environment variable
  */
 // TODO: Re-enable after full resource-scope implementation is complete
-describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
+describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
   const questionData = firstQuestion as LongMemEvalQuestionData;
   const resourceId = `resource_${questionData.question_id}`;
 
@@ -3075,167 +3073,163 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
    */
   // TODO: Re-enable once per-resource architecture is working properly
   // This test requires cross-session memory (resourceScope: true) to work correctly
-  it.skip(
-    'FULL BENCHMARK: should process all 54 sessions and recall key fact',
-    async () => {
-      // 1. Create storage
-      const storage = createInMemoryStorage();
+  it.skip('FULL BENCHMARK: should process all 54 sessions and recall key fact', async () => {
+    // 1. Create storage
+    const storage = createInMemoryStorage();
 
-      // 2. Create ObservationalMemory with realistic thresholds (matching benchmark config)
-      // Use REAL model for Observer/Reflector - they need real LLMs to extract observations
-      const om = new ObservationalMemory({
-        storage,
-        observer: {
-          model: 'google/gemini-2.5-flash',
-          // Use threshold range like the benchmark
-          observationThreshold: { min: 4000, max: 6000 },
-        },
-        reflector: {
-          model: 'google/gemini-2.5-flash',
-          reflectionThreshold: { min: 12000, max: 18000 },
-        },
-        resourceScope: true, // Cross-session memory - critical for LongMemEval
-      });
+    // 2. Create ObservationalMemory with realistic thresholds (matching benchmark config)
+    // Use REAL model for Observer/Reflector - they need real LLMs to extract observations
+    const om = new ObservationalMemory({
+      storage,
+      observer: {
+        model: 'google/gemini-2.5-flash',
+        // Use threshold range like the benchmark
+        observationThreshold: { min: 4000, max: 6000 },
+      },
+      reflector: {
+        model: 'google/gemini-2.5-flash',
+        reflectionThreshold: { min: 12000, max: 18000 },
+      },
+      resourceScope: true, // Cross-session memory - critical for LongMemEval
+    });
 
-      // 3. Create mock model for main agent during ingestion
-      // The main agent doesn't need to generate real responses during ingestion
-      // Only the Observer/Reflector subagents need real LLMs
-      const mockAgentModel = new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: 'Acknowledged.' }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
-            { type: 'text-end', id: 'text-1' },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
-          ]),
-        }),
-      });
+    // 3. Create mock model for main agent during ingestion
+    // The main agent doesn't need to generate real responses during ingestion
+    // Only the Observer/Reflector subagents need real LLMs
+    const mockAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Acknowledged.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
 
-      // 4. Create Agent with mock model for ingestion, ObservationalMemory as processors
-      const agent = new Agent({
-        id: 'longmemeval-agent',
-        name: 'LongMemEval Test Agent',
-        instructions: 'You are a helpful assistant. Process and store conversation history.',
-        model: mockAgentModel,
-        inputProcessors: [om],
-        outputProcessors: [om],
-      });
+    // 4. Create Agent with mock model for ingestion, ObservationalMemory as processors
+    const agent = new Agent({
+      id: 'longmemeval-agent',
+      name: 'LongMemEval Test Agent',
+      instructions: 'You are a helpful assistant. Process and store conversation history.',
+      model: mockAgentModel,
+      inputProcessors: [om],
+      outputProcessors: [om],
+    });
 
-      // 5. Sort sessions chronologically (oldest first) - exactly like prepare.ts
-      const sessionsWithDates = questionData.haystack_sessions.map((session, index) => ({
-        session,
-        sessionId: questionData.haystack_session_ids[index],
-        date: questionData.haystack_dates[index],
-      }));
+    // 5. Sort sessions chronologically (oldest first) - exactly like prepare.ts
+    const sessionsWithDates = questionData.haystack_sessions.map((session, index) => ({
+      session,
+      sessionId: questionData.haystack_session_ids[index],
+      date: questionData.haystack_dates[index],
+    }));
 
-      sessionsWithDates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    sessionsWithDates.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-      console.log(`\n📊 Processing ${sessionsWithDates.length} sessions chronologically...`);
-      console.log(`   First session: ${sessionsWithDates[0].date}`);
-      console.log(`   Last session: ${sessionsWithDates[sessionsWithDates.length - 1].date}`);
+    console.log(`\n📊 Processing ${sessionsWithDates.length} sessions chronologically...`);
+    console.log(`   First session: ${sessionsWithDates[0].date}`);
+    console.log(`   Last session: ${sessionsWithDates[sessionsWithDates.length - 1].date}`);
 
-      // Find where the answer session falls in chronological order
-      const answerSessionId = questionData.answer_session_ids[0];
-      const answerSessionChronoIndex = sessionsWithDates.findIndex(s => s.sessionId === answerSessionId);
-      console.log(`   Answer session "${answerSessionId}" is at chronological index ${answerSessionChronoIndex}`);
+    // Find where the answer session falls in chronological order
+    const answerSessionId = questionData.answer_session_ids[0];
+    const answerSessionChronoIndex = sessionsWithDates.findIndex(s => s.sessionId === answerSessionId);
+    console.log(`   Answer session "${answerSessionId}" is at chronological index ${answerSessionChronoIndex}`);
 
-      // 6. Process ALL sessions sequentially (not concurrently) - exactly like prepare.ts
-      // Process each message pair one at a time so Observer has multiple chances to make observations
-      let processedCount = 0;
-      for (const { session, sessionId, date } of sessionsWithDates) {
-        // Convert session turns to messages
-        const messages = session
-          .filter(turn => turn.content) // Skip empty content
-          .map(turn => ({
-            role: turn.role as 'user' | 'assistant',
-            content: turn.content,
-          }));
+    // 6. Process ALL sessions sequentially (not concurrently) - exactly like prepare.ts
+    // Process each message pair one at a time so Observer has multiple chances to make observations
+    let processedCount = 0;
+    for (const { session, sessionId, date } of sessionsWithDates) {
+      // Convert session turns to messages
+      const messages = session
+        .filter(turn => turn.content) // Skip empty content
+        .map(turn => ({
+          role: turn.role as 'user' | 'assistant',
+          content: turn.content,
+        }));
 
-        if (messages.length === 0) {
-          processedCount++;
-          continue;
-        }
-
-        // Process message pairs (user + assistant) one at a time
-        // This gives Observer multiple chances to make observations
-        for (let i = 0; i < messages.length; i += 2) {
-          const messagePair = messages.slice(i, Math.min(i + 2, messages.length));
-          await agent.generate(messagePair as any, {
-            memory: {
-              thread: sessionId,
-              resource: resourceId,
-            },
-          });
-        }
-
+      if (messages.length === 0) {
         processedCount++;
-
-        // Log progress every 10 sessions
-        if (processedCount % 10 === 0 || sessionId === answerSessionId) {
-          const record = await storage.getObservationalMemory(null, resourceId);
-          const hasKeyFact = record?.activeObservations?.includes('Business Administration') ?? false;
-          console.log(
-            `   [${processedCount}/${sessionsWithDates.length}] ${sessionId.substring(0, 12)}... ` +
-              `(${date}) - observations: ${record?.observationTokenCount ?? 0} tokens` +
-              (sessionId === answerSessionId ? ' ⭐ ANSWER SESSION' : '') +
-              (hasKeyFact ? ' ✅ KEY FACT FOUND' : ''),
-          );
-        }
+        continue;
       }
 
-      // 7. Check observations after processing all sessions
-      const finalRecord = await storage.getObservationalMemory(null, resourceId);
-      console.log(`\n📝 Final observations: ${finalRecord?.observationTokenCount ?? 0} tokens`);
-      console.log(`   Last observed at: ${finalRecord?.lastObservedAt?.toISOString() ?? 'never'}`);
+      // Process message pairs (user + assistant) one at a time
+      // This gives Observer multiple chances to make observations
+      for (let i = 0; i < messages.length; i += 2) {
+        const messagePair = messages.slice(i, Math.min(i + 2, messages.length));
+        await agent.generate(messagePair as any, {
+          memory: {
+            thread: sessionId,
+            resource: resourceId,
+          },
+        });
+      }
 
-      // The key fact should be in observations
-      expect(finalRecord).toBeDefined();
-      expect(finalRecord?.activeObservations).toBeDefined();
-      expect(finalRecord?.activeObservations).toContain('Business Administration');
+      processedCount++;
 
-      // 8. Now ask the question - this is the actual evaluation
-      // For evaluation, we need a real model to answer based on observations
-      console.log(`\n❓ Asking: "${questionData.question}"`);
-      console.log(`   Expected answer: "${questionData.answer}"`);
+      // Log progress every 10 sessions
+      if (processedCount % 10 === 0 || sessionId === answerSessionId) {
+        const record = await storage.getObservationalMemory(null, resourceId);
+        const hasKeyFact = record?.activeObservations?.includes('Business Administration') ?? false;
+        console.log(
+          `   [${processedCount}/${sessionsWithDates.length}] ${sessionId.substring(0, 12)}... ` +
+            `(${date}) - observations: ${record?.observationTokenCount ?? 0} tokens` +
+            (sessionId === answerSessionId ? ' ⭐ ANSWER SESSION' : '') +
+            (hasKeyFact ? ' ✅ KEY FACT FOUND' : ''),
+        );
+      }
+    }
 
-      // Create agent with real model for evaluation
-      const evalAgent = new Agent({
-        id: 'eval-agent',
-        name: 'Eval Agent',
-        instructions: 'You are a helpful assistant. Answer questions based on the conversation history.',
-        model: 'google/gemini-2.5-flash',
-        inputProcessors: [om],
-        outputProcessors: [om],
-      });
+    // 7. Check observations after processing all sessions
+    const finalRecord = await storage.getObservationalMemory(null, resourceId);
+    console.log(`\n📝 Final observations: ${finalRecord?.observationTokenCount ?? 0} tokens`);
+    console.log(`   Last observed at: ${finalRecord?.lastObservedAt?.toISOString() ?? 'never'}`);
 
-      const result = await evalAgent.generate(questionData.question, {
-        memory: {
-          thread: 'evaluation-thread',
-          resource: resourceId,
-        },
-      });
+    // The key fact should be in observations
+    expect(finalRecord).toBeDefined();
+    expect(finalRecord?.activeObservations).toBeDefined();
+    expect(finalRecord?.activeObservations).toContain('Business Administration');
 
-      console.log(`\n💬 Agent response: ${result.text}`);
+    // 8. Now ask the question - this is the actual evaluation
+    // For evaluation, we need a real model to answer based on observations
+    console.log(`\n❓ Asking: "${questionData.question}"`);
+    console.log(`   Expected answer: "${questionData.answer}"`);
 
-      // The agent should be able to answer correctly
-      const responseContainsAnswer = result.text.toLowerCase().includes(questionData.answer.toLowerCase());
-      console.log(`\n${responseContainsAnswer ? '✅ PASS' : '❌ FAIL'}: Response contains "${questionData.answer}"`);
+    // Create agent with real model for evaluation
+    const evalAgent = new Agent({
+      id: 'eval-agent',
+      name: 'Eval Agent',
+      instructions: 'You are a helpful assistant. Answer questions based on the conversation history.',
+      model: 'google/gemini-2.5-flash',
+      inputProcessors: [om],
+      outputProcessors: [om],
+    });
 
-      expect(result.text.toLowerCase()).toContain(questionData.answer.toLowerCase());
-    },
-    600000,
-  ); // 10 minute timeout for processing all 54 sessions
+    const result = await evalAgent.generate(questionData.question, {
+      memory: {
+        thread: 'evaluation-thread',
+        resource: resourceId,
+      },
+    });
+
+    console.log(`\n💬 Agent response: ${result.text}`);
+
+    // The agent should be able to answer correctly
+    const responseContainsAnswer = result.text.toLowerCase().includes(questionData.answer.toLowerCase());
+    console.log(`\n${responseContainsAnswer ? '✅ PASS' : '❌ FAIL'}: Response contains "${questionData.answer}"`);
+
+    expect(result.text.toLowerCase()).toContain(questionData.answer.toLowerCase());
+  }, 600000); // 10 minute timeout for processing all 54 sessions
 
   /**
    * Simpler test: Process only a few sessions including the answer session
@@ -3250,6 +3244,9 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         observer: {
           model: 'google/gemini-2.5-flash',
           observationThreshold: 500, // Low threshold to trigger on each session
+          focus: {
+            include: ['personal-facts', 'preferences', 'tasks', 'technical'],
+          },
         },
         reflector: {
           model: 'google/gemini-2.5-flash',
@@ -3281,13 +3278,16 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         }),
       });
 
+      // MessageHistory processor to save/load messages from storage
+      const messageHistory = new MessageHistory({ storage });
+
       const agent = new Agent({
         id: 'test-agent',
         name: 'Test Agent',
         instructions: 'You are a helpful assistant.',
         model: mockAgentModel,
-        inputProcessors: [om],
-        outputProcessors: [om],
+        inputProcessors: [messageHistory, om],
+        outputProcessors: [messageHistory, om], // MessageHistory must run first to save messages before OM observes
       });
 
       // Process 5 random sessions before the answer session to build context
@@ -3340,8 +3340,8 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         name: 'Eval Agent',
         instructions: 'You are a helpful assistant. Answer questions based on conversation history.',
         model: 'google/gemini-2.5-flash',
-        inputProcessors: [om],
-        outputProcessors: [om],
+        inputProcessors: [messageHistory, om],
+        outputProcessors: [messageHistory, om], // MessageHistory must run first to save messages before OM observes
       });
 
       const result = await evalAgent.generate(questionData.question, {
@@ -3380,8 +3380,9 @@ describe.skip('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         observations: `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
 
 **Current Task:** Continue helping user.`,
-        
-        tokenCount: 100, lastObservedAt: new Date(),
+
+        tokenCount: 100,
+        lastObservedAt: new Date(),
       });
 
       const om = new ObservationalMemory({
