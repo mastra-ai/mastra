@@ -4,7 +4,15 @@ import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
 import type { RerankConfig, RerankResult } from '../rerank';
-import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultVectorQueryDescription,
+  filterSchema,
+  outputSchema,
+  baseSchema,
+  coerceTopK,
+  parseFilterValue,
+} from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { VectorQueryToolOptions } from './types';
@@ -53,12 +61,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter, databaseConfig });
       }
       try {
-        const topKValue =
-          typeof topK === 'number' && !isNaN(topK)
-            ? topK
-            : typeof topK === 'string' && !isNaN(Number(topK))
-              ? Number(topK)
-              : 10;
+        const topKValue = coerceTopK(topK);
 
         let vectorStore: MastraVector | undefined = undefined;
         if ('vectorStore' in options) {
@@ -79,19 +82,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           return { relevantContext: [], sources: [] };
         }
         // Get relevant chunks from the vector database
-        let queryFilter = {};
-        if (enableFilter && filter) {
-          queryFilter = (() => {
-            try {
-              return typeof filter === 'string' ? JSON.parse(filter) : filter;
-            } catch (error) {
-              if (logger) {
-                logger.error('Invalid filter', { filter, error });
-              }
-              throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          })();
-        }
+        const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
         if (logger) {
           logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter, databaseConfig });
         }

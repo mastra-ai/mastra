@@ -3,7 +3,15 @@ import type { MastraVector } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import { vectorQuerySearch, defaultGraphRagDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultGraphRagDescription,
+  filterSchema,
+  outputSchema,
+  baseSchema,
+  coerceTopK,
+  parseFilterValue,
+} from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { GraphRagToolOptions } from './types';
@@ -59,12 +67,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         logger.debug('[GraphRAGTool] execute called with:', { queryText, topK, filter });
       }
       try {
-        const topKValue =
-          typeof topK === 'number' && !isNaN(topK)
-            ? topK
-            : typeof topK === 'string' && !isNaN(Number(topK))
-              ? Number(topK)
-              : 10;
+        const topKValue = coerceTopK(topK);
 
         let vectorStore: MastraVector | undefined = undefined;
         if ('vectorStore' in options) {
@@ -86,19 +89,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           return { relevantContext: [], sources: [] };
         }
 
-        let queryFilter = {};
-        if (enableFilter) {
-          queryFilter = (() => {
-            try {
-              return typeof filter === 'string' ? JSON.parse(filter) : filter;
-            } catch (error) {
-              if (logger) {
-                logger.error('Invalid filter', { filter, error });
-              }
-              throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          })();
-        }
+        const queryFilter = enableFilter ? parseFilterValue(filter, logger) : {};
         if (logger) {
           logger.debug('Prepared vector query parameters:', { queryFilter, topK: topKValue });
         }
