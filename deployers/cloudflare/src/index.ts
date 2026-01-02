@@ -99,20 +99,26 @@ export class CloudflareDeployer extends Deployer {
     import '#polyfills';
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
+    // Cache the Mastra instance to avoid recreating on every request
+    let _cachedMastra;
+
     export default {
       fetch: async (request, env, context) => {
         const { mastra } = await import('#mastra');
         const { tools } = await import('#tools');
         const {createHonoServer, getToolExports} = await import('#server');
-        // Pass Cloudflare env bindings to the mastra factory
-        // This allows storage and other components to access bindings like Hyperdrive, D1, KV
-        const _mastra = mastra(env);
 
-        if (_mastra.getStorage()) {
-          _mastra.__registerInternalWorkflow(scoreTracesWorkflow);
+        // Initialize Mastra once with Cloudflare env bindings, then reuse
+        // This allows storage and other components to access bindings like Hyperdrive, D1, KV
+        if (!_cachedMastra) {
+          _cachedMastra = mastra(env);
+
+          if (_cachedMastra.getStorage()) {
+            _cachedMastra.__registerInternalWorkflow(scoreTracesWorkflow);
+          }
         }
 
-        const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
+        const app = await createHonoServer(_cachedMastra, { tools: getToolExports(tools) });
         return app.fetch(request, env, context);
       }
     }
