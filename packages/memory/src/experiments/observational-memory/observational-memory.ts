@@ -1332,21 +1332,19 @@ ${formattedMessages}
         }
       }
 
-      let currentObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
+      const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
-      // Observe each thread in order
-      for (const threadId of threadOrder) {
+      // ════════════════════════════════════════════════════════════
+      // PARALLEL OBSERVATION: Call Observer for all threads concurrently
+      // This significantly speeds up multi-thread observation
+      // ════════════════════════════════════════════════════════════
+
+      // Prepare observation tasks for each thread
+      const observationTasks = threadOrder.map(async threadId => {
         const threadMessages = messagesByThread.get(threadId) ?? [];
-        if (threadMessages.length === 0) continue;
-
-        // Note: Message ID tracking removed in favor of cursor-based lastObservedAt
+        if (threadMessages.length === 0) return null;
 
         console.info(`[OM] Observing thread ${threadId} with ${threadMessages.length} messages`);
-        // Debug: show first 200 chars of each message
-        // for (const msg of threadMessages) {
-        // const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-        // console.info(`[OM]   ${msg.role}: ${content.substring(0, 200)}...`);
-        // }
 
         // Emit debug event for observation triggered
         this.emitDebugEvent({
@@ -1354,7 +1352,7 @@ ${formattedMessages}
           timestamp: new Date(),
           threadId,
           resourceId,
-          previousObservations: currentObservations,
+          previousObservations: existingObservations,
           messages: threadMessages.map(m => ({
             role: m.role,
             content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
@@ -1362,13 +1360,36 @@ ${formattedMessages}
         });
 
         // Call observer for this thread's messages
-        const result = await this.callObserver(currentObservations, threadMessages);
+        // Note: Each thread gets the same existingObservations context (before any new observations)
+        // This is intentional - we don't want cross-contamination between parallel calls
+        const result = await this.callObserver(existingObservations, threadMessages);
+
         console.info(
           `[OM] Observer returned observations for thread ${threadId} (${result.observations.length} chars):`,
         );
         console.info(`[OM]   Observations: ${result.observations.substring(0, 500)}...`);
 
-        // Wrap with thread tag and replace/append
+        return {
+          threadId,
+          threadMessages,
+          result,
+        };
+      });
+
+      // Execute all observations in parallel
+      console.info(`[OM] Starting parallel observation of ${observationTasks.length} threads`);
+      const observationResults = await Promise.all(observationTasks);
+      console.info(`[OM] All parallel observations complete`);
+
+      // Combine results: wrap each thread's observations and append to existing
+      let currentObservations = existingObservations;
+
+      for (const obsResult of observationResults) {
+        if (!obsResult) continue;
+
+        const { threadId, threadMessages, result } = obsResult;
+
+        // Wrap with thread tag and append (in thread order for consistency)
         const threadSection = this.wrapWithThreadTag(threadId, result.observations);
         currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
@@ -1407,7 +1428,7 @@ ${formattedMessages}
 
       // After ALL threads observed, update the record with final observations
       const totalTokenCount = this.tokenCounter.countObservations(currentObservations);
-      
+
       // Use the max message timestamp as cursor instead of current time
       // This ensures historical data (like LongMemEval fixtures) works correctly
       const lastObservedAt = this.getMaxMessageTimestamp(allUnobservedMessages);
