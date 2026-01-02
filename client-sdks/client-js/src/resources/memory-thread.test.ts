@@ -282,4 +282,87 @@ describe('MemoryThread', () => {
       await expect(thread.deleteMessages(messageIds)).rejects.toThrow();
     });
   });
+
+  describe('without agentId (storage fallback)', () => {
+    let threadWithoutAgent: MemoryThread;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      // Create MemoryThread without agentId - uses storage fallback on server
+      threadWithoutAgent = new MemoryThread(clientOptions, threadId);
+    });
+
+    it('should retrieve thread details without agentId in URL', async () => {
+      const mockThread = {
+        id: threadId,
+        title: 'Test Thread',
+        metadata: { test: true },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      mockFetchResponse(mockThread);
+
+      const result = await threadWithoutAgent.get();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}`,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
+      expect(result).toEqual(mockThread);
+    });
+
+    it('should retrieve thread messages without agentId in URL', async () => {
+      const mockMessages = {
+        messages: [
+          { id: 'msg-1', content: 'Hello', role: 'user' },
+          { id: 'msg-2', content: 'Hi there', role: 'assistant' },
+        ],
+        uiMessages: [
+          { id: 'msg-1', content: 'Hello', role: 'user' },
+          { id: 'msg-2', content: 'Hi there', role: 'assistant' },
+        ],
+      };
+
+      mockFetchResponse(mockMessages);
+
+      const result = await threadWithoutAgent.listMessages();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/threads/${threadId}/messages`,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-key',
+          }),
+        }),
+      );
+      expect(result).toEqual(mockMessages);
+    });
+
+    it('should delete messages without agentId in URL', async () => {
+      const messageIds = ['msg-1', 'msg-2'];
+      const mockResponse = { success: true, message: '2 messages deleted successfully' };
+
+      mockFetchResponse(mockResponse);
+
+      const result = await threadWithoutAgent.deleteMessages(messageIds);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `http://localhost:4111/api/memory/messages/delete`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'application/json',
+            Authorization: 'Bearer test-key',
+          }),
+          body: JSON.stringify({ messageIds }),
+        }),
+      );
+      expect(result).toEqual(mockResponse);
+    });
+  });
 });
