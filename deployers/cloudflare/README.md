@@ -15,7 +15,7 @@ pnpm add @mastra/deployer-cloudflare
 
 ## Usage
 
-Cloudflare deployer is used as part of the Mastra framework:
+The Cloudflare deployer is used as part of the Mastra framework:
 
 ```typescript
 import { Mastra } from '@mastra/core/mastra';
