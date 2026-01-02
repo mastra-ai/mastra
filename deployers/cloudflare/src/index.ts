@@ -50,14 +50,20 @@ export class CloudflareDeployer extends Deployer {
 
     this.userConfig = { ...userConfig };
 
+    if (userConfig.workerNamespace) {
+      console.warn('[CloudflareDeployer]: `workerNamespace` is no longer used');
+    }
     if (!userConfig.name && userConfig.projectName) {
       this.userConfig.name = userConfig.projectName;
+      console.warn('[CloudflareDeployer]: `projectName` is deprecated, use `name` instead');
     }
     if (!userConfig.d1_databases && userConfig.d1Databases) {
       this.userConfig.d1_databases = userConfig.d1Databases;
+      console.warn('[CloudflareDeployer]: `d1Databases` is deprecated, use `d1_databases` instead');
     }
     if (!userConfig.kv_namespaces && userConfig.kvNamespaces) {
       this.userConfig.kv_namespaces = userConfig.kvNamespaces;
+      console.warn('[CloudflareDeployer]: `kvNamespaces` is deprecated, use `kv_namespaces` instead');
     }
   }
 
