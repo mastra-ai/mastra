@@ -3102,9 +3102,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [
-          // { type: 'text', text: 'Acknowledged.' }
-        ],
+        content: [],
         warnings: [],
       }),
       doStream: async () => ({
@@ -3113,9 +3111,6 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          // { type: 'text-start', id: 'text-1' },
-          // { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
-          // { type: 'text-end', id: 'text-1' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
         ]),
       }),
