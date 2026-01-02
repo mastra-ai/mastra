@@ -22,7 +22,6 @@
     ]
   },
   "dependencies": {
-    "form-data": "^2.5.5",
-    "ssri": "^6.0.2"
+    "form-data": "^2.5.5"
   }
 }

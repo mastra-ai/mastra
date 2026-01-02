@@ -11,9 +11,6 @@ importers:
       form-data:
         specifier: ^2.5.5
         version: 2.5.5
-      ssri:
-        specifier: ^6.0.2
-        version: 6.0.2
     devDependencies:
       execa:
         specifier: ^9.6.0
@@ -30,6 +27,9 @@ importers:
       rollup:
         specifier: ^4.41.1
         version: 4.53.5
+      ssri:
+        specifier: ^6.0.2
+        version: 6.0.2
       verdaccio:
         specifier: ^6.2.0
         version: 6.2.4(typanion@3.14.0)
