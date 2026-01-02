@@ -104,7 +104,9 @@ export class CloudflareDeployer extends Deployer {
         const { mastra } = await import('#mastra');
         const { tools } = await import('#tools');
         const {createHonoServer, getToolExports} = await import('#server');
-        const _mastra = mastra();
+        // Pass Cloudflare env bindings to the mastra factory
+        // This allows storage and other components to access bindings like Hyperdrive, D1, KV
+        const _mastra = mastra(env);
 
         if (_mastra.getStorage()) {
           _mastra.__registerInternalWorkflow(scoreTracesWorkflow);

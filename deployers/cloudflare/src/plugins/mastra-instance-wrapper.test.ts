@@ -8,7 +8,7 @@ import { mastraInstanceWrapper } from '../plugins/mastra-instance-wrapper';
 describe('Wrap Mastra instance', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));
 
-  it.for([['./__fixtures__/empty-mastra.js'], ['./__fixtures__/basic.js']])(
+  it.for([['./__fixtures__/empty-mastra.js'], ['./__fixtures__/basic.js'], ['./__fixtures__/env-bindings.js']])(
     'should wrap Mastra instance in %s',
     async ([fileName]) => {
       const file = join(_dirname, fileName as string);
