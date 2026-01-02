@@ -3156,12 +3156,19 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
     // Process each message pair one at a time so Observer has multiple chances to make observations
     let processedCount = 0;
     for (const { session, sessionId, date } of sessionsWithDates) {
-      // Convert session turns to messages
+      // Convert session turns to messages with proper timestamps from the fixture data
+      // Parse date like '2023/05/20 (Sat) 02:21' -> extract '2023/05/20 02:21'
+      const dateMatch = date.match(/(\d{4}\/\d{2}\/\d{2}).*?(\d{2}:\d{2})/);
+      const sessionDate = dateMatch
+        ? new Date(`${dateMatch[1].replace(/\//g, '-')}T${dateMatch[2]}:00`)
+        : new Date(date);
       const messages = session
         .filter(turn => turn.content) // Skip empty content
-        .map(turn => ({
+        .map((turn, index) => ({
           role: turn.role as 'user' | 'assistant',
           content: turn.content,
+          // Use session date + small offset for each message to preserve temporal ordering
+          createdAt: new Date(sessionDate.getTime() + index * 5000), // 5 seconds apart
         }));
 
       if (messages.length === 0) {
