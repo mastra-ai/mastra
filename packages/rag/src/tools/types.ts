@@ -83,20 +83,70 @@ export type DatabaseConfig = {
   [key: string]: any; // Allow for future database extensions
 };
 
+/**
+ * Configuration options for creating a vector query tool.
+ *
+ * This type uses a discriminated union pattern for vector store configuration,
+ * allowing two mutually exclusive approaches:
+ *
+ * 1. **By name**: Use `vectorStoreName` to reference a vector store registered with Mastra
+ * 2. **Direct instance**: Use `vectorStore` to provide a vector store instance or resolver function
+ *
+ * @example Using a named vector store (registered with Mastra)
+ * ```typescript
+ * const tool = createVectorQueryTool({
+ *   vectorStoreName: 'myVectorStore',
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ * });
+ * ```
+ *
+ * @example Using a direct vector store instance
+ * ```typescript
+ * const tool = createVectorQueryTool({
+ *   vectorStore: new PgVector({ connectionString: '...' }),
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ * });
+ * ```
+ *
+ * @example With filtering and reranking enabled
+ * ```typescript
+ * const tool = createVectorQueryTool({
+ *   vectorStoreName: 'myVectorStore',
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ *   enableFilter: true,
+ *   reranker: {
+ *     model: cohere.rerank('rerank-v3.5'),
+ *     options: { topK: 5 },
+ *   },
+ * });
+ * ```
+ */
 export type VectorQueryToolOptions = {
+  /** Custom tool ID. Defaults to `VectorQuery {storeName} {indexName} Tool` */
   id?: string;
+  /** Custom tool description for the LLM */
   description?: string;
+  /** Name of the index to query within the vector store */
   indexName: string;
+  /** Embedding model used to convert query text into vectors */
   model: MastraEmbeddingModel<string>;
+  /** When true, enables metadata filtering in queries. Adds a `filter` input to the tool schema */
   enableFilter?: boolean;
+  /** When true, includes vector embeddings in the results. Defaults to false */
   includeVectors?: boolean;
+  /** When true, includes source documents in the response. Defaults to true */
   includeSources?: boolean;
+  /** Optional reranker configuration to improve result relevance */
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
 } & ProviderOptions &
   (
     | {
+        /** Name of a vector store registered with Mastra */
         vectorStoreName: string;
       }
     | {

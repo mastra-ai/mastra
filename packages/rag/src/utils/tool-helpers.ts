@@ -69,19 +69,33 @@ interface Logger {
  * @param filter - The filter value to parse (string or object)
  * @param logger - Optional logger for error reporting
  * @returns Parsed filter object
- * @throws Error if filter is a string that cannot be parsed as JSON
+ * @throws Error if filter is a string that cannot be parsed as JSON or if filter is not a plain object
  */
 export function parseFilterValue(filter: unknown, logger?: Logger | null): Record<string, any> {
   if (!filter) {
     return {};
   }
 
-  try {
-    return typeof filter === 'string' ? JSON.parse(filter) : (filter as Record<string, any>);
-  } catch (error) {
-    if (logger) {
-      logger.error('Invalid filter', { filter, error });
+  if (typeof filter === 'string') {
+    try {
+      return JSON.parse(filter);
+    } catch (error) {
+      if (logger) {
+        logger.error('Invalid filter', { filter, error });
+      }
+      throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
     }
-    throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
   }
+
+  // Validate that non-string filter is a plain object
+  if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
+    if (logger) {
+      logger.error('Invalid filter', { filter, error: 'Filter must be a plain object' });
+    }
+    throw new Error(
+      `Invalid filter format: expected a plain object, got ${Array.isArray(filter) ? 'array' : typeof filter}`,
+    );
+  }
+
+  return filter as Record<string, any>;
 }
