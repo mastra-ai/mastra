@@ -643,6 +643,25 @@ describe('Tool Input Validation Integration Tests', () => {
       expect(result.message).toContain('Required');
     });
 
+    it('should handle async refinement', async () => {
+      const tool = createTool({
+        id: 'empty-context',
+        description: 'Test empty context',
+        inputSchema: z.object({
+          required: z.string().refine(async val => {
+            return val.length > 0;
+          }),
+        }),
+        execute: async inputData => {
+          return { received: inputData };
+        },
+      });
+
+      const result = await tool.execute({ required: 'hello' } as any);
+      expect(result.error).toBeUndefined();
+      expect(result.received).toEqual({ required: 'hello' });
+    });
+
     it('should preserve additional properties when using passthrough', async () => {
       const tool = createTool({
         id: 'passthrough-test',
@@ -869,6 +888,27 @@ describe('Tool Output Validation Tests', () => {
 
     expect(result.error).toBeUndefined();
     expect(result).toEqual({ anything: 'goes', name: 'John', extra: 123 });
+  });
+
+  it('should handle async refinement', async () => {
+    const tool = createTool({
+      id: 'async-refinement-output',
+      description: 'Tool without output schema',
+      inputSchema: z.object({
+        name: z.string(),
+      }),
+      outputSchema: z.object({
+        anything: z.string().refine(async val => val.length > 0),
+      }),
+      execute: async _ => {
+        return { anything: 'goes' };
+      },
+    });
+
+    const result = await tool.execute({ name: 'John' });
+
+    expect(result && 'error' in result ? result.error : undefined).toBeUndefined();
+    expect(result).toEqual({ anything: 'goes' });
   });
 
   it('should include tool ID in output validation error messages', async () => {
