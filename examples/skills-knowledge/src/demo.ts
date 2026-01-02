@@ -6,8 +6,9 @@
  * Run with: pnpm demo
  */
 
-import { skills, mastra } from './mastra/index';
-import { initializeSupportKnowledge, supportKnowledge } from './mastra/knowledge/index';
+import { mastra } from './mastra';
+import { skills } from './mastra/skills';
+import { supportKnowledge } from './mastra/knowledge/index';
 
 async function main() {
   console.log('='.repeat(70));
@@ -20,10 +21,8 @@ async function main() {
   console.log('- Knowledge: Factual content retrieved dynamically (processor-based)');
   console.log();
 
-  // Initialize knowledge base
-  console.log('Initializing knowledge base...');
-  await initializeSupportKnowledge();
-  console.log();
+  // Note: Knowledge documents are pre-populated in .mastra-knowledge/
+  // No initialization needed - they're loaded from disk automatically
 
   // =========================================================================
   // PART 1: Skills

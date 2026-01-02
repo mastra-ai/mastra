@@ -9,7 +9,7 @@ import { SkillsProcessor } from '@mastra/skills';
  */
 const skillsProcessor = new SkillsProcessor({
   // Skills are auto-discovered from the configured paths
-  // The processor provides tools for listing, activating, and searching skills
+  skillsPaths: ['./skills'],
 });
 
 /**

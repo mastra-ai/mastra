@@ -7,7 +7,7 @@
  * Run with: pnpm demo:knowledge
  */
 
-import { initializeSupportKnowledge, supportKnowledge } from './mastra/knowledge/index';
+import { supportKnowledge } from './mastra/knowledge/index';
 import { mastra } from './mastra/index';
 
 async function main() {
@@ -16,13 +16,11 @@ async function main() {
   console.log('='.repeat(60));
   console.log();
 
-  // Step 1: Initialize the knowledge base with sample FAQ documents
-  console.log('1. Initializing knowledge base...');
-  await initializeSupportKnowledge();
-  console.log();
+  // Note: Knowledge documents are pre-populated in .mastra-knowledge/
+  // No initialization needed - they're loaded from disk automatically
 
-  // Step 2: Test direct search on the knowledge base
-  console.log('2. Testing direct BM25 search...');
+  // Step 1: Test direct search on the knowledge base
+  console.log('1. Testing direct BM25 search...');
   console.log('-'.repeat(40));
 
   const searchQueries = ['reset password', 'billing cycle', 'API rate limits'];
@@ -41,8 +39,8 @@ async function main() {
   }
   console.log();
 
-  // Step 3: Test the support agent with knowledge retrieval
-  console.log('3. Testing support agent with knowledge retrieval...');
+  // Step 2: Test the support agent with knowledge retrieval
+  console.log('2. Testing support agent with knowledge retrieval...');
   console.log('-'.repeat(40));
 
   const agent = mastra.getAgent('supportAgent');
