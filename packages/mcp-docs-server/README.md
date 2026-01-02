@@ -15,11 +15,14 @@ MacOS/Linux
   "mcpServers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
+      "args": ["-y", "@mastra/mcp-docs-server"],
+      "cwd": "${workspaceFolder}"
     }
   }
 }
 ```
+
+> **Note**: The `cwd` parameter ensures the server runs from your project directory, allowing the embedded docs tools to find your installed `@mastra/*` packages.
 
 Windows
 
@@ -28,7 +31,8 @@ Windows
   "mcpServers": {
     "mastra": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"],
+      "cwd": "${workspaceFolder}"
     }
   }
 }
@@ -48,7 +52,8 @@ MacOS/Linux
   "mcpServers": {
     "mastra": {
       "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server"]
+      "args": ["-y", "@mastra/mcp-docs-server"],
+      "cwd": "${workspaceFolder}"
     }
   }
 }
@@ -61,11 +66,14 @@ Windows
   "mcpServers": {
     "mastra": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"],
+      "cwd": "${workspaceFolder}"
     }
   }
 }
 ```
+
+> **Note**: The `cwd` parameter ensures the server runs from your project directory, allowing the embedded docs tools to find your installed `@mastra/*` packages.
 
 This will make all Mastra documentation tools available in your Windsurf workspace.
 Note that Windsurf MCP tool calling doesn't work very well. You will need to fully quit and re-open Windsurf after adding this.
@@ -144,3 +152,41 @@ const response = await agent.stream('Show me the quick start example', {
 - List section headers to see what breaking changes are covered
 - Fetch specific sections or entire migration guides
 - Search across all migration guides by keywords
+
+### Embedded Documentation Tools
+
+Read documentation directly from installed `@mastra/*` packages in your `node_modules`:
+
+> **Note**: All embedded docs tools accept an optional `projectPath` parameter. If the MCP server isn't running from your project directory, you can pass the absolute path to your project (e.g., `"/Users/you/my-project"`) to any of these tools.
+
+#### `listInstalledMastraPackages`
+
+- Lists all installed `@mastra/*` packages that have embedded documentation
+- Use this to discover which packages are available in your project
+- Optional `projectPath` parameter to specify project location
+
+#### `readMastraSourceMap`
+
+- Reads the SOURCE_MAP.json for a package to discover all exported symbols
+- Shows each export with its type definition and implementation file
+- Supports filtering exports by name
+
+#### `findMastraExport`
+
+- Finds detailed information about a specific export (function, class, type, etc.)
+- Returns the type definition file location and implementation code location
+- Useful for finding exactly where something is defined
+
+#### `readMastraEmbeddedDocs`
+
+- Reads embedded documentation markdown files from a package
+- Browse by topic (e.g., "agents", "workflows", "tools")
+- Lists available topics if no specific topic is provided
+
+#### `searchMastraEmbeddedDocs`
+
+- Full-text search across all embedded documentation in installed packages
+- Returns matching content with package and file context
+- Useful for finding information across multiple packages
+
+> **Important**: These tools require the MCP server to run from your project directory (where `node_modules` exists). Make sure to include `"cwd": "${workspaceFolder}"` in your MCP configuration.
