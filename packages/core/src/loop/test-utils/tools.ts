@@ -145,7 +145,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       it('should include provider-executed tool call and result in the full stream', async () => {
-        expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any)).toMatchInlineSnapshot(`
+        expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchInlineSnapshot(`
             [
               {
                 "type": "start",
@@ -394,7 +394,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       it('should include dynamic tool call and result in the full stream', async () => {
-        const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
+        const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
         console.log(JSON.stringify(fullStream, null, 2));
 
@@ -892,7 +892,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream)).toMatchSnapshot();
     });
   });
 
@@ -937,8 +937,17 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
     });
 
-    it('should include tool error part in the full stream', async () => {
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
+    it('should include tool error part in the native fullStream', async () => {
+      // Test native fullStream (Mastra format)
+      const nativeFullStream = await convertAsyncIterableToArray(result.fullStream);
+      const toolErrorChunk = nativeFullStream.find(chunk => chunk.type === 'tool-error');
+      expect(toolErrorChunk).toBeDefined();
+      expect(toolErrorChunk?.type).toBe('tool-error');
+      expect(toolErrorChunk?.payload.toolName).toBe('tool1');
+    });
+
+    it('should include tool error part in the aisdk v5 full stream', async () => {
+      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream);
 
       console.log(fullStream);
 
@@ -1222,17 +1231,16 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const chunks = await convertAsyncIterableToArray(stream);
 
       // Verify tool-result chunk exists with provider output
-      const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
+      const toolResultChunk = chunks.find(c => c.type === 'tool-result');
       expect(toolResultChunk).toBeDefined();
-      // as any because we're testing a case where there's a provider defined tool that's not added to tools: {} in agent definition, so there's no output type
-      expect((toolResultChunk as any)?.output).toEqual({
+      expect(toolResultChunk?.output).toEqual({
         content: '// app.ts file content\nexport function main() {\n  console.log("Hello");\n}',
         line_count: 4,
       });
-      expect((toolResultChunk as any)?.providerExecuted).toBe(true);
+      expect(toolResultChunk?.providerExecuted).toBe(true);
 
       // Verify we also get the text response
-      const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
+      const textChunks = chunks.filter(c => c.type === 'text-delta');
       expect(textChunks.length).toBeGreaterThan(0);
     });
   });
