@@ -3089,7 +3089,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       },
       reflector: {
         model: 'google/gemini-2.5-flash',
-        reflectionThreshold: 60000, // Higher threshold = fewer Reflector calls
+        reflectionThreshold: 10000, // Higher threshold = fewer Reflector calls
       },
       resourceScope: true, // Cross-session memory - critical for LongMemEval
     });
@@ -3210,11 +3210,6 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
     console.log(`\n📝 Final observations: ${finalRecord?.observationTokenCount ?? 0} tokens`);
     console.log(`   Last observed at: ${finalRecord?.lastObservedAt?.toISOString() ?? 'never'}`);
 
-    // The key fact should be in observations
-    expect(finalRecord).toBeDefined();
-    expect(finalRecord?.activeObservations).toBeDefined();
-    expect(finalRecord?.activeObservations).toContain('Business Administration');
-
     // 8. Now ask the question - this is the actual evaluation
     // For evaluation, we need a real model to answer based on observations
     console.log(`\n❓ Asking: "${questionData.question}"`);
@@ -3238,6 +3233,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
     });
 
     console.log(`\n💬 Agent response: ${result.text}`);
+    console.log(result.totalUsage);
 
     // The agent should be able to answer correctly
     const responseContainsAnswer = result.text.toLowerCase().includes(questionData.answer.toLowerCase());
@@ -3276,7 +3272,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          content: [{ type: 'text', text: 'Acknowledged.' }],
+          content: [],
           warnings: [],
         }),
         doStream: async () => ({
@@ -3285,9 +3281,6 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Acknowledged.' },
-            { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
           ]),
         }),

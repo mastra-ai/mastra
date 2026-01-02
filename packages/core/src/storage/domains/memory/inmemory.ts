@@ -763,7 +763,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Timestamps at top level
       createdAt: now,
       updatedAt: now,
-      lastObservedAt: now, // Reset since we're starting fresh after reflection
+      lastObservedAt: currentRecord.lastObservedAt ?? now, // Carry over from observation (which always runs before reflection)
       originType: 'reflection',
       activeObservations: reflection,
       // After reflection, reset observedMessageIds since old messages are now "baked into" the reflection.
