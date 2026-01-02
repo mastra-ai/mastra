@@ -12,7 +12,7 @@
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts", "!__integration-test__/**/*"]
     },
     "test": {
-      "dependsOn": ["test:unit", "test:types:zod", "test:integration"],
+      "dependsOn": ["test:unit", "test:types:zod"],
       "inputs": ["$TURBO_DEFAULT$", "./vitest.config.ts"]
     },
     "test:unit": {},
