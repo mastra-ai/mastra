@@ -47,6 +47,8 @@ import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
 import Knowledge from './pages/knowledge';
 import KnowledgeNamespaceDetail from './pages/knowledge/[namespace]';
+import Skills from './pages/skills';
+import SkillDetailPage from './pages/skills/[skillName]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -173,6 +175,9 @@ function App() {
 
                 <Route path="/knowledge" element={<Knowledge />} />
                 <Route path="/knowledge/:namespace" element={<KnowledgeNamespaceDetail />} />
+
+                <Route path="/skills" element={<Skills />} />
+                <Route path="/skills/:skillName" element={<SkillDetailPage />} />
 
                 <Route path="/workflows" element={<Workflows />} />
                 <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />

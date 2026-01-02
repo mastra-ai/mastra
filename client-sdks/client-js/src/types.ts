@@ -814,3 +814,101 @@ export interface DeleteKnowledgeNamespaceResponse {
   success: boolean;
   namespace: string;
 }
+
+// ============================================================================
+// Skills Types
+// ============================================================================
+
+/**
+ * Skill source type indicating where the skill comes from
+ */
+export type SkillSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Skill metadata (without instructions content)
+ */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  allowedTools?: string[];
+}
+
+/**
+ * Full skill data including instructions and file paths
+ */
+export interface Skill extends SkillMetadata {
+  path: string;
+  instructions: string;
+  source: SkillSource;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+}
+
+/**
+ * Response for listing skills
+ */
+export interface ListSkillsResponse {
+  skills: SkillMetadata[];
+  isSkillsConfigured: boolean;
+}
+
+/**
+ * Skill search result
+ */
+export interface SkillSearchResult {
+  skillName: string;
+  source: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching skills
+ */
+export interface SearchSkillsParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  skillNames?: string[];
+  includeReferences?: boolean;
+}
+
+/**
+ * Response for searching skills
+ */
+export interface SearchSkillsResponse {
+  results: SkillSearchResult[];
+  query: string;
+}
+
+/**
+ * Response for listing skill references
+ */
+export interface ListSkillReferencesResponse {
+  skillName: string;
+  references: string[];
+}
+
+/**
+ * Response for getting skill reference content
+ */
+export interface GetSkillReferenceResponse {
+  skillName: string;
+  referencePath: string;
+  content: string;
+}
