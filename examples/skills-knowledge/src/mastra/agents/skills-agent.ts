@@ -1,6 +1,28 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { SkillsProcessor } from '@mastra/skills';
+
+/**
+ * Resolve skills path - works from both project root and .mastra/output/
+ */
+function resolveSkillsPath(): string {
+  // Try project root first (for demo scripts)
+  const fromRoot = resolve(process.cwd(), 'skills');
+  if (existsSync(fromRoot)) {
+    return fromRoot;
+  }
+
+  // Try from .mastra/output/ (for mastra dev)
+  const fromOutput = resolve(process.cwd(), '../../skills');
+  if (existsSync(fromOutput)) {
+    return fromOutput;
+  }
+
+  // Fallback to project root path (will error if not found)
+  return fromRoot;
+}
 
 /**
  * Skills processor - provides skill activation tools to the agent.
@@ -9,7 +31,7 @@ import { SkillsProcessor } from '@mastra/skills';
  */
 const skillsProcessor = new SkillsProcessor({
   // Skills are auto-discovered from the configured paths
-  skillsPaths: ['./skills'],
+  skillsPaths: [resolveSkillsPath()],
 });
 
 /**

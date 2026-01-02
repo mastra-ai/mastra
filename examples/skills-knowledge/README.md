@@ -77,6 +77,29 @@ const agent = new Agent({
 });
 ```
 
+#### Namespaces
+
+Knowledge is organized into namespaces. Each `RetrievedKnowledge` processor searches a single namespace (defaults to `'default'`). To search a different namespace:
+
+```typescript
+new RetrievedKnowledge({
+  namespace: 'faq', // Search the 'faq' namespace instead of 'default'
+  topK: 3,
+  mode: 'bm25',
+});
+```
+
+To search multiple namespaces, use multiple processors:
+
+```typescript
+const agent = new Agent({
+  inputProcessors: [
+    new RetrievedKnowledge({ namespace: 'faq', topK: 3 }),
+    new RetrievedKnowledge({ namespace: 'docs', topK: 3 }),
+  ],
+});
+```
+
 ## Comparison
 
 | Aspect    | Skills                 | Knowledge             |

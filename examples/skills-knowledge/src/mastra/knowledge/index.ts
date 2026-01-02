@@ -1,4 +1,26 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { KnowledgeFilesystemStorage, Knowledge } from '@mastra/skills';
+
+/**
+ * Resolve knowledge path - works from both project root and .mastra/output/
+ */
+function resolveKnowledgePath(): string {
+  // Try project root first (for demo scripts)
+  const fromRoot = resolve(process.cwd(), '.mastra-knowledge/knowledge/support');
+  if (existsSync(fromRoot)) {
+    return fromRoot;
+  }
+
+  // Try from .mastra/output/ (for mastra dev)
+  const fromOutput = resolve(process.cwd(), '../../.mastra-knowledge/knowledge/support');
+  if (existsSync(fromOutput)) {
+    return fromOutput;
+  }
+
+  // Fallback to project root path (will error if not found)
+  return fromRoot;
+}
 
 /**
  * Knowledge base for the support agent.
@@ -6,7 +28,7 @@ import { KnowledgeFilesystemStorage, Knowledge } from '@mastra/skills';
  */
 export const supportKnowledge = new Knowledge({
   id: 'support-knowledge',
-  storage: new KnowledgeFilesystemStorage({ paths: ['./.mastra-knowledge/knowledge/support'] }),
+  storage: new KnowledgeFilesystemStorage({ paths: [resolveKnowledgePath()] }),
   bm25: true,
 });
 
