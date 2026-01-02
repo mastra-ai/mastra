@@ -1743,6 +1743,7 @@ describe('LangfuseExporter', () => {
     it('should inherit langfuse prompt from AGENT_RUN root span to child MODEL_GENERATION span', async () => {
       // First, create a root AGENT_RUN span with langfuse prompt metadata
       // (simulates: tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)))
+      const traceId = 'traceId';
       const agentSpan = createMockSpan({
         id: 'agent-span-id',
         name: 'support-agent',
@@ -1761,6 +1762,7 @@ describe('LangfuseExporter', () => {
             },
           },
         },
+        traceId,
       });
 
       await exporter.exportTracingEvent({
@@ -1784,8 +1786,8 @@ describe('LangfuseExporter', () => {
           runId: 'run-123',
           threadId: 'thread-456',
         },
+        traceId,
       });
-      llmSpan.traceId = 'agent-span-id';
       llmSpan.parentSpanId = 'agent-span-id';
 
       await exporter.exportTracingEvent({

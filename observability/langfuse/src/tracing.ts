@@ -117,7 +117,7 @@ export class LangfuseExporter extends TrackingExporter<
 
     this.logger.debug(`${this.name}: built span`, {
           traceId: span.traceId,
-          spanId: langfuseSpan.id,
+          spanId: payload.id,
           method: "_buildSpan",
       });
 
@@ -128,10 +128,10 @@ export class LangfuseExporter extends TrackingExporter<
     const { span, traceData } = args;
     const langfuseSpan = traceData.getSpan({spanId: span.id})
     if (langfuseSpan) {
-        this.logger.debug(`${this.name}: found span for update`, {
-          traceId: span.traceId,
-          spanId: langfuseSpan.id,
-          method: "_updateSpan",
+      this.logger.debug(`${this.name}: found span for update`, {
+        traceId: span.traceId,
+        spanId: langfuseSpan.id,
+        method: "_updateSpan",
       });
 
       const updatePayload = this.buildSpanPayload(span, false, traceData);
@@ -186,15 +186,24 @@ export class LangfuseExporter extends TrackingExporter<
    * Look up the Langfuse prompt from the closest span that has one.
    * This enables prompt inheritance for MODEL_GENERATION spans when the prompt
    * is set on a parent span (e.g., AGENT_RUN) rather than directly on the generation.
+   * This enables prompt linking when:
+   * - A workflow calls multiple agents, each with different prompts
+   * - Nested agents have different prompts
+   * - The prompt is set on AGENT_RUN but MODEL_GENERATION inherits it
    */
   private findLangfusePrompt(traceData: LangfuseTraceData, span: AnyExportedSpan): LangfusePromptData | undefined {
     let currentSpanId: string | undefined = span.id;
 
     while (currentSpanId) {
-      const parentMetadata = traceData.getMetadata({spanId: currentSpanId});
+      const providerMetadata = traceData.getMetadata({spanId: currentSpanId});
 
-      if (parentMetadata?.prompt) {
-        return parentMetadata.prompt;
+      if (providerMetadata?.prompt) {
+        this.logger.debug(`${this.name}: found prompt in provider metadata`, {
+          traceId: span.traceId,
+          spanId: span.id,
+          prompt: providerMetadata?.prompt,
+        });
+        return providerMetadata.prompt;
       }
       currentSpanId = traceData.getParentId({ spanId: currentSpanId });
     }
@@ -217,20 +226,8 @@ export class LangfuseExporter extends TrackingExporter<
 
     const attributes = (span.attributes ?? {}) as Record<string, any>;
 
-    // For MODEL_GENERATION spans without langfuse metadata, look up the closest
-    // parent span that has langfuse prompt data. This enables prompt linking when:
-    // - A workflow calls multiple agents, each with different prompts
-    // - Nested agents have different prompts
-    // - The prompt is set on AGENT_RUN but MODEL_GENERATION inherits it
-    let inheritedLangfusePrompt: LangfusePromptData | undefined;
-
-    if (span.type === SpanType.MODEL_GENERATION) {
-      inheritedLangfusePrompt = this.findLangfusePrompt(traceData, span);
-    }
-
     const metadata: Record<string, any> = {
       ...span.metadata,
-      ...(inheritedLangfusePrompt ? { langfuse: { prompt: inheritedLangfusePrompt } } : {}),
     };
 
     // Strip special fields from metadata if used in top-level keys
@@ -255,16 +252,13 @@ export class LangfuseExporter extends TrackingExporter<
         attributesToOmit.push('parameters');
       }
 
-      // Handle Langfuse prompt linking
+
       // Users can set metadata.langfuse.prompt to link generations to Langfuse Prompt Management
       // Supported formats:
       // - { id } - link by prompt UUID alone
       // - { name, version } - link by name and version
       // - { name, version, id } - link with all fields
-      const langfuseData = metadata.langfuse as
-        | { prompt?: { name?: string; version?: number; id?: string } }
-        | undefined;
-      const promptData = langfuseData?.prompt;
+      const promptData = this.findLangfusePrompt(traceData, span);
       const hasNameAndVersion = promptData?.name !== undefined && promptData?.version !== undefined;
       const hasId = promptData?.id !== undefined;
 

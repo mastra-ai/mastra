@@ -1,8 +1,8 @@
 import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
-import type { BaseExporterConfig } from '@mastra/observability';
-import { BaseExporter } from '@mastra/observability';
-import { PostHog } from 'posthog-node';
+import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
+import { TrackingExporter } from '@mastra/observability';
+import { PostHog, type EventMessage } from 'posthog-node';
 
 /**
  * Token usage format compatible with PostHog.
@@ -63,7 +63,9 @@ interface MastraContent {
 
 type SpanData = string | MastraMessage[] | Record<string, unknown> | unknown;
 
-export interface PosthogExporterConfig extends BaseExporterConfig {
+const DISTINCT_ID = 'distinctId';
+
+export interface PosthogExporterConfig extends TrackingExporterConfig {
   apiKey: string;
   host?: string;
   flushAt?: number;
@@ -73,22 +75,29 @@ export interface PosthogExporterConfig extends BaseExporterConfig {
   enablePrivacyMode?: boolean;
 }
 
-type SpanCache = {
+
+type PosthogRoot = unknown;
+type PosthogSpan = {
   startTime: Date;
   type: SpanType;
   isRootSpan: boolean;
 };
+// used as a placeholder for event data since we don't need to cache
+// event data for Posthog
+type PosthogEvent = boolean;
+type PosthogMetadata = unknown;
+type PosthogTraceData = TraceData<PosthogRoot, PosthogSpan, PosthogEvent, PosthogMetadata>;
 
-type TraceMetadata = {
-  spans: Map<string, SpanCache>;
-  distinctId?: string;
-};
+export class PosthogExporter extends TrackingExporter<
+PosthogRoot,
+PosthogSpan,
+PosthogEvent,
+PosthogTraceData,
+PosthogExporterConfig
+> {
 
-export class PosthogExporter extends BaseExporter {
   name = 'posthog';
   private client: PostHog;
-  private config: PosthogExporterConfig;
-  private traceMap = new Map<string, TraceMetadata>();
 
   private static readonly SERVERLESS_FLUSH_AT = 10;
   private static readonly SERVERLESS_FLUSH_INTERVAL = 2000;
@@ -97,7 +106,6 @@ export class PosthogExporter extends BaseExporter {
 
   constructor(config: PosthogExporterConfig) {
     super(config);
-    this.config = config;
 
     if (!config.apiKey) {
       this.setDisabled('Missing required API key');
@@ -107,7 +115,9 @@ export class PosthogExporter extends BaseExporter {
 
     const clientConfig = this.buildClientConfig(config);
     this.client = new PostHog(config.apiKey, clientConfig);
-    this.logInitialization(config.serverless ?? false, clientConfig);
+
+    const message = config.serverless ?? false ? 'PostHog exporter initialized in serverless mode' : 'PostHog exporter initialized';
+    this.logger.debug(message, config);
   }
 
   private buildClientConfig(config: PosthogExporterConfig) {
@@ -121,7 +131,7 @@ export class PosthogExporter extends BaseExporter {
     const host = config.host || process.env.POSTHOG_HOST || 'https://us.i.posthog.com';
 
     if (!config.host && !process.env.POSTHOG_HOST) {
-      this.logger.warn(
+      this.logger.info(
         'No PostHog host specified, using US default (https://us.i.posthog.com). ' +
           'For EU region, set `host: "https://eu.i.posthog.com"` in config or POSTHOG_HOST env var. ' +
           'For self-hosted, provide your instance URL.',
@@ -136,82 +146,60 @@ export class PosthogExporter extends BaseExporter {
     };
   }
 
-  private logInitialization(
-    isServerless: boolean,
-    config: { host: string; flushAt: number; flushInterval: number; privacyMode?: boolean },
-  ): void {
-    const message = isServerless ? 'PostHog exporter initialized in serverless mode' : 'PostHog exporter initialized';
-    this.logger.debug(message, config);
+  protected override skipBuildRootTask = true;
+  protected async _buildRoot(_args: { span: AnyExportedSpan; traceData: PosthogTraceData; }): Promise<PosthogRoot | undefined> {
+    throw new Error('Method not implemented.');
   }
 
-  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
-    if (!this.client) {
-      return;
-    }
+  protected override skipCachingEventSpans = true;
+  protected async _buildEvent(args: { span: AnyExportedSpan; traceData: PosthogTraceData; }): Promise<PosthogEvent> {
+    const { span, traceData } = args;
 
-    try {
-      if (event.exportedSpan.isEvent) {
-        if (event.type === 'span_started') {
-          await this.captureEventSpan(event.exportedSpan);
-        }
-        return;
-      }
+    const eventName = this.mapToPostHogEvent(span.type);
+    const distinctId = this.getDistinctId(span, traceData);
+    const properties = this.buildEventProperties(span, 0);
 
-      switch (event.type) {
-        case 'span_started':
-          await this.handleSpanStarted(event.exportedSpan);
-          break;
-        case 'span_updated':
-          break;
-        case 'span_ended':
-          await this.handleSpanEnded(event.exportedSpan);
-          break;
-      }
-    } catch (error) {
-      this.logger.error('PostHog exporter error', { error, event });
-    }
+    this.client.capture({
+      distinctId,
+      event: eventName,
+      properties,
+      timestamp: span.endTime ? new Date(span.endTime) : new Date(),
+    });
+
+    return true;
   }
 
-  private async handleSpanStarted(span: AnyExportedSpan): Promise<void> {
-    let traceData = this.traceMap.get(span.traceId);
-
-    if (!traceData) {
-      traceData = {
-        spans: new Map(),
-        distinctId: undefined,
-      };
-      this.traceMap.set(span.traceId, traceData);
+  protected async _buildSpan(args: { span: AnyExportedSpan; traceData: PosthogTraceData; }): Promise<PosthogSpan | undefined> {
+    const { span, traceData } = args;
+    if (!traceData.hasExtraValue(DISTINCT_ID)) {
+      const userId = span.metadata?.userId;
+      if (userId) {
+        traceData.setExtraValue(DISTINCT_ID, String(userId));
+      }
     }
 
-    traceData.spans.set(span.id, {
+    return {
       startTime: this.toDate(span.startTime),
       type: span.type,
       isRootSpan: span.isRootSpan,
-    });
-
-    if (!traceData.distinctId) {
-      const userId = span.metadata?.userId;
-      if (userId) {
-        traceData.distinctId = String(userId);
-      }
     }
   }
 
-  private async handleSpanEnded(span: AnyExportedSpan): Promise<void> {
-    const traceData = this.traceMap.get(span.traceId);
+  protected override skipSpanUpdateEvents = true;
+  protected _updateSpan(_args: { span: AnyExportedSpan; traceData: PosthogTraceData; }): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
 
-    if (!traceData) {
-      return;
-    }
+  protected async _finishSpan(args: { span: AnyExportedSpan; traceData: PosthogTraceData; }): Promise<void> {
+    const { span, traceData } = args;
 
-    const cachedSpan = traceData.spans.get(span.id);
+    const cachedSpan = traceData.getSpan({spanId: span.id})
     if (!cachedSpan) {
       return;
     }
 
-    const startTime = cachedSpan.startTime.getTime();
     const endTime = span.endTime ? this.toDate(span.endTime).getTime() : Date.now();
-    const latency = (endTime - startTime) / 1000;
+
 
     const distinctId = this.getDistinctId(span, traceData);
 
@@ -221,23 +209,22 @@ export class PosthogExporter extends BaseExporter {
       this.captureTraceEvent(span, distinctId, endTime);
     } else {
       const eventName = this.mapToPostHogEvent(span.type);
+      const startTime = cachedSpan.startTime.getTime();
+      const latency = (endTime - startTime) / 1000;
 
       // Check if parent is the root span - if so, use traceId as parent_id
       // since we don't create an $ai_span for root spans
       const parentIsRootSpan = this.isParentRootSpan(span, traceData);
       const properties = this.buildEventProperties(span, latency, parentIsRootSpan);
 
-      this.client.capture({
+      const eventMessage = {
         distinctId,
         event: eventName,
         properties,
         timestamp: new Date(endTime),
-      });
-    }
+      }
 
-    traceData.spans.delete(span.id);
-    if (traceData.spans.size === 0) {
-      this.traceMap.delete(span.traceId);
+      this.client.capture(eventMessage);
     }
   }
 
@@ -294,30 +281,6 @@ export class PosthogExporter extends BaseExporter {
     });
   }
 
-  private async captureEventSpan(span: AnyExportedSpan): Promise<void> {
-    const eventName = this.mapToPostHogEvent(span.type);
-    const traceData = this.traceMap.get(span.traceId);
-
-    const distinctId = this.getDistinctId(span, traceData);
-    const properties = this.buildEventProperties(span, 0);
-
-    this.client.capture({
-      distinctId,
-      event: eventName,
-      properties,
-      timestamp: span.endTime ? new Date(span.endTime) : new Date(),
-    });
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.client) {
-      await this.client.shutdown();
-    }
-    this.traceMap.clear();
-    await super.shutdown();
-    this.logger.info('PostHog exporter shutdown complete');
-  }
-
   private toDate(timestamp: Date | number): Date {
     return timestamp instanceof Date ? timestamp : new Date(timestamp);
   }
@@ -329,13 +292,13 @@ export class PosthogExporter extends BaseExporter {
     return '$ai_span';
   }
 
-  private getDistinctId(span: AnyExportedSpan, traceData?: TraceMetadata): string {
+  private getDistinctId(span: AnyExportedSpan, traceData?: PosthogTraceData): string {
     if (span.metadata?.userId) {
       return String(span.metadata.userId);
     }
 
-    if (traceData?.distinctId) {
-      return traceData.distinctId;
+    if (traceData?.hasExtraValue(DISTINCT_ID)) {
+      return String(traceData.getExtraValue(DISTINCT_ID));
     }
 
     if (this.config.defaultDistinctId) {
@@ -350,13 +313,13 @@ export class PosthogExporter extends BaseExporter {
    * We need this because we don't create $ai_span for root spans,
    * so children of root spans should use $ai_trace_id as their $ai_parent_id.
    */
-  private isParentRootSpan(span: AnyExportedSpan, traceData: TraceMetadata): boolean {
+  private isParentRootSpan(span: AnyExportedSpan, traceData: PosthogTraceData): boolean {
     if (!span.parentSpanId) {
       return false;
     }
 
     // Look up the parent span in our cache to check if it's a root span
-    const parentCache = traceData.spans.get(span.parentSpanId);
+    const parentCache = traceData.getSpan({spanId: span.parentSpanId})
     if (parentCache) {
       return parentCache.isRootSpan;
     }
@@ -514,5 +477,14 @@ export class PosthogExporter extends BaseExporter {
       }
       return String(data);
     }
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.client) {
+      await this.client.shutdown();
+    }
+    this.clearTraceMap();
+    await super.shutdown();
+    this.logger.info('PostHog exporter shutdown complete');
   }
 }

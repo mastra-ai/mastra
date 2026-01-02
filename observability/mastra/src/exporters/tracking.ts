@@ -16,6 +16,7 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
   #activeSpanIds: Set<string>; // Set of span IDs that have started but not yet ended
   #metadata: Map<string, TMetadata>; // Mpa of id to vender-specific metadata
   #earlyData: TracingEvent[]; // Any tracing events that arrive before the root span
+  #extraData: Map<string, unknown>; // Any extra data to be stored on a per-trace level
 
   constructor() {
     this.#events = new Map();
@@ -24,6 +25,7 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
     this.#tree = new Map();
     this.#metadata = new Map();
     this.#earlyData = [];
+    this.#extraData = new Map();
   }
 
   hasRoot() : boolean {
@@ -37,6 +39,18 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
 
   getRoot() : TRootData | undefined {
     return this.#rootSpan;
+  }
+
+  setExtraValue(key: string, value: unknown) : void {
+    this.#extraData.set(key, value);
+  }
+
+  hasExtraValue(key: string) : boolean {
+    return this.#extraData.has(key);
+  }
+
+  getExtraValue(key: string) : unknown | undefined {
+    return this.#extraData.get(key);
   }
 
   addEarly(args: { event: TracingEvent}) {
@@ -88,6 +102,9 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
     this.#events.set(args.eventId, args.eventData);
   }
 
+  // TODO: ideally this would add to the span metadata if it already existed
+  // and not just completely overwrite it.
+  // Maybe the type here should be different?
   addMetadata(args: { spanId: string; metadata: TMetadata}): void {
     this.#metadata.set(args.spanId, args.metadata);
   }
@@ -173,6 +190,10 @@ export abstract class TrackingExporter<
   }): Promise<void>;
 
 
+  protected skipBuildRootTask = false;
+  protected skipSpanUpdateEvents = false;
+  protected skipCachingEventSpans = false;
+
 
   private getMethod(event: TracingEvent): 'handleEventSpan' | 'handleSpanStart' | 'handleSpanUpdate' | 'handleSpanEnd'
   {
@@ -191,11 +212,16 @@ export abstract class TrackingExporter<
 
   protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
     const method = this.getMethod(event);
+
+    if (method == "handleSpanUpdate" && this.skipSpanUpdateEvents) {
+      return;
+    }
+
     const traceData = this.getTraceData({ traceId: event.exportedSpan.traceId, method });
 
     const { exportedSpan } = await this._preExportTracingEvent(event);
 
-    if (!traceData.hasRoot()) {
+    if (!this.skipBuildRootTask && !traceData.hasRoot()) {
         if (exportedSpan.isRootSpan) {
             this.logger.debug(`${this.name}: Building root`, {
                 traceId: exportedSpan.traceId,
@@ -207,33 +233,46 @@ export abstract class TrackingExporter<
                 traceData.addRoot({rootId: exportedSpan.id, rootData});
             }
         } else {
+            this.logger.debug(`${this.name}: Root does not exist, adding early span to queue.`, {
+                  traceId: exportedSpan.traceId,
+                  spanId: exportedSpan.id,
+                  method,
+              });
             traceData.addEarly({event})
             return
         }
     }
 
-    traceData.addBranch({spanId: exportedSpan.id, parentSpanId: exportedSpan.parentSpanId })
-
-    if (exportedSpan.metadata && this.name in exportedSpan.metadata) {
+    if (exportedSpan.metadata && (this.name in exportedSpan.metadata)) {
         const metadata = exportedSpan.metadata[this.name] as TMetadata;
+        this.logger.debug(`${this.name}: Found provider metadata in span`, {
+            traceId: exportedSpan.traceId,
+            spanId: exportedSpan.id,
+            method,
+            metadata,
+        });
         traceData.addMetadata({spanId: exportedSpan.id, metadata})
     }
 
-    switch (method) {
+    try {
+      switch (method) {
         case 'handleEventSpan':
             this.logger.debug(`${this.name}: handling event`, {
                 traceId: exportedSpan.traceId,
                 spanId: exportedSpan.id,
                 method,
             });
+            traceData.addBranch({spanId: exportedSpan.id, parentSpanId: exportedSpan.parentSpanId })
             const eventData = await this._buildEvent({ span: exportedSpan, traceData });
             if (eventData) {
-                 this.logger.debug(`${this.name}: adding event to traceData`, {
+              if (!this.skipCachingEventSpans) {
+                    this.logger.debug(`${this.name}: adding event to traceData`, {
                     traceId: exportedSpan.traceId,
                     spanId: exportedSpan.id,
                     method,
                 });
                 traceData.addEvent({ eventId: exportedSpan.id, eventData });
+              }
             } else {
                 this.logger.debug(`${this.name}: adding event early queue`, {
                     traceId: exportedSpan.traceId,
@@ -249,6 +288,7 @@ export abstract class TrackingExporter<
                 spanId: exportedSpan.id,
                 method,
             });
+            traceData.addBranch({spanId: exportedSpan.id, parentSpanId: exportedSpan.parentSpanId })
             const spanData = await this._buildSpan({ span: exportedSpan, traceData });
             if (spanData) {
                 this.logger.debug(`${this.name}: adding span to traceData`, {
@@ -286,6 +326,9 @@ export abstract class TrackingExporter<
               this.clearTraceData({ traceId: event.exportedSpan.traceId, method })
             }
             break;
+      }
+    } catch (error) {
+      this.logger.error(`${this.name}: exporter error`, { error, event, method });
     }
 
     await this._postExportTracingEvent();
