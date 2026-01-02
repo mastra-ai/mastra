@@ -4,7 +4,7 @@ import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
 import virtual from '@rollup/plugin-virtual';
-import type { Unstable_RawConfig } from 'wrangler';
+import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is unstable, and no stable alternative exists. However, `wrangler` is a peerDep, allowing users to use latest properties.
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
