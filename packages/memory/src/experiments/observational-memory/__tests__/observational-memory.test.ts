@@ -3079,18 +3079,17 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
     // 1. Create storage
     const storage = createInMemoryStorage();
 
-    // 2. Create ObservationalMemory with realistic thresholds (matching benchmark config)
+    // 2. Create ObservationalMemory with higher thresholds to reduce API calls
     // Use REAL model for Observer/Reflector - they need real LLMs to extract observations
     const om = new ObservationalMemory({
       storage,
       observer: {
         model: 'google/gemini-2.5-flash',
-        // Use threshold range like the benchmark
-        observationThreshold: { min: 4000, max: 6000 },
+        observationThreshold: 20000, // Higher threshold = fewer Observer calls
       },
       reflector: {
         model: 'google/gemini-2.5-flash',
-        reflectionThreshold: { min: 12000, max: 18000 },
+        reflectionThreshold: 60000, // Higher threshold = fewer Reflector calls
       },
       resourceScope: true, // Cross-session memory - critical for LongMemEval
     });
