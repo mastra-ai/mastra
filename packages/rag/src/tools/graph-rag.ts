@@ -58,11 +58,6 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
-      if (!logger) {
-        console.warn(
-          '[GraphRAGTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
-        );
-      }
       if (logger) {
         logger.debug('[GraphRAGTool] execute called with:', { queryText, topK, filter });
       }
@@ -138,7 +133,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         };
       } catch (err) {
         if (logger) {
-          logger.error('Unexpected error in VectorQueryTool execute', {
+          logger.error('Unexpected error in GraphRAGTool execute', {
             error: err,
             errorMessage: err instanceof Error ? err.message : String(err),
             errorStack: err instanceof Error ? err.stack : undefined,

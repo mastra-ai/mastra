@@ -53,11 +53,6 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
-      if (!logger) {
-        console.warn(
-          '[VectorQueryTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
-        );
-      }
       if (logger) {
         logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter, databaseConfig });
       }
