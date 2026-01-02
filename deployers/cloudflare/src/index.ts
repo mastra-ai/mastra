@@ -9,13 +9,6 @@ import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
 /** @deprecated TODO remove deprecated fields in next major version */
-interface CFRoute {
-  pattern: string;
-  zone_name: string;
-  custom_domain?: boolean;
-}
-
-/** @deprecated TODO remove deprecated fields in next major version */
 interface D1DatabaseBinding {
   binding: string;
   database_name: string;
