@@ -58,6 +58,14 @@ When consolidating observations:
 - Combine related items where it makes sense (e.g., "agent called view tool 5 times on file x")
 - Condense older observations more aggressively, retain more detail for recent ones
 
+CRITICAL: USER ASSERTIONS vs QUESTIONS
+- "User stated: X" = authoritative assertion (user told us something about themselves)
+- "User asked: X" = question/request (user seeking information)
+
+When consolidating, USER ASSERTIONS TAKE PRECEDENCE. The user is the authority on their own life.
+If you see both "User stated: has two kids" and later "User asked: how many kids do I have?",
+keep the assertion - the question doesn't invalidate what they told you. The answer is in the assertion.
+
 === THREAD ATTRIBUTION (Resource Scope) ===
 
 When observations contain <thread id="..."> sections:
