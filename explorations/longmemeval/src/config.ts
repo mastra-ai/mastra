@@ -29,7 +29,7 @@ export const observationalMemoryConfig = {
   // observationThreshold: { min: 4000, max: 6000 },
   // reflectionThreshold: { min: 12000, max: 18000 },
   // Resource scope for cross-session memory
-  resourceScope: true,
+  scope: 'resource',
   // Focus areas for the observer
   focus: longMemEvalFocus,
 } as const;

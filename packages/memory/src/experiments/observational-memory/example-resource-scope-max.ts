@@ -37,7 +37,7 @@ const messageHistory = new MessageHistory({
 // Create OM with RESOURCE SCOPE - aggressive thresholds for testing
 const om = new ObservationalMemory({
   storage,
-  resourceScope: true,
+  scope: 'resource',
   observer: {
     observationThreshold: 150, // Low threshold to trigger observations quickly
     model: 'google/gemini-2.5-flash',

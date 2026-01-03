@@ -82,11 +82,11 @@ export interface ObservationalMemoryConfig {
   reflector?: ReflectorConfig;
 
   /**
-   * Whether to use resource scope (cross-thread memory).
-   * If true, observations span all threads for a resource.
-   * If false (default), observations are per-thread.
+   * Memory scope for observations.
+   * - 'resource': Observations span all threads for a resource (cross-thread memory)
+   * - 'thread': Observations are per-thread (default)
    */
-  resourceScope?: boolean;
+  scope?: 'resource' | 'thread';
 
   /**
    * Debug callback for observation events.
@@ -220,7 +220,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
-  private resourceScope: boolean;
+  private scope: 'resource' | 'thread';
   private observerConfig: ResolvedObserverConfig;
   private reflectorConfig: ResolvedReflectorConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -246,7 +246,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   constructor(config: ObservationalMemoryConfig) {
     this.storage = config.storage;
-    this.resourceScope = config.resourceScope ?? false;
+    this.scope = config.scope ?? 'thread';
 
     // Resolve observer config with defaults
     this.observerConfig = {
@@ -389,7 +389,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Get thread/resource IDs for storage lookup
    */
   private getStorageIds(threadId: string, resourceId?: string): { threadId: string | null; resourceId: string } {
-    if (this.resourceScope) {
+    if (this.scope === 'resource') {
       return {
         threadId: null,
         resourceId: resourceId ?? threadId,
@@ -412,11 +412,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       record = await this.storage.initializeObservationalMemory({
         threadId: ids.threadId,
         resourceId: ids.resourceId,
-        scope: this.resourceScope ? 'resource' : 'thread',
+        scope: this.scope,
         config: {
           observer: this.observerConfig,
           reflector: this.reflectorConfig,
-          resourceScope: this.resourceScope,
+          scope: this.scope,
         },
       });
     }
@@ -518,7 +518,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
   //       // In resource scope, add thread header
   //       let observationsWithHeader = result.observations;
-  //       if (this.resourceScope) {
+  //       if (this.scope === 'resource') {
   //         observationsWithHeader = `**Thread: ${threadId}**\n\n${result.observations}`;
   //       }
 
@@ -827,7 +827,7 @@ ${suggestedResponse}
           `[OM processInputStep] Loaded ${historicalMessages.length} messages since ${lastObservedAt?.toISOString() ?? 'beginning'}`,
         );
 
-        if (this.resourceScope && resourceId) {
+        if (this.scope === 'resource' && resourceId) {
           // Resource scope: group messages by thread
           const messagesByThread = this.groupMessagesByThread(historicalMessages);
 
@@ -878,7 +878,7 @@ ${suggestedResponse}
         unobservedContextBlocks,
       );
       console.info(`[OM processInputStep] Injecting observations (${observationSystemMessage.length} chars)`);
-      if (this.resourceScope) {
+      if (this.scope === 'resource') {
         console.info(`[OM processInputStep] Resource scope enabled`);
       }
       messageList.addSystem(observationSystemMessage, 'observational-memory');
@@ -906,7 +906,7 @@ ${suggestedResponse}
     const result = await this.storage.listMessages({
       // In resource scope, query by resourceId directly (no need to list threads first)
       // In thread scope, query by threadId
-      ...(this.resourceScope && resourceId ? { resourceId } : { threadId }),
+      ...(this.scope === 'resource' && resourceId ? { resourceId } : { threadId }),
       perPage: false, // Get all messages (no pagination limit)
       orderBy: { field: 'createdAt', direction: 'ASC' },
       filter: lastObservedAt
@@ -1105,7 +1105,7 @@ ${formattedMessages}
         // ════════════════════════════════════════════════════════════
         console.info(`[OM] Observation threshold exceeded (${totalPendingTokens} > ${threshold}), triggering Observer`);
 
-        if (this.resourceScope && resourceId) {
+        if (this.scope === 'resource' && resourceId) {
           // Resource scope: observe ALL threads with unobserved messages
           // Pass current thread's messages from messageList since they may not be in DB yet
           await this.doResourceScopedObservation(record, threadId, resourceId, unobservedMessages);
@@ -1193,7 +1193,7 @@ ${formattedMessages}
       // Build new observations (use freshRecord if available)
       const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
       let newObservations: string;
-      if (this.resourceScope) {
+      if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
         const threadSection = this.wrapWithThreadTag(threadId, result.observations);
         newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);

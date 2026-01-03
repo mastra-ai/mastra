@@ -32,7 +32,7 @@ const messageHistory = new MessageHistory({
 // Create OM with RESOURCE SCOPE - observations shared across threads!
 const om = new ObservationalMemory({
   storage,
-  resourceScope: true, // 🔑 This enables cross-thread memory!
+  scope: 'resource', // 🔑 This enables cross-thread memory!
   observer: {
     observationThreshold: 100,
     model: 'google/gemini-2.5-flash',

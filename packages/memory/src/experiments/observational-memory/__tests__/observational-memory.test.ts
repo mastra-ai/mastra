@@ -85,8 +85,9 @@ describe('Storage Operations', () => {
       expect(record.activeObservations).toBe('');
       expect(record.isObserving).toBe(false);
       expect(record.isReflecting).toBe(false);
-      // lastObservedAt is set on initialization to mark the cursor starting point
-      expect(record.lastObservedAt).toBeDefined();
+      // lastObservedAt starts undefined so all existing messages are "unobserved"
+      // This is critical for historical data (like LongMemEval fixtures)
+      expect(record.lastObservedAt).toBeUndefined();
     });
 
     it('should create record with null threadId for resource scope', async () => {
@@ -237,19 +238,15 @@ describe('Storage Operations', () => {
     });
 
     it('should update lastObservedAt when swapping buffered to active', async () => {
-      const beforeInit = new Date();
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
         scope: 'thread',
         config: {},
       });
-      const afterInit = new Date();
 
-      // Initially, lastObservedAt is set to creation time
-      expect(initial.lastObservedAt).toBeDefined();
-      expect(initial.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeInit.getTime());
-      expect(initial.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterInit.getTime());
+      // Initially, lastObservedAt is undefined (all messages are unobserved)
+      expect(initial.lastObservedAt).toBeUndefined();
 
       // Add buffered observations
       await storage.updateBufferedObservations({
@@ -263,7 +260,7 @@ describe('Storage Operations', () => {
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.lastObservedAt).toBeDefined();
-      // lastObservedAt should be updated to swap time
+      // lastObservedAt should be set to swap time (first observation)
       expect(record!.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeSwap.getTime());
       expect(record!.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterSwap.getTime());
     });
@@ -300,8 +297,8 @@ describe('Storage Operations', () => {
         config: {},
       });
 
-      // Initially, lastObservedAt is set to createdAt
-      expect(initial.lastObservedAt).toBeDefined();
+      // Initially, lastObservedAt is undefined (all messages are unobserved)
+      expect(initial.lastObservedAt).toBeUndefined();
 
       const observedAt = new Date('2025-01-15T10:00:00Z');
       await storage.updateActiveObservations({
@@ -421,7 +418,7 @@ describe('Storage Operations', () => {
       expect(newRecord.lastObservedAt).toBeDefined();
     });
 
-    it('should set lastObservedAt on new reflection generation', async () => {
+    it('should preserve lastObservedAt from observation when creating reflection generation', async () => {
       const initial = await storage.initializeObservationalMemory({
         threadId,
         resourceId,
@@ -429,36 +426,34 @@ describe('Storage Operations', () => {
         config: {},
       });
 
-      // Set an older lastObservedAt on the initial record
-      const oldObservedAt = new Date('2025-01-01T00:00:00Z');
+      // Set lastObservedAt during observation (this always happens before reflection)
+      const observedAt = new Date('2025-01-01T00:00:00Z');
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Original observations',
 
         tokenCount: 30000,
-        lastObservedAt: oldObservedAt,
+        lastObservedAt: observedAt,
       });
 
       const currentRecord = await storage.getObservationalMemory(threadId, resourceId);
-      expect(currentRecord?.lastObservedAt).toEqual(oldObservedAt);
+      expect(currentRecord?.lastObservedAt).toEqual(observedAt);
 
-      const beforeReflection = new Date();
       const newRecord = await storage.createReflectionGeneration({
         currentRecord: currentRecord!,
         reflection: '- 🔴 Condensed reflection',
         tokenCount: 5000,
       });
-      const afterReflection = new Date();
 
-      // New record should have a fresh lastObservedAt (approximately now)
+      // New record should preserve lastObservedAt from the observation
+      // (reflection doesn't change the cursor - observation always runs first)
       expect(newRecord.lastObservedAt).toBeDefined();
-      expect(newRecord.lastObservedAt!.getTime()).toBeGreaterThanOrEqual(beforeReflection.getTime());
-      expect(newRecord.lastObservedAt!.getTime()).toBeLessThanOrEqual(afterReflection.getTime());
+      expect(newRecord.lastObservedAt).toEqual(observedAt);
 
-      // Previous record should retain its original lastObservedAt
+      // Previous record should also retain its original lastObservedAt
       const history = await storage.getObservationalMemoryHistory(threadId, resourceId);
       const previousRecord = history?.find(r => r.id === initial.id);
-      expect(previousRecord?.lastObservedAt).toEqual(oldObservedAt);
+      expect(previousRecord?.lastObservedAt).toEqual(observedAt);
     });
   });
 
@@ -2134,7 +2129,7 @@ describe('Thread Attribution Helpers', () => {
       storage,
       observer: { observationThreshold: 100 },
       reflector: { reflectionThreshold: 1000 },
-      resourceScope: true,
+      scope: 'resource',
     });
   });
 
@@ -2283,7 +2278,7 @@ Ask about preferred brewing method
         model: mockModel as any,
       },
       reflector: { reflectionThreshold: 10000 },
-      resourceScope: true,
+      scope: 'resource',
     });
 
     // Initialize record - for resource scope, threadId must be null
@@ -2355,7 +2350,7 @@ Ask about preferred brewing method
         model: mockModel as any,
       },
       reflector: { reflectionThreshold: 10000 },
-      resourceScope: false, // Thread scope
+      scope: 'thread', // Thread scope
     });
 
     // Initialize record
@@ -2437,7 +2432,7 @@ describe('Locking Behavior', () => {
         reflectionThreshold: 100, // Low threshold to trigger reflection
         model: mockReflectorModel as any,
       },
-      resourceScope: false,
+      scope: 'thread',
     });
 
     // Initialize record with enough observations to trigger reflection
@@ -2505,7 +2500,7 @@ describe('Locking Behavior', () => {
         model: mockObserverModel as any,
       },
       reflector: { reflectionThreshold: 10000 },
-      resourceScope: false,
+      scope: 'thread',
     });
 
     // Create thread and initialize record
@@ -2592,7 +2587,7 @@ describe('Reflection with Thread Attribution', () => {
         reflectionThreshold: 100, // Low threshold to trigger reflection
         model: mockReflectorModel as any,
       },
-      resourceScope: true,
+      scope: 'resource',
     });
 
     // Initialize with existing observations that exceed threshold
@@ -2674,7 +2669,7 @@ describe('Reflection with Thread Attribution', () => {
         reflectionThreshold: 100,
         model: mockReflectorModel as any,
       },
-      resourceScope: true,
+      scope: 'resource',
     });
 
     // Initialize with multi-thread observations
@@ -2750,7 +2745,7 @@ describe('Reflection with Thread Attribution', () => {
         reflectionThreshold: 100,
         model: mockReflectorModel as any,
       },
-      resourceScope: true,
+      scope: 'resource',
     });
 
     await storage.initializeObservationalMemory({
@@ -3072,7 +3067,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
    * 4. After all sessions, ask the question to verify recall
    */
   // TODO: Re-enable once per-resource architecture is working properly
-  // This test requires cross-session memory (resourceScope: true) to work correctly
+  // This test requires cross-session memory (scope: 'resource') to work correctly
   // NOTE: This test processes all 54 LongMemEval sessions with real API calls.
   // It takes 10+ minutes to run. Run manually with: npx vitest run -t "FULL BENCHMARK"
   it.skip('FULL BENCHMARK: should process all 54 sessions and recall key fact', async () => {
@@ -3091,7 +3086,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
         model: 'google/gemini-2.5-flash',
         reflectionThreshold: 30000,
       },
-      resourceScope: true, // Cross-session memory - critical for LongMemEval
+      scope: 'resource', // Cross-session memory - critical for LongMemEval
     });
 
     // 3. Create mock model for main agent during ingestion
@@ -3258,7 +3253,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           model: 'google/gemini-2.5-flash',
           reflectionThreshold: 100000, // Won't trigger
         },
-        resourceScope: true,
+        scope: 'resource',
       });
 
       // Use mock model for main agent during ingestion
@@ -3398,7 +3393,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
           model: 'google/gemini-2.5-flash',
           reflectionThreshold: 100000,
         },
-        resourceScope: true,
+        scope: 'resource',
       });
 
       const agent = new Agent({

@@ -506,7 +506,7 @@ export class PrepareCommand {
           model: model, // Real model for Reflector
           // Using defaults (reflectionThreshold: 30000)
         },
-        resourceScope: observationalMemoryConfig.resourceScope,
+        scope: observationalMemoryConfig.scope,
         // Debug callback to log all observation events to a file
         onDebugEvent: async (event: any) => {
           if (!omDebugState.debugLogFile) return; // Skip if not initialized yet
@@ -887,7 +887,7 @@ export class PrepareCommand {
       // Store OM config for reproducibility (actual values used, with defaults as fallback)
       ...(usesObservationalMemory && {
         observationalMemoryConfig: {
-          resourceScope: observationalMemoryConfig.resourceScope,
+          scope: observationalMemoryConfig.scope,
           focus: observationalMemoryConfig.focus,
           // Use configured values if present, otherwise defaults
           observationThreshold:

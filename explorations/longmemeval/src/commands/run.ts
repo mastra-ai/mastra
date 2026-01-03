@@ -364,7 +364,7 @@ export class RunCommand {
           model: retry4o.model,
           reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
         },
-        resourceScope: observationalMemoryConfig.resourceScope,
+        scope: observationalMemoryConfig.scope,
       });
 
       // MessageHistory for persisting messages
@@ -476,7 +476,7 @@ Be specific rather than generic when the user has expressed clear preferences in
         // Store OM config for reproducibility (actual values used, with defaults as fallback)
         ...(usesObservationalMemory && {
           observationalMemoryConfig: {
-            resourceScope: observationalMemoryConfig.resourceScope,
+            scope: observationalMemoryConfig.scope,
             focus: observationalMemoryConfig.focus,
             observationThreshold:
               (observationalMemoryConfig as any).observationThreshold ??
