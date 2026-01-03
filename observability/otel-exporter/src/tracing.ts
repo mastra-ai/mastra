@@ -213,6 +213,23 @@ export class OtelExporter extends BaseExporter {
     }
   }
 
+  /**
+   * Flush any pending spans to the exporter without shutting down.
+   * Useful in serverless environments to export spans before instance termination.
+   */
+  async flush(): Promise<void> {
+    if (this.isDisabled) {
+      return;
+    }
+    if (this.processor) {
+      try {
+        await this.processor.forceFlush();
+      } catch (error) {
+        this.logger.error(`[OtelExporter] Failed to flush spans:`, error);
+      }
+    }
+  }
+
   async shutdown(): Promise<void> {
     // Shutdown the processor to flush any remaining spans
     if (this.processor) {
