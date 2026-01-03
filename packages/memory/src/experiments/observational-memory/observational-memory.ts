@@ -1416,7 +1416,7 @@ ${formattedMessages}
           timestamp: new Date(),
           threadId,
           resourceId,
-          observations: currentObservations,
+          observations: threadSection,
           rawObserverOutput: result.observations,
           previousObservations: record.activeObservations,
           messages: threadMessages.map(m => ({
