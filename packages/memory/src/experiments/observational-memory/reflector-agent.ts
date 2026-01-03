@@ -1,3 +1,9 @@
+import {
+  OBSERVER_EXTRACTION_INSTRUCTIONS,
+  OBSERVER_OUTPUT_FORMAT,
+  OBSERVER_GUIDELINES,
+} from './observer-agent';
+
 /**
  * Result from parsing Reflector output
  */
@@ -9,85 +15,6 @@ export interface ReflectorResult {
   /** Token count of output (for compression validation) */
   tokenCount?: number;
 }
-
-/**
- * The Observer instruction that gets embedded in the Reflector prompt.
- * This helps the Reflector understand how observations were created.
- */
-const OBSERVER_INSTRUCTION_FOR_REFLECTOR = `Extract observations that will help the assistant remember:
-
-CRITICAL USER INFORMATION:
-- Explicit preferences (e.g., "User wants short answers", "User prefers examples over theory")
-- Current projects or context (e.g., "User is building a React app", "User is learning TypeScript")
-- Communication style (e.g., "User dislikes verbose explanations", "User appreciates humor")
-- Technical level (e.g., "User is familiar with JavaScript", "User is new to async programming")
-
-CONVERSATION CONTEXT:
-- What the user is working on or asking about
-- Previous topics and their outcomes
-- What user understands or needs clarification on
-- Specific requirements or constraints mentioned
-- Contents of assistant learnings and summaries
-- Answers to users questions including full context to remember detailed summaries and explanations
-- Relevant code snippets
-- Specific unique names of people, places, objects, events, etc that were discussed in the conversation
-
-ACTIONABLE INSIGHTS:
-- What worked well in explanations
-- What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
-
-=== OUTPUT FORMAT ===
-
-Your output MUST use XML tags to structure the response:
-
-<observations>
-Put all observations here as a markdown list:
-- 🔴 [High priority: explicit preferences, critical context, goals achieved, milestones] [labels]
-- 🟡 [Medium priority: project details, learned information] [labels]
-- 🟢 [Low priority: minor preferences, uncertain observations] [labels]
-
-Include dates/times when relevant:
-- 🔴 **User Profile (2025-12-04):** User prefers direct answers [user_preference]
-- 🟡 **Task Started (2025-12-04 14:30 PST):** User asked to implement feature X [current_project, goal]
-
-Group related observations by indenting sub-observations:
-- 🟡 Agent is working on x [task, tool_use]
-  - -> 🟡 agent executed y to view z file [labels]
-  - -> 🟡 (next tool observation)
-- 🟡 Agent finished working on x and learned y and z [task, tool_use]
-</observations>
-
-<current-task>
-State the current task(s) explicitly:
-- Primary: What the agent is currently working on
-- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
-</current-task>
-
-<suggested-response>
-Hint for the agent's immediate next message.
-</suggested-response>
-
-=== GUIDELINES ===
-
-- Be specific enough for the assistant to act on
-- Good: "User prefers short, direct answers without lengthy explanations"
-- Bad: "User stated a preference" (too vague)
-- Use terse language to save tokens. Sentences should be dense without unnecessary words.
-- Do not add repetitive observations that have already been observed.
-- If the agent calls tools, observe what was called, why, and what was learned.
-- Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
-- Observe WHAT the agent did and WHAT it means, not HOW well it did it.
-
-Common labels to use:
-- user_preference, communication_style, learning_style
-- current_project, user_context, technical_level
-- topic_discussed, understanding_confirmed, needs_clarification
-- explicit_requirement, constraint, goal, goal_achieved, milestone
-- worked_well, avoid_this, follow_up_needed, didnt_work
-- tool_use, task
-
-Remember: These observations are the assistant's ONLY memory. Make them count.`;
 
 /**
  * The Reflector's system prompt.
@@ -105,7 +32,15 @@ The following instructions were given to another part of your psyche (the observ
 Use this to understand how your observational memories were created.
 
 <observational-memory-instruction>
-${OBSERVER_INSTRUCTION_FOR_REFLECTOR}
+${OBSERVER_EXTRACTION_INSTRUCTIONS}
+
+=== OUTPUT FORMAT ===
+
+${OBSERVER_OUTPUT_FORMAT}
+
+=== GUIDELINES ===
+
+${OBSERVER_GUIDELINES}
 </observational-memory-instruction>
 
 You are another part of the same psyche, the observation reflector.
@@ -133,21 +68,24 @@ When observations contain <thread id="..."> sections:
 
 Example input:
 <thread id="thread-1">
-- 🔴 User prefers TypeScript
-- 🟡 Working on auth feature
+Date: Dec 4, 2025
+* 🔴 (14:30) User prefers TypeScript
+* 🟡 (14:35) Working on auth feature
 </thread>
 <thread id="thread-2">
-- 🔴 User prefers TypeScript
-- 🟡 Debugging API endpoint
+Date: Dec 4, 2025
+* 🔴 (15:00) User prefers TypeScript
+* 🟡 (15:05) Debugging API endpoint
 </thread>
 
 Example output (consolidated):
-- 🔴 User prefers TypeScript
+Date: Dec 4, 2025
+* 🔴 (14:30) User prefers TypeScript
 <thread id="thread-1">
-- 🟡 Working on auth feature
+* 🟡 (14:35) Working on auth feature
 </thread>
 <thread id="thread-2">
-- 🟡 Debugging API endpoint
+* 🟡 (15:05) Debugging API endpoint
 </thread>
 
 === OUTPUT FORMAT ===
@@ -155,7 +93,7 @@ Example output (consolidated):
 Your output MUST use XML tags to structure the response:
 
 <observations>
-Put all consolidated observations here as a markdown list with priority emojis (🔴, 🟡, 🟢).
+Put all consolidated observations here using the date-grouped format with priority emojis (🔴, 🟡, 🟢).
 Group related observations with indentation.
 </observations>
 

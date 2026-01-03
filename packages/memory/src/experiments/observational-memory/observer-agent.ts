@@ -98,18 +98,10 @@ function buildFocusSection(focus?: ObservationFocus): string {
 }
 
 /**
- * Build the complete observer system prompt with focus areas.
+ * The core extraction instructions for the Observer.
+ * This is exported so the Reflector can understand how observations were created.
  */
-export function buildObserverSystemPrompt(focus?: ObservationFocus): string {
-  const focusSection = buildFocusSection(focus);
-
-  return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
-
-Extract observations that will help the assistant remember:
-
-${focusSection}
-
-CONVERSATION CONTEXT:
+export const OBSERVER_EXTRACTION_INSTRUCTIONS = `CONVERSATION CONTEXT:
 - What the user is working on or asking about
 - Previous topics and their outcomes
 - What user understands or needs clarification on
@@ -123,35 +115,33 @@ CONVERSATION CONTEXT:
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
 - What needs follow-up or clarification
-- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)
+- User's stated goals or next steps (note if the user tells you not to do a next step, or asks for something specific, other next steps besides the users request should be marked as "waiting for user", unless the user explicitly says to continue all next steps)`;
 
-=== OUTPUT FORMAT ===
-
-Your output MUST use XML tags to structure the response. This allows the system to properly parse and manage memory over time.
-
-<observations>
-Group observations by date, then list each with 24-hour time:
-
-Date: Dec 4, 2025
-
-* 🔴 (14:30) User prefers direct answers [user_preference]
-* 🟡 (14:31) Working on feature X [current_project, goal]
-* 🟢 (14:32) User might prefer dark mode [uncertain]
-
-Date: Dec 5, 2025
-
-* 🟡 (09:15) Continued work on feature X [current_project]
-
-Priority levels:
+/**
+ * The output format instructions for the Observer.
+ * This is exported so the Reflector can use the same format.
+ */
+export const OBSERVER_OUTPUT_FORMAT = `Use priority levels:
 - 🔴 High: explicit user facts, preferences, goals achieved, critical context
 - 🟡 Medium: project details, learned information, tool results
 - 🟢 Low: minor details, uncertain observations
 
 Group related observations (like tool sequences) by indenting:
-* 🟡 (14:33) Agent debugging auth issue [task]
-  * -> ran git status, found 3 modified files [tool_use]
-  * -> viewed auth.ts:45-60, found missing null check [learned]
-  * -> applied fix, tests now pass [resolved]
+* 🟡 (14:33) Agent debugging auth issue
+  * -> ran git status, found 3 modified files
+  * -> viewed auth.ts:45-60, found missing null check
+  * -> applied fix, tests now pass
+
+Group observations by date, then list each with 24-hour time.
+
+<observations>
+Date: Dec 4, 2025
+* 🔴 (14:30) User prefers direct answers
+* 🟡 (14:31) Working on feature X
+* 🟢 (14:32) User might prefer dark mode
+
+Date: Dec 5, 2025
+* 🟡 (09:15) Continued work on feature X
 </observations>
 
 <current-task>
@@ -167,11 +157,13 @@ Hint for the agent's immediate next message. Examples:
 - "I've updated the navigation model. Let me walk you through the changes..."
 - "The assistant should wait for the user to respond before continuing."
 - Call the view tool on src/example.ts to continue debugging.
-</suggested-response>
+</suggested-response>`;
 
-=== GUIDELINES ===
-
-- Be specific enough for the assistant to act on
+/**
+ * The guidelines for the Observer.
+ * This is exported so the Reflector can reference them.
+ */
+export const OBSERVER_GUIDELINES = `- Be specific enough for the assistant to act on
 - Good: "User prefers short, direct answers without lengthy explanations"
 - Bad: "User stated a preference" (too vague)
 - Add 1 to 5 observations per exchange
@@ -182,15 +174,29 @@ Hint for the agent's immediate next message. Examples:
 - If the agent provides a detailed response, observe the contents so it could be repeated.
 - Make sure you start each observation with a priority emoji (🔴, 🟡, 🟢)
 - Observe WHAT the agent did and WHAT it means, not HOW well it did it.
-- If the user provides detailed messages or code snippets, observe all important details.
+- If the user provides detailed messages or code snippets, observe all important details.`;
 
-Common labels to use:
-- user_preference, communication_style, learning_style
-- current_project, user_context, technical_level
-- topic_discussed, understanding_confirmed, needs_clarification
-- explicit_requirement, constraint, goal, goal_achieved, milestone
-- worked_well, avoid_this, follow_up_needed, didnt_work
-- tool_use, task
+/**
+ * Build the complete observer system prompt with focus areas.
+ */
+export function buildObserverSystemPrompt(_focus?: ObservationFocus): string {
+  // const focusSection = buildFocusSection(focus);
+
+  return `You are the memory consciousness of an AI assistant. Your observations will be the ONLY information the assistant has about past interactions with this user.
+
+Extract observations that will help the assistant remember:
+
+${OBSERVER_EXTRACTION_INSTRUCTIONS}
+
+=== OUTPUT FORMAT ===
+
+Your output MUST use XML tags to structure the response. This allows the system to properly parse and manage memory over time.
+
+${OBSERVER_OUTPUT_FORMAT}
+
+=== GUIDELINES ===
+
+${OBSERVER_GUIDELINES}
 
 === IMPORTANT: THREAD ATTRIBUTION ===
 
