@@ -1,10 +1,8 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { InMemoryStore } from '@mastra/core/storage';
 import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
 import { MockLanguageModelV1, MockLanguageModelV2 } from '../test-utils/mock-model';
-import { openai } from '@ai-sdk/openai';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
 import { embeddingCacheStats } from '../embeddings';
 import chalk from 'chalk';
@@ -501,9 +499,11 @@ export class PrepareCommand {
         observer: {
           model: model, // Real model for Observer
           // Using defaults (observationThreshold: 10000)
+          observationThreshold: 30000,
         },
         reflector: {
           model: model, // Real model for Reflector
+          reflectionThreshold: 20000,
           // Using defaults (reflectionThreshold: 30000)
         },
         scope: observationalMemoryConfig.scope,
