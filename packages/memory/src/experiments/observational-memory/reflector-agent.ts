@@ -30,6 +30,7 @@ CONVERSATION CONTEXT:
 - Contents of assistant learnings and summaries
 - Answers to users questions including full context to remember detailed summaries and explanations
 - Relevant code snippets
+- Specific unique names of people, places, objects, events, etc that were discussed in the conversation
 
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
@@ -179,16 +180,16 @@ User messages are extremely important. If the user asks a question or gives a ne
 export const COMPRESSION_RETRY_PROMPT = `
 ## COMPRESSION REQUIRED
 
-Your previous reflection was the same size or larger than the original observations. This defeats the purpose of reflection.
+Your previous reflection was the same size or larger than the original observations.
 
-Please re-process with MORE aggressive condensation:
+Please re-process with slightly more compression:
 - Towards the beginning, condense more observations into higher-level reflections
 - Closer to the end, retain more fine details (recent context matters more)
 - Memory is getting long - use a more condensed style throughout
-- Combine related items more aggressively
-- Completed work should be very brief
+- Combine related items more aggressively but do not lose important specific details of names, places, events, and people
+- For example if there is a long nested observation list about repeated tool calls, you can combine those into a single line and observe that the tool was called multiple times for x reason, and finally y outcome happened.
 
-Target a significant reduction while preserving critical context.
+Your current detail level was a 10/10, lets aim for a 8/10 detail level.
 `;
 
 /**
