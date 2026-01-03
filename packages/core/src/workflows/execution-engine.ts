@@ -76,6 +76,9 @@ export abstract class ExecutionEngine extends MastraBase {
     error?: any;
     steps: Record<string, StepResult<any, any, any, any>>;
     tripwire?: any;
+    getInitData?: () => any;
+    mastra?: Mastra;
+    requestContext?: RequestContext;
   }): Promise<void> {
     const { onFinish, onError } = this.options;
 
@@ -89,6 +92,9 @@ export abstract class ExecutionEngine extends MastraBase {
             error: result.error,
             steps: result.steps,
             tripwire: result.tripwire,
+            getInitData: result.getInitData,
+            mastra: result.mastra,
+            requestContext: result.requestContext,
           }),
         );
       } catch (err) {
@@ -105,6 +111,9 @@ export abstract class ExecutionEngine extends MastraBase {
             error: result.error,
             steps: result.steps,
             tripwire: result.tripwire,
+            getInitData: result.getInitData,
+            mastra: result.mastra,
+            requestContext: result.requestContext,
           }),
         );
       } catch (err) {

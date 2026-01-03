@@ -185,7 +185,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     if (callbackArg.status !== 'paused') {
       // Invoke lifecycle callbacks before returning
-      await this.invokeLifecycleCallbacks(callbackArg);
+      await this.invokeLifecycleCallbacks({
+        ...callbackArg,
+        getInitData: () => resultData.stepResults.input,
+        mastra: this.mastra,
+        requestContext: params.requestContext,
+      });
     }
 
     // Build the final result with any additional fields needed for the return type

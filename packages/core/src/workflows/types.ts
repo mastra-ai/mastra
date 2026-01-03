@@ -322,6 +322,12 @@ export interface WorkflowFinishCallbackResult {
   error?: SerializedError;
   steps: Record<string, StepResult<any, any, any, any>>;
   tripwire?: StepTripwireInfo;
+  /** Function that returns the initial workflow input data for debugging and observability */
+  getInitData?: () => any;
+  /** Reference to the Mastra instance, enabling access to other workflows and resources */
+  mastra?: Mastra;
+  /** The request context containing request-scoped data */
+  requestContext?: RequestContext;
 }
 
 /**
@@ -332,6 +338,12 @@ export interface WorkflowErrorCallbackInfo {
   error?: SerializedError;
   steps: Record<string, StepResult<any, any, any, any>>;
   tripwire?: StepTripwireInfo;
+  /** Function that returns the initial workflow input data for debugging and observability */
+  getInitData?: () => any;
+  /** Reference to the Mastra instance, enabling access to other workflows and resources */
+  mastra?: Mastra;
+  /** The request context containing request-scoped data */
+  requestContext?: RequestContext;
 }
 
 export interface WorkflowOptions {

@@ -632,7 +632,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         if (lastOutput.result.status !== 'paused') {
           // Invoke lifecycle callbacks before returning
-          await this.invokeLifecycleCallbacks(result);
+          await this.invokeLifecycleCallbacks({
+            ...result,
+            getInitData: () => stepResults.input,
+            mastra: this.mastra,
+            requestContext: currentRequestContext,
+          });
         }
 
         if (lastOutput.result.status === 'paused') {
@@ -705,7 +710,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
     });
 
-    await this.invokeLifecycleCallbacks(result);
+    await this.invokeLifecycleCallbacks({
+      ...result,
+      getInitData: () => stepResults.input,
+      mastra: this.mastra,
+      requestContext: currentRequestContext,
+    });
 
     if (params.outputOptions?.includeState) {
       return { ...result, state: lastState };
