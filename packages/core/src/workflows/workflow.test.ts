@@ -19651,6 +19651,172 @@ describe('Workflow', () => {
     });
   });
 
+  describe('requestContextSchema validation', () => {
+    it('should validate requestContext when schema is provided', async () => {
+      const step = createStep({
+        id: 'step-with-context-schema',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ userId: z.string(), tenantId: z.string() }),
+        requestContextSchema: z.object({
+          userId: z.string(),
+          tenantId: z.string(),
+        }),
+        execute: async ({ requestContext }) => {
+          const userId = requestContext.get('userId');
+          const tenantId = requestContext.get('tenantId');
+          return { userId, tenantId };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'context-validation-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ userId: z.string(), tenantId: z.string() }),
+      });
+      workflow.then(step).commit();
+
+      const requestContext = new RequestContext<{ userId: string; tenantId: string }>([
+        ['userId', 'user-123'],
+        ['tenantId', 'tenant-456'],
+      ]);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {}, requestContext });
+
+      expect(result.status).toBe('success');
+      // @ts-ignore
+      expect(result.steps['step-with-context-schema'].output.userId).toBe('user-123');
+      // @ts-ignore
+      expect(result.steps['step-with-context-schema'].output.tenantId).toBe('tenant-456');
+    });
+
+    it('should fail validation when requestContext is missing required fields', async () => {
+      const step = createStep({
+        id: 'step-requiring-context',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        requestContextSchema: z.object({
+          userId: z.string(),
+          tenantId: z.string(),
+        }),
+        execute: async () => {
+          return { result: 'should not reach here' };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'context-validation-fail-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      workflow.then(step).commit();
+
+      // Only provide userId, missing tenantId
+      const requestContext = new RequestContext([['userId', 'user-123']]);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {}, requestContext });
+
+      expect(result.status).toBe('failed');
+      expect(result.error?.message).toContain('requestContext validation failed');
+      expect(result.error?.message).toContain('tenantId');
+    });
+
+    it('should fail validation when requestContext has wrong types', async () => {
+      const step = createStep({
+        id: 'step-with-typed-context',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        requestContextSchema: z.object({
+          userId: z.string(),
+          count: z.number(),
+        }),
+        execute: async () => {
+          return { result: 'should not reach here' };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'context-type-fail-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      workflow.then(step).commit();
+
+      // Provide wrong types
+      const requestContext = new RequestContext([
+        ['userId', 123], // Should be string
+        ['count', 'not-a-number'], // Should be number
+      ]);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {}, requestContext });
+
+      expect(result.status).toBe('failed');
+      expect(result.error?.message).toContain('requestContext validation failed');
+    });
+
+    it('should work without requestContextSchema (backward compatibility)', async () => {
+      const step = createStep({
+        id: 'step-without-context-schema',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ requestContext }) => {
+          // Can still access requestContext, just untyped
+          const value = requestContext.get('anyKey') as string;
+          return { value };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'no-context-schema-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+        options: { validateInputs: false },
+      });
+      workflow.then(step).commit();
+
+      const requestContext = new RequestContext([['anyKey', 'anyValue']]);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {}, requestContext });
+
+      expect(result.status).toBe('success');
+      // @ts-ignore
+      expect(result.steps['step-without-context-schema'].output.value).toBe('anyValue');
+    });
+
+    it('should succeed when schema has all optional fields and context is empty', async () => {
+      const step = createStep({
+        id: 'step-optional-context',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+        requestContextSchema: z.object({
+          userId: z.string().optional(),
+          tenantId: z.string().optional(),
+        }),
+        execute: async () => {
+          return { success: true };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'optional-context-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ success: z.boolean() }),
+      });
+      workflow.then(step).commit();
+
+      // Empty context should pass since all fields are optional
+      const requestContext = new RequestContext();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {}, requestContext });
+
+      expect(result.status).toBe('success');
+    });
+  });
+
   describe('consecutive parallel executions', () => {
     it('should support consecutive parallel calls with proper type inference', async () => {
       // First parallel stage steps

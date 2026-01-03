@@ -2,6 +2,7 @@ import { isEmpty } from 'radash';
 import type z from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
@@ -157,6 +158,49 @@ export async function validateStepStateData({
     }
   }
   return { stateData, validationError };
+}
+
+/**
+ * Validates the requestContext against the step's requestContextSchema if provided.
+ * Converts the RequestContext Map-like structure to an object before validation.
+ */
+export async function validateStepRequestContext({
+  requestContext,
+  step,
+  validateInputs,
+}: {
+  requestContext: RequestContext<any>;
+  step: Step<string, any, any, any, any, any, any, any>;
+  validateInputs: boolean;
+}): Promise<{ validationError?: Error }> {
+  const requestContextSchema = step.requestContextSchema;
+
+  if (!requestContextSchema || !validateInputs) {
+    return { validationError: undefined };
+  }
+
+  // Convert RequestContext to plain object for validation
+  const contextObject = requestContext.toJSON();
+
+  const validatedContext = await requestContextSchema.safeParseAsync(contextObject);
+
+  if (!validatedContext.success) {
+    const errors = getZodErrors(validatedContext.error);
+    const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+    return {
+      validationError: new MastraError(
+        {
+          id: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Step "${step.id}" requestContext validation failed:\n${errorMessages}`,
+        },
+        validatedContext.error,
+      ),
+    };
+  }
+
+  return { validationError: undefined };
 }
 
 export function getResumeLabelsByStepId(

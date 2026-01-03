@@ -67,6 +67,7 @@ export interface SerializedTool {
   description?: string;
   inputSchema?: string;
   outputSchema?: string;
+  requestContextSchema?: string;
   requireApproval?: boolean;
 }
 
@@ -75,6 +76,7 @@ interface SerializedToolInput {
   description?: string;
   inputSchema?: { jsonSchema?: unknown } | unknown;
   outputSchema?: { jsonSchema?: unknown } | unknown;
+  requestContextSchema?: { jsonSchema?: unknown } | unknown;
 }
 
 export interface SerializedWorkflow {
@@ -107,6 +109,7 @@ export interface SerializedAgent {
   defaultOptions?: Record<string, unknown>;
   defaultGenerateOptionsLegacy?: Record<string, unknown>;
   defaultStreamOptionsLegacy?: Record<string, unknown>;
+  requestContextSchema?: string;
 }
 
 export interface SerializedAgentWithId extends SerializedAgent {
@@ -122,6 +125,7 @@ export async function getSerializedAgentTools(
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;
+    let requestContextSchemaForReturn: string | undefined = undefined;
 
     // Only process schemas if not in partial mode
     if (!partial) {
@@ -155,6 +159,25 @@ export async function getSerializedAgentTools(
             );
           }
         }
+
+        if (tool.requestContextSchema) {
+          if (
+            tool.requestContextSchema &&
+            typeof tool.requestContextSchema === 'object' &&
+            'jsonSchema' in tool.requestContextSchema
+          ) {
+            requestContextSchemaForReturn = stringify(tool.requestContextSchema.jsonSchema);
+          } else if (typeof tool.requestContextSchema === 'function') {
+            const requestContextSchema = tool.requestContextSchema();
+            if (requestContextSchema && requestContextSchema.jsonSchema) {
+              requestContextSchemaForReturn = stringify(requestContextSchema.jsonSchema);
+            }
+          } else if (tool.requestContextSchema) {
+            requestContextSchemaForReturn = stringify(
+              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+            );
+          }
+        }
       } catch (error) {
         console.error(`Error getting serialized tool`, {
           toolId: tool.id,
@@ -168,6 +191,7 @@ export async function getSerializedAgentTools(
       id: toolId,
       inputSchema: inputSchemaForReturn,
       outputSchema: outputSchemaForReturn,
+      requestContextSchema: requestContextSchemaForReturn,
     };
     return acc;
   }, {});
@@ -280,6 +304,19 @@ async function formatAgentList({
     },
   }));
 
+  // Serialize requestContextSchema if present
+  const agentRequestContextSchema = agent.getRequestContextSchema();
+  let requestContextSchemaForReturn: string | undefined = undefined;
+  if (agentRequestContextSchema) {
+    try {
+      requestContextSchemaForReturn = stringify(
+        zodToJsonSchema(agentRequestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+      );
+    } catch (error) {
+      console.error(`Error serializing agent requestContextSchema`, { agentId: agent.id, error });
+    }
+  }
+
   return {
     id: agent.id || id,
     name: agent.name,
@@ -297,6 +334,7 @@ async function formatAgentList({
     modelList,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: requestContextSchemaForReturn,
   };
 }
 
@@ -436,6 +474,19 @@ async function formatAgent({
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
+  // Serialize requestContextSchema if present
+  const agentRequestContextSchema = agent.getRequestContextSchema();
+  let requestContextSchemaForReturn: string | undefined = undefined;
+  if (agentRequestContextSchema) {
+    try {
+      requestContextSchemaForReturn = stringify(
+        zodToJsonSchema(agentRequestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+      );
+    } catch (error) {
+      console.error(`Error serializing agent requestContextSchema`, { agentId: agent.id, error });
+    }
+  }
+
   return {
     name: agent.name,
     description,
@@ -452,6 +503,7 @@ async function formatAgent({
     defaultOptions,
     defaultGenerateOptionsLegacy,
     defaultStreamOptionsLegacy,
+    requestContextSchema: requestContextSchemaForReturn,
   };
 }
 

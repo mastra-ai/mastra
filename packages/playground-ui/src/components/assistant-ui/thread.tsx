@@ -107,6 +107,8 @@ interface ComposerProps {
 const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Only auto-focus on initial mount, not on re-renders
+  const shouldAutoFocus = useRef(document.activeElement === document.body);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>
@@ -124,7 +126,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
             <textarea
               ref={textareaRef}
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none outline-none"
-              autoFocus={document.activeElement === document.body}
+              autoFocus={shouldAutoFocus.current}
               placeholder="Enter your message..."
               name=""
               id=""

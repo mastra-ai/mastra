@@ -15,6 +15,7 @@ import {
 } from '../workflows/content-moderation';
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
+import { RequestContext } from '@mastra/core/request-context';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -22,10 +23,14 @@ export const weatherInfo = createTool({
   suspendSchema: z.object({
     message: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
   resumeSchema: z.object({
     city: z.string(),
   }),
   execute: async (_inputData, context) => {
+    context?.requestContext?.get('userId');
     if (!context?.agent?.resumeData) {
       return context?.agent?.suspend({
         message: 'What city do you want to know the weather for?',
@@ -115,6 +120,9 @@ export const chefModelV2Agent = new Agent({
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
 });
 
 const weatherAgent = new Agent({

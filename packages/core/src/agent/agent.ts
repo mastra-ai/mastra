@@ -43,6 +43,7 @@ import type { OutputSchema } from '../stream/base/schema';
 import { createTool } from '../tools';
 import type { CoreTool } from '../tools/types';
 import type { DynamicArgument } from '../types';
+import type { ZodLikeSchema } from '../types/zod-compat';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from '../utils';
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
@@ -119,7 +120,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   maxRetries?: number;
   #mastra?: Mastra;
   #memory?: DynamicArgument<MastraMemory>;
-  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  #workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
@@ -132,6 +133,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #maxProcessorRetries?: number;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+  #requestContextSchema?: ZodLikeSchema;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -258,12 +260,50 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.#maxProcessorRetries = config.maxProcessorRetries;
     }
 
+    if (config.requestContextSchema) {
+      this.#requestContextSchema = config.requestContextSchema;
+    }
+
     // @ts-ignore Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  /**
+   * Validates the requestContext against the agent's requestContextSchema if one is defined.
+   * @param requestContext The RequestContext to validate
+   * @throws MastraError if validation fails
+   */
+  #validateRequestContext(requestContext?: RequestContext): void {
+    if (!this.#requestContextSchema || !requestContext) {
+      return;
+    }
+
+    // Convert RequestContext to plain object for validation
+    const contextObject = requestContext.toJSON();
+
+    // Validate using safeParse
+    if ('safeParse' in this.#requestContextSchema) {
+      const validation = this.#requestContextSchema.safeParse(contextObject);
+      if (!validation.success) {
+        const errorMessages = validation.error.issues
+          .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+          .join('\n');
+        throw new MastraError({
+          id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Agent "${this.id}" requestContext validation failed:\n${errorMessages}`,
+          details: {
+            agentId: this.id,
+            validationErrors: validation.error.issues,
+          },
+        });
+      }
+    }
   }
 
   /**
@@ -605,7 +645,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   public async listWorkflows({
     requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}): Promise<Record<string, Workflow<any, any, any, any, any, any>>> {
+  }: { requestContext?: RequestContext } = {}): Promise<
+    Record<string, Workflow<any, any, any, any, any, any, any, any>>
+  > {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ requestContext, mastra: this.#mastra }));
@@ -749,6 +791,21 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Returns the requestContextSchema for the agent, if one is defined.
+   *
+   * @example
+   * ```typescript
+   * const schema = agent.getRequestContextSchema();
+   * if (schema) {
+   *   // Schema is defined, validate or serialize it
+   * }
+   * ```
+   */
+  public getRequestContextSchema(): ZodLikeSchema | undefined {
+    return this.#requestContextSchema;
   }
 
   /**
@@ -3015,6 +3072,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT>,
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    // Validate requestContext if schema is defined
+    this.#validateRequestContext(options?.requestContext);
+
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: options?.requestContext,
     });
@@ -3094,6 +3154,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
+    // Validate requestContext if schema is defined
+    this.#validateRequestContext(streamOptions?.requestContext);
+
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });

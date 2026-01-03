@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { RequestContext } from '../request-context';
 import type { ZodLikeSchema } from '../types/zod-compat';
 import { isZodArray, isZodObject } from '../utils/zod-utils';
 
@@ -212,4 +213,47 @@ export function validateToolOutput<T = any>(
   };
 
   return { data: output, error };
+}
+
+/**
+ * Validates the requestContext against a Zod schema.
+ * Converts the RequestContext Map-like structure to an object before validation.
+ *
+ * @param schema The Zod schema to validate against
+ * @param requestContext The RequestContext instance to validate
+ * @param toolId Optional tool ID for better error messages
+ * @returns The validated data or a validation error
+ */
+export function validateRequestContext<T = any>(
+  schema: ZodLikeSchema | undefined,
+  requestContext: RequestContext<any>,
+  toolId?: string,
+): { data: T | unknown; error?: ValidationError<T> } {
+  // If no schema, return as-is
+  if (!schema || !('safeParse' in schema)) {
+    return { data: requestContext };
+  }
+
+  // Convert RequestContext to plain object for validation
+  const contextObject = requestContext.toJSON();
+
+  // Validate the context object
+  const validation = schema.safeParse(contextObject);
+
+  if (validation.success) {
+    return { data: validation.data };
+  }
+
+  // Validation failed, return error
+  const errorMessages = validation.error.issues
+    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
+
+  const error: ValidationError<T> = {
+    error: true,
+    message: `RequestContext validation failed${toolId ? ` for tool ${toolId}` : ''}. The requestContext does not match the expected schema:\n${errorMessages}\n\nProvided context: ${truncateForLogging(contextObject)}`,
+    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+  };
+
+  return { data: contextObject, error };
 }

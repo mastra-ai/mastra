@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { createTool } from './tool';
 import { validateToolInput } from './validation';
+import { RequestContext } from '../request-context';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -1189,6 +1190,219 @@ describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () 
         { id: '1', value: 'test' },
         { id: '2', value: undefined },
       ],
+    });
+  });
+});
+
+describe('RequestContext Schema Validation', () => {
+  describe('requestContextSchema in createTool', () => {
+    it('should validate requestContext when schema is provided', async () => {
+      const tool = createTool({
+        id: 'request-context-tool',
+        description: 'Tool that validates request context',
+        requestContextSchema: z.object({
+          userId: z.string(),
+          tenantId: z.string(),
+        }),
+        execute: async (_inputData, context) => {
+          const userId = context?.requestContext?.get('userId');
+          const tenantId = context?.requestContext?.get('tenantId');
+          return { userId, tenantId };
+        },
+      });
+
+      // Import RequestContext for testing
+      const requestContext = new RequestContext<{ userId: string; tenantId: string }>([
+        ['userId', 'user-123'],
+        ['tenantId', 'tenant-456'],
+      ]);
+
+      const result = await tool.execute!({}, { requestContext });
+
+      expect(result.error).toBeUndefined();
+      expect(result.userId).toBe('user-123');
+      expect(result.tenantId).toBe('tenant-456');
+    });
+
+    it('should fail validation when requestContext is missing required fields', async () => {
+      const tool = createTool({
+        id: 'request-context-validation-fail',
+        description: 'Tool that requires specific context',
+        requestContextSchema: z.object({
+          userId: z.string(),
+          tenantId: z.string(),
+        }),
+        execute: async (_inputData, context) => {
+          return { userId: context?.requestContext?.get('userId') };
+        },
+      });
+
+      const requestContext = new RequestContext([['userId', 'user-123']]);
+      // Missing tenantId
+
+      const result = await tool.execute!({}, { requestContext });
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('RequestContext validation failed');
+      expect(result.message).toContain('tenantId');
+    });
+
+    it('should fail validation when requestContext has wrong types', async () => {
+      const tool = createTool({
+        id: 'request-context-type-fail',
+        description: 'Tool with typed context',
+        requestContextSchema: z.object({
+          userId: z.string(),
+          count: z.number(),
+        }),
+        execute: async () => {
+          return { success: true };
+        },
+      });
+
+      const requestContext = new RequestContext([
+        ['userId', 123], // Should be string
+        ['count', 'not-a-number'], // Should be number
+      ]);
+
+      const result = await tool.execute!({}, { requestContext });
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('RequestContext validation failed');
+    });
+
+    it('should work without requestContextSchema (backward compatibility)', async () => {
+      const tool = createTool({
+        id: 'no-context-schema',
+        description: 'Tool without context schema',
+        execute: async (_inputData, context) => {
+          // Can still access requestContext, just untyped
+          const value = context?.requestContext?.get('anyKey');
+          return { value };
+        },
+      });
+
+      const requestContext = new RequestContext([['anyKey', 'anyValue']]);
+
+      const result = await tool.execute!({}, { requestContext });
+
+      expect(result.error).toBeUndefined();
+      expect(result.value).toBe('anyValue');
+    });
+
+    it('should fail validation when no requestContext is provided but schema requires fields', async () => {
+      const tool = createTool({
+        id: 'required-context',
+        description: 'Tool with required context fields',
+        requestContextSchema: z.object({
+          userId: z.string(),
+        }),
+        execute: async () => {
+          return { success: true };
+        },
+      });
+
+      // Execute without any context - Tool creates an empty RequestContext
+      const result = await tool.execute!({});
+
+      // Should fail because the schema requires userId but it's not present
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('RequestContext validation failed');
+    });
+
+    it('should succeed when schema has all optional fields and no context provided', async () => {
+      const tool = createTool({
+        id: 'optional-context',
+        description: 'Tool with optional context fields',
+        requestContextSchema: z.object({
+          userId: z.string().optional(),
+        }),
+        execute: async () => {
+          return { success: true };
+        },
+      });
+
+      // Execute without any context - Tool creates an empty RequestContext
+      const result = await tool.execute!({});
+
+      // Should succeed - schema has optional field
+      expect(result.error).toBeUndefined();
+      expect(result.success).toBe(true);
+    });
+
+    it('should provide typed access to requestContext values', async () => {
+      // This test verifies the TypeScript type inference works correctly
+      const tool = createTool({
+        id: 'typed-context',
+        description: 'Tool with typed context access',
+        requestContextSchema: z.object({
+          userId: z.string(),
+          role: z.enum(['admin', 'user', 'guest']),
+          metadata: z.object({
+            createdAt: z.string(),
+          }),
+        }),
+        execute: async (_inputData, context) => {
+          // TypeScript should know these types
+          const userId = context?.requestContext?.get('userId');
+          const role = context?.requestContext?.get('role');
+          const metadata = context?.requestContext?.get('metadata');
+          return { userId, role, metadata };
+        },
+      });
+
+      const requestContext = new RequestContext([
+        ['userId', 'user-xyz'],
+        ['role', 'admin'],
+        ['metadata', { createdAt: '2024-01-01' }],
+      ]);
+
+      const result = await tool.execute!({}, { requestContext });
+
+      expect(result.error).toBeUndefined();
+      expect(result.userId).toBe('user-xyz');
+      expect(result.role).toBe('admin');
+      expect(result.metadata).toEqual({ createdAt: '2024-01-01' });
+    });
+
+    it('should validate requestContext with transforms', async () => {
+      const tool = createTool({
+        id: 'transform-context',
+        description: 'Tool with transform in context schema',
+        requestContextSchema: z.object({
+          count: z.string().transform(val => parseInt(val, 10)),
+        }),
+        execute: async (_inputData, context) => {
+          return { count: context?.requestContext?.get('count') };
+        },
+      });
+
+      const requestContext = new RequestContext([['count', '42']]);
+
+      const result = await tool.execute!({}, { requestContext });
+
+      // Validation should succeed (the transform converts string to number)
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should include tool ID in requestContext validation error messages', async () => {
+      const tool = createTool({
+        id: 'my-specific-tool',
+        description: 'Tool with specific ID',
+        requestContextSchema: z.object({
+          required: z.string(),
+        }),
+        execute: async () => {
+          return { success: true };
+        },
+      });
+
+      const requestContext = new RequestContext();
+
+      const result = await tool.execute!({}, { requestContext });
+
+      expect(result.error).toBe(true);
+      expect(result.message).toContain('for tool my-specific-tool');
     });
   });
 });

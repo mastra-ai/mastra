@@ -6,6 +6,7 @@ import type { TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
+import type { ZodLikeSchema, InferZodLikeSchema } from '../types/zod-compat';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import type { StepResult } from './types';
 import type { Workflow } from './workflow';
@@ -14,12 +15,21 @@ export type SuspendOptions = {
   resumeLabel?: string | string[];
 } & Record<string, any>;
 
-export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = {
+export type ExecuteFunctionParams<
+  TState,
+  TStepInput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
+> = {
   runId: string;
   resourceId?: string;
   workflowId: string;
   mastra: Mastra;
-  requestContext: RequestContext;
+  requestContext: TRequestContextSchema extends ZodLikeSchema
+    ? RequestContext<InferZodLikeSchema<TRequestContextSchema>>
+    : RequestContext;
   inputData: TStepInput;
   state: TState;
   setState(state: TState): Promise<void>;
@@ -51,21 +61,57 @@ export type ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSch
   validateSchemas?: boolean;
 };
 
-export type ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = Omit<
-  ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ConditionFunctionParams<
+  TState,
+  TStepInput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
+> = Omit<
+  ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType, TRequestContextSchema>,
   'setState' | 'suspend'
 >;
 
-export type ExecuteFunction<TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ExecuteFunction<
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
+> = (
+  params: ExecuteFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType, TRequestContextSchema>,
 ) => Promise<TStepOutput>;
 
-export type ConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType>,
+export type ConditionFunction<
+  TState,
+  TStepInput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
+> = (
+  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType, TRequestContextSchema>,
 ) => Promise<boolean>;
 
-export type LoopConditionFunction<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> = (
-  params: ConditionFunctionParams<TState, TStepInput, TResumeSchema, TSuspendSchema, EngineType> & {
+export type LoopConditionFunction<
+  TState,
+  TStepInput,
+  TResumeSchema,
+  TSuspendSchema,
+  EngineType,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
+> = (
+  params: ConditionFunctionParams<
+    TState,
+    TStepInput,
+    TResumeSchema,
+    TSuspendSchema,
+    EngineType,
+    TRequestContextSchema
+  > & {
     iterationCount: number;
   },
 ) => Promise<boolean>;
@@ -79,6 +125,7 @@ export interface Step<
   TResumeSchema extends z.ZodType<any> = z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any> = z.ZodType<any>,
   TEngineType = any,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
 > {
   id: TStepId;
   description?: string;
@@ -87,13 +134,35 @@ export interface Step<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TState;
+  /**
+   * Schema for validating and typing the requestContext.
+   * When provided, the requestContext will be validated at runtime using .parse()
+   * and the execute function will receive a typed RequestContext.
+   *
+   * @example
+   * ```typescript
+   * const myStep = createStep({
+   *   id: 'my-step',
+   *   requestContextSchema: z.object({
+   *     userId: z.string(),
+   *     tenantId: z.string(),
+   *   }),
+   *   execute: async ({ requestContext }) => {
+   *     // requestContext is typed!
+   *     const userId = requestContext.get('userId'); // string
+   *   }
+   * });
+   * ```
+   */
+  requestContextSchema?: TRequestContextSchema;
   execute: ExecuteFunction<
     z.infer<TState>,
     z.infer<TSchemaIn>,
     z.infer<TSchemaOut>,
     z.infer<TResumeSchema>,
     z.infer<TSuspendSchema>,
-    TEngineType
+    TEngineType,
+    TRequestContextSchema
   >;
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;

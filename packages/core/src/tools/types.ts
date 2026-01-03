@@ -189,10 +189,13 @@ export type InternalCoreTool = {
 export interface ToolExecutionContext<
   TSuspendSchema extends ZodLikeSchema = any,
   TResumeSchema extends ZodLikeSchema = any,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
 > {
   // ============ Common properties (available in all contexts) ============
   mastra?: MastraUnion;
-  requestContext?: RequestContext;
+  requestContext?: TRequestContextSchema extends ZodLikeSchema
+    ? RequestContext<InferZodLikeSchema<TRequestContextSchema>>
+    : RequestContext;
   tracingContext?: TracingContext;
   abortSignal?: AbortSignal;
 
@@ -217,11 +220,13 @@ export interface ToolAction<
   TSchemaOut extends ZodLikeSchema | undefined = undefined,
   TSuspendSchema extends ZodLikeSchema = any,
   TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema> = ToolExecutionContext<
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema, any> = ToolExecutionContext<
     TSuspendSchema,
-    TResumeSchema
+    TResumeSchema,
+    undefined
   >,
   TId extends string = string,
+  TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
 > {
   id: TId;
   description: string;
@@ -229,6 +234,27 @@ export interface ToolAction<
   outputSchema?: TSchemaOut;
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
+  /**
+   * Schema for validating and typing the requestContext.
+   * When provided, the requestContext will be validated at runtime using .parse()
+   * and the execute function will receive a typed RequestContext.
+   *
+   * @example
+   * ```typescript
+   * const myTool = createTool({
+   *   id: 'my-tool',
+   *   requestContextSchema: z.object({
+   *     userId: z.string(),
+   *     tenantId: z.string(),
+   *   }),
+   *   execute: async (input, context) => {
+   *     // context.requestContext is typed!
+   *     const userId = context.requestContext.get('userId'); // string
+   *   }
+   * });
+   * ```
+   */
+  requestContextSchema?: TRequestContextSchema;
   // Execute signature with unified context type
   // First parameter: raw input data (validated against inputSchema)
   // Second parameter: unified execution context with all metadata

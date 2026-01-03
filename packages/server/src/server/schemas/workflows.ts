@@ -30,6 +30,7 @@ export const workflowRunPathParams = workflowIdPathParams.extend({
 const serializedStepSchema = z.object({
   id: z.string(),
   description: z.string().optional(),
+  requestContextSchema: z.string().optional(),
 });
 
 /**
