@@ -20,14 +20,21 @@ async function getPackageJSON(pkgName: string, importer: string): Promise<Packag
   return pkgJSON;
 }
 
+export interface NodeModulesExtensionResolverOptions {
+  /** Workspace package names that should be bundled, not externalized */
+  workspacePackages?: string[];
+}
+
 /**
  * Rollup plugin that resolves module extensions for external dependencies.
  *
  * This plugin handles ESM compatibility for external imports when node-resolve is not used:
  * - Packages WITH exports field (e.g., hono, date-fns): Keep imports as-is or strip redundant extensions
  * - Packages WITHOUT exports field (e.g., lodash): Add .js extension for direct file imports
+ * - Workspace packages: Resolve and bundle (not external) so TypeScript sources get transpiled
  */
-export function nodeModulesExtensionResolver(): Plugin {
+export function nodeModulesExtensionResolver(options?: NodeModulesExtensionResolverOptions): Plugin {
+  const workspacePackages = new Set(options?.workspacePackages ?? []);
   // Create a single instance of node-resolve to reuse
   const nodeResolvePlugin = nodeResolve();
 
@@ -39,15 +46,25 @@ export function nodeModulesExtensionResolver(): Plugin {
         return null;
       }
 
+      const pkgName = getPackageName(id);
+      if (!pkgName) {
+        return null;
+      }
+
+      // Workspace packages should be bundled (not external) so their TypeScript gets transpiled
+      if (workspacePackages.has(pkgName)) {
+        // @ts-expect-error - handler is part of resolveId signature
+        const resolved = await nodeResolvePlugin.resolveId?.handler?.call(this, id, importer, options);
+        if (resolved?.id) {
+          return { id: resolved.id, external: false };
+        }
+        return null;
+      }
+
       // Skip direct package imports (e.g., 'lodash', '@mastra/core')
       const parts = id.split('/');
       const isScoped = id.startsWith('@');
       if ((isScoped && parts.length === 2) || (!isScoped && parts.length === 1)) {
-        return null;
-      }
-
-      const pkgName = getPackageName(id);
-      if (!pkgName) {
         return null;
       }
 
@@ -59,7 +76,7 @@ export function nodeModulesExtensionResolver(): Plugin {
         }
 
         const packageRoot = await getPackageRootPath(pkgName, importer);
-        // @ts-expect-error - handle is part of resolveId signature
+        // @ts-expect-error - handler is part of resolveId signature
         const nodeResolved = await nodeResolvePlugin.resolveId?.handler?.call(this, id, importer, options);
         // if we cannot resolve it, it's not a valid import so we let node handle it
         if (!nodeResolved?.id) {
