@@ -74,24 +74,47 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
     this._collection.observationalMemory.clear();
 
     // Restore data into the SAME map instances (don't replace the maps!)
+    // Convert date strings back to Date objects for all record types
     if (data.threads) {
       for (const [key, value] of data.threads) {
-        this._collection.threads.set(key, value);
+        const thread = {
+          ...value,
+          createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
+          updatedAt: value.updatedAt ? new Date(value.updatedAt) : undefined,
+        };
+        this._collection.threads.set(key, thread);
       }
     }
     if (data.resources) {
       for (const [key, value] of data.resources) {
-        this._collection.resources.set(key, value);
+        const resource = {
+          ...value,
+          createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
+          updatedAt: value.updatedAt ? new Date(value.updatedAt) : undefined,
+        };
+        this._collection.resources.set(key, resource);
       }
     }
     if (data.messages) {
       for (const [key, value] of data.messages) {
-        this._collection.messages.set(key, value);
+        // Convert date strings back to Date objects
+        const message = {
+          ...value,
+          createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
+        };
+        this._collection.messages.set(key, message);
       }
     }
     if (data.observationalMemory) {
       for (const [key, value] of data.observationalMemory) {
-        this._collection.observationalMemory.set(key, value);
+        // Convert date strings back to Date objects
+        const record = {
+          ...value,
+          createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
+          updatedAt: value.updatedAt ? new Date(value.updatedAt) : undefined,
+          lastObservedAt: value.lastObservedAt ? new Date(value.lastObservedAt) : undefined,
+        };
+        this._collection.observationalMemory.set(key, record);
       }
     }
   }
