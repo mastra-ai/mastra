@@ -10,11 +10,12 @@ import {
   startAsyncAgentBuilderBodySchema,
   workflowExecutionResultSchema,
   workflowControlResponseSchema,
-  workflowRunResponseSchema,
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
   streamLegacyAgentBuilderBodySchema,
+  workflowRunResultSchema,
+  workflowRunResultQuerySchema,
 } from '../schemas/agent-builder';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
@@ -126,9 +127,11 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   path: '/api/agent-builder/:actionId/runs/:runId',
   responseType: 'json',
   pathParamSchema: actionRunPathParams,
-  responseSchema: workflowRunResponseSchema,
+  queryParamSchema: workflowRunResultQuerySchema,
+  responseSchema: workflowRunResultSchema,
   summary: 'Get action run by ID',
-  description: 'Returns details for a specific action run',
+  description:
+    'Returns details for a specific action run with metadata and processed execution state. Use the fields query parameter to reduce payload size.',
   tags: ['Agent Builder'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;

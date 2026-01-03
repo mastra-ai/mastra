@@ -382,12 +382,14 @@ describe('Agent Builder Handlers', () => {
         runId: 'test-run',
       });
 
-      expect(result).toEqual({
-        activeStepsPath: {},
-        error: undefined,
+      // Now returns unified WorkflowState with metadata
+      expect(result).toMatchObject({
+        runId: 'test-run',
+        workflowName: 'merge-template',
         status: 'success',
         result: { result: 'success' },
         payload: {},
+        activeStepsPath: {},
         steps: {
           'test-step': {
             status: 'success',
@@ -397,8 +399,10 @@ describe('Agent Builder Handlers', () => {
             payload: {},
           },
         },
-        serializedStepGraph: mockWorkflow.serializedStepGraph,
+        serializedStepGraph: expect.arrayContaining([expect.objectContaining({ type: 'step' })]),
       });
+      expect(result.createdAt).toBeInstanceOf(Date);
+      expect(result.updatedAt).toBeInstanceOf(Date);
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
         {
           'merge-template': expect.anything(),

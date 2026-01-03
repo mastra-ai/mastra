@@ -264,10 +264,34 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         : never
     : never;
 
+/**
+ * Unified workflow state that combines metadata with processed execution state.
+ */
 export interface WorkflowState {
+  // Metadata
+  runId: string;
+  workflowName: string;
+  resourceId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+
+  /**
+   * Indicates whether this result came from in-memory storage rather than persistent storage.
+   * When true, the data is approximate:
+   * - createdAt/updatedAt are set to current time
+   * - steps is empty {} (step data only available from persisted snapshots)
+   *
+   * This flag is useful for callers that need to distinguish between persisted and in-memory runs,
+   * e.g., to decide whether to persist an initial snapshot.
+   */
+  isFromInMemory?: boolean;
+
+  // Execution State
   status: WorkflowRunStatus;
-  activeStepsPath: Record<string, number[]>;
-  serializedStepGraph: SerializedStepFlowEntry[];
+  // Optional detailed fields (can be excluded for performance)
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: SerializedStepFlowEntry[];
+  // Step Information (processed)
   steps: Record<
     string,
     {
@@ -286,6 +310,20 @@ export interface WorkflowState {
   payload?: Record<string, any>;
   error?: SerializedError;
 }
+
+/**
+ * Valid field names for filtering WorkflowState responses.
+ * Use with getWorkflowRunById to reduce payload size.
+ * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.
+ */
+export type WorkflowStateField =
+  | 'status'
+  | 'result'
+  | 'error'
+  | 'payload'
+  | 'steps'
+  | 'activeStepsPath'
+  | 'serializedStepGraph';
 
 export interface WorkflowRunState {
   // Core state info
