@@ -124,3 +124,145 @@ export const useCloneThread = () => {
     },
   });
 };
+
+export const useBranchThread = () => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      agentId,
+      branchPointMessageId,
+      title,
+    }: {
+      threadId: string;
+      agentId: string;
+      branchPointMessageId?: string;
+      title?: string;
+    }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.branch({ branchPointMessageId, title, requestContext });
+    },
+    onSuccess: (_, variables) => {
+      const { agentId } = variables;
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+      }
+      toast.success('Thread branched successfully');
+    },
+    onError: () => {
+      toast.error('Failed to branch thread');
+    },
+  });
+};
+
+export const usePromoteBranch = () => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      agentId,
+      deleteParentMessages,
+    }: {
+      threadId: string;
+      agentId: string;
+      deleteParentMessages?: boolean;
+    }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.promote({ deleteParentMessages, requestContext });
+    },
+    onSuccess: (_, variables) => {
+      const { agentId } = variables;
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+      }
+      toast.success('Branch promoted successfully');
+    },
+    onError: () => {
+      toast.error('Failed to promote branch');
+    },
+  });
+};
+
+export const useListBranches = ({
+  threadId,
+  agentId,
+  enabled = true,
+}: {
+  threadId: string;
+  agentId: string;
+  enabled?: boolean;
+}) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['memory', 'branches', threadId, agentId],
+    queryFn: async () => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      const result = await thread.listBranches(requestContext);
+      return result.branches;
+    },
+    enabled: Boolean(enabled && threadId && agentId),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+};
+
+export const useParentThread = ({
+  threadId,
+  agentId,
+  enabled = true,
+}: {
+  threadId: string;
+  agentId: string;
+  enabled?: boolean;
+}) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['memory', 'parent', threadId, agentId],
+    queryFn: async () => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      const result = await thread.getParent(requestContext);
+      return result.thread;
+    },
+    enabled: Boolean(enabled && threadId && agentId),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+};
+
+export const useBranchHistory = ({
+  threadId,
+  agentId,
+  enabled = true,
+}: {
+  threadId: string;
+  agentId: string;
+  enabled?: boolean;
+}) => {
+  const client = useMastraClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useQuery({
+    queryKey: ['memory', 'branchHistory', threadId, agentId],
+    queryFn: async () => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      const result = await thread.getBranchHistory(requestContext);
+      return result.history;
+    },
+    enabled: Boolean(enabled && threadId && agentId),
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+};

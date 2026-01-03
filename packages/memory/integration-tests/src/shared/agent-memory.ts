@@ -1684,4 +1684,575 @@ export function getAgentMemoryTests({
       expect(hasClonedMessage).toBe(true);
     });
   });
+
+  describe('Thread Branching', () => {
+    const branchStorage = new LibSQLStore({
+      id: 'branch-storage',
+      url: dbFile,
+    });
+    const branchVector = new LibSQLVector({
+      connectionUrl: dbFile,
+      id: 'branch-vector',
+    });
+    const branchMemory = new Memory({
+      storage: branchStorage,
+      vector: branchVector,
+      embedder: fastembed,
+      options: {
+        lastMessages: 10,
+        semanticRecall: true,
+      },
+    });
+
+    const branchAgent = new Agent({
+      id: 'branch-test-agent',
+      name: 'Branch Test Agent',
+      instructions: 'You are a helpful assistant for testing thread branching.',
+      model,
+      memory: branchMemory,
+      tools,
+    });
+
+    it('should branch a thread and inherit messages from parent', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-test-resource';
+
+      // Create a conversation in the source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Hello, my name is Alice!', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await branchAgent.generate('I live in New York.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Hello, my name is Alice!', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await branchAgent.generateLegacy('I live in New York.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Verify source thread has messages
+      const sourceMessages = await branchMemory.recall({ threadId: sourceThreadId });
+      expect(sourceMessages.messages.length).toBeGreaterThan(0);
+      const sourceMessageCount = sourceMessages.messages.length;
+
+      // Branch the thread
+      const { thread: branchedThread, inheritedMessageCount } = await branchMemory.branchThread({
+        sourceThreadId,
+      });
+
+      // Verify the branched thread was created
+      expect(branchedThread).toBeDefined();
+      expect(branchedThread.id).not.toBe(sourceThreadId);
+
+      // Verify branch metadata
+      expect(branchedThread.metadata?.branch).toBeDefined();
+      expect((branchedThread.metadata?.branch as any).parentThreadId).toBe(sourceThreadId);
+
+      // Verify inherited message count matches source
+      expect(inheritedMessageCount).toBe(sourceMessageCount);
+
+      // Verify branched thread can access inherited messages
+      const branchedThreadMessages = await branchMemory.recall({ threadId: branchedThread.id });
+      expect(branchedThreadMessages.messages.length).toBe(sourceMessageCount);
+    });
+
+    it('should branch a thread at a specific message point', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-at-point-resource';
+
+      // Create multiple messages
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Message 1', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await branchAgent.generate('Message 2', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await branchAgent.generate('Message 3', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Message 1', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await branchAgent.generateLegacy('Message 2', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+        await branchAgent.generateLegacy('Message 3', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Get the first user message ID
+      const sourceMessages = await branchMemory.recall({ threadId: sourceThreadId });
+      const userMessages = sourceMessages.messages.filter((m: any) => m.role === 'user');
+      expect(userMessages.length).toBe(3);
+
+      // Branch at the second user message
+      const branchPointMessageId = userMessages[1]!.id;
+      const { thread: branchedThread, inheritedMessageCount } = await branchMemory.branchThread({
+        sourceThreadId,
+        branchPointMessageId,
+      });
+
+      // The branch should inherit messages up to and including the branch point
+      // Since we're branching at the 2nd user message, we should have:
+      // - User message 1 + assistant response 1
+      // - User message 2 + assistant response 2
+      // = 4 messages total
+      expect(inheritedMessageCount).toBeLessThan(sourceMessages.messages.length);
+
+      // Verify branch metadata has the correct branch point
+      const branchMetadata = branchMemory.getBranchMetadata(branchedThread);
+      expect(branchMetadata?.branchPointMessageId).toBe(branchPointMessageId);
+    });
+
+    it('should allow continuing conversation on branched thread independently', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-continue-resource';
+
+      // Create initial conversation
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('My favorite color is blue.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('My favorite color is blue.', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Branch the thread
+      const { thread: branchedThread } = await branchMemory.branchThread({
+        sourceThreadId,
+      });
+
+      // Continue conversation on branched thread with different info
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Actually, my favorite color is red.', {
+          threadId: branchedThread.id,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Actually, my favorite color is red.', {
+          threadId: branchedThread.id,
+          resourceId,
+        });
+      }
+
+      // Verify source thread is unchanged (still only 1 user message)
+      const sourceMessages = await branchMemory.recall({ threadId: sourceThreadId });
+      const sourceUserMessages = sourceMessages.messages.filter((m: any) => m.role === 'user');
+      expect(sourceUserMessages.length).toBe(1);
+
+      // Verify branched thread has additional messages (inherited + new)
+      const branchedMessages = await branchMemory.recall({ threadId: branchedThread.id });
+      const branchedUserMessages = branchedMessages.messages.filter((m: any) => m.role === 'user');
+      expect(branchedUserMessages.length).toBe(2); // Inherited + new message
+    });
+
+    it('should use utility methods to check branch status', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-utility-resource';
+
+      // Create source thread
+      const sourceThread = await branchMemory.createThread({
+        threadId: sourceThreadId,
+        resourceId,
+        title: 'Source Thread',
+      });
+
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Branch the thread
+      const { thread: branchedThread } = await branchMemory.branchThread({
+        sourceThreadId,
+      });
+
+      // Test isBranch utility
+      expect(branchMemory.isBranch(sourceThread)).toBe(false);
+      expect(branchMemory.isBranch(branchedThread)).toBe(true);
+
+      // Test getBranchMetadata utility
+      expect(branchMemory.getBranchMetadata(sourceThread)).toBeNull();
+      const branchMetadata = branchMemory.getBranchMetadata(branchedThread);
+      expect(branchMetadata).not.toBeNull();
+      expect(branchMetadata?.parentThreadId).toBe(sourceThreadId);
+
+      // Test getParentThread utility
+      const retrievedParent = await branchMemory.getParentThread(branchedThread.id);
+      expect(retrievedParent).not.toBeNull();
+      expect(retrievedParent?.id).toBe(sourceThreadId);
+    });
+
+    it('should list all branches of a source thread', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-list-resource';
+
+      // Create source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Create multiple branches
+      await branchMemory.branchThread({ sourceThreadId, title: 'Branch 1' });
+      await branchMemory.branchThread({ sourceThreadId, title: 'Branch 2' });
+      await branchMemory.branchThread({ sourceThreadId, title: 'Branch 3' });
+
+      // List branches
+      const branches = await branchMemory.listBranches(sourceThreadId);
+
+      expect(branches.length).toBe(3);
+      expect(branches.every(b => branchMemory.isBranch(b))).toBe(true);
+    });
+
+    it('should track branch history chain', async () => {
+      const originalThreadId = randomUUID();
+      const resourceId = 'branch-history-resource';
+
+      // Create original thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Original message', {
+          threadId: originalThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Original message', {
+          threadId: originalThreadId,
+          resourceId,
+        });
+      }
+
+      // Create chain: original -> branch1 -> branch2
+      const { thread: branch1 } = await branchMemory.branchThread({
+        sourceThreadId: originalThreadId,
+        title: 'First Branch',
+      });
+
+      const { thread: branch2 } = await branchMemory.branchThread({
+        sourceThreadId: branch1.id,
+        title: 'Second Branch',
+      });
+
+      // Get branch history
+      const history = await branchMemory.getBranchHistory(branch2.id);
+
+      expect(history.length).toBe(3);
+      expect(history[0]?.id).toBe(originalThreadId);
+      expect(history[1]?.id).toBe(branch1.id);
+      expect(history[2]?.id).toBe(branch2.id);
+    });
+
+    it('should promote a branch to parent', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-promote-resource';
+
+      // Create source thread with initial messages
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Initial message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Initial message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Branch the thread
+      const { thread: branchedThread } = await branchMemory.branchThread({
+        sourceThreadId,
+      });
+
+      // Add messages to the branch
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Branch-specific message', {
+          threadId: branchedThread.id,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Branch-specific message', {
+          threadId: branchedThread.id,
+          resourceId,
+        });
+      }
+
+      // Also add a message to the source thread after branching (creates divergence)
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Message after branch', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Message after branch', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Promote the branch
+      const { promotedThread, archiveThread, archivedMessageCount } = await branchMemory.promoteBranch({
+        branchThreadId: branchedThread.id,
+      });
+
+      // The promoted thread should be the parent thread
+      expect(promotedThread.id).toBe(sourceThreadId);
+
+      // The branch thread should no longer exist
+      const deletedBranch = await branchMemory.getThreadById({ threadId: branchedThread.id });
+      expect(deletedBranch).toBeNull();
+
+      // An archive thread should have been created for the divergent messages
+      expect(archiveThread).toBeDefined();
+      expect(archivedMessageCount).toBeGreaterThan(0);
+    });
+
+    it('should delete parent messages when promoting with deleteParentMessages=true', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-promote-delete-resource';
+
+      // Create source thread with initial messages
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Initial message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Initial message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Branch the thread
+      const { thread: branchedThread } = await branchMemory.branchThread({
+        sourceThreadId,
+      });
+
+      // Add messages to parent after branching
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Message after branch on parent', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Message after branch on parent', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Promote and delete divergent messages
+      const { promotedThread, archiveThread } = await branchMemory.promoteBranch({
+        branchThreadId: branchedThread.id,
+        deleteParentMessages: true,
+      });
+
+      // Should not create archive thread when deleting
+      expect(archiveThread).toBeUndefined();
+      expect(promotedThread.id).toBe(sourceThreadId);
+    });
+
+    it('should branch with custom thread ID', async () => {
+      const sourceThreadId = randomUUID();
+      const customBranchId = `custom-branch-${randomUUID()}`;
+      const resourceId = 'branch-custom-id-resource';
+
+      // Create source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Branch with custom ID
+      const { thread: branchedThread } = await branchMemory.branchThread({
+        sourceThreadId,
+        newThreadId: customBranchId,
+      });
+
+      expect(branchedThread.id).toBe(customBranchId);
+    });
+
+    it('should branch with custom title', async () => {
+      const sourceThreadId = randomUUID();
+      const resourceId = 'branch-custom-title-resource';
+
+      // Create source thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Test message', {
+          threadId: sourceThreadId,
+          resourceId,
+        });
+      }
+
+      // Branch with custom title
+      const customTitle = 'My Custom Branch Title';
+      const { thread: branchedThread } = await branchMemory.branchThread({
+        sourceThreadId,
+        title: customTitle,
+      });
+
+      expect(branchedThread.title).toBe(customTitle);
+    });
+
+    it('should allow nested branching (branch of a branch)', async () => {
+      const originalThreadId = randomUUID();
+      const resourceId = 'nested-branch-resource';
+
+      // Create original thread
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('Original message', {
+          threadId: originalThreadId,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('Original message', {
+          threadId: originalThreadId,
+          resourceId,
+        });
+      }
+
+      // Create first branch
+      const { thread: firstBranch } = await branchMemory.branchThread({
+        sourceThreadId: originalThreadId,
+        title: 'First Branch',
+      });
+
+      // Add message to first branch
+      if (
+        typeof model === 'string' ||
+        ('specificationVersion' in model && ['v2', 'v3'].includes(model.specificationVersion))
+      ) {
+        await branchAgent.generate('First branch message', {
+          threadId: firstBranch.id,
+          resourceId,
+        });
+      } else {
+        await branchAgent.generateLegacy('First branch message', {
+          threadId: firstBranch.id,
+          resourceId,
+        });
+      }
+
+      // Create branch of branch
+      const { thread: nestedBranch, inheritedMessageCount } = await branchMemory.branchThread({
+        sourceThreadId: firstBranch.id,
+        title: 'Nested Branch',
+      });
+
+      // Verify nested branch was created
+      expect(nestedBranch).toBeDefined();
+      expect(branchMemory.isBranch(nestedBranch)).toBe(true);
+
+      // Verify nested branch has correct parent
+      const nestedBranchMeta = branchMemory.getBranchMetadata(nestedBranch);
+      expect(nestedBranchMeta?.parentThreadId).toBe(firstBranch.id);
+
+      // Nested branch should inherit messages from both original and first branch
+      // Original: 1 user + 1 assistant = 2
+      // First branch: 1 user + 1 assistant = 2 (on top of inherited 2)
+      // Total messages visible to nested branch: 4
+      // Note: inheritedMessageCount only counts messages from immediate parent (firstBranch),
+      // not the full parent chain, so it will be 2 (just firstBranch's own messages)
+      expect(inheritedMessageCount).toBeGreaterThan(0);
+
+      // Verify nested branch can see all messages in chain (including ancestor threads)
+      const nestedMessages = await branchMemory.recall({ threadId: nestedBranch.id });
+      // Should see: original thread (2) + firstBranch (2) = 4 total
+      expect(nestedMessages.messages.length).toBeGreaterThanOrEqual(inheritedMessageCount);
+      expect(nestedMessages.messages.length).toBe(4); // Full chain visibility
+    });
+  });
 }

@@ -5,7 +5,7 @@ import {
   ToolCallMessagePartComponent,
   useComposerRuntime,
 } from '@assistant-ui/react';
-import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
+import { ArrowUp, Mic, PlusIcon, GitBranch, ChevronRight } from 'lucide-react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -20,6 +20,9 @@ import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recogniti
 import { ComposerAttachments } from './attachments/attachment';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { useThreadInput } from '@/domains/conversation';
+import { useThreadContext } from '@/domains/agents/context/thread-context';
+import { useParentThread, useBranchHistory } from '@/domains/memory/hooks/use-memory';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface ThreadProps {
   agentName?: string;
@@ -39,6 +42,7 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
   return (
     <ThreadWrapper>
       <ThreadPrimitive.Viewport ref={areaRef} autoScroll={false} className="overflow-y-scroll scroll-smooth h-full">
+        <BranchBreadcrumb />
         <ThreadWelcome agentName={agentName} />
 
         <div className="max-w-3xl w-full mx-auto px-4 pb-7">
@@ -225,5 +229,45 @@ const CircleStopIcon = () => {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" width="16" height="16">
       <rect width="10" height="10" x="3" y="3" rx="2" />
     </svg>
+  );
+};
+
+const BranchBreadcrumb = () => {
+  const { threadId, agentId } = useThreadContext();
+  const { Link, paths } = useLinkComponent();
+
+  const { data: parentThread, isLoading } = useParentThread({
+    threadId: threadId ?? '',
+    agentId: agentId ?? '',
+    enabled: Boolean(threadId && agentId),
+  });
+
+  // Don't show anything if not a branch or still loading
+  if (isLoading || !parentThread) {
+    return null;
+  }
+
+  const getThreadTitle = (thread: typeof parentThread) => {
+    if (!thread?.title) return `Thread ${thread?.id?.substring(thread.id.length - 5)}`;
+    const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+    if (defaultPattern.test(thread.title)) {
+      return `Thread ${thread.id?.substring(thread.id.length - 5)}`;
+    }
+    return thread.title;
+  };
+
+  return (
+    <div className="max-w-3xl w-full mx-auto px-4 py-2">
+      <div className="flex items-center gap-1 text-ui-sm text-icon3">
+        <GitBranch className="h-3.5 w-3.5" />
+        <span>Branched from</span>
+        <Link
+          href={agentId ? paths.agentThreadLink(agentId, parentThread.id) : '#'}
+          className="text-accent1 hover:underline flex items-center gap-1"
+        >
+          {getThreadTitle(parentThread)}
+        </Link>
+      </div>
+    </div>
   );
 };

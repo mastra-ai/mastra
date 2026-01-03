@@ -22,6 +22,11 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  StorageBranchThreadInput,
+  StorageBranchThreadOutput,
+  ThreadBranchMetadata,
+  StoragePromoteBranchInput,
+  StoragePromoteBranchOutput,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -628,10 +633,52 @@ export class MemoryPG extends MemoryStorage {
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+      const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
-      const conditions: string[] = [`thread_id IN (${inPlaceholders(threadIds.length)})`];
-      const queryParams: any[] = [...threadIds];
-      let paramIndex = threadIds.length + 1;
+      // Collect all thread IDs to query, including inherited parent threads for branches
+      const allThreadIdsToQuery = new Set<string>(threadIds);
+      const branchConstraints: Map<string, { parentThreadId: string; branchPointMessageId: string }> = new Map();
+
+      // Check each thread for branch metadata and build parent chain
+      for (const tid of threadIds) {
+        const thread = await this.getThreadById({ threadId: tid });
+        if (thread) {
+          const branchMeta = this.getBranchMetadata(thread);
+          if (branchMeta) {
+            // Store the branch constraint for this thread
+            branchConstraints.set(tid, {
+              parentThreadId: branchMeta.parentThreadId,
+              branchPointMessageId: branchMeta.branchPointMessageId,
+            });
+            // Add parent thread to query set
+            allThreadIdsToQuery.add(branchMeta.parentThreadId);
+
+            // Recursively resolve parent chain
+            let currentParentId = branchMeta.parentThreadId;
+            while (currentParentId) {
+              const parentThread = await this.getThreadById({ threadId: currentParentId });
+              if (!parentThread) break;
+
+              const parentBranchMeta = this.getBranchMetadata(parentThread);
+              if (parentBranchMeta) {
+                branchConstraints.set(currentParentId, {
+                  parentThreadId: parentBranchMeta.parentThreadId,
+                  branchPointMessageId: parentBranchMeta.branchPointMessageId,
+                });
+                allThreadIdsToQuery.add(parentBranchMeta.parentThreadId);
+                currentParentId = parentBranchMeta.parentThreadId;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const allThreadIdsList = Array.from(allThreadIdsToQuery);
+      const conditions: string[] = [`thread_id IN (${inPlaceholders(allThreadIdsList.length)})`];
+      const queryParams: any[] = [...allThreadIdsList];
+      let paramIndex = allThreadIdsList.length + 1;
 
       if (resourceId) {
         conditions.push(`"resourceId" = $${paramIndex++}`);
@@ -688,6 +735,49 @@ export class MemoryPG extends MemoryStorage {
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
       let finalMessages = list.get.all.db();
+
+      // Filter out messages from parent threads that are after the branch point
+      if (branchConstraints.size > 0) {
+        // Build a map of branch point message timestamps for filtering
+        const branchPointTimestamps: Map<string, Date> = new Map();
+
+        for (const [_branchThreadId, constraint] of branchConstraints) {
+          // Find the branch point message to get its timestamp
+          const branchPointMsg = finalMessages.find(m => m.id === constraint.branchPointMessageId);
+          if (branchPointMsg) {
+            branchPointTimestamps.set(constraint.parentThreadId, branchPointMsg.createdAt);
+          }
+        }
+
+        // Filter messages: keep only those that are:
+        // 1. From the original requested threads (not inherited parents), OR
+        // 2. From parent threads but before or at the branch point
+        finalMessages = finalMessages.filter(msg => {
+          const msgThreadId = msg.threadId;
+          if (!msgThreadId) return true;
+
+          // If this message is from one of the originally requested threads, keep it
+          if (threadIds.includes(msgThreadId)) return true;
+
+          // If this message is from a parent thread, check if it's before the branch point
+          const branchPointTime = branchPointTimestamps.get(msgThreadId);
+          if (branchPointTime) {
+            return msg.createdAt <= branchPointTime;
+          }
+
+          // For deeply nested branches, check all constraints
+          for (const [_tid, constraint] of branchConstraints) {
+            if (constraint.parentThreadId === msgThreadId) {
+              const bpMsg = finalMessages.find(m => m.id === constraint.branchPointMessageId);
+              if (bpMsg) {
+                return msg.createdAt <= bpMsg.createdAt;
+              }
+            }
+          }
+
+          return true;
+        });
+      }
 
       finalMessages = finalMessages.sort((a, b) => {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
@@ -1290,5 +1380,331 @@ export class MemoryPG extends MemoryStorage {
         error,
       );
     }
+  }
+
+  async branchThread(args: StorageBranchThreadInput): Promise<StorageBranchThreadOutput> {
+    const { sourceThreadId, branchPointMessageId, newThreadId: providedThreadId, resourceId, title, metadata } = args;
+
+    // Get the source thread
+    const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+    if (!sourceThread) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'BRANCH_THREAD', 'SOURCE_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Source thread with id ${sourceThreadId} not found`,
+        details: { sourceThreadId },
+      });
+    }
+
+    // Use provided ID or generate a new one
+    const newThreadId = providedThreadId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    const existingThread = await this.getThreadById({ threadId: newThreadId });
+    if (existingThread) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'BRANCH_THREAD', 'THREAD_EXISTS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread with id ${newThreadId} already exists`,
+        details: { newThreadId },
+      });
+    }
+
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    try {
+      return await this.#db.client.tx(async t => {
+        // Get messages from source thread to determine branch point
+        const sourceMessages = await t.manyOrNone<{ id: string; createdAt: Date }>(
+          `SELECT id, "createdAt" FROM ${messageTableName} WHERE thread_id = $1 ORDER BY "createdAt" ASC`,
+          [sourceThreadId],
+        );
+
+        // Determine branch point (default to last message)
+        let branchPoint = branchPointMessageId;
+        if (!branchPoint && sourceMessages.length > 0) {
+          branchPoint = sourceMessages[sourceMessages.length - 1]!.id;
+        }
+
+        // Validate branch point exists in source thread
+        if (branchPoint && !sourceMessages.some(m => m.id === branchPoint)) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'BRANCH_THREAD', 'BRANCH_POINT_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: `Branch point message ${branchPoint} not found in source thread ${sourceThreadId}`,
+            details: { sourceThreadId, branchPointMessageId: branchPoint },
+          });
+        }
+
+        // Calculate number of inherited messages
+        let inheritedMessageCount = 0;
+        if (branchPoint) {
+          const branchPointIndex = sourceMessages.findIndex(m => m.id === branchPoint);
+          inheritedMessageCount = branchPointIndex + 1;
+        }
+
+        const now = new Date();
+
+        // Get working memory snapshot if thread-scoped
+        let workingMemorySnapshot: string | undefined;
+        if (sourceThread.metadata?.workingMemory && typeof sourceThread.metadata.workingMemory === 'string') {
+          workingMemorySnapshot = sourceThread.metadata.workingMemory;
+        }
+
+        // Create branch metadata
+        const branchMetadata: ThreadBranchMetadata = {
+          parentThreadId: sourceThreadId,
+          branchPointMessageId: branchPoint || '',
+          branchCreatedAt: now,
+          ...(workingMemorySnapshot && { workingMemorySnapshot }),
+        };
+
+        // Create the new thread (NO messages are copied)
+        const newThread: StorageThreadType = {
+          id: newThreadId,
+          resourceId: resourceId || sourceThread.resourceId,
+          title: title || (sourceThread.title ? `Branch of ${sourceThread.title}` : undefined),
+          metadata: {
+            ...metadata,
+            branch: branchMetadata,
+            ...(workingMemorySnapshot && { workingMemory: workingMemorySnapshot }),
+          },
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        // Insert the new thread
+        await t.none(
+          `INSERT INTO ${threadTableName} (
+            id,
+            "resourceId",
+            title,
+            metadata,
+            "createdAt",
+            "createdAtZ",
+            "updatedAt",
+            "updatedAtZ"
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            newThread.id,
+            newThread.resourceId,
+            newThread.title,
+            newThread.metadata ? JSON.stringify(newThread.metadata) : null,
+            now,
+            now,
+            now,
+            now,
+          ],
+        );
+
+        return {
+          thread: newThread,
+          inheritedMessageCount,
+        };
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'BRANCH_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { sourceThreadId, newThreadId },
+        },
+        error,
+      );
+    }
+  }
+
+  async promoteBranch(args: StoragePromoteBranchInput): Promise<StoragePromoteBranchOutput> {
+    const { branchThreadId, deleteParentMessages = false, archiveThreadTitle } = args;
+
+    // Get the branch thread
+    const branchThread = await this.getThreadById({ threadId: branchThreadId });
+    if (!branchThread) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'PROMOTE_BRANCH', 'BRANCH_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Branch thread with id ${branchThreadId} not found`,
+        details: { branchThreadId },
+      });
+    }
+
+    // Validate it's actually a branch
+    const branchMetadata = branchThread.metadata?.branch as ThreadBranchMetadata | undefined;
+    if (!branchMetadata) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'PROMOTE_BRANCH', 'NOT_A_BRANCH'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${branchThreadId} is not a branch (no branch metadata)`,
+        details: { branchThreadId },
+      });
+    }
+
+    const { parentThreadId, branchPointMessageId } = branchMetadata;
+
+    // Get the parent thread
+    const parentThread = await this.getThreadById({ threadId: parentThreadId });
+    if (!parentThread) {
+      throw new MastraError({
+        id: createStorageErrorId('PG', 'PROMOTE_BRANCH', 'PARENT_NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Parent thread with id ${parentThreadId} not found`,
+        details: { parentThreadId, branchThreadId },
+      });
+    }
+
+    const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messageTableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+
+    try {
+      return await this.#db.client.tx(async t => {
+        // Get parent messages after the branch point
+        const branchPointMessage = await t.oneOrNone<{ createdAt: Date }>(
+          `SELECT "createdAt" FROM ${messageTableName} WHERE id = $1`,
+          [branchPointMessageId],
+        );
+
+        let messagesAfterBranchPoint: { id: string }[] = [];
+        if (branchPointMessage) {
+          messagesAfterBranchPoint = await t.manyOrNone<{ id: string }>(
+            `SELECT id FROM ${messageTableName}
+             WHERE thread_id = $1 AND "createdAt" > $2
+             ORDER BY "createdAt" ASC`,
+            [parentThreadId, branchPointMessage.createdAt],
+          );
+        }
+
+        const now = new Date();
+        let archiveThread: StorageThreadType | undefined;
+
+        if (messagesAfterBranchPoint.length > 0) {
+          if (deleteParentMessages) {
+            // Delete messages after branch point
+            const messageIds = messagesAfterBranchPoint.map(m => m.id);
+            await t.none(
+              `DELETE FROM ${messageTableName} WHERE id IN (${inPlaceholders(messageIds.length)})`,
+              messageIds,
+            );
+          } else {
+            // Archive messages to a new thread
+            const archiveThreadId = crypto.randomUUID();
+            archiveThread = {
+              id: archiveThreadId,
+              resourceId: parentThread.resourceId,
+              title: archiveThreadTitle || `Archived from ${parentThread.title || parentThreadId}`,
+              metadata: {
+                archivedFrom: {
+                  threadId: parentThreadId,
+                  branchPointMessageId,
+                  archivedAt: now,
+                  promotedBranchId: branchThreadId,
+                },
+              },
+              createdAt: now,
+              updatedAt: now,
+            };
+
+            // Insert the archive thread
+            await t.none(
+              `INSERT INTO ${threadTableName} (
+                id,
+                "resourceId",
+                title,
+                metadata,
+                "createdAt",
+                "createdAtZ",
+                "updatedAt",
+                "updatedAtZ"
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              [
+                archiveThread.id,
+                archiveThread.resourceId,
+                archiveThread.title,
+                JSON.stringify(archiveThread.metadata),
+                now,
+                now,
+                now,
+                now,
+              ],
+            );
+
+            // Move messages to archive thread
+            const messageIds = messagesAfterBranchPoint.map(m => m.id);
+            await t.none(
+              `UPDATE ${messageTableName} SET thread_id = $1 WHERE id IN (${inPlaceholders(messageIds.length, 2)})`,
+              [archiveThreadId, ...messageIds],
+            );
+          }
+        }
+
+        // Move branch's own messages to the parent thread
+        await t.none(`UPDATE ${messageTableName} SET thread_id = $1 WHERE thread_id = $2`, [
+          parentThreadId,
+          branchThreadId,
+        ]);
+
+        // Update parent thread metadata
+        const updatedParentMetadata = { ...parentThread.metadata };
+        if (branchThread.metadata?.workingMemory) {
+          updatedParentMetadata.workingMemory = branchThread.metadata.workingMemory;
+        }
+
+        await t.none(`UPDATE ${threadTableName} SET metadata = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`, [
+          JSON.stringify(updatedParentMetadata),
+          now,
+          now,
+          parentThreadId,
+        ]);
+
+        // Delete the branch thread
+        await t.none(`DELETE FROM ${threadTableName} WHERE id = $1`, [branchThreadId]);
+
+        // Return updated parent thread
+        const promotedThread: StorageThreadType = {
+          ...parentThread,
+          metadata: updatedParentMetadata,
+          updatedAt: now,
+        };
+
+        return {
+          promotedThread,
+          archiveThread,
+          archivedMessageCount: messagesAfterBranchPoint.length,
+        };
+      });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'PROMOTE_BRANCH', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { branchThreadId, parentThreadId },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Get branch metadata from a thread if it's a branch.
+   */
+  private getBranchMetadata(thread: StorageThreadType | null): ThreadBranchMetadata | null {
+    if (!thread?.metadata?.branch) {
+      return null;
+    }
+    return thread.metadata.branch as ThreadBranchMetadata;
   }
 }

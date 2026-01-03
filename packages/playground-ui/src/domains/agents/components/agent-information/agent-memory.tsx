@@ -2,12 +2,21 @@ import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
 import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink, Copy, GitBranch, ArrowUpRight, ChevronRight } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
+import {
+  useMemoryConfig,
+  useMemorySearch,
+  useCloneThread,
+  useParentThread,
+  useListBranches,
+  usePromoteBranch,
+  useBranchHistory,
+} from '@/domains/memory/hooks';
 import { MemorySearch } from '@/components/assistant-ui/memory-search';
 import { Button } from '@/components/ui/button';
+import { AlertDialog } from '@/components/ui/alert-dialog';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -17,7 +26,7 @@ interface AgentMemoryProps {
 export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const { threadInput: chatInputValue } = useThreadInput();
 
-  const { paths, navigate } = useLinkComponent();
+  const { Link, paths, navigate } = useLinkComponent();
 
   // Get memory config to check if semantic recall is enabled
   const { data } = useMemoryConfig(agentId);
@@ -36,6 +45,30 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   // Get clone thread hook
   const { mutateAsync: cloneThread, isPending: isCloning } = useCloneThread();
 
+  // Get branch-related data
+  const { data: parentThread } = useParentThread({
+    threadId: threadId || '',
+    agentId: agentId || '',
+    enabled: Boolean(threadId && agentId),
+  });
+
+  const { data: branches } = useListBranches({
+    threadId: threadId || '',
+    agentId: agentId || '',
+    enabled: Boolean(threadId && agentId),
+  });
+
+  const { data: branchHistory } = useBranchHistory({
+    threadId: threadId || '',
+    agentId: agentId || '',
+    enabled: Boolean(threadId && agentId && parentThread),
+  });
+
+  const { mutateAsync: promoteBranch, isPending: isPromoting } = usePromoteBranch();
+
+  const isBranch = Boolean(parentThread);
+  const hasBranches = Boolean(branches && branches.length > 0);
+
   // Handle cloning the current thread
   const handleCloneThread = useCallback(async () => {
     if (!threadId || !agentId) return;
@@ -46,6 +79,27 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
       navigate(paths.agentThreadLink(agentId, result.thread.id));
     }
   }, [threadId, agentId, cloneThread, navigate, paths]);
+
+  // Handle promoting the current branch
+  const handlePromoteBranch = useCallback(async () => {
+    if (!threadId || !agentId || !parentThread) return;
+
+    const result = await promoteBranch({ threadId, agentId });
+    // Navigate to the promoted (parent) thread
+    if (result?.promotedThread?.id) {
+      navigate(paths.agentThreadLink(agentId, result.promotedThread.id));
+    }
+  }, [threadId, agentId, parentThread, promoteBranch, navigate, paths]);
+
+  // Helper to format thread title
+  const getThreadTitle = (thread: { id: string; title?: string }) => {
+    if (!thread?.title) return `Thread ${thread?.id?.substring(thread.id.length - 5)}`;
+    const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
+    if (defaultPattern.test(thread.title)) {
+      return `Thread ${thread.id?.substring(thread.id.length - 5)}`;
+    }
+    return thread.title;
+  };
 
   // Handle clicking on a search result to scroll to the message
   const handleResultClick = useCallback(
@@ -73,6 +127,84 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Branch Information Section */}
+      {threadId && (isBranch || hasBranches) && (
+        <div className="p-4 border-b border-border1">
+          <div className="flex items-center gap-2 mb-3">
+            <GitBranch className="w-4 h-4 text-icon3" />
+            <h3 className="text-sm font-medium text-icon5">Branch Info</h3>
+          </div>
+
+          {/* Parent Thread Link */}
+          {isBranch && parentThread && (
+            <div className="mb-3">
+              <p className="text-xs text-icon3 mb-1">Branched from:</p>
+              <Link
+                href={paths.agentThreadLink(agentId, parentThread.id)}
+                className="text-sm text-accent1 hover:underline flex items-center gap-1"
+              >
+                {getThreadTitle(parentThread)}
+                <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            </div>
+          )}
+
+          {/* Branch History */}
+          {isBranch && branchHistory && branchHistory.length > 1 && (
+            <div className="mb-3">
+              <p className="text-xs text-icon3 mb-1">Branch history:</p>
+              <div className="flex items-center gap-1 flex-wrap text-xs">
+                {branchHistory.map((thread, index) => (
+                  <span key={thread.id} className="flex items-center">
+                    {index > 0 && <ChevronRight className="w-3 h-3 text-icon3 mx-1" />}
+                    {thread.id === threadId ? (
+                      <span className="text-icon5 font-medium">{getThreadTitle(thread)}</span>
+                    ) : (
+                      <Link href={paths.agentThreadLink(agentId, thread.id)} className="text-accent1 hover:underline">
+                        {getThreadTitle(thread)}
+                      </Link>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Promote Branch Button */}
+          {isBranch && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border1">
+              <div>
+                <p className="text-xs text-icon3">Make this the main thread</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handlePromoteBranch} disabled={isPromoting}>
+                <ArrowUpRight className="w-4 h-4 mr-2" />
+                {isPromoting ? 'Promoting...' : 'Promote'}
+              </Button>
+            </div>
+          )}
+
+          {/* Child Branches List */}
+          {hasBranches && branches && (
+            <div className={cn(isBranch && 'mt-3 pt-3 border-t border-border1')}>
+              <p className="text-xs text-icon3 mb-2">Branches from this thread:</p>
+              <div className="space-y-1">
+                {branches.map(branch => (
+                  <Link
+                    key={branch.id}
+                    href={paths.agentThreadLink(agentId, branch.id)}
+                    className="text-sm text-accent1 hover:underline flex items-center gap-1"
+                  >
+                    <GitBranch className="w-3 h-3" />
+                    {getThreadTitle(branch)}
+                    <ArrowUpRight className="w-3 h-3" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Clone Thread Section */}
       {threadId && (
         <div className="p-4 border-b border-border1">

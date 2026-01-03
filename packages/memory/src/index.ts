@@ -21,6 +21,11 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  StorageBranchThreadInput,
+  StorageBranchThreadOutput,
+  ThreadBranchMetadata,
+  StoragePromoteBranchInput,
+  StoragePromoteBranchOutput,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -1338,6 +1343,175 @@ ${
 
     return history;
   }
+
+  /**
+   * Branch a thread at a specific message point, creating a new thread that
+   * references the parent's messages up to the branch point instead of copying them.
+   *
+   * Unlike cloning, branching does NOT copy messages - it references them.
+   * The branch will see the parent's messages up to the branch point,
+   * but new messages added to either thread after branching are independent.
+   *
+   * For thread-scoped working memory, the branch receives a fresh copy of the
+   * parent's working memory at the time of branching.
+   *
+   * @param args - Branch configuration options
+   * @param memoryConfig - Optional memory configuration override
+   * @returns The branched thread and count of inherited messages
+   *
+   * @example
+   * ```typescript
+   * // Branch from a specific message
+   * const { thread } = await memory.branchThread({
+   *   sourceThreadId: 'thread-123',
+   *   branchPointMessageId: 'msg-456', // Branch after this message
+   * });
+   *
+   * // Branch from the latest message (default)
+   * const { thread } = await memory.branchThread({
+   *   sourceThreadId: 'thread-123',
+   * });
+   * ```
+   */
+  public async branchThread(
+    args: StorageBranchThreadInput,
+    memoryConfig?: MemoryConfig,
+  ): Promise<StorageBranchThreadOutput> {
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.branchThread(args);
+
+    // Note: Unlike cloning, we don't need to embed messages for branches
+    // because embeddings already exist for parent messages and are
+    // keyed by message_id, which remains unchanged.
+
+    return result;
+  }
+
+  /**
+   * Promote a branch to become the canonical thread, optionally archiving
+   * or deleting the parent's messages that came after the branch point.
+   *
+   * After promotion:
+   * - The branch's messages are moved to the parent thread
+   * - The parent's messages after the branch point are archived or deleted
+   * - The branch thread is deleted
+   * - The parent thread becomes the promoted thread
+   *
+   * @param args - Promotion configuration options
+   * @returns The promoted thread and optionally the archive thread
+   *
+   * @example
+   * ```typescript
+   * // Promote a branch, archiving parent's divergent messages
+   * const { promotedThread, archiveThread } = await memory.promoteBranch({
+   *   branchThreadId: 'branch-123',
+   * });
+   *
+   * // Promote a branch, deleting parent's divergent messages
+   * const { promotedThread } = await memory.promoteBranch({
+   *   branchThreadId: 'branch-123',
+   *   deleteParentMessages: true,
+   * });
+   * ```
+   */
+  public async promoteBranch(args: StoragePromoteBranchInput): Promise<StoragePromoteBranchOutput> {
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.promoteBranch(args);
+  }
+
+  /**
+   * Get the parent thread that a branched thread was created from.
+   *
+   * @param threadId - ID of the branched thread
+   * @returns The parent thread if found, null if the thread is not a branch or parent doesn't exist
+   *
+   * @example
+   * ```typescript
+   * const parentThread = await memory.getParentThread('branched-thread-123');
+   * if (parentThread) {
+   *   console.log(`Parent thread: ${parentThread.title}`);
+   * }
+   * ```
+   */
+  public async getParentThread(threadId: string): Promise<StorageThreadType | null> {
+    const thread = await this.getThreadById({ threadId });
+    const branchMetadata = this.getBranchMetadata(thread);
+
+    if (!branchMetadata) {
+      return null;
+    }
+
+    return this.getThreadById({ threadId: branchMetadata.parentThreadId });
+  }
+
+  /**
+   * List all threads that were branched from a specific source thread.
+   *
+   * @param sourceThreadId - ID of the source thread
+   * @param resourceId - Optional resource ID to filter by
+   * @returns Array of threads that are branches of the source thread
+   *
+   * @example
+   * ```typescript
+   * const branches = await memory.listBranches('original-thread-123', 'user-456');
+   * console.log(`Found ${branches.length} branches of this thread`);
+   * ```
+   */
+  public async listBranches(sourceThreadId: string, resourceId?: string): Promise<StorageThreadType[]> {
+    // If resourceId is provided, use it to scope the search
+    // Otherwise, get the source thread's resourceId
+    let targetResourceId = resourceId;
+
+    if (!targetResourceId) {
+      const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+      if (!sourceThread) {
+        return [];
+      }
+      targetResourceId = sourceThread.resourceId;
+    }
+
+    // List all threads for the resource and filter for branches
+    const { threads } = await this.listThreadsByResourceId({
+      resourceId: targetResourceId,
+      perPage: false, // Get all threads
+    });
+
+    return threads.filter(thread => {
+      const branchMetadata = this.getBranchMetadata(thread);
+      return branchMetadata?.parentThreadId === sourceThreadId;
+    });
+  }
+
+  /**
+   * Get the branch history chain for a thread (all ancestors back to the root).
+   *
+   * @param threadId - ID of the thread to get history for
+   * @returns Array of threads from oldest ancestor to the given thread (inclusive)
+   *
+   * @example
+   * ```typescript
+   * const history = await memory.getBranchHistory('deeply-branched-thread');
+   * // Returns: [originalThread, firstBranch, secondBranch, deeplyBranchedThread]
+   * ```
+   */
+  public async getBranchHistory(threadId: string): Promise<StorageThreadType[]> {
+    const history: StorageThreadType[] = [];
+    let currentThreadId: string | null = threadId;
+
+    while (currentThreadId) {
+      const thread = await this.getThreadById({ threadId: currentThreadId });
+      if (!thread) {
+        break;
+      }
+
+      history.unshift(thread); // Add to beginning to maintain order from oldest to newest
+
+      const branchMetadata = this.getBranchMetadata(thread);
+      currentThreadId = branchMetadata?.parentThreadId ?? null;
+    }
+
+    return history;
+  }
 }
 
 // Re-export memory processors from @mastra/core for backward compatibility
@@ -1345,3 +1519,12 @@ export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/proc
 
 // Re-export clone-related types for convenience
 export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';
+
+// Re-export branch-related types for convenience
+export type {
+  StorageBranchThreadInput,
+  StorageBranchThreadOutput,
+  ThreadBranchMetadata,
+  StoragePromoteBranchInput,
+  StoragePromoteBranchOutput,
+} from '@mastra/core/storage';

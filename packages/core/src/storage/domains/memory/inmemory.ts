@@ -13,6 +13,11 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  StorageBranchThreadInput,
+  StorageBranchThreadOutput,
+  ThreadBranchMetadata,
+  StoragePromoteBranchInput,
+  StoragePromoteBranchOutput,
 } from '../../types';
 import { filterByDateRange, safelyParseJSON } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
@@ -119,12 +124,47 @@ export class InMemoryMemory extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    // Step 1: Get regular paginated messages from the thread(s) first
-    let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
-      if (!threadIdSet.has(msg.thread_id)) return false;
-      if (resourceId && msg.resourceId !== resourceId) return false;
+    // Step 1: Collect messages, including inherited messages from parent branches
+    let threadMessages: StorageMessageType[] = [];
+
+    for (const tid of threadIds) {
+      const thread = this.db.threads.get(tid);
+      const branchMeta = thread ? this.getBranchMetadata(thread) : null;
+
+      if (branchMeta) {
+        // This is a branched thread - collect inherited messages from parent chain
+        const parentChain = await this.resolveParentChain(tid);
+        // Add the immediate parent with its branch point
+        parentChain.push({
+          threadId: branchMeta.parentThreadId,
+          branchPointMessageId: branchMeta.branchPointMessageId,
+        });
+
+        const inheritedMessages = this.collectInheritedMessages(parentChain);
+        threadMessages.push(...inheritedMessages);
+      }
+
+      // Add the thread's own messages
+      const ownMessages = Array.from(this.db.messages.values()).filter((msg: StorageMessageType) => {
+        if (msg.thread_id !== tid) return false;
+        if (resourceId && msg.resourceId !== resourceId) return false;
+        return true;
+      });
+      threadMessages.push(...ownMessages);
+    }
+
+    // Deduplicate messages (in case of overlapping inherited messages)
+    const seenIds = new Set<string>();
+    threadMessages = threadMessages.filter(msg => {
+      if (seenIds.has(msg.id)) return false;
+      seenIds.add(msg.id);
       return true;
     });
+
+    // Apply resourceId filter to inherited messages as well
+    if (resourceId) {
+      threadMessages = threadMessages.filter(msg => msg.resourceId === resourceId);
+    }
 
     // Apply date filtering
     threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
@@ -679,5 +719,274 @@ export class InMemoryMemory extends MemoryStorage {
         ? String(aValue).localeCompare(String(bValue))
         : String(bValue).localeCompare(String(aValue));
     });
+  }
+
+  async branchThread(args: StorageBranchThreadInput): Promise<StorageBranchThreadOutput> {
+    const { sourceThreadId, branchPointMessageId, newThreadId: providedId, resourceId, title, metadata } = args;
+
+    this.logger.debug(`InMemoryMemory: branchThread called for source thread ${sourceThreadId}`);
+
+    // Get the source thread
+    const sourceThread = this.db.threads.get(sourceThreadId);
+    if (!sourceThread) {
+      throw new Error(`Source thread with id ${sourceThreadId} not found`);
+    }
+
+    // Get messages from source thread, sorted by createdAt
+    const sourceMessages = Array.from(this.db.messages.values())
+      .filter((msg: StorageMessageType) => msg.thread_id === sourceThreadId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    // Determine the branch point message ID
+    let branchPoint = branchPointMessageId;
+    if (!branchPoint && sourceMessages.length > 0) {
+      // Default to the last message
+      branchPoint = sourceMessages[sourceMessages.length - 1]!.id;
+    }
+
+    // Validate branch point exists in source thread
+    if (branchPoint) {
+      const branchPointExists = sourceMessages.some(m => m.id === branchPoint);
+      if (!branchPointExists) {
+        throw new Error(`Branch point message ${branchPoint} not found in source thread ${sourceThreadId}`);
+      }
+    }
+
+    // Calculate number of inherited messages (messages up to and including branch point)
+    let inheritedMessageCount = 0;
+    if (branchPoint) {
+      const branchPointIndex = sourceMessages.findIndex(m => m.id === branchPoint);
+      inheritedMessageCount = branchPointIndex + 1;
+    }
+
+    const now = new Date();
+    const newThreadId = providedId || crypto.randomUUID();
+
+    // Check if the new thread ID already exists
+    if (this.db.threads.has(newThreadId)) {
+      throw new Error(`Thread with id ${newThreadId} already exists`);
+    }
+
+    // Get working memory snapshot if the source thread has thread-scoped working memory
+    let workingMemorySnapshot: string | undefined;
+    if (sourceThread.metadata?.workingMemory && typeof sourceThread.metadata.workingMemory === 'string') {
+      workingMemorySnapshot = sourceThread.metadata.workingMemory;
+    }
+
+    // Create branch metadata
+    const branchMetadata: ThreadBranchMetadata = {
+      parentThreadId: sourceThreadId,
+      branchPointMessageId: branchPoint || '',
+      branchCreatedAt: now,
+      ...(workingMemorySnapshot && { workingMemorySnapshot }),
+    };
+
+    // Create the new thread (NO messages are copied - they are referenced)
+    const newThread: StorageThreadType = {
+      id: newThreadId,
+      resourceId: resourceId || sourceThread.resourceId,
+      title: title || (sourceThread.title ? `Branch of ${sourceThread.title}` : undefined),
+      metadata: {
+        ...metadata,
+        branch: branchMetadata,
+        // Copy working memory to the new thread if it exists (fresh copy for thread-scoped)
+        ...(workingMemorySnapshot && { workingMemory: workingMemorySnapshot }),
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Save the new thread
+    this.db.threads.set(newThreadId, newThread);
+
+    this.logger.debug(
+      `InMemoryMemory: branched thread ${sourceThreadId} to ${newThreadId} with ${inheritedMessageCount} inherited messages`,
+    );
+
+    return {
+      thread: newThread,
+      inheritedMessageCount,
+    };
+  }
+
+  async promoteBranch(args: StoragePromoteBranchInput): Promise<StoragePromoteBranchOutput> {
+    const { branchThreadId, deleteParentMessages = false, archiveThreadTitle } = args;
+
+    this.logger.debug(`InMemoryMemory: promoteBranch called for branch thread ${branchThreadId}`);
+
+    // Get the branch thread
+    const branchThread = this.db.threads.get(branchThreadId);
+    if (!branchThread) {
+      throw new Error(`Branch thread with id ${branchThreadId} not found`);
+    }
+
+    // Validate it's actually a branch
+    const branchMetadata = branchThread.metadata?.branch as ThreadBranchMetadata | undefined;
+    if (!branchMetadata) {
+      throw new Error(`Thread ${branchThreadId} is not a branch (no branch metadata)`);
+    }
+
+    const { parentThreadId, branchPointMessageId } = branchMetadata;
+
+    // Get the parent thread
+    const parentThread = this.db.threads.get(parentThreadId);
+    if (!parentThread) {
+      throw new Error(`Parent thread with id ${parentThreadId} not found`);
+    }
+
+    // Get parent messages after the branch point
+    const parentMessages = Array.from(this.db.messages.values())
+      .filter((msg: StorageMessageType) => msg.thread_id === parentThreadId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    const branchPointIndex = parentMessages.findIndex(m => m.id === branchPointMessageId);
+    const messagesAfterBranchPoint = branchPointIndex >= 0 ? parentMessages.slice(branchPointIndex + 1) : [];
+
+    const now = new Date();
+    let archiveThread: StorageThreadType | undefined;
+
+    if (messagesAfterBranchPoint.length > 0) {
+      if (deleteParentMessages) {
+        // Delete messages after branch point
+        for (const msg of messagesAfterBranchPoint) {
+          this.db.messages.delete(msg.id);
+        }
+      } else {
+        // Archive messages to a new thread
+        const archiveThreadId = crypto.randomUUID();
+        archiveThread = {
+          id: archiveThreadId,
+          resourceId: parentThread.resourceId,
+          title: archiveThreadTitle || `Archived from ${parentThread.title || parentThreadId}`,
+          metadata: {
+            archivedFrom: {
+              threadId: parentThreadId,
+              branchPointMessageId,
+              archivedAt: now,
+              promotedBranchId: branchThreadId,
+            },
+          },
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        this.db.threads.set(archiveThreadId, archiveThread);
+
+        // Move messages to archive thread
+        for (const msg of messagesAfterBranchPoint) {
+          const updatedMsg: StorageMessageType = {
+            ...msg,
+            thread_id: archiveThreadId,
+          };
+          this.db.messages.set(msg.id, updatedMsg);
+        }
+      }
+    }
+
+    // Move branch's own messages to the parent thread
+    const branchMessages = Array.from(this.db.messages.values()).filter(
+      (msg: StorageMessageType) => msg.thread_id === branchThreadId,
+    );
+
+    for (const msg of branchMessages) {
+      const updatedMsg: StorageMessageType = {
+        ...msg,
+        thread_id: parentThreadId,
+      };
+      this.db.messages.set(msg.id, updatedMsg);
+    }
+
+    // Update the parent thread's metadata to remove any indication it's a parent of this branch
+    // and copy over any working memory from the branch
+    const updatedParentMetadata = { ...parentThread.metadata };
+    if (branchThread.metadata?.workingMemory) {
+      updatedParentMetadata.workingMemory = branchThread.metadata.workingMemory;
+    }
+    parentThread.metadata = updatedParentMetadata;
+    parentThread.updatedAt = now;
+
+    // Delete the branch thread (it's now merged into parent)
+    this.db.threads.delete(branchThreadId);
+
+    this.logger.debug(
+      `InMemoryMemory: promoted branch ${branchThreadId} to parent ${parentThreadId}, ` +
+        `${messagesAfterBranchPoint.length} messages ${deleteParentMessages ? 'deleted' : 'archived'}`,
+    );
+
+    return {
+      promotedThread: parentThread,
+      archiveThread,
+      archivedMessageCount: messagesAfterBranchPoint.length,
+    };
+  }
+
+  /**
+   * Get branch metadata from a thread if it's a branch.
+   * Helper method used internally for branch-aware operations.
+   */
+  private getBranchMetadata(thread: StorageThreadType | null): ThreadBranchMetadata | null {
+    if (!thread?.metadata?.branch) {
+      return null;
+    }
+    return thread.metadata.branch as ThreadBranchMetadata;
+  }
+
+  /**
+   * Resolve the full parent chain for a branched thread.
+   * Returns an array of { threadId, branchPointMessageId } from root to immediate parent.
+   */
+  private async resolveParentChain(
+    threadId: string,
+  ): Promise<Array<{ threadId: string; branchPointMessageId: string }>> {
+    const chain: Array<{ threadId: string; branchPointMessageId: string }> = [];
+    let currentThreadId: string | null = threadId;
+
+    while (currentThreadId) {
+      const thread = this.db.threads.get(currentThreadId);
+      if (!thread) break;
+
+      const branchMeta = this.getBranchMetadata(thread);
+      if (branchMeta) {
+        chain.unshift({
+          threadId: branchMeta.parentThreadId,
+          branchPointMessageId: branchMeta.branchPointMessageId,
+        });
+        currentThreadId = branchMeta.parentThreadId;
+      } else {
+        // Reached a root thread (not a branch)
+        break;
+      }
+    }
+
+    return chain;
+  }
+
+  /**
+   * Collect inherited messages from a parent chain up to the branch point.
+   * Used for branch-aware message listing.
+   */
+  private collectInheritedMessages(
+    parentChain: Array<{ threadId: string; branchPointMessageId: string }>,
+  ): StorageMessageType[] {
+    if (parentChain.length === 0) return [];
+
+    const inheritedMessages: StorageMessageType[] = [];
+
+    for (let i = 0; i < parentChain.length; i++) {
+      const { threadId, branchPointMessageId } = parentChain[i]!;
+
+      // Get messages from this thread
+      const threadMessages = Array.from(this.db.messages.values())
+        .filter((msg: StorageMessageType) => msg.thread_id === threadId)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      // Find the branch point and include messages up to it
+      const branchPointIndex = threadMessages.findIndex(m => m.id === branchPointMessageId);
+      const messagesToInclude = branchPointIndex >= 0 ? threadMessages.slice(0, branchPointIndex + 1) : threadMessages;
+
+      inheritedMessages.push(...messagesToInclude);
+    }
+
+    return inheritedMessages;
   }
 }

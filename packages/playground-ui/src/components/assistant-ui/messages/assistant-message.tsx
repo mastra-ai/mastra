@@ -1,5 +1,5 @@
 import { ActionBarPrimitive, MessagePrimitive, useMessage } from '@assistant-ui/react';
-import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon, GitBranch } from 'lucide-react';
 
 import { ErrorAwareText } from './error-aware-text';
 import { TooltipIconButton } from '../tooltip-icon-button';
@@ -7,6 +7,9 @@ import { ToolFallback } from '@/components/assistant-ui/tools/tool-fallback';
 import { Reasoning } from './reasoning';
 import { cn } from '@/lib/utils';
 import { ProviderLogo } from '@/domains/agents/components/agent-metadata/provider-logo';
+import { useThreadContext } from '@/domains/agents/context/thread-context';
+import { useBranchThread } from '@/domains/memory/hooks/use-memory';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface AssistantMessageProps {
   hasModelList?: boolean;
@@ -51,6 +54,35 @@ export const AssistantMessage = ({ hasModelList }: AssistantMessageProps) => {
 };
 
 const AssistantActionBar = () => {
+  const data = useMessage();
+  const messageId = data.id;
+  const { threadId, agentId, onBranchCreated } = useThreadContext();
+  const branchMutation = useBranchThread();
+  const { navigate, paths } = useLinkComponent();
+
+  const handleBranch = async () => {
+    if (!threadId || !agentId || !messageId) return;
+
+    try {
+      const result = await branchMutation.mutateAsync({
+        threadId,
+        agentId,
+        branchPointMessageId: messageId,
+      });
+
+      onBranchCreated?.();
+
+      // Navigate to the new branch
+      if (result.thread?.id) {
+        navigate(paths.agentThreadLink(agentId, result.thread.id));
+      }
+    } catch (error) {
+      console.error('Failed to branch thread:', error);
+    }
+  };
+
+  const canBranch = threadId && agentId && messageId;
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -82,6 +114,16 @@ const AssistantActionBar = () => {
           </MessagePrimitive.If>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
+      {canBranch && (
+        <TooltipIconButton
+          tooltip="Branch from here"
+          className="bg-transparent text-icon3 hover:text-icon6"
+          onClick={handleBranch}
+          disabled={branchMutation.isPending}
+        >
+          <GitBranch />
+        </TooltipIconButton>
+      )}
       {/* <ActionBarPrimitive.Reload asChild>
         <TooltipIconButton tooltip="Refresh">
           <RefreshCwIcon />

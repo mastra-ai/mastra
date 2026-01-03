@@ -1,12 +1,82 @@
 import { ThreadDeleteButton, ThreadItem, ThreadLink, ThreadList, Threads } from '@/components/threads';
 import { Icon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { Plus } from 'lucide-react';
+import { Plus, GitBranch } from 'lucide-react';
 import { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@/components/ui/alert-dialog';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Txt } from '@/ds/components/Txt/Txt';
+
+interface BranchMetadata {
+  parentThreadId: string;
+  branchPointMessageId?: string;
+  branchCreatedAt: string;
+}
+
+function getBranchMetadata(thread: StorageThreadType): BranchMetadata | null {
+  const branch = thread.metadata?.branch;
+  if (!branch || typeof branch !== 'object') return null;
+  const branchObj = branch as Record<string, unknown>;
+  if (!branchObj.parentThreadId || typeof branchObj.parentThreadId !== 'string') return null;
+  return {
+    parentThreadId: branchObj.parentThreadId,
+    branchPointMessageId: branchObj.branchPointMessageId as string | undefined,
+    branchCreatedAt: branchObj.branchCreatedAt as string,
+  };
+}
+
+interface ThreadNode {
+  thread: StorageThreadType;
+  children: ThreadNode[];
+  depth: number;
+}
+
+function buildThreadTree(threads: StorageThreadType[]): ThreadNode[] {
+  const threadMap = new Map<string, StorageThreadType>();
+  const childrenMap = new Map<string, StorageThreadType[]>();
+  const rootThreads: StorageThreadType[] = [];
+
+  // First pass: build maps
+  for (const thread of threads) {
+    threadMap.set(thread.id, thread);
+    const branchMeta = getBranchMetadata(thread);
+    if (branchMeta) {
+      const parentChildren = childrenMap.get(branchMeta.parentThreadId) || [];
+      parentChildren.push(thread);
+      childrenMap.set(branchMeta.parentThreadId, parentChildren);
+    } else {
+      rootThreads.push(thread);
+    }
+  }
+
+  // Second pass: build tree recursively
+  function buildNode(thread: StorageThreadType, depth: number): ThreadNode {
+    const children = (childrenMap.get(thread.id) || [])
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map(child => buildNode(child, depth + 1));
+    return { thread, children, depth };
+  }
+
+  // Sort root threads by date (newest first)
+  rootThreads.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return rootThreads.map(thread => buildNode(thread, 0));
+}
+
+function flattenTree(nodes: ThreadNode[]): ThreadNode[] {
+  const result: ThreadNode[] = [];
+  function traverse(node: ThreadNode) {
+    result.push(node);
+    for (const child of node.children) {
+      traverse(child);
+    }
+  }
+  for (const node of nodes) {
+    traverse(node);
+  }
+  return result;
+}
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
@@ -20,6 +90,12 @@ export interface ChatThreadsProps {
 export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Build tree structure from flat thread list
+  const flattenedThreads = useMemo(() => {
+    const tree = buildThreadTree(threads);
+    return flattenTree(tree);
+  }, [threads]);
 
   if (isLoading) {
     return <ChatThreadSkeleton />;
@@ -49,19 +125,26 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
             </Txt>
           )}
 
-          {threads.map(thread => {
+          {flattenedThreads.map(({ thread, depth }) => {
             const isActive = thread.id === threadId;
+            const isBranch = depth > 0;
 
             const threadLink =
               resourceType === 'agent'
                 ? paths.agentThreadLink(resourceId, thread.id)
                 : paths.networkThreadLink(resourceId, thread.id);
 
+            // Calculate padding based on depth (16px per level)
+            const paddingLeft = depth * 16;
+
             return (
               <ThreadItem isActive={isActive} key={thread.id}>
                 <ThreadLink as={Link} to={threadLink}>
-                  <ThreadTitle title={thread.title} id={thread.id} />
-                  <span>{formatDay(thread.createdAt)}</span>
+                  <span className="flex items-center gap-2" style={{ paddingLeft }}>
+                    {isBranch && <GitBranch className="h-3 w-3 text-icon3 shrink-0" />}
+                    <ThreadTitle title={thread.title} id={thread.id} isBranch={isBranch} />
+                  </span>
+                  <span style={{ paddingLeft }}>{formatDay(thread.createdAt)}</span>
                 </ThreadLink>
 
                 <ThreadDeleteButton onClick={() => setDeleteId(thread.id)} />
@@ -126,13 +209,19 @@ function isDefaultThreadName(name: string): boolean {
   return defaultPattern.test(name);
 }
 
-function ThreadTitle({ title, id }: { title?: string; id?: string }) {
+function ThreadTitle({ title, id, isBranch }: { title?: string; id?: string; isBranch?: boolean }) {
+  const prefix = isBranch ? 'Branch' : 'Thread';
+
   if (!title) {
     return null;
   }
 
   if (isDefaultThreadName(title)) {
-    return <span className="text-muted-foreground">Thread {id ? id.substring(id.length - 5) : null}</span>;
+    return (
+      <span className="text-muted-foreground">
+        {prefix} {id ? id.substring(id.length - 5) : null}
+      </span>
+    );
   }
 
   return <span className="truncate max-w-[14rem] text-muted-foreground">{title}</span>;
