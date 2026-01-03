@@ -10,7 +10,7 @@ import {
 } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { Hono } from 'hono';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from '../index';
 
 // Wrapper describe block so the factory can call describe() inside
@@ -306,6 +306,149 @@ describe('Hono Server Adapter', () => {
       const textDelta = chunks.find(c => c.type === 'text-delta');
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
+    });
+  });
+
+  describe('Transfer-Encoding Header', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('should NOT explicitly set Transfer-Encoding header to avoid duplicates with Bun runtime', async () => {
+      // This test verifies the fix for https://github.com/mastra-ai/mastra/issues/11510
+      // When deploying with Bun, the runtime automatically adds Transfer-Encoding: chunked
+      // for ReadableStream responses. If Mastra also sets this header, it causes duplicate
+      // headers which breaks HTTP protocol compliance and causes 502 errors.
+      //
+      // The solution is to NOT explicitly set Transfer-Encoding header and let the runtime
+      // handle it automatically. This test verifies the streaming still works without
+      // explicitly setting the header.
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.ok).toBe(true);
+
+      // Verify streaming works correctly - Content-Type should be text/plain for streams
+      expect(response.headers.get('content-type')).toBe('text/plain');
+
+      // Verify streaming data can be consumed correctly
+      const chunks = await consumeSSEStream(response.body);
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Verify we got the expected chunk types
+      const chunkTypes = chunks.map(c => c.type);
+      expect(chunkTypes).toContain('step-start');
+      expect(chunkTypes).toContain('text-delta');
+      expect(chunkTypes).toContain('step-finish');
+      expect(chunkTypes).toContain('finish');
+    });
+
+    it('should stream correctly over real HTTP connection without explicit Transfer-Encoding', async () => {
+      // This integration test starts a real HTTP server to verify streaming works
+      // over actual network connections, not just in-memory requests.
+      // This is important because the Transfer-Encoding header behavior differs
+      // between in-memory tests and real HTTP servers.
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start a real HTTP server
+      server = serve({
+        fetch: app.fetch,
+        port: 0, // Random available port
+      }) as Server;
+
+      // Wait for server to be listening
+      await new Promise<void>(resolve => {
+        server!.once('listening', () => resolve());
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      // Make a real HTTP request
+      const response = await fetch(`http://localhost:${port}/test/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.ok).toBe(true);
+
+      // Verify Content-Type header
+      expect(response.headers.get('content-type')).toBe('text/plain');
+
+      // In Node.js HTTP server, Transfer-Encoding: chunked is automatically added
+      // for streaming responses. The key is that we don't set it explicitly,
+      // so there's no duplicate header issue.
+      const transferEncoding = response.headers.get('transfer-encoding');
+      // Node.js will add 'chunked' automatically for streaming responses
+      expect(transferEncoding).toBe('chunked');
+
+      // Verify streaming data can be consumed correctly over real HTTP
+      const chunks = await consumeSSEStream(response.body);
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Verify we got the expected chunk types
+      const chunkTypes = chunks.map(c => c.type);
+      expect(chunkTypes).toContain('step-start');
+      expect(chunkTypes).toContain('text-delta');
+      expect(chunkTypes).toContain('step-finish');
+      expect(chunkTypes).toContain('finish');
     });
   });
 

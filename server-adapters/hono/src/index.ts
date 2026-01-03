@@ -109,7 +109,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
     res.header('Content-Type', 'text/plain');
-    res.header('Transfer-Encoding', 'chunked');
+    // Note: Do NOT set Transfer-Encoding header explicitly.
+    // Runtimes automatically add this header for streaming responses,
+    // and setting it explicitly causes duplicate headers which break HTTP protocol.
 
     const streamFormat = route.streamFormat || 'stream';
 

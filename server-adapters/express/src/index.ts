@@ -93,7 +93,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
   async stream(route: ServerRoute, res: Response, result: { fullStream: ReadableStream }): Promise<void> {
     res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Transfer-Encoding', 'chunked');
+    // Note: Do NOT set Transfer-Encoding header explicitly.
+    // Runtimes automatically add this header for streaming responses,
+    // and setting it explicitly causes duplicate headers which break HTTP protocol.
 
     const streamFormat = route.streamFormat || 'stream';
 

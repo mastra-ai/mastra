@@ -383,6 +383,93 @@ describe('Express Server Adapter', () => {
     });
   });
 
+  describe('Transfer-Encoding Header', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('should NOT explicitly set Transfer-Encoding header to avoid duplicates with Bun runtime', async () => {
+      // This test verifies the fix for https://github.com/mastra-ai/mastra/issues/11510
+      // When deploying with Bun, the runtime automatically adds Transfer-Encoding: chunked
+      // for ReadableStream responses. If Mastra also sets this header, it causes duplicate
+      // headers which breaks HTTP protocol compliance and causes 502 errors.
+      //
+      // The solution is to NOT explicitly set Transfer-Encoding header and let the runtime
+      // handle it automatically. This test verifies the streaming still works without
+      // explicitly setting the header.
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithSensitiveData('v2'),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      // Start server
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.ok).toBe(true);
+
+      // Verify streaming works correctly - Content-Type should be text/plain for streams
+      expect(response.headers.get('content-type')).toBe('text/plain');
+
+      // In Node.js/Express, Transfer-Encoding: chunked is automatically added
+      // for streaming responses. The key is that we don't set it explicitly,
+      // so there's no duplicate header issue.
+      const transferEncoding = response.headers.get('transfer-encoding');
+      expect(transferEncoding).toBe('chunked');
+
+      // Verify streaming data can be consumed correctly
+      const chunks = await consumeSSEStream(response.body);
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Verify we got the expected chunk types
+      const chunkTypes = chunks.map(c => c.type);
+      expect(chunkTypes).toContain('step-start');
+      expect(chunkTypes).toContain('text-delta');
+      expect(chunkTypes).toContain('step-finish');
+      expect(chunkTypes).toContain('finish');
+    });
+  });
+
   describe('Abort Signal', () => {
     let context: AdapterTestContext;
     let server: Server | null = null;
