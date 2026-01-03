@@ -1,10 +1,19 @@
 import { createTool } from '@mastra/core/tools';
-import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
+import type { MastraEmbeddingModel } from '@mastra/core/vector';
 import { z } from 'zod';
 
 import { rerank, rerankWithScorer } from '../rerank';
 import type { RerankConfig, RerankResult } from '../rerank';
-import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import {
+  vectorQuerySearch,
+  defaultVectorQueryDescription,
+  filterSchema,
+  outputSchema,
+  baseSchema,
+  coerceTopK,
+  parseFilterValue,
+  resolveVectorStore,
+} from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { VectorQueryToolOptions } from './types';
@@ -44,28 +53,13 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
-      if (!logger) {
-        console.warn(
-          '[VectorQueryTool] Logger not initialized: no debug or error logs will be recorded for this tool execution.',
-        );
-      }
       if (logger) {
         logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter, databaseConfig });
       }
       try {
-        const topKValue =
-          typeof topK === 'number' && !isNaN(topK)
-            ? topK
-            : typeof topK === 'string' && !isNaN(Number(topK))
-              ? Number(topK)
-              : 10;
+        const topKValue = coerceTopK(topK);
 
-        let vectorStore: MastraVector | undefined = undefined;
-        if ('vectorStore' in options) {
-          vectorStore = options.vectorStore;
-        } else if (mastra) {
-          vectorStore = mastra.getVector(vectorStoreName);
-        }
+        const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
@@ -73,19 +67,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           return { relevantContext: [], sources: [] };
         }
         // Get relevant chunks from the vector database
-        let queryFilter = {};
-        if (enableFilter && filter) {
-          queryFilter = (() => {
-            try {
-              return typeof filter === 'string' ? JSON.parse(filter) : filter;
-            } catch (error) {
-              if (logger) {
-                logger.error('Invalid filter', { filter, error });
-              }
-              throw new Error(`Invalid filter format: ${error instanceof Error ? error.message : String(error)}`);
-            }
-          })();
-        }
+        const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
         if (logger) {
           logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter, databaseConfig });
         }

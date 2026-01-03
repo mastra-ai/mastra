@@ -1,6 +1,36 @@
+import type { MastraUnion } from '@mastra/core/action';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
 
 import type { RerankConfig } from '../rerank';
+
+/**
+ * Context passed to dynamic vector store resolver functions.
+ * Enables multi-tenant setups where the vector store is selected based on request context.
+ */
+export interface VectorStoreResolverContext {
+  /** The request context containing tenant/schema information */
+  requestContext?: RequestContext;
+  /** The Mastra instance for accessing registered resources */
+  mastra?: MastraUnion;
+}
+
+/**
+ * A function that dynamically resolves a vector store based on the execution context.
+ * Useful for multi-tenant applications where each tenant has a separate schema/database.
+ *
+ * @example
+ * ```typescript
+ * const vectorStoreResolver: VectorStoreResolver = async ({ requestContext }) => {
+ *   const schemaId = requestContext?.get('schemaId');
+ *   return new PgVector({
+ *     connectionString: process.env.DATABASE_URL,
+ *     schemaName: `tenant_${schemaId}`,
+ *   });
+ * };
+ * ```
+ */
+export type VectorStoreResolver = (context: VectorStoreResolverContext) => MastraVector | Promise<MastraVector>;
 
 export interface PineconeConfig {
   namespace?: string;
@@ -53,25 +83,94 @@ export type DatabaseConfig = {
   [key: string]: any; // Allow for future database extensions
 };
 
+/**
+ * Configuration options for creating a vector query tool.
+ *
+ * This type uses a discriminated union pattern for vector store configuration,
+ * allowing two mutually exclusive approaches:
+ *
+ * 1. **By name**: Use `vectorStoreName` to reference a vector store registered with Mastra
+ * 2. **Direct instance**: Use `vectorStore` to provide a vector store instance or resolver function
+ *
+ * @example Using a named vector store (registered with Mastra)
+ * ```typescript
+ * const tool = createVectorQueryTool({
+ *   vectorStoreName: 'myVectorStore',
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ * });
+ * ```
+ *
+ * @example Using a direct vector store instance
+ * ```typescript
+ * const tool = createVectorQueryTool({
+ *   vectorStore: new PgVector({ connectionString: '...' }),
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ * });
+ * ```
+ *
+ * @example With filtering and reranking enabled
+ * ```typescript
+ * const tool = createVectorQueryTool({
+ *   vectorStoreName: 'myVectorStore',
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ *   enableFilter: true,
+ *   reranker: {
+ *     model: cohere.rerank('rerank-v3.5'),
+ *     options: { topK: 5 },
+ *   },
+ * });
+ * ```
+ */
 export type VectorQueryToolOptions = {
+  /** Custom tool ID. Defaults to `VectorQuery {storeName} {indexName} Tool` */
   id?: string;
+  /** Custom tool description for the LLM */
   description?: string;
+  /** Name of the index to query within the vector store */
   indexName: string;
+  /** Embedding model used to convert query text into vectors */
   model: MastraEmbeddingModel<string>;
+  /** When true, enables metadata filtering in queries. Adds a `filter` input to the tool schema */
   enableFilter?: boolean;
+  /** When true, includes vector embeddings in the results. Defaults to false */
   includeVectors?: boolean;
+  /** When true, includes source documents in the response. Defaults to true */
   includeSources?: boolean;
+  /** Optional reranker configuration to improve result relevance */
   reranker?: RerankConfig;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
 } & ProviderOptions &
   (
     | {
+        /** Name of a vector store registered with Mastra */
         vectorStoreName: string;
       }
     | {
         vectorStoreName?: string;
-        vectorStore: MastraVector;
+        /**
+         * The vector store instance or a resolver function for dynamic selection.
+         *
+         * For multi-tenant applications, pass a function that receives the request context
+         * and returns the appropriate vector store for the current tenant/schema.
+         *
+         * @example Static vector store
+         * ```typescript
+         * vectorStore: new PgVector({ connectionString: '...' })
+         * ```
+         *
+         * @example Dynamic resolver for multi-tenant
+         * ```typescript
+         * vectorStore: async ({ requestContext }) => {
+         *   const schemaId = requestContext?.get('schemaId');
+         *   return getVectorStoreForSchema(schemaId);
+         * }
+         * ```
+         */
+        vectorStore: MastraVector | VectorStoreResolver;
       }
   );
 
@@ -79,7 +178,6 @@ export type GraphRagToolOptions = {
   id?: string;
   description?: string;
   indexName: string;
-  vectorStoreName: string;
   model: MastraEmbeddingModel<string>;
   enableFilter?: boolean;
   includeSources?: boolean;
@@ -89,7 +187,35 @@ export type GraphRagToolOptions = {
     restartProb?: number;
     threshold?: number;
   };
-} & ProviderOptions;
+} & ProviderOptions &
+  (
+    | {
+        vectorStoreName: string;
+      }
+    | {
+        vectorStoreName?: string;
+        /**
+         * The vector store instance or a resolver function for dynamic selection.
+         *
+         * For multi-tenant applications, pass a function that receives the request context
+         * and returns the appropriate vector store for the current tenant/schema.
+         *
+         * @example Static vector store
+         * ```typescript
+         * vectorStore: new PgVector({ connectionString: '...' })
+         * ```
+         *
+         * @example Dynamic resolver for multi-tenant
+         * ```typescript
+         * vectorStore: async ({ requestContext }) => {
+         *   const schemaId = requestContext?.get('schemaId');
+         *   return getVectorStoreForSchema(schemaId);
+         * }
+         * ```
+         */
+        vectorStore: MastraVector | VectorStoreResolver;
+      }
+  );
 
 export type ProviderOptions = {
   /**
