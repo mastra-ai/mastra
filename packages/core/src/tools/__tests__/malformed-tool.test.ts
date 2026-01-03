@@ -5,12 +5,11 @@ import { ensureToolProperties } from '../../utils';
 import { createTool } from '../tool';
 
 /**
- * Test for GitHub Issue #11244
- * https://github.com/mastra-ai/mastra/issues/11244
+ * Regression test for malformed tool validation
  *
  * When a user passes a function that returns a tool (instead of the tool itself),
  * the agent silently fails - the LLM makes a tool call but the tool never executes.
- * This should throw a descriptive error instead.
+ * Now throws a descriptive error instead.
  */
 describe('Malformed tool validation - Issue #11244', () => {
   it('should throw an error when a function is passed as a tool instead of a tool object', () => {
