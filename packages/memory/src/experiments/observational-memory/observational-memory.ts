@@ -122,7 +122,7 @@ interface ResolvedReflectorConfig {
 export const OBSERVATIONAL_MEMORY_DEFAULTS = {
   observer: {
     model: 'google/gemini-2.5-flash',
-    observationThreshold: 10_000,
+    observationThreshold: 30_000,
     modelSettings: {
       temperature: 0.3,
       maxOutputTokens: 100_000,
@@ -137,7 +137,7 @@ export const OBSERVATIONAL_MEMORY_DEFAULTS = {
   },
   reflector: {
     model: 'google/gemini-2.5-flash',
-    reflectionThreshold: 30_000,
+    reflectionThreshold: 40_000,
     modelSettings: {
       temperature: 0, // Use 0 for maximum consistency in reflections
       maxOutputTokens: 100_000,
