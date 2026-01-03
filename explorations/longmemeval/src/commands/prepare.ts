@@ -655,7 +655,8 @@ export class PrepareCommand {
     }
 
     // Process sessions in batches to avoid overwhelming the system
-    const BATCH_SIZE = usesWorkingMemory ? 1 : 50; // Process x sessions at a time. working memory must run one at a time since each conversation will use resource working memory from the last conversation and build on it.
+    // Working memory and observational memory must run one at a time since each session builds on memory from previous sessions
+    const BATCH_SIZE = usesWorkingMemory || usesObservationalMemory ? 1 : 50;
     let processedSessions = processedSessionIds.size;
 
     // Apply session offset if specified
