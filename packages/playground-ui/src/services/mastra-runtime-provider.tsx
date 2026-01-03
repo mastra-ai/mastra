@@ -361,7 +361,7 @@ export function MastraRuntimeProvider({
             seed,
             instructions,
             requestContext: requestContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
+            ...(memory ? { threadId, resourceId } : {}),
             providerOptions,
           });
           if (generateResponse.response && 'messages' in generateResponse.response) {
@@ -479,7 +479,7 @@ export function MastraRuntimeProvider({
             seed,
             instructions,
             requestContext: requestContextInstance,
-            ...(memory ? { threadId, resourceId: agentId } : {}),
+            ...(memory ? { threadId, resourceId } : {}),
             providerOptions,
           });
 
