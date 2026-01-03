@@ -282,6 +282,70 @@ export class CustomOutputProcessor implements Processor {
 }
 ```
 
+#### Adding metadata in output processors
+
+You can add custom metadata to messages in `processOutputResult`. This metadata is accessible via the response object:
+
+```typescript title="src/mastra/processors/metadata-processor.ts"
+import type { Processor, MastraDBMessage } from "@mastra/core";
+
+export class MetadataProcessor implements Processor {
+  id = "metadata-processor";
+
+  async processOutputResult({
+    messages,
+  }: {
+    messages: MastraDBMessage[];
+  }): Promise<MastraDBMessage[]> {
+    return messages.map((msg) => {
+      if (msg.role === "assistant") {
+        return {
+          ...msg,
+          content: {
+            ...msg.content,
+            metadata: {
+              ...msg.content.metadata,
+              processedAt: new Date().toISOString(),
+              customData: "your data here",
+            },
+          },
+        };
+      }
+      return msg;
+    });
+  }
+}
+```
+
+Access the metadata with `generate()`:
+
+```typescript
+const result = await agent.generate("Hello");
+
+// The response includes uiMessages with processor-added metadata
+const assistantMessage = result.response?.uiMessages?.find((m) => m.role === "assistant");
+console.log(assistantMessage?.metadata?.customData);
+```
+
+Access the metadata when streaming:
+
+```typescript
+const stream = await agent.stream("Hello");
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === "finish") {
+    // Access response with processor-added metadata from the finish chunk
+    const uiMessages = chunk.payload.response?.uiMessages;
+    const assistantMessage = uiMessages?.find((m) => m.role === "assistant");
+    console.log(assistantMessage?.metadata?.customData);
+  }
+}
+
+// Or via the response promise after consuming the stream
+const response = await stream.response;
+console.log(response.uiMessages);
+```
+
 ## Built-in Utility Processors
 
 Mastra provides utility processors for common tasks:
