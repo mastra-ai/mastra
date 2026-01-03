@@ -389,7 +389,22 @@ Be specific rather than generic when the user has expressed clear preferences in
       // For OM, use processors instead of memory
       // OM handles message loading itself via cursor-based loadUnobservedMessages
       // MessageHistory must come first in output to save messages before OM observes them
-      inputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
+      inputProcessors: usesObservationalMemory
+        ? [
+            observationalMemory!,
+            {
+              id: 'debug',
+              processInputStep: args => {
+                const omm = args.messageList.getSystemMessages(`observational-memory`);
+                if (omm.length && omm[0]?.content) {
+                  writeFileSync(join(process.cwd(), 'omm.md'), omm[0].content as string);
+                }
+                omm;
+                return args.messageList;
+              },
+            },
+          ]
+        : undefined,
       outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
     });
 
@@ -406,6 +421,8 @@ Be specific rather than generic when the user has expressed clear preferences in
       },
       context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
     });
+
+    console.log(response.text + `\n\n`);
 
     const evalAgent = new Agent({
       id: 'longmemeval-metric-agent',
