@@ -3085,11 +3085,11 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
       storage,
       observer: {
         model: 'google/gemini-2.5-flash',
-        observationThreshold: 20000, // Higher threshold = fewer Observer calls
+        observationThreshold: 30000,
       },
       reflector: {
         model: 'google/gemini-2.5-flash',
-        reflectionThreshold: 10000, // Higher threshold = fewer Reflector calls
+        reflectionThreshold: 30000,
       },
       resourceScope: true, // Cross-session memory - critical for LongMemEval
     });
