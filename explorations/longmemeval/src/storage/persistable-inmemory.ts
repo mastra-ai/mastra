@@ -106,15 +106,16 @@ export class PersistableInMemoryMemory extends InMemoryMemory {
       }
     }
     if (data.observationalMemory) {
-      for (const [key, value] of data.observationalMemory) {
-        // Convert date strings back to Date objects
-        const record = {
-          ...value,
-          createdAt: value.createdAt ? new Date(value.createdAt) : undefined,
-          updatedAt: value.updatedAt ? new Date(value.updatedAt) : undefined,
-          lastObservedAt: value.lastObservedAt ? new Date(value.lastObservedAt) : undefined,
-        };
-        this._collection.observationalMemory.set(key, record);
+      for (const [key, records] of data.observationalMemory) {
+        // records is an array of ObservationalMemoryRecord
+        // Convert date strings back to Date objects for each record
+        const convertedRecords = records.map((record: any) => ({
+          ...record,
+          createdAt: record.createdAt ? new Date(record.createdAt) : undefined,
+          updatedAt: record.updatedAt ? new Date(record.updatedAt) : undefined,
+          lastObservedAt: record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+        }));
+        this._collection.observationalMemory.set(key, convertedRecords);
       }
     }
   }
