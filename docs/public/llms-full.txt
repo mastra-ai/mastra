@@ -63255,9 +63255,11 @@ Retrieve all memory threads for a specific resource:
 ```typescript
 const threads = await mastraClient.getMemoryThreads({
   resourceId: "resource-1",
-  agentId: "agent-1",
+  agentId: "agent-1", // Optional - can be omitted if storage is configured
 });
 ```
+
+When `agentId` is omitted and storage is configured on the server, threads will be retrieved using storage directly. This is useful when multiple agents share the same threads (e.g., in workflows with multiple agent steps).
 
 ### Create a New Thread
 
