@@ -17,7 +17,7 @@
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "@modelcontextprotocol/sdk": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.24.0",
     "chalk": "^5.4.1",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
