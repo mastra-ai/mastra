@@ -735,13 +735,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private formatObservationsForContext(
     observations: string,
+    currentTask?: string,
     suggestedResponse?: string,
     unobservedContextBlocks?: string,
   ): string {
     // Optimize observations to save tokens
     const optimized = optimizeObservationsForContext(observations);
 
-    let content = `<observations>
+    let content = `
+The following observations block contains your memory of past conversations with this user. Use these observations to provide personalized, contextually relevant responses.
+
+<observations>
 ${optimized}
 </observations>`;
 
@@ -750,12 +754,22 @@ ${optimized}
       content += `\n\n${unobservedContextBlocks}`;
     }
 
+    // Dynamically inject current-task from thread metadata (not stored in observations)
+    if (currentTask) {
+      content += `
+
+<current-task>
+${currentTask}
+</current-task>`;
+    }
+
     if (suggestedResponse) {
       content += `
 
 <suggested-response>
 ${suggestedResponse}
-</suggested-response>`;
+</suggested-response>
+`;
     }
 
     return content;
@@ -872,9 +886,10 @@ ${suggestedResponse}
       unobservedContextBlocks = state.unobservedContextBlocks as string | undefined;
     }
 
-    // Fetch thread metadata to get suggested response
+    // Fetch thread metadata to get current task and suggested response
     const thread = await this.storage.getThreadById({ threadId });
     const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+    const currentTask = threadOMMetadata?.currentTask;
     const suggestedResponse = threadOMMetadata?.suggestedResponse;
 
     // Inject observations as a system message (every step)
@@ -882,6 +897,7 @@ ${suggestedResponse}
     if (record.activeObservations) {
       const observationSystemMessage = this.formatObservationsForContext(
         record.activeObservations,
+        currentTask,
         suggestedResponse,
         unobservedContextBlocks,
       );

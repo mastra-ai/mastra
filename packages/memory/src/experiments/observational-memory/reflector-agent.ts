@@ -174,17 +174,14 @@ ${COMPRESSION_RETRY_PROMPT}`;
 export function parseReflectorOutput(output: string): ReflectorResult {
   const parsed = parseReflectorSectionXml(output);
 
-  // Build the observations string with current-task appended
-  let observations = parsed.observations || '';
-
-  // Append current-task as XML section if present
-  if (parsed.currentTask) {
-    observations += `\n<current-task>\n${parsed.currentTask}\n</current-task>`;
-  }
+  // Return observations WITHOUT current-task/suggested-response tags
+  // Those are stored separately in thread metadata and injected dynamically
+  const observations = parsed.observations || '';
 
   return {
     observations,
     suggestedContinuation: parsed.suggestedResponse || undefined,
+    // Note: Reflector's currentTask is not used - thread metadata preserves per-thread tasks
   };
 }
 

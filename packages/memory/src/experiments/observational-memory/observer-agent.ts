@@ -332,15 +332,12 @@ export function buildObserverPrompt(
 export function parseObserverOutput(output: string): ObserverResult {
   const parsed = parseMemorySectionXml(output);
 
-  // Build the observations string with current-task appended
-  let observations = parsed.observations || '';
+  // Return observations WITHOUT current-task/suggested-response tags
+  // Those are stored separately in thread metadata and injected dynamically
+  const observations = parsed.observations || '';
 
-  // Append current-task as a markdown section if present
-  if (parsed.currentTask) {
-    observations += `\n<current-task>\n${parsed.currentTask}\n</current-task>`;
-  } else {
-    console.warn('[OM Observer] Warning: Observations missing <current-task> section. Adding default.');
-    observations += '\n<current-task>\nContinue based on the most recent user message.\n</current-task>';
+  if (!parsed.currentTask) {
+    console.warn('[OM Observer] Warning: Observations missing <current-task> section.');
   }
 
   return {

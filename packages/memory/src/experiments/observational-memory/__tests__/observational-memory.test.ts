@@ -641,16 +641,20 @@ Here's the implementation...
       const result = parseObserverOutput(output);
       expect(result.suggestedContinuation).toBeDefined();
       expect(result.observations).toContain('🔴 Observation here');
-      expect(result.observations).toContain('Working on implementation');
+      // currentTask is returned separately, not embedded in observations
+      expect(result.currentTask).toBe('Working on implementation');
+      expect(result.observations).not.toContain('Working on implementation');
+      expect(result.observations).not.toContain('<current-task>');
     });
 
     it('should handle output without continuation hint', () => {
       const output = '- 🔴 Simple observation';
       const result = parseObserverOutput(output);
 
-      // Now adds default Current Task if missing (in XML format)
+      // currentTask is returned separately (undefined if not present)
       expect(result.observations).toContain('- 🔴 Simple observation');
-      expect(result.observations).toContain('<current-task>');
+      expect(result.observations).not.toContain('<current-task>');
+      expect(result.currentTask).toBeUndefined();
       expect(result.suggestedContinuation).toBeUndefined();
     });
 
@@ -694,7 +698,9 @@ Help user with conditional rendering
         const result = parseObserverOutput(output);
         expect(result.observations).toContain('User is working on React component');
         expect(result.observations).toContain('a < b');
-        expect(result.observations).toContain('Help user with conditional rendering');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user with conditional rendering');
+        expect(result.observations).not.toContain('Help user with conditional rendering');
       });
 
       it('should NOT capture inline <observations> tags that appear mid-line', () => {
@@ -713,8 +719,9 @@ Explain the <observations> tag format to user
         expect(result.observations).toContain('User asked about XML parsing');
         // The inline mention of <observations> should be preserved as content, not parsed as a tag
         expect(result.observations).toContain('<observations> tags are used for memory');
-        // Current task should include the inline tag mention
-        expect(result.observations).toContain('Explain the <observations> tag format');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Explain the <observations> tag format to user');
+        expect(result.observations).not.toContain('Explain the <observations> tag format');
       });
 
       it('should NOT capture inline <current-task> tags that appear mid-line', () => {
@@ -729,7 +736,9 @@ Help user understand memory XML structure
 
         const result = parseObserverOutput(output);
         expect(result.observations).toContain('<current-task> section format');
-        expect(result.observations).toContain('Help user understand memory XML structure');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user understand memory XML structure');
+        expect(result.observations).not.toContain('Help user understand memory XML structure');
       });
 
       it('should NOT capture inline <suggested-response> tags that appear mid-line', () => {
@@ -766,7 +775,9 @@ Help user implement XML parsing
 
         const result = parseObserverOutput(output);
         expect(result.observations).toContain('User is building an XML parser');
-        expect(result.observations).toContain('Help user implement XML parsing');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user implement XML parsing');
+        expect(result.observations).not.toContain('Help user implement XML parsing');
       });
 
       it('should NOT be truncated by inline closing tags like </observations>', () => {
@@ -784,7 +795,9 @@ Help user understand XML tag boundaries
         // Should NOT be truncated at the inline </observations>
         expect(result.observations).toContain('User mentioned that </observations> ends the section');
         expect(result.observations).toContain('Important: preserve all content');
-        expect(result.observations).toContain('Help user understand XML tag boundaries');
+        // currentTask is returned separately, not in observations
+        expect(result.currentTask).toBe('Help user understand XML tag boundaries');
+        expect(result.observations).not.toContain('Help user understand XML tag boundaries');
       });
 
       it('should NOT be truncated by inline closing </current-task> tag', () => {
@@ -797,8 +810,10 @@ User asked about </current-task> parsing and how it works
 </current-task>`;
 
         const result = parseObserverOutput(output);
+        // currentTask is returned separately, not in observations
         // Should capture the full current-task content
-        expect(result.observations).toContain('User asked about </current-task> parsing');
+        expect(result.currentTask).toContain('User asked about </current-task> parsing');
+        expect(result.observations).not.toContain('User asked about </current-task> parsing');
       });
     });
   });
@@ -947,7 +962,9 @@ Help user implement XML parsing
 
         const result = parseReflectorOutput(output);
         expect(result.observations).toContain('User is building an XML parser');
-        expect(result.observations).toContain('Help user implement XML parsing');
+        // currentTask is NOT returned by parseReflectorOutput (only observations and suggestedContinuation)
+        // and is NOT embedded in observations
+        expect(result.observations).not.toContain('Help user implement XML parsing');
       });
     });
   });
@@ -1931,11 +1948,13 @@ with all the charts and graphs
 
       const result = parseObserverOutput(output);
 
-      // Should have added a default Current Task (in XML format)
-      expect(result.observations).toContain('<current-task>');
+      // currentTask is returned separately, not embedded in observations
+      // When missing from output, currentTask should be undefined
+      expect(result.observations).not.toContain('<current-task>');
+      expect(result.currentTask).toBeUndefined();
     });
 
-    it('should not modify if Current Task already present (XML format)', () => {
+    it('should extract Current Task separately when present (XML format)', () => {
       const output = `<observations>
 - 🔴 User asked about React
 </observations>
@@ -1946,9 +1965,10 @@ Help user set up React project
 
       const result = parseObserverOutput(output);
 
-      // Should not have duplicated
-      const matches = result.observations.match(/current-task/gi);
-      expect(matches?.length).toBe(2); // opening and closing tags
+      // currentTask should be extracted separately, not in observations
+      expect(result.currentTask).toBe('Help user set up React project');
+      expect(result.observations).not.toContain('<current-task>');
+      expect(result.observations).not.toContain('Help user set up React project');
     });
   });
 });
@@ -2866,22 +2886,24 @@ For personal expense tracking...
       expect(result.observations).toContain('graduated');
       expect(result.observations).toContain('degree');
 
-      // Must have Current Task
-      expect(hasCurrentTaskSection(result.observations)).toBe(true);
+      // currentTask is returned separately, not in observations
+      expect(result.currentTask).toBeDefined();
+      expect(result.observations).not.toContain('<current-task>');
 
       // Should extract continuation hint
       expect(result.suggestedContinuation).toBeDefined();
     });
 
-    it('should add default Current Task if observer omits it', () => {
+    it('should handle observer output missing Current Task', () => {
       // Observer output missing Current Task
       const incompleteOutput = `- 🔴 **User Education:** User graduated with a degree in Business Administration [personal_fact, education]
 - 🟡 **Employment:** User started a new job [personal_fact]`;
 
       const result = parseObserverOutput(incompleteOutput);
 
-      // Should have added Current Task (in XML format)
-      expect(result.observations).toContain('<current-task>');
+      // currentTask should be undefined when missing, not embedded in observations
+      expect(result.currentTask).toBeUndefined();
+      expect(result.observations).not.toContain('<current-task>');
       // Key fact must still be present
       expect(result.observations).toContain('Business Administration');
     });
