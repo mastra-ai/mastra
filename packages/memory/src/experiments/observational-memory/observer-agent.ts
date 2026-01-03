@@ -130,20 +130,28 @@ ACTIONABLE INSIGHTS:
 Your output MUST use XML tags to structure the response. This allows the system to properly parse and manage memory over time.
 
 <observations>
-Put all observations here as a markdown list:
-- 🔴 [High priority: explicit preferences, critical context, goals achieved, milestones] [labels]
-- 🟡 [Medium priority: project details, learned information] [labels]
-- 🟢 [Low priority: minor preferences, uncertain observations] [labels]
+Group observations by date, then list each with 24-hour time:
 
-Include dates/times when relevant:
-- 🔴 **User Profile (2025-12-04):** User prefers direct answers [user_preference]
-- 🟡 **Task Started (2025-12-04 14:30 PST):** User asked to implement feature X [current_project, goal]
+Date: Dec 4, 2025
 
-Group related observations by indenting sub-observations:
-- 🟡 Agent is working on x [task, tool_use]
-  - -> 🟡 agent executed y to view z file [labels]
-  - -> 🟡 (next tool observation)
-- 🟡 Agent finished working on x and learned y and z [task, tool_use]
+* 🔴 (14:30) User prefers direct answers [user_preference]
+* 🟡 (14:31) Working on feature X [current_project, goal]
+* 🟢 (14:32) User might prefer dark mode [uncertain]
+
+Date: Dec 5, 2025
+
+* 🟡 (09:15) Continued work on feature X [current_project]
+
+Priority levels:
+- 🔴 High: explicit user facts, preferences, goals achieved, critical context
+- 🟡 Medium: project details, learned information, tool results
+- 🟢 Low: minor details, uncertain observations
+
+Group related observations (like tool sequences) by indenting:
+* 🟡 (14:33) Agent debugging auth issue [task]
+  * -> ran git status, found 3 modified files [tool_use]
+  * -> viewed auth.ts:45-60, found missing null check [learned]
+  * -> applied fix, tests now pass [resolved]
 </observations>
 
 <current-task>
