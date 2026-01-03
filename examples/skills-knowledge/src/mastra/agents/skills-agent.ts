@@ -1,0 +1,69 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { SkillsProcessor } from '@mastra/skills';
+
+/**
+ * Resolve skills path - works from both project root and .mastra/output/
+ */
+function resolveSkillsPath(): string {
+  // Try project root first (for demo scripts)
+  const fromRoot = resolve(process.cwd(), 'skills');
+  if (existsSync(fromRoot)) {
+    return fromRoot;
+  }
+
+  // Try from .mastra/output/ (for mastra dev)
+  const fromOutput = resolve(process.cwd(), '../../skills');
+  if (existsSync(fromOutput)) {
+    return fromOutput;
+  }
+
+  // Fallback to project root path (will error if not found)
+  return fromRoot;
+}
+
+/**
+ * Skills processor with explicit paths - this agent has its OWN skills.
+ *
+ * This demonstrates agent-level skills that are NOT shared with Mastra instance.
+ * The agent only sees skills from the configured paths.
+ */
+const skillsProcessor = new SkillsProcessor({
+  skillsPaths: [resolveSkillsPath()],
+});
+
+/**
+ * Documentation agent that uses skills for brand-consistent writing.
+ *
+ * This agent demonstrates:
+ * 1. SkillsProcessor with skillsPaths - agent has its own skill discovery
+ * 2. Tool-based skill activation - agent decides when to use skills
+ * 3. Skills are specific to this agent (not inherited from Mastra)
+ */
+export const docsAgent = new Agent({
+  id: 'docs-agent',
+  name: 'Documentation Agent',
+  description: 'An agent that writes documentation following brand guidelines using skills.',
+  instructions: `You are a technical documentation writer for Mastra.
+
+Your job is to help write clear, technical documentation that follows Mastra's brand guidelines.
+
+When writing documentation:
+1. First, activate the "brand-guidelines" skill to understand the writing style
+2. Follow the voice & tone guidelines strictly
+3. Avoid marketing language - focus on technical details
+4. Use the correct brand colors when relevant
+5. Keep explanations concise and specific
+
+Available actions:
+- Use the skills tools to list and activate relevant skills
+- Once a skill is activated, its instructions become available to guide your writing`,
+
+  model: openai('gpt-4o-mini'),
+
+  // SkillsProcessor adds tools for skill management
+  // Uses explicit skillsPaths - does NOT inherit from Mastra
+  inputProcessors: [skillsProcessor],
+});

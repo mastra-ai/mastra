@@ -45,6 +45,10 @@ import { Link } from './lib/framework';
 import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import Observability from './pages/observability';
+import Knowledge from './pages/knowledge';
+import KnowledgeNamespaceDetail from './pages/knowledge/[namespace]';
+import Skills from './pages/skills';
+import SkillDetailPage from './pages/skills/[skillName]';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
@@ -53,6 +57,7 @@ import { StudioSettingsPage } from './pages/settings';
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
   agentsLink: () => `/agents`,
   agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/${uuid()}?new=true`,
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
@@ -64,6 +69,7 @@ const paths: LinkComponentProviderProps['paths'] = {
   networkThreadLink: (networkId: string, threadId: string) => `/networks/v-next/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
+  skillLink: (skillName: string) => `/skills/${skillName}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
@@ -168,6 +174,12 @@ function App() {
 
                 <Route path="/mcps/:serverId" element={<McpServerPage />} />
                 <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
+
+                <Route path="/knowledge" element={<Knowledge />} />
+                <Route path="/knowledge/:namespace" element={<KnowledgeNamespaceDetail />} />
+
+                <Route path="/skills" element={<Skills />} />
+                <Route path="/skills/:skillName" element={<SkillDetailPage />} />
 
                 <Route path="/workflows" element={<Workflows />} />
                 <Route path="/workflows/:workflowId" element={<NavigateTo to="/workflows/:workflowId/graph" />} />

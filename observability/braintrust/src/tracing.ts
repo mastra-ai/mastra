@@ -370,6 +370,37 @@ export class BraintrustExporter extends BaseExporter {
   }
 
   /**
+   * Recursively serializes Date objects to ISO strings for JSON serialization.
+   * This ensures Date objects are properly displayed in Braintrust traces instead of
+   * appearing as empty objects `{}`.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/11024
+   */
+  private serializeDates(value: any): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (Array.isArray(value)) {
+      return value.map(item => this.serializeDates(item));
+    }
+
+    if (typeof value === 'object') {
+      const result: Record<string, any> = {};
+      for (const [key, val] of Object.entries(value)) {
+        result[key] = this.serializeDates(val);
+      }
+      return result;
+    }
+
+    return value;
+  }
+
+  /**
    * Transforms MODEL_GENERATION input to Braintrust Thread view format.
    */
   private transformInput(input: any, spanType: SpanType): any {

@@ -10,6 +10,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
+import type { MastraKnowledge } from '../knowledge';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -20,6 +21,7 @@ import { NoOpObservability } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
+import type { MastraSkills } from '../skills';
 import type { MastraStorage, WorkflowRuns, StorageAgentType, StorageScorerConfig } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -209,6 +211,45 @@ export interface Config<
   memory?: TMemory;
 
   /**
+   * Knowledge instance for document storage and retrieval.
+   * Supports vector search, BM25 keyword search, and hybrid search.
+   * Processors like RetrievedKnowledge can inherit this instance from Mastra.
+   *
+   * @example
+   * ```typescript
+   * import { Knowledge, KnowledgeFilesystemStorage } from '@mastra/skills';
+   *
+   * const mastra = new Mastra({
+   *   knowledge: new Knowledge({
+   *     id: 'support-docs',
+   *     storage: new KnowledgeFilesystemStorage({ basePath: './docs' }),
+   *     bm25: true,
+   *   }),
+   * });
+   * ```
+   */
+  knowledge?: MastraKnowledge;
+
+  /**
+   * Skills instance for agent skill management following the Agent Skills specification.
+   * Discovers skills from filesystem paths and makes them available to agents.
+   * Processors like SkillsProcessor can inherit this instance from Mastra.
+   *
+   * @example
+   * ```typescript
+   * import { Skills } from '@mastra/skills';
+   *
+   * const mastra = new Mastra({
+   *   skills: new Skills({
+   *     id: 'my-skills',
+   *     paths: ['./skills', 'node_modules/@company/skills'],
+   *   }),
+   * });
+   * ```
+   */
+  skills?: MastraSkills;
+
+  /**
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
@@ -278,6 +319,8 @@ export class Mastra<
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
 > {
   #vectors?: TVectors;
+  #knowledge?: MastraKnowledge;
+  #skills?: MastraSkills;
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
@@ -294,6 +337,7 @@ export class Mastra<
   #tools?: TTools;
   #processors?: TProcessors;
   #memory?: TMemory;
+  // Note: #knowledge and #skills are declared above with #vectors
   #server?: ServerConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -485,6 +529,8 @@ export class Mastra<
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
+    this.#knowledge = undefined;
+    this.#skills = undefined;
     this.#mcpServers = {} as TMCPServers;
     this.#tts = {} as TTTS;
     this.#agents = {} as TAgents;
@@ -529,6 +575,14 @@ export class Mastra<
           this.addVector(vector, key);
         }
       });
+    }
+
+    if (config?.knowledge) {
+      this.#knowledge = config.knowledge;
+    }
+
+    if (config?.skills) {
+      this.#skills = config.skills;
     }
 
     if (config?.scorers) {
@@ -1370,6 +1424,68 @@ export class Mastra<
     return this.listVectors();
   }
 
+  // ============================================================================
+  // Knowledge Management
+  // ============================================================================
+
+  /**
+   * Returns the registered knowledge instance.
+   *
+   * @returns The knowledge instance or undefined if none is registered
+   *
+   * @example
+   * ```typescript
+   * import { Knowledge, KnowledgeFilesystemStorage } from '@mastra/skills';
+   *
+   * const mastra = new Mastra({
+   *   knowledge: new Knowledge({
+   *     id: 'support-docs',
+   *     storage: new KnowledgeFilesystemStorage({ basePath: './docs' }),
+   *     bm25: true,
+   *   }),
+   * });
+   *
+   * const knowledge = mastra.getKnowledge();
+   * if (knowledge) {
+   *   const results = await knowledge.search('default', 'password reset', { mode: 'bm25' });
+   * }
+   * ```
+   */
+  public getKnowledge(): MastraKnowledge | undefined {
+    return this.#knowledge;
+  }
+
+  // ============================================================================
+  // Skills Management
+  // ============================================================================
+
+  /**
+   * Returns the registered skills instance.
+   *
+   * @returns The skills instance or undefined if none is registered
+   *
+   * @example
+   * ```typescript
+   * import { Skills } from '@mastra/skills';
+   *
+   * const mastra = new Mastra({
+   *   skills: new Skills({
+   *     id: 'my-skills',
+   *     paths: ['./skills'],
+   *   }),
+   * });
+   *
+   * const skills = mastra.getSkills();
+   * if (skills) {
+   *   const allSkills = skills.list();
+   *   const skill = skills.get('brand-guidelines');
+   * }
+   * ```
+   */
+  public getSkills(): MastraSkills | undefined {
+    return this.#skills;
+  }
+
   /**
    * Gets the currently configured deployment provider.
    *
@@ -2043,6 +2159,11 @@ export class Mastra<
       const logger = this.getLogger();
       logger.debug(`Processor with key ${processorKey} already exists. Skipping addition.`);
       return;
+    }
+
+    // Register Mastra with the processor if it supports it
+    if (typeof processor.__registerMastra === 'function') {
+      processor.__registerMastra(this);
     }
 
     processors[processorKey] = processor;
