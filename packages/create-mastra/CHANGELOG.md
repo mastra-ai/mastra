@@ -1,5 +1,17 @@
 # create-mastra
 
+## 1.0.0-beta.13
+
+### Patch Changes
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
 ## 1.0.0-beta.12
 
 ### Minor Changes

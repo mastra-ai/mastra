@@ -1,5 +1,76 @@
 # @mastra/inngest
 
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Add support for `retries` and `scorers` parameters across all `createStep` overloads.
+  ([#11495](https://github.com/mastra-ai/mastra/pull/11495))
+
+  The `createStep` function now includes support for the `retries` and `scorers` fields across all step creation patterns, enabling step-level retry configuration and AI evaluation support for regular steps, agent-based steps, and tool-based steps.
+
+  ```typescript
+  import { init } from '@mastra/inngest';
+  import { z } from 'zod';
+
+  const { createStep } = init(inngest);
+
+  // 1. Regular step with retries
+  const regularStep = createStep({
+    id: 'api-call',
+    inputSchema: z.object({ url: z.string() }),
+    outputSchema: z.object({ data: z.any() }),
+    retries: 3, // ← Will retry up to 3 times on failure
+    execute: async ({ inputData }) => {
+      const response = await fetch(inputData.url);
+      return { data: await response.json() };
+    },
+  });
+
+  // 2. Agent step with retries and scorers
+  const agentStep = createStep(myAgent, {
+    retries: 3,
+    scorers: [{ id: 'accuracy-scorer', scorer: myAccuracyScorer }],
+  });
+
+  // 3. Tool step with retries and scorers
+  const toolStep = createStep(myTool, {
+    retries: 2,
+    scorers: [{ id: 'quality-scorer', scorer: myQualityScorer }],
+  });
+  ```
+
+  This change ensures API consistency across all `createStep` overloads. All step types now support retry and evaluation configurations.
+
+  This is a non-breaking change - steps without these parameters continue to work exactly as before.
+
+  Fixes #9351
+
+- Remove `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods, call `stream`, `resumeStream` and `observeStream` directly ([#11499](https://github.com/mastra-ai/mastra/pull/11499))
+
+  ```diff
+  + const run = await workflow.createRun({ runId: '123' });
+  - const stream = await run.streamVNext({ inputData: { ... } });
+  + const stream = await run.stream({ inputData: { ... } });
+  ```
+
+- Add cron scheduling support to Inngest workflows. Workflows can now be automatically triggered on a schedule by adding a `cron` property along with optional `inputData` and `initialState`: ([#11518](https://github.com/mastra-ai/mastra/pull/11518))
+
+  ```typescript
+  const workflow = createWorkflow({
+    id: 'scheduled-workflow',
+    inputSchema: z.object({ value: z.string() }),
+    outputSchema: z.object({ result: z.string() }),
+    steps: [step1],
+    cron: '0 0 * * *', // Run daily at midnight
+    inputData: { value: 'scheduled-run' }, // Optional inputData for the scheduled workflow run
+    initialState: { count: 0 }, // Optional initialState for the scheduled workflow run
+  });
+  ```
+
+- Updated dependencies [[`bc72b52`](https://github.com/mastra-ai/mastra/commit/bc72b529ee4478fe89ecd85a8be47ce0127b82a0), [`05b8bee`](https://github.com/mastra-ai/mastra/commit/05b8bee9e50e6c2a4a2bf210eca25ee212ca24fa), [`c042bd0`](https://github.com/mastra-ai/mastra/commit/c042bd0b743e0e86199d0cb83344ca7690e34a9c), [`940a2b2`](https://github.com/mastra-ai/mastra/commit/940a2b27480626ed7e74f55806dcd2181c1dd0c2), [`e0941c3`](https://github.com/mastra-ai/mastra/commit/e0941c3d7fc75695d5d258e7008fd5d6e650800c), [`4f0b3c6`](https://github.com/mastra-ai/mastra/commit/4f0b3c66f196c06448487f680ccbb614d281e2f7), [`74c4f22`](https://github.com/mastra-ai/mastra/commit/74c4f22ed4c71e72598eacc346ba95cdbc00294f), [`81b6a8f`](https://github.com/mastra-ai/mastra/commit/81b6a8ff79f49a7549d15d66624ac1a0b8f5f971), [`a4f010b`](https://github.com/mastra-ai/mastra/commit/a4f010b22e4355a5fdee70a1fe0f6e4a692cc29e), [`251df45`](https://github.com/mastra-ai/mastra/commit/251df4531407dfa46d805feb40ff3fb49769f455), [`c2b9547`](https://github.com/mastra-ai/mastra/commit/c2b9547bf435f56339f23625a743b2147ab1c7a6), [`58e3931`](https://github.com/mastra-ai/mastra/commit/58e3931af9baa5921688566210f00fb0c10479fa), [`4fba91b`](https://github.com/mastra-ai/mastra/commit/4fba91bec7c95911dc28e369437596b152b04cd0), [`12b0cc4`](https://github.com/mastra-ai/mastra/commit/12b0cc4077d886b1a552637dedb70a7ade93528c)]:
+  - @mastra/core@1.0.0-beta.20
+
 ## 1.0.0-beta.10
 
 ### Minor Changes

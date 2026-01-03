@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-azure",
-  "version": "0.11.0-beta.0",
+  "version": "0.11.0-beta.1",
   "description": "Mastra Azure speech integration",
   "type": "module",
   "main": "dist/index.js",
