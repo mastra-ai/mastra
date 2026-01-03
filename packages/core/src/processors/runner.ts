@@ -856,9 +856,10 @@ export class ProcessorRunner {
         requestContext,
       };
 
-      // Use the current span (the step span) as the parent for processor spans
+      // Find the AGENT_RUN span by walking up the parent chain
       const currentSpan = tracingContext?.currentSpan;
-      const processorSpan = currentSpan?.createChildSpan({
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input step processor: ${processor.id}`,
         entityType: EntityType.INPUT_PROCESSOR,
