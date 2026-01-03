@@ -737,21 +737,28 @@ export class PrepareCommand {
       }
 
       // Process batch in parallel
-      const batchPromises = sessionBatch.map(async ({ session, sessionId }) => {
+      const batchPromises = sessionBatch.map(async ({ session, sessionId, date }) => {
         // Skip if already processed
         if (processedSessionIds.has(sessionId)) {
           return;
         }
 
-        // Convert session to messages
-        const messages: CoreMessage[] = [];
-        for (const turn of session) {
+        // Parse session date for message timestamps
+        const sessionDate = new Date(date);
+
+        // Convert session to messages with historical timestamps
+        const messages: (CoreMessage & { createdAt?: Date })[] = [];
+        for (let turnIdx = 0; turnIdx < session.length; turnIdx++) {
+          const turn = session[turnIdx];
           if (!turn.content) continue;
 
           const role = turn.role === 'user' || turn.role === 'assistant' ? turn.role : 'user';
+          // Add 5 seconds offset per message to maintain order
+          const messageDate = new Date(sessionDate.getTime() + turnIdx * 5 * 1000);
           messages.push({
             role,
             content: turn.content,
+            createdAt: messageDate,
           });
         }
 
@@ -830,10 +837,13 @@ export class PrepareCommand {
 
       await Promise.all(batchPromises);
 
-      // Fix dates for newly processed sessions
-      const newlyProcessedSessions = sessionBatch.filter(s => processedSessionIds.has(s.sessionId));
-      if (newlyProcessedSessions.length > 0) {
-        await this.fixSessionDates(questionDir, newlyProcessedSessions, benchmarkStore);
+      // Fix dates for newly processed sessions (only needed for non-OM configs)
+      // OM configs pass createdAt directly on messages, so dates are correct from the start
+      if (!usesObservationalMemory) {
+        const newlyProcessedSessions = sessionBatch.filter(s => processedSessionIds.has(s.sessionId));
+        if (newlyProcessedSessions.length > 0) {
+          await this.fixSessionDates(questionDir, newlyProcessedSessions, benchmarkStore);
+        }
       }
 
       // Update processed count based on actual processed sessions
