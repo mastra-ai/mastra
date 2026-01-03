@@ -192,7 +192,7 @@ interface ToolCallInputStreamingEndPayload {
   providerMetadata?: ProviderMetadata;
 }
 
-interface FinishPayload<Tools extends ToolSet = ToolSet> {
+interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   stepResult: {
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
@@ -215,6 +215,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet> {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  response?: LLMStepResult<OUTPUT>['response'];
   [key: string]: unknown;
 }
 
