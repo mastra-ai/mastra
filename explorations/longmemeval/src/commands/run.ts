@@ -387,8 +387,9 @@ Be specific rather than generic when the user has expressed clear preferences in
       instructions: agentInstructions,
       memory,
       // For OM, use processors instead of memory
+      // OM handles message loading itself via cursor-based loadUnobservedMessages
       // MessageHistory must come first in output to save messages before OM observes them
-      inputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
+      inputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
       outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
     });
 
