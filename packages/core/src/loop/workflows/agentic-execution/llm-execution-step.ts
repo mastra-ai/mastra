@@ -143,12 +143,41 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         });
         break;
 
+      case 'text-start': {
+        // Capture text-start's providerMetadata (e.g., openai.itemId: "msg_xxx")
+        // This is needed because, for example, OpenAI reasoning models send separate itemIds for
+        // reasoning (rs_xxx) and text (msg_xxx) parts. The text's itemId must be
+        // preserved so that when memory is replayed, OpenAI sees the required
+        // following item for the reasoning part.
+        if (chunk.payload.providerMetadata) {
+          runState.setState({
+            providerOptions: chunk.payload.providerMetadata,
+          });
+        }
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
       case 'text-delta': {
         const textDeltasFromState = runState.state.textDeltas;
         textDeltasFromState.push(chunk.payload.text);
         runState.setState({
           textDeltas: textDeltasFromState,
           isStreaming: true,
+        });
+        if (isControllerOpen(controller)) {
+          controller.enqueue(chunk);
+        }
+        break;
+      }
+
+      case 'text-end': {
+        // Clear providerOptions to prevent text's providerMetadata from leaking
+        // into subsequent parts (similar to reasoning-end clearing)
+        runState.setState({
+          providerOptions: undefined,
         });
         if (isControllerOpen(controller)) {
           controller.enqueue(chunk);
