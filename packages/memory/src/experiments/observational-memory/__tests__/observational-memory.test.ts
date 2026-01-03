@@ -3070,7 +3070,7 @@ describe('E2E: Agent + ObservationalMemory (LongMemEval Flow)', () => {
   // This test requires cross-session memory (scope: 'resource') to work correctly
   // NOTE: This test processes all 54 LongMemEval sessions with real API calls.
   // It takes 10+ minutes to run. Run manually with: npx vitest run -t "FULL BENCHMARK"
-  it('FULL BENCHMARK: should process all 54 sessions and recall key fact', async () => {
+  it.skip('FULL BENCHMARK: should process all 54 sessions and recall key fact', async () => {
     // 1. Create storage
     const storage = createInMemoryStorage();
 
