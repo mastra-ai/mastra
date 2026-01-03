@@ -149,6 +149,43 @@ Example filter:
 - `listMessages({ threadId, perPage?, page? })`: Get messages for a thread with pagination
 - `deleteMessages(messageIds)`: Delete specific messages
 
+## Drizzle ORM Integration
+
+For type-safe queries with [Drizzle ORM](https://orm.drizzle.team/):
+
+```bash
+npm install drizzle-orm drizzle-kit
+```
+
+```typescript
+import { createMastraSchema } from '@mastra/libsql/drizzle';
+import { drizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
+import { eq } from 'drizzle-orm';
+
+const { mastraThreads } = createMastraSchema();
+const client = createClient({ url: 'file:./dev.db' });
+const db = drizzle(client);
+
+const threads = await db.select().from(mastraThreads).where(eq(mastraThreads.resourceId, 'user-123'));
+```
+
+By default, `LibSQLStore` creates tables automatically. To use `drizzle-kit push` instead, set `disableInit: true`.
+
+**Compile-time safety:** Export `MastraSchema` type and use it to ensure you've exported all tables when Mastra adds new ones:
+
+```typescript
+import { createMastraSchema, type MastraSchema } from '@mastra/libsql/drizzle';
+const schema = createMastraSchema();
+
+export const mastraThreads = schema.mastraThreads;
+// ... export all tables
+
+// TypeScript will error if any table is missing
+const _check: MastraSchema = { mastraThreads /* ... */ };
+```
+
 ## Related Links
 
-- [LibSQL Documentation](https://docs.turso.tech/sdk/introductionh)
+- [LibSQL Documentation](https://docs.turso.tech/sdk/introduction)
+- [Drizzle ORM Documentation](https://orm.drizzle.team/)

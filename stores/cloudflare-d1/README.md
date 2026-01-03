@@ -147,6 +147,43 @@ Each logical Mastra table maps to a SQL table in D1 (with optional prefix):
 
 ---
 
+## Drizzle ORM Integration
+
+For type-safe queries with [Drizzle ORM](https://orm.drizzle.team/):
+
+```bash
+npm install drizzle-orm drizzle-kit
+```
+
+```typescript
+import { createMastraSchema } from '@mastra/cloudflare-d1/drizzle';
+import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
+
+// Optional: pass tablePrefix to match your D1Store config
+const { mastraThreads } = createMastraSchema(); // or createMastraSchema({ tablePrefix: 'prod_' })
+const db = drizzle(env.DB);
+
+const threads = await db.select().from(mastraThreads).where(eq(mastraThreads.resourceId, 'user-123'));
+```
+
+By default, `D1Store` creates tables automatically. To use `drizzle-kit push` instead, set `disableInit: true`.
+
+**Compile-time safety:** Export `MastraSchema` type and use it to ensure you've exported all tables when Mastra adds new ones:
+
+```typescript
+import { createMastraSchema, type MastraSchema } from '@mastra/cloudflare-d1/drizzle';
+const schema = createMastraSchema();
+
+export const mastraThreads = schema.mastraThreads;
+// ... export all tables
+
+// TypeScript will error if any table is missing
+const _check: MastraSchema = { mastraThreads /* ... */ };
+```
+
+---
+
 ## Limitations
 
 - No multi-statement transactions (D1 currently supports single statements per query)
