@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { ObservationalMemory } from '@mastra/memory/experiments';
+import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
 import { openai } from '@ai-sdk/openai';
 import { cachedOpenAI } from '../embeddings/cached-openai-provider';
@@ -357,12 +357,12 @@ export class RunCommand {
         storage: omStorage,
         observer: {
           model: retry4o.model,
-          historyThreshold: observationalMemoryConfig.historyThreshold,
+          observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
           focus: observationalMemoryConfig.focus,
         },
         reflector: {
           model: retry4o.model,
-          observationThreshold: observationalMemoryConfig.observationThreshold,
+          reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
         },
         resourceScope: observationalMemoryConfig.resourceScope,
       });
@@ -387,8 +387,9 @@ Be specific rather than generic when the user has expressed clear preferences in
       instructions: agentInstructions,
       memory,
       // For OM, use processors instead of memory
+      // MessageHistory must come first in output to save messages before OM observes them
       inputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
-      outputProcessors: usesObservationalMemory ? [observationalMemory!, messageHistory!] : undefined,
+      outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
     });
 
     // Create a fresh thread for the evaluation question
@@ -464,6 +465,7 @@ Be specific rather than generic when the user has expressed clear preferences in
 
     // Save metrics
     const metricsPath = join(runDir, 'metrics.json');
+    const usesObservationalMemory = options.memoryConfig === 'observational-memory';
     const metricsData = {
       ...metrics,
       config: {
@@ -471,6 +473,23 @@ Be specific rather than generic when the user has expressed clear preferences in
         model: options.model,
         memoryConfig: options.memoryConfig,
         subset: options.subset,
+        // Store OM config for reproducibility (actual values used, with defaults as fallback)
+        ...(usesObservationalMemory && {
+          observationalMemoryConfig: {
+            resourceScope: observationalMemoryConfig.resourceScope,
+            focus: observationalMemoryConfig.focus,
+            observationThreshold:
+              (observationalMemoryConfig as any).observationThreshold ??
+              OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
+            reflectionThreshold:
+              (observationalMemoryConfig as any).reflectionThreshold ??
+              OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+            observerModel:
+              (observationalMemoryConfig as any).observerModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
+            reflectorModel:
+              (observationalMemoryConfig as any).reflectorModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
+          },
+        }),
       },
       timestamp: new Date().toISOString(),
     };

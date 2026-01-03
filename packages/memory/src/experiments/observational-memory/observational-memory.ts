@@ -119,7 +119,7 @@ interface ResolvedReflectorConfig {
 /**
  * Default configuration values matching the spec
  */
-const DEFAULTS = {
+export const OBSERVATIONAL_MEMORY_DEFAULTS = {
   observer: {
     model: 'google/gemini-2.5-flash',
     observationThreshold: 10_000,
@@ -250,29 +250,29 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Resolve observer config with defaults
     this.observerConfig = {
-      model: config.observer?.model ?? DEFAULTS.observer.model,
-      observationThreshold: config.observer?.observationThreshold ?? DEFAULTS.observer.observationThreshold,
+      model: config.observer?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
+      observationThreshold: config.observer?.observationThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
       bufferEvery: config.observer?.bufferEvery,
       modelSettings: {
-        temperature: config.observer?.modelSettings?.temperature ?? DEFAULTS.observer.modelSettings.temperature,
+        temperature: config.observer?.modelSettings?.temperature ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.temperature,
         maxOutputTokens:
-          config.observer?.modelSettings?.maxOutputTokens ?? DEFAULTS.observer.modelSettings.maxOutputTokens,
+          config.observer?.modelSettings?.maxOutputTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.modelSettings.maxOutputTokens,
       },
-      providerOptions: config.observer?.providerOptions ?? DEFAULTS.observer.providerOptions,
+      providerOptions: config.observer?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.providerOptions,
       focus: config.observer?.focus,
     };
 
     // Resolve reflector config with defaults
     this.reflectorConfig = {
-      model: config.reflector?.model ?? DEFAULTS.reflector.model,
-      reflectionThreshold: config.reflector?.reflectionThreshold ?? DEFAULTS.reflector.reflectionThreshold,
+      model: config.reflector?.model ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
+      reflectionThreshold: config.reflector?.reflectionThreshold ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
       bufferEvery: config.reflector?.bufferEvery,
       modelSettings: {
-        temperature: config.reflector?.modelSettings?.temperature ?? DEFAULTS.reflector.modelSettings.temperature,
+        temperature: config.reflector?.modelSettings?.temperature ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.modelSettings.temperature,
         maxOutputTokens:
-          config.reflector?.modelSettings?.maxOutputTokens ?? DEFAULTS.reflector.modelSettings.maxOutputTokens,
+          config.reflector?.modelSettings?.maxOutputTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.modelSettings.maxOutputTokens,
       },
-      providerOptions: config.reflector?.providerOptions ?? DEFAULTS.reflector.providerOptions,
+      providerOptions: config.reflector?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.providerOptions,
     };
 
     this.tokenCounter = new TokenCounter();

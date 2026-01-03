@@ -25,10 +25,9 @@ const longMemEvalFocus: ObservationFocus = {
 // Observational Memory configuration
 // These thresholds allow more context to accumulate before triggering observation/reflection
 export const observationalMemoryConfig = {
-  // Observer triggers after ~5000 tokens of new messages (more context per observation)
-  historyThreshold: { min: 4000, max: 6000 },
-  // Reflector triggers when observations exceed ~15000 tokens
-  observationThreshold: { min: 12000, max: 18000 },
+  // Using defaults: observationThreshold: 10000, reflectionThreshold: 30000
+  // observationThreshold: { min: 4000, max: 6000 },
+  // reflectionThreshold: { min: 12000, max: 18000 },
   // Resource scope for cross-session memory
   resourceScope: true,
   // Focus areas for the observer

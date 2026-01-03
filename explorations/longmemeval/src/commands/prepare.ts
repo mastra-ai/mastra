@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { InMemoryStore } from '@mastra/core/storage';
-import { ObservationalMemory } from '@mastra/memory/experiments';
+import { ObservationalMemory, OBSERVATIONAL_MEMORY_DEFAULTS } from '@mastra/memory/experiments';
 import { MessageHistory } from '@mastra/core/processors';
 import { MockLanguageModelV1, MockLanguageModelV2 } from '../test-utils/mock-model';
 import { openai } from '@ai-sdk/openai';
@@ -500,11 +500,11 @@ export class PrepareCommand {
         storage: omStorage,
         observer: {
           model: model, // Real model for Observer
-          historyThreshold: observationalMemoryConfig.historyThreshold,
+          // Using defaults (observationThreshold: 10000)
         },
         reflector: {
           model: model, // Real model for Reflector
-          observationThreshold: observationalMemoryConfig.observationThreshold,
+          // Using defaults (reflectionThreshold: 30000)
         },
         resourceScope: observationalMemoryConfig.resourceScope,
         // Debug callback to log all observation events to a file
@@ -553,7 +553,7 @@ export class PrepareCommand {
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [{ type: 'text', text: 'Acknowledged.' }],
+        content: [],
         warnings: [],
       }),
       // No streaming needed for ingestion
@@ -570,7 +570,7 @@ export class PrepareCommand {
       memory: usesObservationalMemory ? undefined : memory,
       // For OM, use processors instead of memory
       inputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
-      outputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
+      outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
     });
 
     // Process all haystack sessions
@@ -884,6 +884,24 @@ export class PrepareCommand {
       sessionCount: sessionsWithDates.length,
       evidenceSessionIds: question.answer_session_ids,
       note: 'Sessions were processed in chronological order (oldest first) for working memory',
+      // Store OM config for reproducibility (actual values used, with defaults as fallback)
+      ...(usesObservationalMemory && {
+        observationalMemoryConfig: {
+          resourceScope: observationalMemoryConfig.resourceScope,
+          focus: observationalMemoryConfig.focus,
+          // Use configured values if present, otherwise defaults
+          observationThreshold:
+            (observationalMemoryConfig as any).observationThreshold ??
+            OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
+          reflectionThreshold:
+            (observationalMemoryConfig as any).reflectionThreshold ??
+            OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+          observerModel:
+            (observationalMemoryConfig as any).observerModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.observer.model,
+          reflectorModel:
+            (observationalMemoryConfig as any).reflectorModel ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflector.model,
+        },
+      }),
     };
 
     await writeFile(join(questionDir, 'meta.json'), JSON.stringify(metadata, null, 2));

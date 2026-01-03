@@ -14,6 +14,7 @@
 // Main processor
 export {
   ObservationalMemory,
+  OBSERVATIONAL_MEMORY_DEFAULTS,
   type ObservationalMemoryConfig,
   type ObservationDebugEvent,
 } from './observational-memory';
