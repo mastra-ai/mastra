@@ -53,6 +53,7 @@ vi.mock('@mastra/deployer/build', () => {
       off: vi.fn(),
     }),
     getWatcherInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
+    getEsbuildPlatform: vi.fn().mockReturnValue('node'),
   };
 });
 

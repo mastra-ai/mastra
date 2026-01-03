@@ -1,6 +1,14 @@
 import { posix } from 'node:path';
-import { describe, it, expect } from 'vitest';
-import { getPackageName, getCompiledDepCachePath, slash, findNativePackageModule, normalizeStudioBase } from './utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import {
+  getPackageName,
+  getCompiledDepCachePath,
+  slash,
+  findNativePackageModule,
+  normalizeStudioBase,
+  detectRuntime,
+  getEsbuildPlatform,
+} from './utils';
 
 describe('getPackageName', () => {
   it('should return the full scoped package name for scoped packages', () => {
@@ -504,5 +512,68 @@ describe('normalizeStudioBase', () => {
       expect(normalizeStudioBase('/Admin')).toBe('/Admin');
       expect(normalizeStudioBase('MyApp')).toBe('/MyApp');
     });
+  });
+});
+
+/**
+ * Tests for runtime detection utilities
+ * @see GitHub Issue #11253: Bun S3 API's not working inside Mastra Workflows
+ */
+describe('detectRuntime', () => {
+  const originalGlobalBun = (globalThis as any).Bun;
+
+  beforeEach(() => {
+    // Clean up Bun global before each test
+    delete (globalThis as any).Bun;
+  });
+
+  afterEach(() => {
+    // Restore original Bun global
+    if (originalGlobalBun) {
+      (globalThis as any).Bun = originalGlobalBun;
+    } else {
+      delete (globalThis as any).Bun;
+    }
+  });
+
+  it('should return "node" when Bun global is not present', () => {
+    expect(detectRuntime()).toBe('node');
+  });
+
+  it('should return "bun" when Bun global is present', () => {
+    (globalThis as any).Bun = { version: '1.0.0' };
+    expect(detectRuntime()).toBe('bun');
+  });
+
+  it('should return "bun" even when Bun global is an empty object', () => {
+    (globalThis as any).Bun = {};
+    expect(detectRuntime()).toBe('bun');
+  });
+});
+
+describe('getEsbuildPlatform', () => {
+  const originalGlobalBun = (globalThis as any).Bun;
+
+  beforeEach(() => {
+    // Clean up Bun global before each test
+    delete (globalThis as any).Bun;
+  });
+
+  afterEach(() => {
+    // Restore original Bun global
+    if (originalGlobalBun) {
+      (globalThis as any).Bun = originalGlobalBun;
+    } else {
+      delete (globalThis as any).Bun;
+    }
+  });
+
+  it('should return "node" platform when running under Node.js', () => {
+    expect(getEsbuildPlatform()).toBe('node');
+  });
+
+  it('should return "neutral" platform when running under Bun', () => {
+    (globalThis as any).Bun = { version: '1.0.0' };
+    expect(getEsbuildPlatform()).toBe('neutral');
   });
 });
