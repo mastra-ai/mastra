@@ -14,12 +14,40 @@ import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createTool } from '../../tools';
+import type { Message } from '../../agent';
 
 const execAsync = promisify(exec);
 
 // ============================================================================
 // Core Types
 // ============================================================================
+
+/**
+ * Runtime context passed to validation checks.
+ * Contains the current state of the network loop.
+ */
+export interface ValidationContext {
+  /** Current iteration number (1-based) */
+  iteration: number;
+  /** Maximum iterations allowed */
+  maxIterations?: number;
+  /** All messages in the conversation */
+  messages: Message[];
+  /** The original task/prompt */
+  originalTask: string;
+  /** Current thread ID (if using memory) */
+  threadId?: string;
+  /** Resource ID (if using memory) */
+  resourceId?: string;
+  /** Name of the network */
+  networkName: string;
+  /** ID of the current run */
+  runId: string;
+  /** Result from the last primitive execution (if any) */
+  lastResult?: unknown;
+  /** Whether the LLM assessed the task as complete */
+  llmSaysComplete: boolean;
+}
 
 /**
  * Result of a single validation check.
@@ -40,14 +68,16 @@ export interface ValidationResult {
  * A validation check that verifies some aspect of task completion.
  *
  * Users can implement this interface directly or use helper functions
- * like `createCheck()` or `createCommandCheck()`.
+ * like `createCheck()`.
  *
  * @example Direct implementation
  * ```typescript
  * const myCheck: ValidationCheck = {
  *   id: 'api-health',
  *   name: 'API Health Check',
- *   check: async () => {
+ *   check: async (ctx) => {
+ *     // Can use context to make decisions
+ *     console.log(`Checking after iteration ${ctx.iteration}`);
  *     const res = await fetch('http://localhost:3000/health');
  *     return {
  *       success: res.ok,
@@ -62,8 +92,8 @@ export interface ValidationCheck {
   id: string;
   /** Human-readable name (shown in logs/UI) */
   name: string;
-  /** Async function that performs the validation */
-  check: () => Promise<ValidationResult>;
+  /** Async function that performs the validation, receives runtime context */
+  check: (context: ValidationContext) => Promise<ValidationResult>;
 }
 
 /**
@@ -129,7 +159,10 @@ export interface ValidationRunResult {
 /**
  * Runs all validation checks according to the configuration
  */
-export async function runValidation(config: NetworkValidationConfig): Promise<ValidationRunResult> {
+export async function runValidation(
+  config: NetworkValidationConfig,
+  context: ValidationContext,
+): Promise<ValidationRunResult> {
   const strategy = config.strategy ?? 'all';
   const parallel = config.parallel ?? true;
   const timeout = config.timeout ?? 600000;
@@ -147,7 +180,7 @@ export async function runValidation(config: NetworkValidationConfig): Promise<Va
     // Run all checks in parallel
     const checkPromises = config.checks.map(async check => {
       try {
-        const result = await check.check();
+        const result = await check.check(context);
         return { ...result, checkId: check.id, checkName: check.name };
       } catch (error: any) {
         return {
@@ -183,7 +216,7 @@ export async function runValidation(config: NetworkValidationConfig): Promise<Va
       }
 
       try {
-        const result = await check.check();
+        const result = await check.check(context);
         results.push({ ...result, checkId: check.id, checkName: check.name });
 
         // Short-circuit for 'all' strategy if a check fails
@@ -265,36 +298,76 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
 // ============================================================================
 
 /**
+ * The result shape returned by a check's run function
+ */
+type CheckRunResult = { success: boolean; message: string; details?: Record<string, unknown> };
+
+/**
  * Creates a validation check from an async function.
+ *
+ * The `run` function receives:
+ * - `args`: Your custom static configuration (if provided)
+ * - `context`: Runtime state from the network loop (messages, iteration, etc.)
  *
  * @param options.id - Unique identifier for this check
  * @param options.name - Human-readable name (shown in logs/feedback)
- * @param options.args - Arguments passed to the run function (your custom config)
- * @param options.run - Async function that performs the validation, receives args
+ * @param options.args - Static arguments passed to the run function (your custom config)
+ * @param options.run - Async function that performs the validation
  *
  * @example
  * ```typescript
- * // Run a command with configurable options
+ * // Run a command - use context to vary behavior
  * const testsCheck = createCheck({
  *   id: 'tests',
  *   name: 'Unit Tests',
- *   args: { command: 'npm test', timeout: 60000 },
- *   run: async (args) => {
- *     const result = await exec(args.command, { timeout: args.timeout });
+ *   args: { command: 'npm test' },
+ *   run: async (args, ctx) => {
+ *     // Could run more thorough tests on later iterations
+ *     const cmd = ctx.iteration > 3 ? `${args.command} -- --coverage` : args.command;
+ *     const result = await exec(cmd);
  *     return {
  *       success: result.exitCode === 0,
  *       message: result.exitCode === 0 ? 'Tests passed' : 'Tests failed',
- *       details: { stdout: result.stdout },
+ *       details: { stdout: result.stdout, iteration: ctx.iteration },
  *     };
  *   },
  * });
  *
- * // Check an API endpoint
+ * // Check based on conversation content
+ * const outputCheck = createCheck({
+ *   id: 'output-check',
+ *   name: 'Output Validation',
+ *   run: async (ctx) => {
+ *     // Inspect what the agent actually did
+ *     const lastMessage = ctx.messages.at(-1);
+ *     const hasCode = lastMessage?.content?.includes('```');
+ *     return {
+ *       success: hasCode,
+ *       message: hasCode ? 'Agent produced code' : 'No code in output',
+ *     };
+ *   },
+ * });
+ *
+ * // Dynamic check based on iteration
+ * const progressCheck = createCheck({
+ *   id: 'progress',
+ *   name: 'Progress Check',
+ *   run: async (ctx) => {
+ *     // Fail if we're past iteration 5 and still not done
+ *     if (ctx.iteration > 5 && !ctx.llmSaysComplete) {
+ *       return { success: false, message: 'Taking too long, need human review' };
+ *     }
+ *     return { success: true, message: 'Progress acceptable' };
+ *   },
+ * });
+ *
+ * // With static args for configuration
  * const apiCheck = createCheck({
  *   id: 'api',
  *   name: 'API Health',
  *   args: { url: 'http://localhost:3000/health', expectedStatus: 200 },
- *   run: async (args) => {
+ *   run: async (args, ctx) => {
+ *     console.log(`Checking API on iteration ${ctx.iteration}`);
  *     const res = await fetch(args.url);
  *     return {
  *       success: res.status === args.expectedStatus,
@@ -302,52 +375,31 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
  *     };
  *   },
  * });
- *
- * // No args needed
- * const simpleCheck = createCheck({
- *   id: 'db',
- *   name: 'Database',
- *   run: async () => {
- *     await db.ping();
- *     return { success: true, message: 'Connected' };
- *   },
- * });
- *
- * // Reusable check factory
- * function createEndpointCheck(endpoint: string, name: string) {
- *   return createCheck({
- *     id: `endpoint-${endpoint}`,
- *     name,
- *     args: { endpoint },
- *     run: async (args) => {
- *       const res = await fetch(args.endpoint);
- *       return { success: res.ok, message: res.ok ? 'OK' : `Status ${res.status}` };
- *     },
- *   });
- * }
  * ```
  */
-export function createCheck<TArgs = void>(
-  options: TArgs extends void
+export function createCheck<TArgs = undefined>(
+  options: TArgs extends undefined
     ? {
         id: string;
         name: string;
-        run: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>;
+        run: (context: ValidationContext) => Promise<CheckRunResult>;
       }
     : {
         id: string;
         name: string;
         args: TArgs;
-        run: (args: TArgs) => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>;
+        run: (args: TArgs, context: ValidationContext) => Promise<CheckRunResult>;
       },
 ): ValidationCheck {
   return {
     id: options.id,
     name: options.name,
-    async check() {
+    async check(context: ValidationContext) {
       const start = Date.now();
       try {
-        const result = await ('args' in options ? options.run(options.args) : (options.run as () => Promise<any>)());
+        const result = await ('args' in options
+          ? options.run(options.args, context)
+          : (options.run as (ctx: ValidationContext) => Promise<CheckRunResult>)(context));
         return { ...result, duration: Date.now() - start };
       } catch (error: any) {
         return {
