@@ -5,7 +5,7 @@ import { Agent, tryGenerateWithJsonFallback } from '../../agent/index';
 import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage, MessageListInput } from '../../agent/message-list';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import type { TracingContext } from '../../observability';
+import { InternalSpans, type TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
@@ -1112,6 +1112,10 @@ export async function createNetworkLoop({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      tracingPolicy: {
+        // mark all workflow spans related to network execution as internal
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   });
 
@@ -1267,6 +1271,10 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      tracingPolicy: {
+        // mark all workflow spans related to network execution as internal
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .dountil(networkWorkflow, async ({ inputData }) => {

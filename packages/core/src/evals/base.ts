@@ -504,8 +504,8 @@ class MastraScorer<
         generateReasonPrompt: z.string().optional(),
       }),
       options: {
-        // mark all spans generated as part of the scorer workflow internal
         tracingPolicy: {
+          // mark all spans generated as part of the scorer workflow internal
           internal: InternalSpans.ALL,
         },
         validateInputs: false,

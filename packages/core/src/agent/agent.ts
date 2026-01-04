@@ -33,7 +33,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { EntityType, SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, InternalSpans, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
@@ -383,14 +383,25 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       inputSchema: ProcessorStepSchema,
       outputSchema: ProcessorStepSchema,
       type: 'processor',
-      options: { validateInputs: false },
+      options: {
+        validateInputs: false,
+        tracingPolicy: {
+          // mark all workflow spans related to processor execution as internal
+          internal: InternalSpans.ALL,
+        },
+      },
     });
+
+    console.log('workflow');
+    console.log(workflow.id);
 
     for (const processorOrWorkflow of validProcessors) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
       const step = isProcessorWorkflow(processorOrWorkflow)
         ? processorOrWorkflow
         : createStep(processorOrWorkflow as Exclude<T, ProcessorWorkflow>);
+
+      console.log(`adding step: ${step.id}`);
       workflow = workflow.then(step);
     }
 

@@ -57,8 +57,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     outputSchema: llmIterationOutputSchema,
     options: {
       tracingPolicy: {
-        // mark all workflow spans related to the
-        // VNext execution as internal
+        // mark all workflow spans related to VNext execution as internal
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: params => {

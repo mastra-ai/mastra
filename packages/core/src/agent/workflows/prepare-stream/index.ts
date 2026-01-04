@@ -130,6 +130,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
     steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {
+        // mark all spans generated as part of the prepare-stream workflow internal
         internal: InternalSpans.WORKFLOW,
       },
       validateInputs: false,

@@ -1559,12 +1559,14 @@ export class Workflow<
    * @param options.runId Optional custom run ID, defaults to a random UUID
    * @param options.resourceId Optional resource ID to associate with this run
    * @param options.disableScorers Optional flag to disable scorers for this run
+   * @param options.tracingPolicy
    * @returns A Run instance that can be used to execute the workflow
    */
   async createRun(options?: {
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
+    tracingPolicy?: TracingPolicy;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     if (this.stepFlow.length === 0) {
       throw new Error(

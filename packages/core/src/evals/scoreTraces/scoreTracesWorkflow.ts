@@ -251,6 +251,7 @@ export const scoreTracesWorkflow = createWorkflow({
   steps: [getTraceStep],
   options: {
     tracingPolicy: {
+      // mark all workflow spans related to scoring execution as internal
       internal: InternalSpans.ALL,
     },
     validateInputs: false,
