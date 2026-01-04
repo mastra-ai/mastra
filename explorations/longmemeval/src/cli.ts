@@ -115,6 +115,9 @@ program
       if (options.subset) {
         console.log(chalk.gray(`Subset: ${options.subset} questions`));
       }
+      if (options.offset) {
+        console.log(chalk.gray(`Offset: skipping first ${options.offset} questions`));
+      }
       if (options.questionId) {
         console.log(chalk.gray(`Question ID: ${options.questionId}`));
       }
@@ -187,6 +190,7 @@ program
         memoryConfig: options.memoryConfig,
         outputDir: options.output,
         subset: options.subset,
+        offset: options.offset,
         concurrency: options.concurrency,
         questionId: options.questionId,
         resumeFromMessageId: options.resumeFromMessageId,
@@ -218,11 +222,25 @@ program
   .option('-o, --output <dir>', 'Output directory for results', './results')
   .option('--prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
   .option('--subset <n>', 'Run on subset of n questions', parseInt)
+  .option('--offset <n>', 'Skip first n questions when using --subset', parseInt)
   .option('--concurrency <n>', 'Number of parallel requests (default: 5)', parseInt)
   .option('--question-id <id>', 'Focus on a specific question by ID')
   .action(async options => {
     try {
       console.log(chalk.blue('\n🚀 LongMemEval Benchmark Runner\n'));
+      console.log(chalk.gray(`Dataset: ${options.dataset}`));
+      console.log(chalk.gray(`Model: ${options.model}`));
+      console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
+      if (options.subset) {
+        console.log(chalk.gray(`Subset: ${options.subset} questions`));
+      }
+      if (options.offset) {
+        console.log(chalk.gray(`Offset: skipping first ${options.offset} questions`));
+      }
+      if (options.questionId) {
+        console.log(chalk.gray(`Question ID: ${options.questionId}`));
+      }
+      console.log();
 
       // Check for OpenAI API key
       if (!process.env.OPENAI_API_KEY) {
@@ -248,6 +266,7 @@ program
         preparedDataDir: options.preparedData,
         outputDir: options.output,
         subset: options.subset,
+        offset: options.offset,
         concurrency: options.concurrency,
         questionId: options.questionId,
       });

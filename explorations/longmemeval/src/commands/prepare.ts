@@ -27,6 +27,7 @@ export interface PrepareOptions {
   memoryConfig: MemoryConfigType;
   outputDir?: string;
   subset?: number;
+  offset?: number;
   concurrency?: number;
   questionId?: string;
   resumeFromMessageId?: string;
@@ -81,9 +82,16 @@ export class PrepareCommand {
         throw new Error(`Question with ID "${options.questionId}" not found in dataset`);
       }
       console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
-    } else if (options.subset) {
-      // Apply subset if requested
-      questionsToProcess = questions.slice(0, options.subset);
+    } else {
+      // Apply offset and subset if requested
+      const offset = options.offset || 0;
+      if (offset > 0) {
+        questionsToProcess = questions.slice(offset);
+        console.log(chalk.gray(`Skipping first ${offset} questions`));
+      }
+      if (options.subset) {
+        questionsToProcess = questionsToProcess.slice(0, options.subset);
+      }
     }
 
     console.log(

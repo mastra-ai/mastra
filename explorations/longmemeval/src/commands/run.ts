@@ -23,6 +23,7 @@ export interface RunOptions {
   preparedDataDir?: string;
   outputDir?: string;
   subset?: number;
+  offset?: number;
   concurrency?: number;
   questionId?: string;
 }
@@ -132,12 +133,21 @@ export class RunCommand {
         throw new Error(`Question with ID "${options.questionId}" not found in prepared data`);
       }
       console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
-    } else if (options.subset) {
-      // Apply subset if requested
-      questionsToProcess = preparedQuestions.slice(0, options.subset);
-      console.log(
-        chalk.gray(`\nApplying subset: ${options.subset} questions from ${preparedQuestions.length} total\n`),
-      );
+    } else {
+      // Apply offset and subset if requested
+      const offset = options.offset || 0;
+      if (offset > 0) {
+        questionsToProcess = preparedQuestions.slice(offset);
+        console.log(chalk.gray(`Skipping first ${offset} questions`));
+      }
+      if (options.subset) {
+        questionsToProcess = questionsToProcess.slice(0, options.subset);
+      }
+      if (offset > 0 || options.subset) {
+        console.log(
+          chalk.gray(`\nProcessing questions ${offset + 1}-${offset + questionsToProcess.length} of ${preparedQuestions.length} total\n`),
+        );
+      }
     }
 
     console.log(
