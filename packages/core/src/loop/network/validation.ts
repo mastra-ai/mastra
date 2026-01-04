@@ -267,77 +267,87 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
 /**
  * Creates a validation check from an async function.
  *
- * The function you provide should return `{ success: boolean, message: string }`.
- * Optionally include `details` for additional context shown to the LLM on failure.
+ * @param options.id - Unique identifier for this check
+ * @param options.name - Human-readable name (shown in logs/feedback)
+ * @param options.args - Arguments passed to the run function (your custom config)
+ * @param options.run - Async function that performs the validation, receives args
  *
  * @example
  * ```typescript
- * // Run shell commands
+ * // Run a command with configurable options
  * const testsCheck = createCheck({
  *   id: 'tests',
  *   name: 'Unit Tests',
- *   run: async () => {
- *     const { exitCode, stdout, stderr } = await $`npm test`;
+ *   args: { command: 'npm test', timeout: 60000 },
+ *   run: async (args) => {
+ *     const result = await exec(args.command, { timeout: args.timeout });
  *     return {
- *       success: exitCode === 0,
- *       message: exitCode === 0 ? 'All tests passed' : 'Tests failed',
- *       details: { stdout, stderr },
+ *       success: result.exitCode === 0,
+ *       message: result.exitCode === 0 ? 'Tests passed' : 'Tests failed',
+ *       details: { stdout: result.stdout },
  *     };
  *   },
  * });
  *
- * // Check an API
+ * // Check an API endpoint
  * const apiCheck = createCheck({
- *   id: 'api-health',
+ *   id: 'api',
  *   name: 'API Health',
- *   run: async () => {
- *     const res = await fetch('http://localhost:3000/health');
+ *   args: { url: 'http://localhost:3000/health', expectedStatus: 200 },
+ *   run: async (args) => {
+ *     const res = await fetch(args.url);
  *     return {
- *       success: res.ok,
- *       message: res.ok ? 'API healthy' : `API returned ${res.status}`,
+ *       success: res.status === args.expectedStatus,
+ *       message: res.ok ? 'API healthy' : `Got ${res.status}`,
  *     };
  *   },
  * });
  *
- * // Check database
- * const dbCheck = createCheck({
+ * // No args needed
+ * const simpleCheck = createCheck({
  *   id: 'db',
  *   name: 'Database',
  *   run: async () => {
- *     await db.query('SELECT 1');
+ *     await db.ping();
  *     return { success: true, message: 'Connected' };
  *   },
  * });
  *
- * // Check file exists
- * const fileCheck = createCheck({
- *   id: 'dist-exists',
- *   name: 'Build Output',
- *   run: async () => {
- *     const exists = await fs.access('./dist/index.js').then(() => true).catch(() => false);
- *     return {
- *       success: exists,
- *       message: exists ? 'Build output exists' : 'Build output missing',
- *     };
- *   },
- * });
+ * // Reusable check factory
+ * function createEndpointCheck(endpoint: string, name: string) {
+ *   return createCheck({
+ *     id: `endpoint-${endpoint}`,
+ *     name,
+ *     args: { endpoint },
+ *     run: async (args) => {
+ *       const res = await fetch(args.endpoint);
+ *       return { success: res.ok, message: res.ok ? 'OK' : `Status ${res.status}` };
+ *     },
+ *   });
+ * }
  * ```
  */
-export function createCheck(options: {
-  /** Unique identifier for this check */
-  id: string;
-  /** Human-readable name (shown in logs/feedback) */
-  name: string;
-  /** Async function that performs the validation */
-  run: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>;
-}): ValidationCheck {
+export function createCheck<TArgs = void>(
+  options: TArgs extends void
+    ? {
+        id: string;
+        name: string;
+        run: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>;
+      }
+    : {
+        id: string;
+        name: string;
+        args: TArgs;
+        run: (args: TArgs) => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>;
+      },
+): ValidationCheck {
   return {
     id: options.id,
     name: options.name,
     async check() {
       const start = Date.now();
       try {
-        const result = await options.run();
+        const result = await ('args' in options ? options.run(options.args) : (options.run as () => Promise<any>)());
         return { ...result, duration: Date.now() - start };
       } catch (error: any) {
         return {
