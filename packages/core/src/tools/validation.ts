@@ -1,11 +1,16 @@
 import type { z } from 'zod';
+import { isStandardSchema, type StandardSchemaV1 } from '../types/standard-schema';
 import type { ZodLikeSchema } from '../types/zod-compat';
 import { isZodArray, isZodObject } from '../utils/zod-utils';
 
+/**
+ * Generic validation error interface that works with both Zod and Standard Schema.
+ */
 export interface ValidationError<T = any> {
   error: true;
   message: string;
-  validationErrors: z.ZodFormattedError<T>;
+  /** Zod-formatted errors for backward compatibility, or Standard Schema issues */
+  validationErrors: z.ZodFormattedError<T> | ReadonlyArray<StandardSchemaV1.Issue>;
 }
 
 /**
@@ -27,9 +32,36 @@ function truncateForLogging(data: unknown, maxLength: number = 200): string {
 }
 
 /**
- * Validates raw suspend data against a Zod schema.
+ * Helper function to check if a schema has Zod's safeParse method.
+ */
+function hasZodSafeParse(schema: unknown): schema is { safeParse: (data: unknown) => any } {
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'safeParse' in schema &&
+    typeof (schema as any).safeParse === 'function'
+  );
+}
+
+/**
+ * Formats Standard Schema issues into a human-readable error message.
+ */
+function formatStandardSchemaIssues(issues: ReadonlyArray<StandardSchemaV1.Issue>): string {
+  return issues
+    .map(issue => {
+      const path =
+        issue.path
+          ?.map(segment => (typeof segment === 'object' && 'key' in segment ? String(segment.key) : String(segment)))
+          .join('.') || 'root';
+      return `- ${path}: ${issue.message}`;
+    })
+    .join('\n');
+}
+
+/**
+ * Validates raw suspend data against a schema (Zod or Standard Schema).
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against (Zod or Standard Schema)
  * @param suspendData The raw suspend data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
@@ -40,29 +72,64 @@ export function validateToolSuspendData<T = any>(
   toolId?: string,
 ): { data: T | unknown; error?: ValidationError<T> } {
   // If no schema, return suspend data as-is
-  if (!schema || !('safeParse' in schema)) {
+  if (!schema) {
     return { data: suspendData };
   }
 
-  // Validate the input directly - no unwrapping needed in v1.0
-  const validation = schema.safeParse(suspendData);
+  // Check for Zod's safeParse first (Zod v3.25+ also implements Standard Schema,
+  // but we prefer Zod's safeParse for better error handling)
+  if (hasZodSafeParse(schema)) {
+    // Validate the input directly - no unwrapping needed in v1.0
+    const validation = schema.safeParse(suspendData);
 
-  if (validation.success) {
-    return { data: validation.data };
+    if (validation.success) {
+      return { data: validation.data };
+    }
+
+    // Validation failed, return error
+    const errorMessages = validation.error.issues
+      .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+      .join('\n');
+
+    const error: ValidationError<T> = {
+      error: true,
+      message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
+      validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    };
+
+    return { data: suspendData, error };
   }
 
-  // Validation failed, return error
-  const errorMessages = validation.error.issues
-    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-    .join('\n');
+  // Check if it's a Standard Schema (has ~standard.validate) without Zod's safeParse
+  if (isStandardSchema(schema)) {
+    // Standard Schema validate can be async, but we need sync here
+    // Most implementations return sync results, but we handle async just in case
+    const result = schema['~standard'].validate(suspendData);
 
-  const error: ValidationError<T> = {
-    error: true,
-    message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
-  };
+    // Handle both sync and async results
+    if (result instanceof Promise) {
+      // For async validation, we can't handle it synchronously
+      // This is a limitation - callers should use async version if needed
+      console.warn('Standard Schema async validation not supported in sync context, skipping validation');
+      return { data: suspendData };
+    }
 
-  return { data: suspendData, error };
+    if (!result.issues) {
+      return { data: result.value as T };
+    }
+
+    const errorMessages = formatStandardSchemaIssues(result.issues);
+    const error: ValidationError<T> = {
+      error: true,
+      message: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(suspendData)}`,
+      validationErrors: result.issues,
+    };
+
+    return { data: suspendData, error };
+  }
+
+  // No recognizable schema validation method - return data as-is
+  return { data: suspendData };
 }
 
 /**
@@ -125,9 +192,9 @@ function convertUndefinedToNull(input: unknown): unknown {
 }
 
 /**
- * Validates raw input data against a Zod schema.
+ * Validates raw input data against a schema (Zod or Standard Schema).
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against (Zod or Standard Schema)
  * @param input The raw input data to validate
  * @param toolId Optional tool ID for better error messages
  * @returns The validated data or a validation error
@@ -138,48 +205,93 @@ export function validateToolInput<T = any>(
   toolId?: string,
 ): { data: T | unknown; error?: ValidationError<T> } {
   // If no schema, return input as-is
-  if (!schema || !('safeParse' in schema)) {
+  if (!schema) {
     return { data: input };
   }
 
-  // Normalize undefined/null input to appropriate default for the schema type
-  // This handles LLMs that send undefined instead of {} or [] for optional parameters
-  let normalizedInput = normalizeNullishInput(schema, input);
+  // Check for Zod's safeParse first (Zod v3.25+ also implements Standard Schema,
+  // but we prefer Zod's safeParse for better normalization handling)
+  if (hasZodSafeParse(schema)) {
+    // Normalize undefined/null input to appropriate default for the schema type
+    // This handles LLMs that send undefined instead of {} or [] for optional parameters
+    let normalizedInput = normalizeNullishInput(schema, input);
 
-  // Convert undefined values to null recursively (GitHub #11457)
-  // This is needed because OpenAI compat layers convert .optional() to .nullable()
-  // for strict mode compliance. When fields are omitted (undefined), we convert them
-  // to null so the schema validation passes. The schema's transform will then convert
-  // null back to undefined to match the original .optional() semantics.
-  normalizedInput = convertUndefinedToNull(normalizedInput);
+    // Convert undefined values to null recursively (GitHub #11457)
+    // This is needed because OpenAI compat layers convert .optional() to .nullable()
+    // for strict mode compliance. When fields are omitted (undefined), we convert them
+    // to null so the schema validation passes. The schema's transform will then convert
+    // null back to undefined to match the original .optional() semantics.
+    normalizedInput = convertUndefinedToNull(normalizedInput);
 
-  // Validate the normalized input
-  const validation = schema.safeParse(normalizedInput);
+    // Validate the normalized input
+    const validation = schema.safeParse(normalizedInput);
 
-  if (validation.success) {
-    return { data: validation.data };
+    if (validation.success) {
+      return { data: validation.data };
+    }
+
+    // Validation failed, return error
+    const errorMessages = validation.error.issues
+      .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+      .join('\n');
+
+    const error: ValidationError<T> = {
+      error: true,
+      message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+      validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    };
+
+    return { data: input, error };
   }
 
-  // Validation failed, return error
-  const errorMessages = validation.error.issues
-    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-    .join('\n');
+  // Check if it's a Standard Schema (has ~standard.validate) without Zod's safeParse
+  // This handles non-Zod Standard Schema implementations like Valibot, ArkType, etc.
+  if (isStandardSchema(schema)) {
+    // For Standard Schema, we still need to handle undefined -> {} normalization
+    // This is needed for LLMs that send undefined for optional parameters
+    let normalizedInput = input;
+    if (input === undefined || input === null) {
+      normalizedInput = {};
+    }
 
-  const error: ValidationError<T> = {
-    error: true,
-    message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
-  };
+    // Convert undefined values to null recursively (GitHub #11457)
+    normalizedInput = convertUndefinedToNull(normalizedInput);
 
-  return { data: input, error };
+    // Standard Schema validate can be async, but we need sync here
+    const result = schema['~standard'].validate(normalizedInput);
+
+    // Handle both sync and async results
+    if (result instanceof Promise) {
+      // For async validation, we can't handle it synchronously
+      console.warn('Standard Schema async validation not supported in sync context, skipping validation');
+      return { data: normalizedInput };
+    }
+
+    if (!result.issues) {
+      return { data: result.value as T };
+    }
+
+    const errorMessages = formatStandardSchemaIssues(result.issues);
+    const error: ValidationError<T> = {
+      error: true,
+      message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+      validationErrors: result.issues,
+    };
+
+    return { data: input, error };
+  }
+
+  // No recognizable schema validation method - return input as-is
+  return { data: input };
 }
 
 /**
- * Validates tool output data against a Zod schema.
+ * Validates tool output data against a schema (Zod or Standard Schema).
  *
- * @param schema The Zod schema to validate against
+ * @param schema The schema to validate against (Zod or Standard Schema)
  * @param output The output data to validate
  * @param toolId Optional tool ID for better error messages
+ * @param suspendCalled Whether suspend was called (skips validation if true)
  * @returns The validated data or a validation error
  */
 export function validateToolOutput<T = any>(
@@ -188,28 +300,61 @@ export function validateToolOutput<T = any>(
   toolId?: string,
   suspendCalled?: boolean,
 ): { data: T | unknown; error?: ValidationError<T> } {
-  // If no schema, return output as-is
-  if (!schema || !('safeParse' in schema) || suspendCalled) {
+  // If no schema or suspend was called, return output as-is
+  if (!schema || suspendCalled) {
     return { data: output };
   }
 
-  // Validate the output
-  const validation = schema.safeParse(output);
+  // Check for Zod's safeParse first (Zod v3.25+ also implements Standard Schema,
+  // but we prefer Zod's safeParse for better error handling)
+  if (hasZodSafeParse(schema)) {
+    // Validate the output
+    const validation = schema.safeParse(output);
 
-  if (validation.success) {
-    return { data: validation.data };
+    if (validation.success) {
+      return { data: validation.data };
+    }
+
+    // Validation failed, return error
+    const errorMessages = validation.error.issues
+      .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+      .join('\n');
+
+    const error: ValidationError<T> = {
+      error: true,
+      message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
+      validationErrors: validation.error.format() as z.ZodFormattedError<T>,
+    };
+
+    return { data: output, error };
   }
 
-  // Validation failed, return error
-  const errorMessages = validation.error.issues
-    .map((e: z.ZodIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
-    .join('\n');
+  // Check if it's a Standard Schema (has ~standard.validate) without Zod's safeParse
+  if (isStandardSchema(schema)) {
+    // Standard Schema validate can be async, but we need sync here
+    const result = schema['~standard'].validate(output);
 
-  const error: ValidationError<T> = {
-    error: true,
-    message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
-    validationErrors: validation.error.format() as z.ZodFormattedError<T>,
-  };
+    // Handle both sync and async results
+    if (result instanceof Promise) {
+      // For async validation, we can't handle it synchronously
+      console.warn('Standard Schema async validation not supported in sync context, skipping validation');
+      return { data: output };
+    }
 
-  return { data: output, error };
+    if (!result.issues) {
+      return { data: result.value as T };
+    }
+
+    const errorMessages = formatStandardSchemaIssues(result.issues);
+    const error: ValidationError<T> = {
+      error: true,
+      message: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned invalid output:\n${errorMessages}\n\nReturned output: ${truncateForLogging(output)}`,
+      validationErrors: result.issues,
+    };
+
+    return { data: output, error };
+  }
+
+  // No recognizable schema validation method - return output as-is
+  return { data: output };
 }

@@ -1,6 +1,13 @@
 # @mastra/schema-compat
 
-Schema compatibility layer for Mastra.ai that provides compatibility fixes for different AI model providers when using Zod schemas with tools.
+Schema compatibility layer for Mastra.ai that provides compatibility fixes for different AI model providers when using schemas with tools.
+
+## Features
+
+- **Standard Schema Support**: Works with any [Standard Schema](https://standardschema.dev/) compatible library (Zod, Valibot, ArkType, etc.)
+- **JSON Schema First-Class**: Use plain JSON Schema directly without needing a validation library
+- **Provider Compatibility**: Automatic schema transformations for different AI providers
+- **Bidirectional Conversion**: Convert between Zod, JSON Schema, and AI SDK Schema formats
 
 ## Installation
 
@@ -9,6 +16,49 @@ pnpm add @mastra/schema-compat
 ```
 
 ## Usage
+
+### Standard Schema Support
+
+Mastra now supports any validation library that implements the [Standard Schema](https://standardschema.dev/) specification. This means you can use:
+
+- **Zod** (v3.25+)
+- **Valibot**
+- **ArkType**
+- **And more...**
+
+```typescript
+import { convertAnySchemaToAISDKSchema, isStandardSchema } from '@mastra/schema-compat';
+
+// Works with any Standard Schema compatible library
+const schema = yourValidationLibrary.object({
+  name: yourValidationLibrary.string(),
+  age: yourValidationLibrary.number(),
+});
+
+if (isStandardSchema(schema)) {
+  const aiSchema = convertAnySchemaToAISDKSchema(schema);
+}
+```
+
+### JSON Schema Support
+
+You can also use plain JSON Schema directly:
+
+```typescript
+import { convertAnySchemaToAISDKSchema, jsonSchema } from '@mastra/schema-compat';
+
+const myJsonSchema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string' },
+    age: { type: 'number' },
+  },
+  required: ['name'],
+};
+
+// Convert to AI SDK Schema with validation
+const aiSchema = convertAnySchemaToAISDKSchema(myJsonSchema);
+```
 
 ### Basic Usage
 
@@ -111,10 +161,18 @@ const backToZod = convertSchemaToZod(aiSdkSchema);
 
 - `applyCompatLayer(options)` - Process schema with automatic compatibility detection
 - `convertZodSchemaToAISDKSchema(zodSchema, target?)` - Convert Zod schema to AI SDK Schema
-- `convertSchemaToZod(schema)` - Convert AI SDK Schema to Zod schema
+- `convertStandardSchemaToAISDKSchema(schema, target?)` - Convert Standard Schema to AI SDK Schema
+- `convertAnySchemaToAISDKSchema(schema, target?)` - Convert any supported schema format to AI SDK Schema
+- `convertSchemaToZod(schema)` - Convert AI SDK Schema, JSON Schema, or Standard JSON Schema to Zod
+- `isZodType(value)` - Check if a value is a Zod schema
+- `isStandardSchema(value)` - Check if a value implements Standard Schema
+- `isStandardJSONSchema(value)` - Check if a value implements Standard JSON Schema
 
 ### Types and Constants
 
+- `StandardSchemaV1` - Standard Schema V1 interface (from [standardschema.dev](https://standardschema.dev/))
+- `StandardJSONSchemaV1` - Standard JSON Schema V1 interface for schemas that can generate JSON Schema
+- `AnySchema` - Union type of all supported schema formats
 - `StringCheckType`, `NumberCheckType`, `ArrayCheckType` - Check types for validation
 - `UnsupportedZodType`, `SupportedZodType`, `AllZodType` - Zod type classifications
 - `ZodShape`, `ShapeKey`, `ShapeValue` - Utility types for Zod schemas
