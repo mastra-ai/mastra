@@ -119,23 +119,34 @@ const iterationScorer = createScorer({
 
 ### LLM-based Scorer
 
+Use this when you want LLM evaluation alongside code scorers:
+
 ```typescript
-const qualityScorer = createScorer({
-  id: 'code-quality',
-  description: 'LLM evaluates code quality',
+const taskCompleteScorer = createScorer({
+  id: 'task-complete',
+  description: 'LLM evaluates if task is complete',
   judge: {
     model: openai('gpt-4o-mini'),
-    instructions: 'You evaluate code quality.',
+    instructions: 'You evaluate task completion.',
   },
 }).generateScore({
-  description: 'Evaluate if the code meets quality standards',
-  createPrompt: ({ run }) => `
-    Evaluate this code change:
-    ${run.output}
-    
-    Return 1 if it's high quality, 0 if not.
-  `,
+  description: 'Evaluate if the task is complete',
+  createPrompt: ({ run }) => {
+    const ctx = run.input; // CompletionContext
+    return `
+      Original task: ${ctx.originalTask}
+      
+      Latest result: ${ctx.primitiveResult}
+      
+      Is this task complete? Return 1 if yes, 0 if no.
+    `;
+  },
 });
+
+// Use LLM scorer + code scorer together
+completion: {
+  scorers: [taskCompleteScorer, testsScorer],
+}
 ```
 
 ---
@@ -163,18 +174,30 @@ interface CompletionConfig {
 
 ---
 
+## How Completion Works
+
+| Config | Completion Determined By |
+|--------|-------------------------|
+| No `completion.scorers` | Built-in LLM evaluation (default) |
+| `completion.scorers: [...]` | Only those scorers (LLM skipped) |
+
+When you provide scorers, they **completely replace** the default LLM completion check.
+
+---
+
 ## Usage Patterns
 
 ### 1. Default: LLM-only completion
 
 ```typescript
-// No config - uses built-in LLM evaluation
+// No scorers - uses built-in LLM evaluation
 await agent.network('Build a landing page');
 ```
 
-### 2. Code scorers only
+### 2. Code scorers only (replaces LLM)
 
 ```typescript
+// Scorers replace the default LLM check entirely
 await agent.network('Migrate to Vitest', {
   completion: {
     scorers: [testsScorer, buildScorer],

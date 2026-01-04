@@ -252,6 +252,7 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
+  completion,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -263,6 +264,7 @@ export async function createNetworkLoop({
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
   };
+  completion?: CompletionConfig;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -320,8 +322,11 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
       });
 
-      if (inputData.primitiveType !== 'none' && inputData?.result) {
-        // Default LLM-based completion evaluation
+      // Check if scorers are configured - they replace the default LLM completion check
+      const hasScorers = completion?.scorers && completion.scorers.length > 0;
+
+      if (inputData.primitiveType !== 'none' && inputData?.result && !hasScorers) {
+        // Default LLM-based completion evaluation (only when no scorers configured)
         const completionPrompt = `
                           The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
                           This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
@@ -1266,6 +1271,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
+    completion: validation,
   });
 
   // Validation step: runs external checks when LLM says task is complete
@@ -1286,15 +1292,18 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      // If no scorers configured or LLM didn't say complete, pass through
       const scorers = validation?.scorers || [];
-      if (scorers.length === 0 || !inputData.isComplete) {
+      
+      // If no scorers configured, pass through (LLM decision is final)
+      if (scorers.length === 0) {
         return {
           ...inputData,
           validationPassed: undefined,
           validationFeedback: undefined,
         };
       }
+      
+      // Scorers are configured - they determine completion (not the LLM)
 
       // Build completion context with relevant state
       const memory = await routingAgent.getMemory({ requestContext });

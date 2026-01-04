@@ -324,6 +324,34 @@ export const formatCheckFeedback = formatCompletionFeedback;
 export const formatValidationFeedback = formatCompletionFeedback;
 
 // ============================================================================
+// Default Completion Scorer
+// ============================================================================
+
+/**
+ * Creates an LLM-based completion scorer.
+ * 
+ * Use this when you want to include the default LLM completion check
+ * alongside other scorers, or customize the LLM evaluation.
+ * 
+ * @example
+ * ```typescript
+ * import { createCompletionScorer } from '@mastra/core/loop';
+ * import { openai } from '@ai-sdk/openai';
+ * 
+ * const llmScorer = createCompletionScorer({
+ *   model: openai('gpt-4o-mini'),
+ *   instructions: 'Only mark complete when all tests pass',
+ * });
+ * 
+ * // Use with other scorers
+ * completion: {
+ *   scorers: [llmScorer, testsScorer],
+ * }
+ * ```
+ */
+export { createScorer } from '../../evals/base';
+
+// ============================================================================
 // Tools
 // ============================================================================
 
