@@ -898,6 +898,7 @@ export class PrepareCommand {
       improvedQuestion: question.improved_question, // Clarified version for vague/ambiguous questions
       improvedAnswer: question.improved_answer, // Expected answer for improved question (if different)
       improvementNote: question.improvement_note, // Notes about why this question failed (for tracking)
+      requiresRetry: question.requires_retry, // If true, retry failed evaluations once (for flaky eval agent)
       answer: question.answer,
       questionDate: question.question_date,
       resourceId,

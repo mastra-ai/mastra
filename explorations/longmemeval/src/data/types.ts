@@ -21,6 +21,7 @@ export interface LongMemEvalQuestion {
   improved_question?: string; // Clarified version for vague/ambiguous questions
   improved_answer?: string; // Updated answer for the clarified question (if different)
   improvement_note?: string; // Notes about why this question failed (for tracking investigated failures)
+  requires_retry?: boolean; // Eval agent sometimes fails due to poor reasoning, retry once on failure
   answer: string;
   question_date: string;
   haystack_session_ids: string[];

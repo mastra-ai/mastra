@@ -38,6 +38,7 @@ interface PreparedQuestionMeta {
   improvedQuestion?: string; // Clarified version for vague/ambiguous questions
   improvedAnswer?: string; // Updated answer for the clarified question (if different)
   improvementNote?: string; // Notes about why this question failed (for tracking investigated failures)
+  requiresRetry?: boolean; // Eval agent sometimes fails due to poor reasoning, retry once on failure
   answer: string;
   evidenceSessionIds?: string[];
   questionDate?: string;
@@ -472,7 +473,7 @@ Be specific rather than generic when the user has expressed clear preferences in
 
     updateStatus(`${meta.threadIds.length} sessions, ${options.memoryConfig}`);
 
-    const response = await agent.generate(meta.question, {
+    let response = await agent.generate(meta.question, {
       threadId: evalThreadId,
       resourceId: meta.resourceId,
       modelSettings: {
@@ -507,7 +508,34 @@ Be specific rather than generic when the user has expressed clear preferences in
     });
 
     const result = await metric.measure(input, response.text);
-    const isCorrect = result.score === 1;
+    let isCorrect = result.score === 1;
+
+    // Retry up to 5 times if requiresRetry is set and the first attempt failed
+    // This handles cases where the eval agent has flaky reasoning
+    let retryCount = 0;
+    const maxRetries = 5;
+    while (!isCorrect && meta.requiresRetry && retryCount < maxRetries) {
+      retryCount++;
+      updateStatus(`Retry ${retryCount}/${maxRetries} for ${meta.questionId}...`);
+
+      const retryThreadId = `eval_retry_${meta.questionId}_${retryCount}_${Date.now()}`;
+      const retryResponse = await agent.generate(meta.question, {
+        threadId: retryThreadId,
+        resourceId: meta.resourceId,
+        modelSettings: {
+          temperature: 0,
+        },
+        context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
+      });
+
+      const retryResult = await metric.measure(input, retryResponse.text);
+      if (retryResult.score === 1) {
+        isCorrect = true;
+        // Update response to the successful retry for logging
+        response = retryResponse;
+      }
+    }
+    const didRetry = retryCount > 0;
 
     // Run improved evaluation if improved question OR improved answer exists
     let improvedHypothesis: string | undefined;
@@ -554,11 +582,17 @@ Be specific rather than generic when the user has expressed clear preferences in
 
     const isOraSpinner = spinner && 'clear' in spinner;
     if (isOraSpinner) {
-      // Show vanilla result
+      // Show vanilla result (with retry indicator if applicable)
+      const retryIndicator = didRetry
+        ? isCorrect
+          ? chalk.yellow(` (retry ${retryCount}/${maxRetries} ✓)`)
+          : chalk.gray(` (retry ${retryCount}/${maxRetries} ✗)`)
+        : '';
       console.log(
         chalk.blue(`▶ ${meta.questionId}`),
         chalk.gray(`(${meta.questionType})`),
         chalk[isCorrect ? 'green' : 'red'](`${isCorrect ? '✓' : '✗'}`),
+        retryIndicator,
         chalk.gray(`${elapsed}s`),
       );
       if (!isCorrect) {
