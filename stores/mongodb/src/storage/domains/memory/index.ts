@@ -284,6 +284,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
+      // Metadata filter (dot notation for nested fields)
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query[`metadataJson.${key}`] = value;
+        }
+      }
+
       // Get total count
       const total = await collection.countDocuments(query);
 

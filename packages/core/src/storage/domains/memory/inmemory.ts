@@ -129,6 +129,17 @@ export class InMemoryMemory extends MemoryStorage {
     // Apply date filtering
     threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
 
+    // Apply metadata filtering
+    if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+      threadMessages = threadMessages.filter((msg: any) => {
+        if (!msg.metadataJson) return false;
+        for (const [key, value] of Object.entries(filter.metadata!)) {
+          if (msg.metadataJson[key] !== value) return false;
+        }
+        return true;
+      });
+    }
+
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
       const isDateField = field === 'createdAt' || field === 'updatedAt';

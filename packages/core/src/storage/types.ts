@@ -91,6 +91,12 @@ export type StorageListMessagesInput = {
        */
       endExclusive?: boolean;
     };
+    /**
+     * Filter messages by metadata using JSONB containment.
+     * Messages matching ALL specified key-value pairs will be returned.
+     * Uses the metadataJson column for efficient filtering.
+     */
+    metadata?: Record<string, unknown>;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
 };

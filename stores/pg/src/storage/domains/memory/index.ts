@@ -671,6 +671,12 @@ export class MemoryPG extends MemoryStorage {
         queryParams.push(filter.dateRange.end);
       }
 
+      // Metadata filter (JSONB containment)
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        conditions.push(`"metadataJson" @> $${paramIndex++}`);
+        queryParams.push(JSON.stringify(filter.metadata));
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;

@@ -420,6 +420,18 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         filter?.dateRange,
       );
 
+      // Apply metadata filter
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => {
+          const metadata = msg.content?.metadata;
+          if (!metadata) return false;
+          for (const [key, value] of Object.entries(filter.metadata!)) {
+            if (metadata[key] !== value) return false;
+          }
+          return true;
+        });
+      }
+
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
         const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];

@@ -707,6 +707,14 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(endDate);
       }
 
+      // Metadata filter using JSON functions
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          query += ` AND json_extract(metadataJson, '$.${key}') = ?`;
+          queryParams.push(typeof value === 'object' ? JSON.stringify(value) : value);
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       query += ` ORDER BY "${field}" ${direction}`;
@@ -754,6 +762,14 @@ export class MemoryStorageD1 extends MemoryStorage {
         const endOp = dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
+      }
+
+      // Metadata filter using JSON functions
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          countQuery += ` AND json_extract(metadataJson, '$.${key}') = ?`;
+          countParams.push(typeof value === 'object' ? JSON.stringify(value) : value);
+        }
       }
 
       const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {

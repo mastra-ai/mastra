@@ -242,6 +242,15 @@ export class MemoryLibSQL extends MemoryStorage {
         );
       }
 
+      // Metadata filter using JSON functions
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push(`json_extract("metadataJson", '$.${key}') = ?`);
+          const serializedValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+          queryParams.push(serializedValue);
+        }
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count

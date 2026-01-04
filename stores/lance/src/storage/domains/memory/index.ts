@@ -380,6 +380,25 @@ export class StoreMemoryLance extends MemoryStorage {
       const query = table.query().where(whereClause);
       let allRecords = await query.toArray();
 
+      // Apply metadata filter (post-fetch since LanceDB doesn't have native JSON query support)
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        allRecords = allRecords.filter((record: any) => {
+          let metadata = record.metadataJson;
+          if (!metadata) return false;
+          if (typeof metadata === 'string') {
+            try {
+              metadata = JSON.parse(metadata);
+            } catch {
+              return false;
+            }
+          }
+          for (const [key, value] of Object.entries(filter.metadata!)) {
+            if (metadata[key] !== value) return false;
+          }
+          return true;
+        });
+      }
+
       // Sort records
       allRecords.sort((a, b) => {
         const aValue = field === 'createdAt' ? a.createdAt : a[field];

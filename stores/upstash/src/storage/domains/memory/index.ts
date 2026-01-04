@@ -670,6 +670,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
         filter?.dateRange,
       );
 
+      // Apply metadata filter
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        messagesData = messagesData.filter((msg: MastraDBMessage) => {
+          const metadata = msg.content?.metadata;
+          if (!metadata) return false;
+          for (const [key, value] of Object.entries(filter.metadata!)) {
+            if (metadata[key] !== value) return false;
+          }
+          return true;
+        });
+      }
+
       // Determine sort field and direction, default to ASC (oldest first)
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 

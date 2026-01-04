@@ -270,6 +270,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         dataParams.toDate = endDate;
       }
 
+      // Metadata filter using JSONExtract for each key
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        let metadataIdx = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIdx++}`;
+          dataQuery += ` AND JSONExtractString(metadataJson, {${paramName}Key:String}) = {${paramName}Value:String}`;
+          dataParams[`${paramName}Key`] = key;
+          dataParams[`${paramName}Value`] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
@@ -328,6 +339,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
+      }
+
+      // Metadata filter using JSONExtract for each key
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        let metadataIdx = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIdx++}`;
+          countQuery += ` AND JSONExtractString(metadataJson, {${paramName}Key:String}) = {${paramName}Value:String}`;
+          countParams[`${paramName}Key`] = key;
+          countParams[`${paramName}Value`] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
       }
 
       const countResult = await this.client.query({
