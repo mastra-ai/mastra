@@ -57,8 +57,12 @@ export enum EntityType {
   EVAL = 'eval',
   /** Input Processor */
   INPUT_PROCESSOR = 'input_processor',
+  /** Input Step Processor */
+  INPUT_STEP_PROCESSOR = 'input_step_processor',
   /** Output Processor */
   OUTPUT_PROCESSOR = 'output_processor',
+  /** Output Step Processor */
+  OUTPUT_STEP_PROCESSOR = 'output_step_processor',
   /** Workflow Step */
   WORKFLOW_STEP = 'workflow_step',
   /** Tool */
@@ -233,8 +237,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
  * Processor attributes
  */
 export interface ProcessorRunAttributes extends AIBaseAttributes {
-  /** Processor type (input or output) */
-  processorType: 'input' | 'output';
+  /** Processor executor type (workflow or legacy) */
+  processorExecutor?: 'workflow' | 'legacy';
   /** Processor index in the agent */
   processorIndex?: number;
   /** MessageList mutations performed by this processor */
