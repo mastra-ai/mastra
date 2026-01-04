@@ -1,13 +1,13 @@
+import { AuroraDSQLClient } from '@aws/aurora-dsql-node-postgres-connector';
+import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  StoreOperations,
+  createStorageErrorId,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_THREADS,
-  TABLE_MESSAGES,
-  TABLE_TRACES,
-  TABLE_SCORERS,
   TABLE_SPANS,
   TABLE_SCHEMAS,
+  getSqlType as coreSqlType,
+  getDefaultValue as coreDefaultValue,
 } from '@mastra/core/storage';
 import type {
   StorageColumn,
@@ -17,28 +17,153 @@ import type {
   StorageIndexStats,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import type { IDatabase } from 'pg-promise';
-import { splitIntoBatches, DEFAULT_MAX_ROWS_PER_BATCH } from '../../../shared/batch';
-import { withRetry } from '../../../shared/retry';
-import { getSchemaName, getTableName } from '../utils';
+import { Pool } from 'pg';
+import { splitIntoBatches, DEFAULT_MAX_ROWS_PER_BATCH } from '../../shared/batch';
+import { withRetry } from '../../shared/retry';
+import type { DbClient } from '../client';
+import { PoolAdapter } from '../client';
 
-// Re-export the types for convenience
-export type { CreateIndexOptions, IndexInfo, StorageIndexStats };
+// Re-export DbClient for external use
+export type { DbClient } from '../client';
 
-export class StoreOperationsDSQL extends StoreOperations {
-  public client: IDatabase<{}>;
+/**
+ * Configuration for standalone domain usage.
+ * Accepts either:
+ * 1. An existing database client (Pool or PoolAdapter)
+ * 2. Config to create a new pool internally
+ */
+export type DsqlDomainConfig = DsqlDomainClientConfig | DsqlDomainPoolConfig | DsqlDomainRestConfig;
+
+/**
+ * Configuration for standalone domain usage.
+ * Accepts a database client instance.
+ */
+export interface DsqlDomainClientConfig {
+  /** The database client instance */
+  client: DbClient;
+  /** Database schema name */
+  schemaName?: string;
+  /** Skip creation of default indexes */
+  skipDefaultIndexes?: boolean;
+  /** Custom index definitions (filtered by domain's MANAGED_TABLES) */
+  indexes?: CreateIndexOptions[];
+}
+
+/**
+ * Pass an existing pg.Pool
+ */
+export interface DsqlDomainPoolConfig {
+  /** Pre-configured pg.Pool */
+  pool: Pool;
+  /** Optional schema name (defaults to 'public') */
+  schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
+}
+
+/**
+ * Pass config to create a new pg.Pool internally
+ */
+export type DsqlDomainRestConfig = {
+  /** Optional schema name (defaults to 'public') */
+  schemaName?: string;
+  /** When true, default indexes will not be created during initialization */
+  skipDefaultIndexes?: boolean;
+  /** Custom indexes to create for this domain's tables */
+  indexes?: CreateIndexOptions[];
+} & {
+  host: string;
+  database: string;
+  user: string;
+};
+/**
+ * Resolves DsqlDomainConfi to a database client and schema.
+ * Handles creating a new pool if config is provided.
+ */
+export function resolveDsqlConfig(config: DsqlDomainConfig): {
+  client: DbClient;
+  schemaName?: string;
+  skipDefaultIndexes?: boolean;
+  indexes?: CreateIndexOptions[];
+} {
+  // Existing client
+  if ('client' in config) {
+    return {
+      client: config.client,
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
+  }
+
+  // Existing pool
+  if ('pool' in config) {
+    return {
+      client: new PoolAdapter(config.pool),
+      schemaName: config.schemaName,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    };
+  }
+  // Config to create new pool
+  const pool = new Pool({
+    host: config.host,
+    database: config.database,
+    user: config.user,
+    Client: AuroraDSQLClient,
+  });
+  return {
+    client: new PoolAdapter(pool),
+    schemaName: config.schemaName,
+    skipDefaultIndexes: config.skipDefaultIndexes,
+    indexes: config.indexes,
+  };
+}
+
+function getSchemaName(schema?: string) {
+  return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : '"public"';
+}
+
+function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+  const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+  const quotedIndexName = `"${parsedIndexName}"`;
+  const quotedSchemaName = schemaName;
+  return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
+}
+
+/**
+ * Internal config for DsqlDB - accepts already-resolved client
+ */
+export interface DsqlDBInternalConfig {
+  client: DbClient;
+  schemaName?: string;
+  skipDefaultIndexes?: boolean;
+}
+
+// Static map to track schema setup across all DsqlDB instances
+// Key: schemaName, Value: { promise, complete }
+// This prevents race conditions when multiple domains try to create the same schema concurrently
+const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
+
+export class DsqlDB extends MastraBase {
+  public client: DbClient;
   public schemaName?: string;
-  private setupSchemaPromise: Promise<void> | null = null;
-  private schemaSetupComplete: boolean | undefined = undefined;
+  public skipDefaultIndexes?: boolean;
 
-  constructor({ client, schemaName }: { client: IDatabase<{}>; schemaName?: string }) {
-    super();
-    this.client = client;
-    this.schemaName = schemaName;
+  constructor(config: DsqlDBInternalConfig) {
+    super({
+      component: 'STORAGE',
+      name: 'DSQL_DB_LAYER',
+    });
+
+    this.client = config.client;
+    this.schemaName = config.schemaName;
+    this.skipDefaultIndexes = config.skipDefaultIndexes;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    // Use this.schema to scope the check
     const schema = this.schemaName || 'public';
 
     const result = await this.client.oneOrNone(
@@ -55,7 +180,6 @@ export class StoreOperationsDSQL extends StoreOperations {
    */
   private prepareValuesForInsert(record: Record<string, any>, tableName: TABLE_NAMES): any[] {
     return Object.entries(record).map(([key, value]) => {
-      // Get the schema for this table to determine column types
       const schema = TABLE_SCHEMAS[tableName];
       const columnSchema = schema?.[key];
 
@@ -97,12 +221,10 @@ export class StoreOperationsDSQL extends StoreOperations {
       return value.toISOString();
     }
 
-    // Get the schema for this table to determine column types
     const schema = TABLE_SCHEMAS[tableName];
     const columnSchema = schema?.[columnName];
 
     // If the column is TEXT (storing JSON) or was previously JSONB, stringify objects
-    // Aurora DSQL: We store JSON as TEXT and cast to ::jsonb only when filtering
     if (columnSchema?.type === 'jsonb') {
       if (typeof value === 'object') {
         return JSON.stringify(value);
@@ -118,16 +240,22 @@ export class StoreOperationsDSQL extends StoreOperations {
   }
 
   private async setupSchema() {
-    if (!this.schemaName || this.schemaSetupComplete) {
+    if (!this.schemaName) {
       return;
     }
 
-    const schemaName = getSchemaName(this.schemaName);
+    // Use static registry to coordinate schema setup across all DsqlDB instances
+    let registryEntry = schemaSetupRegistry.get(this.schemaName);
+    if (registryEntry?.complete) {
+      return;
+    }
 
-    if (!this.setupSchemaPromise) {
-      this.setupSchemaPromise = (async () => {
+    const quotedSchemaName = getSchemaName(this.schemaName);
+
+    if (!registryEntry?.promise) {
+      const schemaNameCapture = this.schemaName;
+      const setupPromise = (async () => {
         try {
-          // First check if schema exists and we have usage permission
           const schemaExists = await this.client.oneOrNone(
             `
                 SELECT EXISTS (
@@ -135,37 +263,73 @@ export class StoreOperationsDSQL extends StoreOperations {
                   WHERE schema_name = $1
                 )
               `,
-            [this.schemaName],
+            [schemaNameCapture],
           );
 
           if (!schemaExists?.exists) {
             try {
-              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
-              this.logger.info(`Schema "${this.schemaName}" created successfully`);
+              await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName}`);
+              this.logger.info(`Schema "${schemaNameCapture}" created successfully`);
             } catch (error) {
-              this.logger.error(`Failed to create schema "${this.schemaName}"`, { error });
+              this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
               throw new Error(
-                `Unable to create schema "${this.schemaName}". This requires CREATE privilege on the database. ` +
+                `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
                   `Either create the schema manually or grant CREATE privilege to the user.`,
               );
             }
           }
 
-          // If we got here, schema exists and we can use it
-          this.schemaSetupComplete = true;
-          this.logger.debug(`Schema "${schemaName}" is ready for use`);
+          // Mark as complete in the registry
+          const entry = schemaSetupRegistry.get(schemaNameCapture);
+          if (entry) {
+            entry.complete = true;
+          }
+          this.logger.debug(`Schema "${quotedSchemaName}" is ready for use`);
         } catch (error) {
-          // Reset flags so we can retry
-          this.schemaSetupComplete = undefined;
-          this.setupSchemaPromise = null;
+          // On error, clear the registry entry so retry is possible
+          schemaSetupRegistry.delete(schemaNameCapture);
           throw error;
-        } finally {
-          this.setupSchemaPromise = null;
         }
       })();
+
+      // Register the promise immediately so concurrent callers can await it
+      schemaSetupRegistry.set(this.schemaName, { promise: setupPromise, complete: false });
+      registryEntry = schemaSetupRegistry.get(this.schemaName);
     }
 
-    await this.setupSchemaPromise;
+    await registryEntry!.promise;
+  }
+
+  /**
+   * Override getSqlType to map JSONB to TEXT for Aurora DSQL compatibility.
+   * Aurora DSQL does not fully support native JSONB, so we store JSON as TEXT
+   * and cast to ::jsonb only when filtering/querying.
+   */
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'jsonb':
+        // Aurora DSQL: Store JSON data as TEXT instead of JSONB
+        return 'TEXT';
+      case 'uuid':
+        return 'UUID';
+      case 'boolean':
+        return 'BOOLEAN';
+      default:
+        return coreSqlType(type);
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'timestamp':
+        return 'DEFAULT NOW()';
+      case 'jsonb':
+        // Aurora DSQL: JSONB columns are stored as TEXT with JSON content
+        // We use TEXT with a default empty JSON object string
+        return "DEFAULT '{}'";
+      default:
+        return coreDefaultValue(type);
+    }
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
@@ -191,7 +355,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_INSERT_FAILED',
+          id: createStorageErrorId('DSQL', 'INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -221,7 +385,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_CLEAR_TABLE_FAILED',
+          id: createStorageErrorId('DSQL', 'CLEAR_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -230,37 +394,6 @@ export class StoreOperationsDSQL extends StoreOperations {
         },
         error,
       );
-    }
-  }
-
-  /**
-   * Override getSqlType to map JSONB to TEXT for Aurora DSQL compatibility.
-   * Aurora DSQL does not fully support native JSONB, so we store JSON as TEXT
-   * and cast to ::jsonb only when filtering/querying.
-   */
-  protected getSqlType(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'jsonb':
-        // Aurora DSQL: Store JSON data as TEXT instead of JSONB
-        return 'TEXT';
-      default:
-        return super.getSqlType(type);
-    }
-  }
-
-  protected getDefaultValue(type: StorageColumn['type']): string {
-    switch (type) {
-      case 'timestamp':
-        return 'DEFAULT NOW()';
-      case 'jsonb':
-        // Aurora DSQL: JSONB columns are stored as TEXT with JSON content
-        // We use TEXT with a default empty JSON object string
-        return "DEFAULT '{}'";
-      case 'text':
-        // For TEXT columns that might store JSON, use empty string or null
-        return '';
-      default:
-        return super.getDefaultValue(type);
     }
   }
 
@@ -294,17 +427,16 @@ export class StoreOperationsDSQL extends StoreOperations {
           return `"${parsedName}" ${sqlType} ${constraints.join(' ')}`;
         });
 
-        // Create schema if it doesn't exist
         if (this.schemaName) {
           await this.setupSchema();
         }
 
         const finalColumns = [...columns, ...timeZColumns].join(',\n');
-
-        // Constraints are global to a database, ensure schemas do not conflict with each other
         const constraintPrefix = this.schemaName ? `${this.schemaName}_` : '';
+        const schemaName = getSchemaName(this.schemaName);
+
         const createTableSql = `
-          CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} (
+          CREATE TABLE IF NOT EXISTS ${getTableName({ indexName: tableName, schemaName })} (
             ${finalColumns}
           );
         `;
@@ -315,7 +447,7 @@ export class StoreOperationsDSQL extends StoreOperations {
         // DSQL doesn't support DO $$ blocks or PL/pgSQL
         if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
           const indexName = `${constraintPrefix}mastra_workflow_snapshot_workflow_name_run_id_key`;
-          const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+          const fullTableName = getTableName({ indexName: tableName, schemaName });
 
           try {
             // Check if index already exists
@@ -346,8 +478,10 @@ export class StoreOperationsDSQL extends StoreOperations {
         });
 
         // Set up timestamp triggers for Spans table
+        // Note: Aurora DSQL doesn't support triggers, this is a no-op
         if (tableName === TABLE_SPANS) {
           await this.setupTimestampTriggers(tableName);
+          await this.migrateSpansTable();
         }
       },
       {
@@ -358,7 +492,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_CREATE_TABLE_FAILED',
+          id: createStorageErrorId('DSQL', 'CREATE_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -381,8 +515,64 @@ export class StoreOperationsDSQL extends StoreOperations {
     // Timestamps (createdAt, updatedAt, createdAtZ, updatedAtZ) are managed:
     // - DEFAULT NOW() on column definition for createdAt/createdAtZ
     // - Application-level setting in update operations for updatedAt/updatedAtZ
-    // See: addTimestampZColumns() and prepareValuesForInsert() methods
     return;
+  }
+
+  /**
+   * Migrates the spans table schema from OLD_SPAN_SCHEMA to current SPAN_SCHEMA.
+   * This adds new columns that don't exist in old schema.
+   */
+  private async migrateSpansTable(): Promise<void> {
+    const fullTableName = getTableName({ indexName: TABLE_SPANS, schemaName: getSchemaName(this.schemaName) });
+    const schema = TABLE_SCHEMAS[TABLE_SPANS];
+
+    try {
+      // Add any columns from current schema that don't exist in the database
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
+        if (!columnExists) {
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const sqlType = this.getSqlType(columnDef.type);
+          // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
+          const nullable = columnDef.nullable ? '' : 'NOT NULL';
+          const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+          await this.client.none(alterSql);
+          this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
+
+          // For timestamp columns, also add the timezone-aware version
+          // This matches the behavior in alterTable()
+          if (sqlType === 'TIMESTAMP') {
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${columnName}Z' to ${fullTableName}`);
+          }
+        }
+      }
+
+      // Also add timezone columns for any existing timestamp columns that don't have them yet
+      // This handles the case where timestamp columns existed but their *Z counterparts don't
+      for (const [columnName, columnDef] of Object.entries(schema)) {
+        if (columnDef.type === 'timestamp') {
+          const tzColumnName = `${columnName}Z`;
+          const tzColumnExists = await this.hasColumn(TABLE_SPANS, tzColumnName);
+          if (!tzColumnExists) {
+            const parsedTzColumnName = parseSqlIdentifier(tzColumnName, 'column name');
+            const timestampZSql =
+              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedTzColumnName}" TIMESTAMPTZ DEFAULT NOW()`.trim();
+            await this.client.none(timestampZSql);
+            this.logger?.debug?.(`Added timezone column '${tzColumnName}' to ${fullTableName}`);
+          }
+        }
+      }
+
+      this.logger?.info?.(`Migration completed for ${fullTableName}`);
+    } catch (error) {
+      // Log warning but don't fail - migrations should be best-effort
+      this.logger?.warn?.(`Failed to migrate spans table ${fullTableName}:`, error);
+    }
   }
 
   /**
@@ -426,7 +616,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_ALTER_TABLE_FAILED',
+          id: createStorageErrorId('DSQL', 'ALTER_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -444,7 +634,7 @@ export class StoreOperationsDSQL extends StoreOperations {
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 
-      const result = await this.client.oneOrNone(
+      const result = await this.client.oneOrNone<R>(
         `SELECT * FROM ${getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) })} WHERE ${conditions} ORDER BY "createdAt" DESC LIMIT 1`,
         values,
       );
@@ -453,20 +643,19 @@ export class StoreOperationsDSQL extends StoreOperations {
         return null;
       }
 
-      // If this is a workflow snapshot, parse the snapshot field
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         const snapshot = result as any;
         if (typeof snapshot.snapshot === 'string') {
           snapshot.snapshot = JSON.parse(snapshot.snapshot);
         }
-        return snapshot as R;
+        return snapshot;
       }
 
-      return result as R;
+      return result;
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_LOAD_FAILED',
+          id: createStorageErrorId('DSQL', 'LOAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -518,7 +707,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_BATCH_INSERT_FAILED',
+          id: createStorageErrorId('DSQL', 'BATCH_INSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -539,7 +728,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_DROP_TABLE_FAILED',
+          id: createStorageErrorId('DSQL', 'DROP_TABLE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -579,9 +768,6 @@ export class StoreOperationsDSQL extends StoreOperations {
     throw new Error(`DSQL async job ${jobUuid} timed out after ${timeoutMs}ms`);
   }
 
-  /**
-   * Create a new index on a table
-   */
   async createIndex(options: CreateIndexOptions): Promise<void> {
     try {
       const {
@@ -612,7 +798,6 @@ export class StoreOperationsDSQL extends StoreOperations {
       );
 
       if (indexExists) {
-        // Index already exists, skip creation
         return;
       }
 
@@ -623,11 +808,8 @@ export class StoreOperationsDSQL extends StoreOperations {
 
       // Handle columns with optional operator class
       // Aurora DSQL: Strip ASC/DESC sort order specifiers (not supported)
-      // B-tree indexes support bidirectional scanning, so ORDER BY ... DESC
-      // queries still work efficiently without explicit sort order in the index.
       const columnsStr = columns
         .map(col => {
-          // Strip ASC/DESC modifiers for Aurora DSQL compatibility
           const colName = col.replace(/\s+(DESC|ASC)$/i, '').trim();
           const quotedCol = `"${parseSqlIdentifier(colName, 'column name')}"`;
           return opclass ? `${quotedCol} ${opclass}` : quotedCol;
@@ -637,7 +819,6 @@ export class StoreOperationsDSQL extends StoreOperations {
       const whereStr = where ? ` WHERE ${where}` : '';
       const tablespaceStr = tablespace ? ` TABLESPACE ${tablespace}` : '';
 
-      // Build storage parameters string
       let withStr = '';
       if (storage && Object.keys(storage).length > 0) {
         const storageParams = Object.entries(storage)
@@ -649,17 +830,15 @@ export class StoreOperationsDSQL extends StoreOperations {
       // Aurora DSQL: Use ASYNC instead of CONCURRENTLY
       const sql = `CREATE ${uniqueStr}INDEX ASYNC ${name} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
-      // Execute and get the job UUID
       const result = await this.client.oneOrNone<{ job_uuid: string }>(sql);
 
-      // If ASYNC returns a job UUID, wait for completion
       if (result?.job_uuid) {
         await this.waitForDSQLJob(result.job_uuid);
       }
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_INDEX_CREATE_FAILED',
+          id: createStorageErrorId('DSQL', 'INDEX_CREATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -672,15 +851,11 @@ export class StoreOperationsDSQL extends StoreOperations {
     }
   }
 
-  /**
-   * Drop an existing index
-   */
   async dropIndex(indexName: string): Promise<void> {
     const schemaName = this.schemaName || 'public';
 
     await withRetry(
       async () => {
-        // Check if index exists first
         const indexExists = await this.client.oneOrNone(
           `SELECT 1 FROM pg_indexes
            WHERE indexname = $1
@@ -689,11 +864,11 @@ export class StoreOperationsDSQL extends StoreOperations {
         );
 
         if (!indexExists) {
-          // Index doesn't exist, nothing to drop
           return;
         }
 
-        const sql = `DROP INDEX IF EXISTS ${getSchemaName(this.schemaName)}.${indexName}`;
+        const quotedIndexName = `"${parseSqlIdentifier(indexName, 'index name')}"`;
+        const sql = `DROP INDEX IF EXISTS ${getSchemaName(this.schemaName)}.${quotedIndexName}`;
         await this.client.none(sql);
       },
       {
@@ -704,7 +879,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_INDEX_DROP_FAILED',
+          id: createStorageErrorId('DSQL', 'INDEX_DROP', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -716,9 +891,6 @@ export class StoreOperationsDSQL extends StoreOperations {
     });
   }
 
-  /**
-   * List indexes for a specific table or all tables
-   */
   async listIndexes(tableName?: string): Promise<IndexInfo[]> {
     try {
       const schemaName = this.schemaName || 'public';
@@ -766,10 +938,8 @@ export class StoreOperationsDSQL extends StoreOperations {
       const results = await this.client.manyOrNone(query, params);
 
       return results.map(row => {
-        // Parse PostgreSQL array format {col1,col2} to ['col1','col2']
         let columns: string[] = [];
         if (typeof row.columns === 'string' && row.columns.startsWith('{') && row.columns.endsWith('}')) {
-          // Remove braces and split by comma, handling empty arrays
           const arrayContent = row.columns.slice(1, -1);
           columns = arrayContent ? arrayContent.split(',') : [];
         } else if (Array.isArray(row.columns)) {
@@ -788,7 +958,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_INDEX_LIST_FAILED',
+          id: createStorageErrorId('DSQL', 'INDEX_LIST', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: tableName
@@ -802,97 +972,10 @@ export class StoreOperationsDSQL extends StoreOperations {
     }
   }
 
-  /**
-   * Returns definitions for automatic performance indexes
-   * These composite indexes cover both filtering and sorting in single index
-   */
-  protected getAutomaticIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.schemaName ? `${this.schemaName}_` : '';
-    return [
-      // Composite index for threads (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_threads_resourceid_createdat_idx`,
-        table: TABLE_THREADS,
-        columns: ['resourceId', 'createdAt'],
-      },
-      // Composite index for messages (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
-        table: TABLE_MESSAGES,
-        columns: ['thread_id', 'createdAt'],
-      },
-      // Composite index for traces (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_traces_name_starttime_idx`,
-        table: TABLE_TRACES,
-        columns: ['name', 'startTime'],
-      },
-      // Composite index for scores (filter + sort)
-      {
-        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
-        table: TABLE_SCORERS,
-        columns: ['traceId', 'spanId', 'createdAt'],
-      },
-      // Spans indexes for optimal trace querying
-      {
-        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['traceId', 'startedAt'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['parentSpanId', 'startedAt'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
-        table: TABLE_SPANS,
-        columns: ['name'],
-      },
-      {
-        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
-        table: TABLE_SPANS,
-        columns: ['spanType', 'startedAt'],
-      },
-    ];
-  }
-
-  /**
-   * Creates automatic indexes for optimal query performance
-   * Uses getAutomaticIndexDefinitions() to determine which indexes to create
-   */
-  async createAutomaticIndexes(): Promise<void> {
-    try {
-      const indexes = this.getAutomaticIndexDefinitions();
-
-      for (const indexOptions of indexes) {
-        try {
-          await this.createIndex(indexOptions);
-        } catch (error) {
-          // Log but continue with other indexes
-          this.logger?.warn?.(`Failed to create index ${indexOptions.name}:`, error);
-        }
-      }
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MASTRA_STORAGE_DSQL_STORE_CREATE_PERFORMANCE_INDEXES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * Get detailed statistics for a specific index
-   */
   async describeIndex(indexName: string): Promise<StorageIndexStats> {
     try {
       const schemaName = this.schemaName || 'public';
 
-      // First get basic index info and stats
       const query = `
         SELECT
           i.indexname as name,
@@ -922,7 +1005,6 @@ export class StoreOperationsDSQL extends StoreOperations {
         throw new Error(`Index "${indexName}" not found in schema "${schemaName}"`);
       }
 
-      // Parse PostgreSQL array format
       let columns: string[] = [];
       if (typeof result.columns === 'string' && result.columns.startsWith('{') && result.columns.endsWith('}')) {
         const arrayContent = result.columns.slice(1, -1);
@@ -949,7 +1031,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_INDEX_DESCRIBE_FAILED',
+          id: createStorageErrorId('DSQL', 'INDEX_DESCRIBE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -961,9 +1043,6 @@ export class StoreOperationsDSQL extends StoreOperations {
     }
   }
 
-  /**
-   * Update a single record in the database
-   */
   async update({
     tableName,
     keys,
@@ -985,14 +1064,12 @@ export class StoreOperationsDSQL extends StoreOperations {
       updatedAtZ: now,
     };
 
-    // Build SET clause
     Object.entries(dataWithTimestamp).forEach(([key, value]) => {
       const parsedKey = parseSqlIdentifier(key, 'column name');
       setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
       setValues.push(this.prepareValue(value, key, tableName));
     });
 
-    // Build WHERE clause
     const whereConditions: string[] = [];
     const whereValues: any[] = [];
 
@@ -1022,7 +1099,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     ).catch(error => {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_UPDATE_FAILED',
+          id: createStorageErrorId('DSQL', 'UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1034,10 +1111,6 @@ export class StoreOperationsDSQL extends StoreOperations {
     });
   }
 
-  /**
-   * Update multiple records in a single batch transaction.
-   * Uses batch splitting and retry to handle DSQL's transaction limits (max 3000 rows).
-   */
   async batchUpdate({
     tableName,
     updates,
@@ -1053,22 +1126,18 @@ export class StoreOperationsDSQL extends StoreOperations {
     }
 
     try {
-      // Split updates into DSQL-compatible batches (max 3000 rows per transaction)
       const { batches } = splitIntoBatches(updates, { maxRows: DEFAULT_MAX_ROWS_PER_BATCH });
 
-      // Process each batch with retry support
       for (const batch of batches) {
         await withRetry(
           async () => {
             await this.client.tx(async t => {
               for (const { keys, data } of batch) {
-                // Prepare update data
                 const setClauses: string[] = [];
                 const whereConditions: string[] = [];
                 const values: any[] = [];
                 let paramIndex = 1;
 
-                // Aurora DSQL: Set updatedAt/updatedAtZ since triggers are not supported
                 const now = new Date().toISOString();
                 const dataWithTimestamp = {
                   ...data,
@@ -1076,7 +1145,6 @@ export class StoreOperationsDSQL extends StoreOperations {
                   updatedAtZ: now,
                 };
 
-                // Build SET clause
                 Object.entries(dataWithTimestamp).forEach(([key, value]) => {
                   const parsedKey = parseSqlIdentifier(key, 'column name');
                   const preparedValue = this.prepareValue(value, key, tableName);
@@ -1084,7 +1152,6 @@ export class StoreOperationsDSQL extends StoreOperations {
                   values.push(preparedValue);
                 });
 
-                // Build WHERE clause
                 Object.entries(keys).forEach(([key, value]) => {
                   const parsedKey = parseSqlIdentifier(key, 'column name');
                   whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
@@ -1113,7 +1180,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_BATCH_UPDATE_FAILED',
+          id: createStorageErrorId('DSQL', 'BATCH_UPDATE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1126,10 +1193,6 @@ export class StoreOperationsDSQL extends StoreOperations {
     }
   }
 
-  /**
-   * Delete multiple records by keys.
-   * Uses batch splitting and retry to handle DSQL's transaction limits (max 3000 rows).
-   */
   async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
     if (keys.length === 0) {
       return;
@@ -1141,10 +1204,8 @@ export class StoreOperationsDSQL extends StoreOperations {
         schemaName: getSchemaName(this.schemaName),
       });
 
-      // Split keys into DSQL-compatible batches (max 3000 rows per transaction)
       const { batches } = splitIntoBatches(keys, { maxRows: DEFAULT_MAX_ROWS_PER_BATCH });
 
-      // Process each batch with retry support
       for (const batch of batches) {
         await withRetry(
           async () => {
@@ -1177,7 +1238,7 @@ export class StoreOperationsDSQL extends StoreOperations {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_DSQL_STORE_BATCH_DELETE_FAILED',
+          id: createStorageErrorId('DSQL', 'BATCH_DELETE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -1188,5 +1249,12 @@ export class StoreOperationsDSQL extends StoreOperations {
         error,
       );
     }
+  }
+
+  /**
+   * Delete all data from a table (alias for clearTable for consistency with other stores)
+   */
+  async deleteData({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    return this.clearTable({ tableName });
   }
 }

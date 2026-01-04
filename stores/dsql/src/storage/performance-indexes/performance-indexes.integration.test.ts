@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { DsqlDB } from '../db';
 import { DSQLStore } from '../index';
 import { TEST_CONFIG, canRunDSQLTests } from '../test-utils';
 import { DSQLPerformanceTest } from './performance-test';
@@ -9,12 +10,15 @@ const describeIf = canRunDSQLTests() ? describe : describe.skip;
 // Integration tests that require a real database connection
 describeIf('DSQLStore Performance Indexes Integration', () => {
   let store: DSQLStore;
+  let dbOps: DsqlDB;
   let performanceTest: DSQLPerformanceTest;
 
   beforeAll(async () => {
     store = new DSQLStore(TEST_CONFIG);
     await store.init();
 
+    // Create DsqlDB instance for index operations (not exposed on main store)
+    dbOps = new DsqlDB({ client: store.db });
     performanceTest = new DSQLPerformanceTest({
       testDataSize: 1000, // Larger dataset to trigger index usage
       iterations: 3,
@@ -32,7 +36,7 @@ describeIf('DSQLStore Performance Indexes Integration', () => {
 
   it('should create performance indexes during store initialization', async () => {
     // Composite indexes are created by default during init
-    const indexes = await store.listIndexes();
+    const indexes = await dbOps.listIndexes();
 
     expect(indexes.length).toBeGreaterThan(0);
 
@@ -45,10 +49,10 @@ describeIf('DSQLStore Performance Indexes Integration', () => {
   it('should demonstrate performance scaling with indexes across dataset sizes', async () => {
     const testSizes = [
       { name: 'XSmall', size: 100 },
-      // { name: 'Small', size: 1000 },
-      // { name: 'Medium', size: 10000 },
-      // { name: 'Large', size: 100000 },
-      // { name: 'XLarge', size: 1000000 },
+      { name: 'Small', size: 1000 },
+      { name: 'Medium', size: 10000 },
+      { name: 'Large', size: 100000 },
+      { name: 'XLarge', size: 1000000 },
     ];
 
     console.log('\n=== Comprehensive Performance Scaling Analysis ===');
@@ -152,14 +156,11 @@ describeIf('DSQLStore Performance Indexes Integration', () => {
   }, 300000); // 5 minute timeout for comprehensive testing
 
   it('should handle index creation gracefully when indexes already exist', async () => {
-    // Access operations to test index creation
-    const operations = store.stores.operations as any;
-
-    // Create automatic indexes again - should not fail
-    await expect(operations.createAutomaticIndexes()).resolves.not.toThrow();
+    // Re-initialize the store - should not fail even if indexes already exist
+    await expect(store.init()).resolves.not.toThrow();
 
     // Verify indexes still exist
-    const indexes = await store.listIndexes();
+    const indexes = await dbOps.listIndexes();
     const compositeIndexes = indexes.filter(
       idx => idx.name.includes('threads_resourceid_createdat') || idx.name.includes('messages_thread_id_createdat'),
     );

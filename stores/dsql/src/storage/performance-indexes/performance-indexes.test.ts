@@ -1,169 +1,170 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { StoreOperationsDSQL } from '../domains/operations';
-import { DSQLStore } from '../index';
-import { TEST_CONFIG } from '../test-utils';
+import { MemoryDSQL } from '../domains/memory';
+import { ObservabilityDSQL } from '../domains/observability';
+import { ScoresDSQL } from '../domains/scores';
 
-// Mock pg-promise
+// Mock DbClient
 const mockClient = {
+  $pool: {},
   none: vi.fn(),
   one: vi.fn(),
   manyOrNone: vi.fn(),
+  oneOrNone: vi.fn(),
+  many: vi.fn(),
+  any: vi.fn(),
+  query: vi.fn(),
+  tx: vi.fn(),
 };
 
-const mockPgp = vi.fn(() => mockClient);
-vi.mock('pg-promise', () => ({ default: vi.fn(() => mockPgp) }));
-
-describe('DSQLStore Performance Indexes', () => {
-  let operations: StoreOperationsDSQL;
-
+describe('DSQLStore Domain Performance Indexes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    operations = new StoreOperationsDSQL({
-      client: mockClient as any,
-      schemaName: 'test_schema',
-    });
-
-    // Mock createIndex method to simulate the actual implementation
-    vi.spyOn(operations, 'createIndex').mockResolvedValue(undefined);
   });
 
-  describe('createAutomaticIndexes', () => {
-    it('should create all necessary composite indexes', async () => {
-      await operations.createAutomaticIndexes();
+  describe('MemoryDSQL.getDefaultIndexDefinitions', () => {
+    it('should return composite indexes for threads and messages without ASC/DESC', () => {
+      const memory = new MemoryDSQL({
+        client: mockClient as any,
+        schemaName: 'test_schema',
+      });
 
-      // Verify that createIndex was called 8 times for composite indexes
-      expect(operations.createIndex).toHaveBeenCalledTimes(8);
+      const indexes = memory.getDefaultIndexDefinitions();
 
-      // Check that composite index for threads is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(indexes.length).toBe(2);
+      // Note: Aurora DSQL does not support ASC/DESC in index columns
+      expect(indexes).toContainEqual({
         name: 'test_schema_mastra_threads_resourceid_createdat_idx',
         table: 'mastra_threads',
         columns: ['resourceId', 'createdAt'],
       });
-
-      // Check that composite index for messages is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      expect(indexes).toContainEqual({
         name: 'test_schema_mastra_messages_thread_id_createdat_idx',
         table: 'mastra_messages',
         columns: ['thread_id', 'createdAt'],
       });
+    });
 
-      // Check that composite index for traces is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
-        name: 'test_schema_mastra_traces_name_starttime_idx',
-        table: 'mastra_traces',
-        columns: ['name', 'startTime'],
+    it('should work with default schema (public)', () => {
+      const memory = new MemoryDSQL({
+        client: mockClient as any,
+        // No schemaName provided, should default to public
       });
 
-      // Check that composite index for scores is created
-      expect(operations.createIndex).toHaveBeenCalledWith({
+      const indexes = memory.getDefaultIndexDefinitions();
+
+      // Verify indexes are created without schema prefix
+      expect(indexes).toContainEqual({
+        name: 'mastra_threads_resourceid_createdat_idx',
+        table: 'mastra_threads',
+        columns: ['resourceId', 'createdAt'],
+      });
+    });
+  });
+
+  describe('ScoresDSQL.getDefaultIndexDefinitions', () => {
+    it('should return composite index for scores without ASC/DESC', () => {
+      const scores = new ScoresDSQL({
+        client: mockClient as any,
+        schemaName: 'test_schema',
+      });
+
+      const indexes = scores.getDefaultIndexDefinitions();
+
+      expect(indexes.length).toBe(1);
+      // Note: Aurora DSQL does not support ASC/DESC in index columns
+      expect(indexes).toContainEqual({
         name: 'test_schema_mastra_scores_trace_id_span_id_created_at_idx',
         table: 'mastra_scorers',
         columns: ['traceId', 'spanId', 'createdAt'],
       });
     });
+  });
 
-    it('should handle index creation errors gracefully', async () => {
-      // Mock the logger using Object.defineProperty to bypass protected access
-      const loggerWarnSpy = vi.fn();
-      Object.defineProperty(operations, 'logger', {
-        value: {
-          warn: loggerWarnSpy,
-        },
-        writable: true,
-        configurable: true,
+  describe('ObservabilityDSQL.getDefaultIndexDefinitions', () => {
+    it('should return composite indexes for spans without ASC/DESC or partial indexes', () => {
+      const observability = new ObservabilityDSQL({
+        client: mockClient as any,
+        schemaName: 'test_schema',
       });
 
-      // Make createIndex fail for the first index
-      vi.spyOn(operations, 'createIndex')
-        .mockRejectedValueOnce(new Error('Index already exists'))
-        .mockResolvedValue(undefined);
+      const indexes = observability.getDefaultIndexDefinitions();
 
-      await operations.createAutomaticIndexes();
+      // DSQL has 7 indexes (vs PG's 4) because it adds entity/org indexes
+      // but omits partial indexes and GIN indexes which DSQL doesn't support
+      expect(indexes.length).toBe(7);
 
-      // Should log warning but continue with other indexes
-      expect(loggerWarnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to create index'), expect.any(Error));
+      // Core trace/span indexes (without DESC)
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_traceid_startedat_idx',
+        table: 'mastra_ai_spans',
+        columns: ['traceId', 'startedAt'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_parentspanid_startedat_idx',
+        table: 'mastra_ai_spans',
+        columns: ['parentSpanId', 'startedAt'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_name_idx',
+        table: 'mastra_ai_spans',
+        columns: ['name'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_spantype_startedat_idx',
+        table: 'mastra_ai_spans',
+        columns: ['spanType', 'startedAt'],
+      });
 
-      // Should still try to create all 8 indexes
-      expect(operations.createIndex).toHaveBeenCalledTimes(8);
+      // Entity identification indexes (DSQL-specific additions)
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_entitytype_entityid_idx',
+        table: 'mastra_ai_spans',
+        columns: ['entityType', 'entityId'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_entitytype_entityname_idx',
+        table: 'mastra_ai_spans',
+        columns: ['entityType', 'entityName'],
+      });
+      expect(indexes).toContainEqual({
+        name: 'test_schema_mastra_ai_spans_orgid_userid_idx',
+        table: 'mastra_ai_spans',
+        columns: ['organizationId', 'userId'],
+      });
     });
 
-    it('should work with default schema (public)', async () => {
-      const publicOperations = new StoreOperationsDSQL({
+    it('should not include partial indexes or GIN indexes (unsupported by Aurora DSQL)', () => {
+      const observability = new ObservabilityDSQL({
         client: mockClient as any,
-        // No schemaName provided, should default to public
+        schemaName: 'test_schema',
       });
 
-      vi.spyOn(publicOperations, 'createIndex').mockResolvedValue(undefined);
+      const indexes = observability.getDefaultIndexDefinitions();
 
-      await publicOperations.createAutomaticIndexes();
+      // Verify no partial indexes (with 'where' clause)
+      for (const index of indexes) {
+        expect(index).not.toHaveProperty('where');
+      }
 
-      // Verify indexes are created without schema prefix
-      expect(publicOperations.createIndex).toHaveBeenCalledWith({
-        name: 'mastra_threads_resourceid_createdat_idx', // No schema prefix
-        table: 'mastra_threads',
-        columns: ['resourceId', 'createdAt'],
-      });
+      // Verify no GIN indexes
+      for (const index of indexes) {
+        expect(index).not.toHaveProperty('using');
+      }
     });
   });
 
-  describe('DSQLStore initialization', () => {
-    it('should create indexes during init without failing on index errors', async () => {
-      // Create a fresh store instance
-      const testStore = new DSQLStore(TEST_CONFIG);
+  describe('Total index count across all domains', () => {
+    it('should define 10 indexes total (2 memory + 1 scores + 7 observability)', () => {
+      const memory = new MemoryDSQL({ client: mockClient as any });
+      const scores = new ScoresDSQL({ client: mockClient as any });
+      const observability = new ObservabilityDSQL({ client: mockClient as any });
 
-      // Mock pgPromise and database connection
-      const mockDb = {
-        none: vi.fn().mockRejectedValue(new Error('Index creation failed')),
-        one: vi.fn(),
-        manyOrNone: vi.fn(),
-        oneOrNone: vi.fn(),
-      };
+      const totalIndexes =
+        memory.getDefaultIndexDefinitions().length +
+        scores.getDefaultIndexDefinitions().length +
+        observability.getDefaultIndexDefinitions().length;
 
-      // Use the already mocked pg-promise at module level
-      mockPgp.mockReturnValue(mockDb);
-
-      // Create a mock operations instance with logger
-      const mockOperations = {
-        createAutomaticIndexes: vi.fn().mockImplementation(async function () {
-          // Simulate index creation failures with proper logging
-          for (let i = 0; i < 4; i++) {
-            try {
-              throw new Error('Index creation failed');
-            } catch (error) {
-              // Use logger if available
-              this.logger?.warn?.(`Failed to create index:`, error);
-            }
-          }
-        }),
-        logger: {
-          warn: vi.fn(),
-        },
-      };
-
-      // Mock the store's operations property
-      Object.defineProperty(testStore, 'stores', {
-        value: {
-          operations: mockOperations,
-        },
-        writable: true,
-      });
-
-      // Mock the init method to simulate what DSQLStore.init does
-      testStore.init = vi.fn().mockImplementation(async function () {
-        // Call createAutomaticIndexes like the real implementation does
-        await mockOperations.createAutomaticIndexes.call(mockOperations);
-      });
-
-      // Init should still succeed even if index creation fails
-      await expect(testStore.init()).resolves.not.toThrow();
-
-      // Verify that createAutomaticIndexes was called
-      expect(mockOperations.createAutomaticIndexes).toHaveBeenCalled();
-
-      // Verify warnings were logged using the logger
-      expect(mockOperations.logger.warn).toHaveBeenCalled();
+      expect(totalIndexes).toBe(10);
     });
   });
 });

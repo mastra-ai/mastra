@@ -1,38 +1,145 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { TracingStorageStrategy } from '@mastra/core/observability';
-import { SPAN_SCHEMA, ObservabilityStorage, TABLE_SPANS } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  listTracesArgsSchema,
+  ObservabilityStorage,
+  TABLE_SCHEMAS,
+  TABLE_SPANS,
+  TraceStatus,
+} from '@mastra/core/storage';
 import type {
   SpanRecord,
-  TraceRecord,
-  TracesPaginatedArg,
-  CreateSpanRecord,
-  PaginationInfo,
-  UpdateSpanRecord,
+  TracingStorageStrategy,
+  ListTracesArgs,
+  ListTracesResponse,
+  UpdateSpanArgs,
+  BatchDeleteTracesArgs,
+  BatchUpdateSpansArgs,
+  BatchCreateSpansArgs,
+  CreateSpanArgs,
+  GetSpanArgs,
+  GetSpanResponse,
+  GetRootSpanArgs,
+  GetRootSpanResponse,
+  GetTraceArgs,
+  GetTraceResponse,
+  CreateIndexOptions,
 } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
 import { splitIntoBatches, DEFAULT_MAX_ROWS_PER_BATCH } from '../../../shared/batch';
 import { withRetry } from '../../../shared/retry';
-import type { StoreOperationsDSQL } from '../operations';
-import { buildDateRangeFilter, prepareWhereClause, transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+import { DsqlDB, resolveDsqlConfig } from '../../db';
+import type { DsqlDomainConfig } from '../../db';
+import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityDSQL extends ObservabilityStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsDSQL;
-  private schema?: string;
+  #db: DsqlDB;
+  #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsDSQL;
-    schema?: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SPANS] as const;
+
+  constructor(config: DsqlDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolveDsqlConfig(config);
+    this.#db = new DsqlDB({ client, schemaName, skipDefaultIndexes });
+    this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (ObservabilityDSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the observability domain tables.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['traceId', 'startedAt'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_parentspanid_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['parentSpanId', 'startedAt'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_name_idx`,
+        table: TABLE_SPANS,
+        columns: ['name'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_spantype_startedat_idx`,
+        table: TABLE_SPANS,
+        columns: ['spanType', 'startedAt'],
+      },
+      // Entity identification indexes - common filtering patterns
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityid_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityId'],
+      },
+      {
+        name: `${schemaPrefix}mastra_ai_spans_entitytype_entityname_idx`,
+        table: TABLE_SPANS,
+        columns: ['entityType', 'entityName'],
+      },
+      // Multi-tenant filtering - organizationId + userId
+      {
+        name: `${schemaPrefix}mastra_ai_spans_orgid_userid_idx`,
+        table: TABLE_SPANS,
+        columns: ['organizationId', 'userId'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SPANS });
   }
 
   public override get tracingStrategy(): {
@@ -45,7 +152,8 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     };
   }
 
-  async createSpan(span: CreateSpanRecord): Promise<void> {
+  async createSpan(args: CreateSpanArgs): Promise<void> {
+    const { span } = args;
     try {
       const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
       const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
@@ -62,11 +170,11 @@ export class ObservabilityDSQL extends ObservabilityStorage {
         updatedAt: now,
       };
 
-      await this.operations.insert({ tableName: TABLE_SPANS, record });
+      await this.#db.insert({ tableName: TABLE_SPANS, record });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DSQL_STORE_CREATE_SPAN_FAILED',
+          id: createStorageErrorId('DSQL', 'CREATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -81,22 +189,122 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }
   }
 
-  async getTrace(traceId: string): Promise<TraceRecord | null> {
+  async getSpan(args: GetSpanArgs): Promise<GetSpanResponse | null> {
+    const { traceId, spanId } = args;
     try {
       const tableName = getTableName({
         indexName: TABLE_SPANS,
-        schemaName: getSchemaName(this.schema),
+        schemaName: getSchemaName(this.#schema),
       });
 
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const row = await this.#db.client.oneOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
-          "attributes", "metadata", "links", "input", "output", "error", "isEvent",
+          "traceId", "spanId", "parentSpanId", "name",
+          "entityType", "entityId", "entityName",
+          "userId", "organizationId", "resourceId",
+          "runId", "sessionId", "threadId", "requestId",
+          "environment", "source", "serviceName", "scope",
+          "spanType", "attributes", "metadata", "tags", "links",
+          "input", "output", "error", "isEvent",
+          "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
+          "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
+        FROM ${tableName}
+        WHERE "traceId" = $1 AND "spanId" = $2`,
+        [traceId, spanId],
+      );
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        span: transformFromSqlRow<SpanRecord>({
+          tableName: TABLE_SPANS,
+          sqlRow: row,
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'GET_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId, spanId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getRootSpan(args: GetRootSpanArgs): Promise<GetRootSpanResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      const row = await this.#db.client.oneOrNone<SpanRecord>(
+        `SELECT
+          "traceId", "spanId", "parentSpanId", "name",
+          "entityType", "entityId", "entityName",
+          "userId", "organizationId", "resourceId",
+          "runId", "sessionId", "threadId", "requestId",
+          "environment", "source", "serviceName", "scope",
+          "spanType", "attributes", "metadata", "tags", "links",
+          "input", "output", "error", "isEvent",
+          "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
+          "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
+        FROM ${tableName}
+        WHERE "traceId" = $1 AND "parentSpanId" IS NULL`,
+        [traceId],
+      );
+
+      if (!row) {
+        return null;
+      }
+
+      return {
+        span: transformFromSqlRow<SpanRecord>({
+          tableName: TABLE_SPANS,
+          sqlRow: row,
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'GET_ROOT_SPAN', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { traceId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTrace(args: GetTraceArgs): Promise<GetTraceResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      const spans = await this.#db.client.manyOrNone<SpanRecord>(
+        `SELECT
+          "traceId", "spanId", "parentSpanId", "name",
+          "entityType", "entityId", "entityName",
+          "userId", "organizationId", "resourceId",
+          "runId", "sessionId", "threadId", "requestId",
+          "environment", "source", "serviceName", "scope",
+          "spanType", "attributes", "metadata", "tags", "links",
+          "input", "output", "error", "isEvent",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
         WHERE "traceId" = $1
-        ORDER BY "startedAtZ" DESC`,
+        ORDER BY "startedAtZ" ASC`,
         [traceId],
       );
 
@@ -116,7 +324,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DSQL_STORE_GET_TRACE_FAILED',
+          id: createStorageErrorId('DSQL', 'GET_TRACE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -128,34 +336,24 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }
   }
 
-  async updateSpan({
-    spanId,
-    traceId,
-    updates,
-  }: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<UpdateSpanRecord>;
-  }): Promise<void> {
+  async updateSpan(args: UpdateSpanArgs): Promise<void> {
+    const { traceId, spanId, updates } = args;
     try {
-      const data: Partial<UpdateSpanRecord> & {
-        endedAtZ?: string;
-        startedAtZ?: string;
-      } = { ...updates };
+      const data: Record<string, any> = { ...updates };
       if (data.endedAt instanceof Date) {
         const endedAt = data.endedAt.toISOString();
-        data.endedAt = endedAt as any;
+        data.endedAt = endedAt;
         data.endedAtZ = endedAt;
       }
       if (data.startedAt instanceof Date) {
         const startedAt = data.startedAt.toISOString();
-        data.startedAt = startedAt as any;
+        data.startedAt = startedAt;
         data.startedAtZ = startedAt;
       }
-      // Note: updatedAt/updatedAtZ will be set in operations.update() method
+      // Note: updatedAt/updatedAtZ will be set in #db.update() method
       // Aurora DSQL doesn't support triggers
 
-      await this.operations.update({
+      await this.#db.update({
         tableName: TABLE_SPANS,
         keys: { spanId, traceId },
         data,
@@ -163,7 +361,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DSQL_STORE_UPDATE_SPAN_FAILED',
+          id: createStorageErrorId('DSQL', 'UPDATE_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -176,66 +374,168 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }
   }
 
-  async getTracesPaginated({
-    filters,
-    pagination,
-  }: TracesPaginatedArg): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
-    const page = pagination?.page ?? 0;
-    const perPage = pagination?.perPage ?? 10;
-    const { entityId, entityType, ...actualFilters } = filters || {};
-
-    const filtersWithDateRange: Record<string, any> = {
-      ...actualFilters,
-      ...buildDateRangeFilter(pagination?.dateRange, 'startedAtZ'),
-      parentSpanId: null, // Only get root spans for traces
-    };
-
-    const whereClause = prepareWhereClause(filtersWithDateRange, SPAN_SCHEMA);
-
-    let actualWhereClause = whereClause.sql;
-    let currentParamIndex = whereClause.args.length + 1;
-
-    // Handle entity filtering
-    if (entityId && entityType) {
-      let name = '';
-      if (entityType === 'workflow') {
-        name = `workflow run: '${entityId}'`;
-      } else if (entityType === 'agent') {
-        name = `agent run: '${entityId}'`;
-      } else {
-        const error = new MastraError({
-          id: 'DSQL_STORE_GET_TRACES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: {
-            entityType,
-          },
-          text: `Cannot filter by entity type: ${entityType}`,
-        });
-        this.logger?.trackException(error);
-        throw error;
-      }
-
-      whereClause.args.push(name);
-      const statement = `"name" = $${currentParamIndex++}`;
-
-      if (actualWhereClause) {
-        actualWhereClause += ` AND ${statement}`;
-      } else {
-        actualWhereClause = ` WHERE ${statement}`;
-      }
-    }
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
+    // Parse args through schema to apply defaults
+    const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
+    const { page, perPage } = pagination;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.#schema),
     });
 
     try {
+      // Build WHERE clause for filters
+      const conditions: string[] = ['r."parentSpanId" IS NULL']; // Only root spans
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (filters) {
+        // Date range filters
+        if (filters.startedAt?.start) {
+          conditions.push(`r."startedAtZ" >= $${paramIndex++}`);
+          params.push(filters.startedAt.start.toISOString());
+        }
+        if (filters.startedAt?.end) {
+          conditions.push(`r."startedAtZ" <= $${paramIndex++}`);
+          params.push(filters.startedAt.end.toISOString());
+        }
+        if (filters.endedAt?.start) {
+          conditions.push(`r."endedAtZ" >= $${paramIndex++}`);
+          params.push(filters.endedAt.start.toISOString());
+        }
+        if (filters.endedAt?.end) {
+          conditions.push(`r."endedAtZ" <= $${paramIndex++}`);
+          params.push(filters.endedAt.end.toISOString());
+        }
+
+        // Span type filter
+        if (filters.spanType !== undefined) {
+          conditions.push(`r."spanType" = $${paramIndex++}`);
+          params.push(filters.spanType);
+        }
+
+        // Entity filters
+        if (filters.entityType !== undefined) {
+          conditions.push(`r."entityType" = $${paramIndex++}`);
+          params.push(filters.entityType);
+        }
+        if (filters.entityId !== undefined) {
+          conditions.push(`r."entityId" = $${paramIndex++}`);
+          params.push(filters.entityId);
+        }
+        if (filters.entityName !== undefined) {
+          conditions.push(`r."entityName" = $${paramIndex++}`);
+          params.push(filters.entityName);
+        }
+
+        // Identity & Tenancy filters
+        if (filters.userId !== undefined) {
+          conditions.push(`r."userId" = $${paramIndex++}`);
+          params.push(filters.userId);
+        }
+        if (filters.organizationId !== undefined) {
+          conditions.push(`r."organizationId" = $${paramIndex++}`);
+          params.push(filters.organizationId);
+        }
+        if (filters.resourceId !== undefined) {
+          conditions.push(`r."resourceId" = $${paramIndex++}`);
+          params.push(filters.resourceId);
+        }
+
+        // Correlation ID filters
+        if (filters.runId !== undefined) {
+          conditions.push(`r."runId" = $${paramIndex++}`);
+          params.push(filters.runId);
+        }
+        if (filters.sessionId !== undefined) {
+          conditions.push(`r."sessionId" = $${paramIndex++}`);
+          params.push(filters.sessionId);
+        }
+        if (filters.threadId !== undefined) {
+          conditions.push(`r."threadId" = $${paramIndex++}`);
+          params.push(filters.threadId);
+        }
+        if (filters.requestId !== undefined) {
+          conditions.push(`r."requestId" = $${paramIndex++}`);
+          params.push(filters.requestId);
+        }
+
+        // Deployment context filters
+        if (filters.environment !== undefined) {
+          conditions.push(`r."environment" = $${paramIndex++}`);
+          params.push(filters.environment);
+        }
+        if (filters.source !== undefined) {
+          conditions.push(`r."source" = $${paramIndex++}`);
+          params.push(filters.source);
+        }
+        if (filters.serviceName !== undefined) {
+          conditions.push(`r."serviceName" = $${paramIndex++}`);
+          params.push(filters.serviceName);
+        }
+
+        // Scope filter (TEXT with JSON comparison - Aurora DSQL stores JSONB as TEXT)
+        if (filters.scope != null) {
+          conditions.push(`r."scope"::text = $${paramIndex++}`);
+          params.push(JSON.stringify(filters.scope));
+        }
+
+        // Metadata filter (TEXT with JSON comparison - Aurora DSQL stores JSONB as TEXT)
+        if (filters.metadata != null) {
+          conditions.push(`r."metadata"::text = $${paramIndex++}`);
+          params.push(JSON.stringify(filters.metadata));
+        }
+
+        // Tags filter (TEXT with JSON comparison - Aurora DSQL stores JSONB as TEXT)
+        if (filters.tags != null && filters.tags.length > 0) {
+          conditions.push(`r."tags"::text = $${paramIndex++}`);
+          params.push(JSON.stringify(filters.tags));
+        }
+
+        // Status filter (derived from error and endedAt)
+        if (filters.status !== undefined) {
+          switch (filters.status) {
+            case TraceStatus.ERROR:
+              conditions.push(`r."error" IS NOT NULL`);
+              break;
+            case TraceStatus.RUNNING:
+              conditions.push(`r."endedAtZ" IS NULL AND r."error" IS NULL`);
+              break;
+            case TraceStatus.SUCCESS:
+              conditions.push(`r."endedAtZ" IS NOT NULL AND r."error" IS NULL`);
+              break;
+          }
+        }
+
+        // hasChildError filter (requires subquery)
+        if (filters.hasChildError !== undefined) {
+          if (filters.hasChildError) {
+            conditions.push(`EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
+            )`);
+          } else {
+            conditions.push(`NOT EXISTS (
+              SELECT 1 FROM ${tableName} c
+              WHERE c."traceId" = r."traceId" AND c."error" IS NOT NULL
+            )`);
+          }
+        }
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Build ORDER BY clause with proper NULL handling for endedAt
+      // Note: Aurora DSQL does not support NULLS FIRST/LAST syntax
+      const sortField = `${orderBy.field}Z`;
+      const sortDirection = orderBy.direction;
+      const orderClause = `ORDER BY r."${sortField}" ${sortDirection}`;
+
       // Get total count
-      const countResult = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${tableName}${actualWhereClause}`,
-        whereClause.args,
+      const countResult = await this.#db.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${tableName} r ${whereClause}`,
+        params,
       );
       const count = Number(countResult?.count ?? 0);
 
@@ -252,16 +552,22 @@ export class ObservabilityDSQL extends ObservabilityStorage {
       }
 
       // Get paginated spans
-      const spans = await this.client.manyOrNone<SpanRecord>(
+      const spans = await this.#db.client.manyOrNone<SpanRecord>(
         `SELECT
-          "traceId", "spanId", "parentSpanId", "name", "scope", "spanType",
-          "attributes", "metadata", "links", "input", "output", "error", "isEvent",
-          "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
-          "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
-        FROM ${tableName}${actualWhereClause}
-        ORDER BY "startedAtZ" DESC
-        LIMIT $${currentParamIndex} OFFSET $${currentParamIndex + 1}`,
-        [...whereClause.args, perPage, page * perPage],
+          r."traceId", r."spanId", r."parentSpanId", r."name",
+          r."entityType", r."entityId", r."entityName",
+          r."userId", r."organizationId", r."resourceId",
+          r."runId", r."sessionId", r."threadId", r."requestId",
+          r."environment", r."source", r."serviceName", r."scope",
+          r."spanType", r."attributes", r."metadata", r."tags", r."links",
+          r."input", r."output", r."error", r."isEvent",
+          r."startedAtZ" as "startedAt", r."endedAtZ" as "endedAt",
+          r."createdAtZ" as "createdAt", r."updatedAtZ" as "updatedAt"
+        FROM ${tableName} r
+        ${whereClause}
+        ${orderClause}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...params, perPage, page * perPage],
       );
 
       return {
@@ -269,7 +575,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
           total: count,
           page,
           perPage,
-          hasMore: page * perPage + spans.length < count,
+          hasMore: (page + 1) * perPage < count,
         },
         spans: spans.map(span =>
           transformFromSqlRow<SpanRecord>({
@@ -281,7 +587,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DSQL_STORE_GET_TRACES_PAGINATED_FAILED',
+          id: createStorageErrorId('DSQL', 'LIST_TRACES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -290,7 +596,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }
   }
 
-  async batchCreateSpans(args: { records: CreateSpanRecord[] }): Promise<void> {
+  async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     try {
       const now = new Date().toISOString();
       const records = args.records.map(record => {
@@ -309,14 +615,14 @@ export class ObservabilityDSQL extends ObservabilityStorage {
         };
       });
 
-      await this.operations.batchInsert({
+      await this.#db.batchInsert({
         tableName: TABLE_SPANS,
         records,
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DSQL_STORE_BATCH_CREATE_SPANS_FAILED',
+          id: createStorageErrorId('DSQL', 'BATCH_CREATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -325,34 +631,23 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateSpans(args: {
-    records: {
-      traceId: string;
-      spanId: string;
-      updates: Partial<UpdateSpanRecord>;
-    }[];
-  }): Promise<void> {
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
-      await this.operations.batchUpdate({
+      await this.#db.batchUpdate({
         tableName: TABLE_SPANS,
         updates: args.records.map(record => {
-          const data: Partial<UpdateSpanRecord> & {
-            endedAtZ?: string;
-            startedAtZ?: string;
-          } = {
-            ...record.updates,
-          };
+          const data: Record<string, any> = { ...record.updates };
           if (data.endedAt instanceof Date) {
             const endedAt = data.endedAt.toISOString();
-            data.endedAt = endedAt as any;
+            data.endedAt = endedAt;
             data.endedAtZ = endedAt;
           }
           if (data.startedAt instanceof Date) {
             const startedAt = data.startedAt.toISOString();
-            data.startedAt = startedAt as any;
+            data.startedAt = startedAt;
             data.startedAtZ = startedAt;
           }
-          // Note: updatedAt/updatedAtZ will be set in operations.batchUpdate() method
+          // Note: updatedAt/updatedAtZ will be set in #db.batchUpdate() method
           // Aurora DSQL doesn't support triggers
 
           return {
@@ -364,7 +659,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'DSQL_STORE_BATCH_UPDATE_SPANS_FAILED',
+          id: createStorageErrorId('DSQL', 'BATCH_UPDATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },
@@ -373,12 +668,12 @@ export class ObservabilityDSQL extends ObservabilityStorage {
     }
   }
 
-  async batchDeleteTraces(args: { traceIds: string[] }): Promise<void> {
+  async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     const { batches } = splitIntoBatches(args.traceIds, { maxRows: DEFAULT_MAX_ROWS_PER_BATCH });
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
-      schemaName: getSchemaName(this.schema),
+      schemaName: getSchemaName(this.#schema),
     });
 
     for (const batchTraceIds of batches) {
@@ -386,7 +681,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
 
       await withRetry(
         async () => {
-          await this.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, batchTraceIds);
+          await this.#db.client.none(`DELETE FROM ${tableName} WHERE "traceId" IN (${placeholders})`, batchTraceIds);
         },
         {
           onRetry: (error, attempt, delay) => {
@@ -398,7 +693,7 @@ export class ObservabilityDSQL extends ObservabilityStorage {
       ).catch(error => {
         throw new MastraError(
           {
-            id: 'DSQL_STORE_BATCH_DELETE_TRACES_FAILED',
+            id: createStorageErrorId('DSQL', 'BATCH_DELETE_TRACES', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
           },
