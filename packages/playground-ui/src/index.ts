@@ -31,6 +31,7 @@ export * from './components/ui/entry';
 export * from './hooks';
 export * from './lib/tanstack-query';
 export * from './domains/memory/hooks';
+export * from './domains/memory/components';
 
 export * from './store/playground-store';
 export * from './lib/framework';
