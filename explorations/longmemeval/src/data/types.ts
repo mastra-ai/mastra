@@ -18,6 +18,8 @@ export interface LongMemEvalQuestion {
   question_id: string;
   question_type: QuestionType;
   question: string;
+  improved_question?: string; // Clarified version for vague/ambiguous questions
+  improved_answer?: string; // Updated answer for the clarified question (if different)
   answer: string;
   question_date: string;
   haystack_session_ids: string[];
@@ -32,6 +34,10 @@ export interface EvaluationResult {
   autoeval_label?: boolean;
   question_type?: QuestionType;
   is_correct?: boolean;
+  // For improved_question support
+  improved_question?: string;
+  improved_hypothesis?: string;
+  improved_is_correct?: boolean;
 }
 
 export type DatasetType = 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
@@ -59,4 +65,11 @@ export interface BenchmarkMetrics {
   correct_answers: number;
   abstention_correct?: number;
   abstention_total?: number;
+  // For improved_question support
+  improved_accuracy?: number;
+  improved_correct?: number;
+  improved_total?: number;
+  // "Fixed" metrics - full results with improved questions replacing originals where available
+  fixed_accuracy_by_type?: Record<QuestionType, { correct: number; total: number; accuracy: number }>;
+  fixed_overall_accuracy?: number;
 }

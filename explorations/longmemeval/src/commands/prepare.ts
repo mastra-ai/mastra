@@ -465,8 +465,9 @@ export class PrepareCommand {
     }
 
     // Create memory with appropriate configuration
+    // Note: Using 'as any' to work around outdated BenchmarkStore types
     const memory = new Memory({
-      storage: benchmarkStore,
+      storage: benchmarkStore as any,
       vector:
         options.memoryConfig === 'semantic-recall' || options.memoryConfig.includes('combined')
           ? benchmarkVectorStore
@@ -843,7 +844,7 @@ export class PrepareCommand {
       if (!usesObservationalMemory) {
         const newlyProcessedSessions = sessionBatch.filter(s => processedSessionIds.has(s.sessionId));
         if (newlyProcessedSessions.length > 0) {
-          await this.fixSessionDates(questionDir, newlyProcessedSessions, benchmarkStore);
+          await this.fixSessionDates(questionDir, newlyProcessedSessions, benchmarkStore as any);
         }
       }
 
@@ -886,6 +887,8 @@ export class PrepareCommand {
       questionId: question.question_id,
       questionType: question.question_type,
       question: question.question,
+      improvedQuestion: question.improved_question, // Clarified version for vague/ambiguous questions
+      improvedAnswer: question.improved_answer, // Expected answer for improved question (if different)
       answer: question.answer,
       questionDate: question.question_date,
       resourceId,

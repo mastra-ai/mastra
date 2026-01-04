@@ -8,7 +8,7 @@ import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { join } from 'path';
 import { readdir, readFile, mkdir, writeFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 
 import { BenchmarkStore, BenchmarkVectorStore, PersistableInMemoryMemory } from '../storage';
 import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
@@ -34,6 +34,8 @@ interface PreparedQuestionMeta {
   threadIds: string[];
   memoryConfig: string;
   question: string;
+  improvedQuestion?: string; // Clarified version for vague/ambiguous questions
+  improvedAnswer?: string; // Updated answer for the clarified question (if different)
   answer: string;
   evidenceSessionIds?: string[];
   questionDate?: string;
@@ -242,6 +244,18 @@ export class RunCommand {
             console.log(chalk.yellow(`  Expected: "${meta.answer}"`));
           }
 
+          // Show improved result if applicable
+          if (result.improved_question) {
+            console.log(
+              chalk.cyan(`  ↳ improved:`),
+              chalk[result.improved_is_correct ? 'green' : 'red'](`${result.improved_is_correct ? '✓' : '✗'}`),
+            );
+            if (!result.improved_is_correct) {
+              console.log(chalk.gray(`    Q: "${result.improved_question}"`));
+              console.log(chalk.gray(`    A: "${result.improved_hypothesis}"`));
+            }
+          }
+
           // Re-render the spinner
           questionSpinner.render();
         }
@@ -328,10 +342,12 @@ export class RunCommand {
     }
 
     // Create memory with the hydrated stores (for non-OM configs)
+    // Note: BenchmarkStore is outdated and doesn't fully implement MastraStorage
+    // Using 'as any' as a workaround since OM configs use PersistableInMemoryMemory instead
     const memory = usesObservationalMemory
       ? undefined
       : new Memory({
-          storage: benchmarkStore,
+          storage: benchmarkStore as any,
           vector: benchmarkVectorStore,
           embedder: cachedOpenAI.embedding('text-embedding-3-small'),
           options: memoryOptions.options,
@@ -445,10 +461,44 @@ Be specific rather than generic when the user has expressed clear preferences in
     const result = await metric.measure(input, response.text);
     const isCorrect = result.score === 1;
 
+    // Run improved question if it exists
+    let improvedHypothesis: string | undefined;
+    let improvedIsCorrect: boolean | undefined;
+
+    if (meta.improvedQuestion) {
+      updateStatus(`Running improved question for ${meta.questionId}...`);
+
+      // Create a separate thread for the improved question evaluation
+      const improvedThreadId = `eval_improved_${meta.questionId}_${Date.now()}`;
+
+      const improvedResponse = await agent.generate(meta.improvedQuestion, {
+        threadId: improvedThreadId,
+        resourceId: meta.resourceId,
+        modelSettings: {
+          temperature: 0,
+        },
+        context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
+      });
+
+      improvedHypothesis = improvedResponse.text;
+
+      // Use improvedAnswer if provided, otherwise fall back to original answer
+      const expectedAnswer = meta.improvedAnswer ?? meta.answer;
+
+      const improvedInput = JSON.stringify({
+        question: meta.improvedQuestion,
+        answer: expectedAnswer,
+      });
+
+      const improvedResult = await metric.measure(improvedInput, improvedResponse.text);
+      improvedIsCorrect = improvedResult.score === 1;
+    }
+
     const elapsed = ((Date.now() - questionStart) / 1000).toFixed(1);
 
     const isOraSpinner = spinner && 'clear' in spinner;
     if (isOraSpinner) {
+      // Show vanilla result
       console.log(
         chalk.blue(`▶ ${meta.questionId}`),
         chalk.gray(`(${meta.questionType})`),
@@ -460,6 +510,20 @@ Be specific rather than generic when the user has expressed clear preferences in
         console.log(chalk.gray(`  A: "${response.text}"`));
         console.log(chalk.yellow(`  Expected: "${meta.answer}"`));
       }
+
+      // Show improved result if applicable
+      if (meta.improvedQuestion) {
+        const improvedExpectedAnswer = meta.improvedAnswer ?? meta.answer;
+        console.log(
+          chalk.cyan(`  ↳ improved:`),
+          chalk[improvedIsCorrect ? 'green' : 'red'](`${improvedIsCorrect ? '✓' : '✗'}`),
+        );
+        if (!improvedIsCorrect) {
+          console.log(chalk.gray(`    Q: "${meta.improvedQuestion}"`));
+          console.log(chalk.gray(`    A: "${improvedHypothesis}"`));
+          console.log(chalk.yellow(`    Expected: "${improvedExpectedAnswer}"`));
+        }
+      }
     }
 
     return {
@@ -467,6 +531,9 @@ Be specific rather than generic when the user has expressed clear preferences in
       hypothesis: response.text,
       question_type: meta.questionType as QuestionType,
       is_correct: isCorrect,
+      improved_question: meta.improvedQuestion,
+      improved_hypothesis: improvedHypothesis,
+      improved_is_correct: improvedIsCorrect,
     };
   }
 
@@ -525,15 +592,33 @@ Be specific rather than generic when the user has expressed clear preferences in
       correct_answers: 0,
       abstention_correct: 0,
       abstention_total: 0,
+      // "Fixed" metrics - uses improved_is_correct where available, otherwise is_correct
+      improved_accuracy: undefined,
+      improved_correct: 0,
+      improved_total: 0,
+      fixed_accuracy_by_type: {} as Record<QuestionType, { correct: number; total: number; accuracy: number }>,
+      fixed_overall_accuracy: undefined,
     };
+
+    // Check if any results have improved questions
+    const hasAnyImprovedQuestions = results.some(r => r.improved_question !== undefined);
 
     // Calculate overall metrics
     for (const result of results) {
+      // Vanilla metrics (original question only)
       if (result.is_correct) {
         metrics.correct_answers++;
       }
 
-      // Track by question type
+      // Track how many questions have improved versions
+      if (result.improved_question !== undefined) {
+        metrics.improved_total = (metrics.improved_total || 0) + 1;
+        if (result.improved_is_correct) {
+          metrics.improved_correct = (metrics.improved_correct || 0) + 1;
+        }
+      }
+
+      // Track by question type (vanilla)
       if (result.question_type) {
         const type = result.question_type;
         if (!metrics.accuracy_by_type[type]) {
@@ -542,6 +627,22 @@ Be specific rather than generic when the user has expressed clear preferences in
         metrics.accuracy_by_type[type].total++;
         if (result.is_correct) {
           metrics.accuracy_by_type[type].correct++;
+        }
+
+        // Track "fixed" metrics by type (use improved result if available, otherwise vanilla)
+        if (hasAnyImprovedQuestions) {
+          if (!metrics.fixed_accuracy_by_type![type]) {
+            metrics.fixed_accuracy_by_type![type] = { correct: 0, total: 0, accuracy: 0 };
+          }
+          metrics.fixed_accuracy_by_type![type].total++;
+          
+          // Use improved_is_correct if this question has an improved version, otherwise use is_correct
+          const isCorrectFixed = result.improved_question !== undefined 
+            ? result.improved_is_correct 
+            : result.is_correct;
+          if (isCorrectFixed) {
+            metrics.fixed_accuracy_by_type![type].correct++;
+          }
         }
       }
 
@@ -554,7 +655,7 @@ Be specific rather than generic when the user has expressed clear preferences in
       }
     }
 
-    // Calculate per-type accuracies first
+    // Calculate per-type accuracies (vanilla)
     for (const type in metrics.accuracy_by_type) {
       const typeMetrics = metrics.accuracy_by_type[type as QuestionType];
       if (typeMetrics) {
@@ -562,28 +663,35 @@ Be specific rather than generic when the user has expressed clear preferences in
       }
     }
 
+    // Calculate per-type accuracies (fixed)
+    if (hasAnyImprovedQuestions && metrics.fixed_accuracy_by_type) {
+      for (const type in metrics.fixed_accuracy_by_type) {
+        const typeMetrics = metrics.fixed_accuracy_by_type[type as QuestionType];
+        if (typeMetrics) {
+          typeMetrics.accuracy = typeMetrics.total > 0 ? typeMetrics.correct / typeMetrics.total : 0;
+        }
+      }
+    }
+
     if (metrics.abstention_total && metrics.abstention_total > 0) {
       metrics.abstention_accuracy = (metrics.abstention_correct || 0) / metrics.abstention_total;
     }
 
-    // Calculate overall accuracy as average of all question type accuracies (excluding abstention)
+    // Calculate overall accuracy as average of all question type accuracies (vanilla)
     const allTypeAccuracies = Object.values(metrics.accuracy_by_type).map(t => t.accuracy);
-
-    // Debug: Log the exact values being averaged
-    console.log('\nDebug - Question type accuracies being averaged:');
-    Object.entries(metrics.accuracy_by_type).forEach(([type, data]) => {
-      console.log(`  ${type}: ${data.accuracy} (${data.correct}/${data.total})`);
-    });
-    console.log(`  Sum: ${allTypeAccuracies.reduce((sum, acc) => sum + acc, 0)}`);
-    console.log(`  Count: ${allTypeAccuracies.length}`);
-
     metrics.overall_accuracy =
       allTypeAccuracies.length > 0
         ? allTypeAccuracies.reduce((sum, acc) => sum + acc, 0) / allTypeAccuracies.length
         : 0;
 
-    console.log(`  Calculated overall: ${metrics.overall_accuracy}`);
-    console.log(`  As percentage: ${(metrics.overall_accuracy * 100).toFixed(10)}%\n`);
+    // Calculate fixed overall accuracy
+    if (hasAnyImprovedQuestions && metrics.fixed_accuracy_by_type) {
+      const fixedTypeAccuracies = Object.values(metrics.fixed_accuracy_by_type).map(t => t.accuracy);
+      metrics.fixed_overall_accuracy =
+        fixedTypeAccuracies.length > 0
+          ? fixedTypeAccuracies.reduce((sum, acc) => sum + acc, 0) / fixedTypeAccuracies.length
+          : 0;
+    }
 
     return metrics;
   }
@@ -607,37 +715,67 @@ Be specific rather than generic when the user has expressed clear preferences in
       console.log();
     }
 
+    // Check if we have fixed metrics to display
+    const hasFixedMetrics = metrics.fixed_accuracy_by_type && Object.keys(metrics.fixed_accuracy_by_type).length > 0;
+
     // Question type breakdown
     console.log(chalk.bold('Accuracy by Question Type:'));
 
     // Sort question types alphabetically
     const sortedTypes = Object.entries(metrics.accuracy_by_type).sort(([a], [b]) => a.localeCompare(b));
 
-    // Display regular question types
+    // Helper to create progress bar
+    const createBar = (accuracy: number, length: number = 20) => {
+      const filledLength = Math.round(accuracy * length);
+      return '█'.repeat(filledLength) + '░'.repeat(length - filledLength);
+    };
+
+    // Helper to get color based on accuracy
+    const getColor = (accuracy: number) => accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red';
+
+    // Display regular question types (vanilla)
     for (const [type, typeMetrics] of sortedTypes) {
       const { correct, total, accuracy } = typeMetrics;
-      const typeColor = accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red';
-
-      // Create a simple progress bar
-      const barLength = 20;
-      const filledLength = Math.round(accuracy * barLength);
-      const bar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+      const typeColor = getColor(accuracy);
 
       console.log(
         chalk.gray(`  ${type.padEnd(25)}:`),
         chalk[typeColor](`${(accuracy * 100).toFixed(1).padStart(5)}%`),
-        chalk.gray(`[${bar}]`),
+        chalk.gray(`[${createBar(accuracy)}]`),
         chalk.gray(`(${correct}/${total})`),
       );
+
+      // If we have fixed metrics, show the fixed version right after
+      if (hasFixedMetrics && metrics.fixed_accuracy_by_type![type as QuestionType]) {
+        const fixedTypeMetrics = metrics.fixed_accuracy_by_type![type as QuestionType];
+        const fixedColor = getColor(fixedTypeMetrics.accuracy);
+        console.log(
+          chalk.gray(`  ${(type + ' (fixed)').padEnd(25)}:`),
+          chalk[fixedColor](`${(fixedTypeMetrics.accuracy * 100).toFixed(1).padStart(5)}%`),
+          chalk.gray(`[${createBar(fixedTypeMetrics.accuracy)}]`),
+          chalk.gray(`(${fixedTypeMetrics.correct}/${fixedTypeMetrics.total})`),
+        );
+      }
     }
 
     console.log();
-    const accuracyColor =
-      metrics.overall_accuracy >= 0.8 ? 'green' : metrics.overall_accuracy >= 0.6 ? 'yellow' : 'red';
+    
+    // Overall accuracy (vanilla)
+    const accuracyColor = getColor(metrics.overall_accuracy);
     console.log(
-      chalk.bold('Overall Accuracy:'),
+      chalk.bold('Overall Accuracy:        '),
       chalk[accuracyColor](`${(metrics.overall_accuracy * 100).toFixed(2)}%`),
       chalk.gray(`(average of ${Object.keys(metrics.accuracy_by_type).length} question types)`),
     );
+
+    // Overall accuracy (fixed) - shown if any improved questions exist
+    if (hasFixedMetrics && metrics.fixed_overall_accuracy !== undefined) {
+      const fixedAccuracyColor = getColor(metrics.fixed_overall_accuracy);
+      console.log(
+        chalk.bold('Overall Accuracy (fixed):'),
+        chalk[fixedAccuracyColor](`${(metrics.fixed_overall_accuracy * 100).toFixed(2)}%`),
+        chalk.gray(`(${metrics.improved_total} questions clarified)`),
+      );
+    }
   }
 }
