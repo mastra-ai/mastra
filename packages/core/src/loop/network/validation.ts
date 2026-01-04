@@ -83,6 +83,8 @@ export interface ScorerResult {
   passed: boolean;
   /** Reason from the scorer */
   reason?: string;
+  /** Final result to return (from LLM scorers) */
+  finalResult?: string;
   /** Scorer ID */
   scorerId: string;
   /** Scorer name */
@@ -138,6 +140,10 @@ export interface CompletionConfig {
 export interface CompletionRunResult {
   /** Whether the task is complete (based on strategy) */
   complete: boolean;
+  /** Final result to return (from passing scorer) */
+  finalResult?: string;
+  /** Completion reason (from passing scorer) */
+  completionReason?: string;
   /** Individual scorer results */
   scorers: ScorerResult[];
   /** Total duration of all scorers */
@@ -266,8 +272,15 @@ export async function runCompletionScorers(
       ? results.length === scorers.length && results.every(r => r.passed)
       : results.some(r => r.passed);
 
+  // Extract finalResult and reason from the first passing scorer that has them
+  const passingScorer = results.find(r => r.passed && r.finalResult);
+  const finalResult = passingScorer?.finalResult;
+  const completionReason = passingScorer?.reason || results.find(r => r.passed)?.reason;
+
   return {
     complete,
+    finalResult,
+    completionReason,
     scorers: results,
     totalDuration: Date.now() - startTime,
     timedOut,
@@ -336,45 +349,72 @@ export const formatValidationFeedback = formatCompletionFeedback;
 // ============================================================================
 
 /**
- * Creates the default LLM completion scorer.
- * This is what runs when no scorers are configured.
- * 
- * @internal Used by the network loop
+ * Schema for the default LLM completion response
  */
-export function createDefaultCompletionScorer(agent: Agent): MastraScorer<any, any, any, any> {
-  return createScorer({
-    id: 'default-completion',
-    description: 'Default LLM completion check',
-  }).generateScore(async ({ run }) => {
-    const ctx = run.input as CompletionContext;
-    
-    const completionPrompt = `
-      The ${ctx.selectedPrimitive.type} ${ctx.selectedPrimitive.id} has contributed to the task.
-      This is the result: ${ctx.primitiveResult}
+const defaultCompletionSchema = z.object({
+  isComplete: z.boolean().describe('Whether the task is complete'),
+  completionReason: z.string().describe('Explanation of why the task is or is not complete'),
+  finalResult: z.string().describe('The final result to return if complete'),
+});
 
-      You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete.
-      Original task: ${ctx.originalTask}
+/**
+ * Runs the default LLM completion check.
+ * Returns structured output with finalResult and completionReason.
+ * 
+ * @internal Used by the network loop when no scorers are configured
+ */
+export async function runDefaultCompletionCheck(
+  agent: Agent,
+  context: CompletionContext,
+): Promise<ScorerResult> {
+  const start = Date.now();
 
-      Return 1 if the task is complete, 0 if not complete.
-    `;
+  const completionPrompt = `
+    The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} has contributed to the task.
+    This is the result: ${context.primitiveResult}
 
-    try {
-      const result = await agent.generate(completionPrompt, {
-        maxSteps: 1,
-      });
-      
-      // Parse the response - look for indicators of completion
-      const text = result.text.toLowerCase();
-      const isComplete = text.includes('1') || 
-                         text.includes('complete') || 
-                         text.includes('done') ||
-                         text.includes('finished');
-      
-      return isComplete ? 1 : 0;
-    } catch {
-      return 0; // On error, assume not complete
+    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions.
+    Original task: ${context.originalTask}
+
+    When generating the final result, make sure to take into account previous decision making history and results.
+
+    You must return this JSON shape:
+    {
+      "isComplete": boolean,
+      "completionReason": string,
+      "finalResult": string
     }
-  });
+  `;
+
+  try {
+    const result = await agent.generate(completionPrompt, {
+      maxSteps: 1,
+      structuredOutput: {
+        schema: defaultCompletionSchema,
+      },
+    });
+
+    const output = result.object;
+    
+    return {
+      score: output.isComplete ? 1 : 0,
+      passed: output.isComplete,
+      reason: output.completionReason,
+      finalResult: output.isComplete ? output.finalResult : undefined,
+      scorerId: 'default-completion',
+      scorerName: 'Default LLM Completion',
+      duration: Date.now() - start,
+    };
+  } catch (error: any) {
+    return {
+      score: 0,
+      passed: false,
+      reason: `LLM completion check failed: ${error.message}`,
+      scorerId: 'default-completion',
+      scorerName: 'Default LLM Completion',
+      duration: Date.now() - start,
+    };
+  }
 }
 
 // Re-export for users who want to create custom scorers

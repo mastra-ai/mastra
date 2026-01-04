@@ -195,14 +195,19 @@ interface CompletionConfig {
 
 ## How Completion Works
 
-**Everything is a scorer.** Even the default LLM completion is a scorer under the hood.
+**Everything goes through the completion check system.**
 
-| Config | Scorers Used |
-|--------|-------------|
-| No `completion.scorers` | Default LLM scorer (asks "is this complete?") |
+| Config | What Runs |
+|--------|-----------|
+| No `completion.scorers` | Default LLM check (structured output with `finalResult`) |
 | `completion.scorers: [...]` | Only those scorers |
 
-When you provide scorers, they **replace** the default LLM scorer.
+The default LLM check returns:
+- `isComplete`: boolean
+- `completionReason`: why it's complete or not
+- `finalResult`: the final output to return
+
+This metadata flows back into the network result.
 
 ---
 

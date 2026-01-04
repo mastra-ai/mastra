@@ -13,8 +13,8 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-import type { CompletionConfig, CompletionContext } from './validation';
-import { runValidation, formatCompletionFeedback, createDefaultCompletionScorer } from './validation';
+import type { CompletionConfig, CompletionContext, ScorerResult } from './validation';
+import { runValidation, formatCompletionFeedback, runDefaultCompletionCheck } from './validation';
 
 async function getRoutingAgent({
   requestContext,
@@ -1123,11 +1123,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      // Use configured scorers, or default LLM scorer if none provided
       const configuredScorers = validation?.scorers || [];
-      const scorers = configuredScorers.length > 0
-        ? configuredScorers
-        : [createDefaultCompletionScorer(routingAgent)];
 
       // Build completion context
       const memory = await routingAgent.getMemory({ requestContext });
@@ -1153,19 +1149,36 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         customContext: requestContext?.toJSON?.() as Record<string, unknown> | undefined,
       };
 
-      // Run completion scorers
+      // Determine which scorers to run
+      const hasConfiguredScorers = configuredScorers.length > 0;
+
       await writer?.write({
         type: 'network-validation-start',
         payload: {
           runId,
           iteration: inputData.iteration,
-          checksCount: scorers.length,
+          checksCount: hasConfiguredScorers ? configuredScorers.length : 1,
         },
         from: ChunkFrom.NETWORK,
         runId,
       });
 
-      const completionResult = await runValidation({ ...validation, scorers }, completionContext);
+      // Run either configured scorers or the default LLM completion check
+      let completionResult;
+      if (hasConfiguredScorers) {
+        completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
+      } else {
+        // Use the default LLM completion check (returns structured output)
+        const defaultResult = await runDefaultCompletionCheck(routingAgent, completionContext);
+        completionResult = {
+          complete: defaultResult.passed,
+          finalResult: defaultResult.finalResult,
+          completionReason: defaultResult.reason,
+          scorers: [defaultResult],
+          totalDuration: defaultResult.duration,
+          timedOut: false,
+        };
+      }
 
       await writer?.write({
         type: 'network-validation-end',
@@ -1181,24 +1194,45 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       });
 
       if (completionResult.complete) {
-        // All checks passed - task is truly complete
+        // Task is complete - use finalResult from scorer if available
+        const finalResultToUse = completionResult.finalResult || inputData.result;
+        
+        // Save final result to memory
+        const memoryInstance = await routingAgent.getMemory({ requestContext });
+        if (memoryInstance && completionResult.finalResult) {
+          await memoryInstance.saveMessages({
+            messages: [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'assistant',
+                content: {
+                  parts: [{ type: 'text', text: completionResult.finalResult }],
+                  format: 2,
+                },
+                createdAt: new Date(),
+                threadId: inputData.threadId || runId,
+                resourceId: inputData.threadResourceId || networkName,
+              },
+            ] as MastraDBMessage[],
+          });
+        }
+
         return {
           ...inputData,
+          result: finalResultToUse,
           isComplete: true,
           validationPassed: true,
-          completionReason: inputData.completionReason
-            ? `${inputData.completionReason} (checks passed)`
-            : 'All checks passed',
+          completionReason: completionResult.completionReason || 'Task complete',
         };
       } else {
-        // Checks failed - override LLM's completion assessment
-        // Format feedback to inject into the next iteration
+        // Not complete - inject feedback for next iteration
         const feedback = formatCompletionFeedback(completionResult);
 
-        // Save validation feedback to memory so the next iteration can see it
-        const memory = await routingAgent.getMemory({ requestContext });
-        if (memory) {
-          await memory.saveMessages({
+        // Save feedback to memory so the next iteration can see it
+        const memoryInstance = await routingAgent.getMemory({ requestContext });
+        if (memoryInstance) {
+          await memoryInstance.saveMessages({
             messages: [
               {
                 id: generateId(),
@@ -1208,7 +1242,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
                   parts: [
                     {
                       type: 'text',
-                      text: `[VALIDATION FAILED]\n\nThe LLM assessed the task as complete, but automated validation checks failed.\n\n${feedback}\n\nPlease address these validation failures and continue working on the task.`,
+                      text: `[NOT COMPLETE]\n\n${feedback}\n\nPlease continue working on the task.`,
                     },
                   ],
                   format: 2,
@@ -1223,13 +1257,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
 
         return {
           ...inputData,
-          isComplete: false, // Override - force another iteration
+          isComplete: false,
           validationPassed: false,
           validationFeedback: feedback,
-          // Update result to include validation context for next routing decision
-          result: inputData.result
-            ? `${inputData.result}\n\n[VALIDATION FAILED - See feedback above]`
-            : '[VALIDATION FAILED - See feedback above]',
         };
       }
     },
