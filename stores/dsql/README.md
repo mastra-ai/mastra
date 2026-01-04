@@ -1,7 +1,6 @@
 # @mastra/dsql
 
-Amazon Aurora DSQL storage implementation for Mastra.  
-Provides thread, message, workflow, and observability storage using Aurora DSQL with IAM authentication.
+Amazon Aurora DSQL storage implementation for Mastra, providing thread, message, workflow, and observability storage using Aurora DSQL with IAM authentication.
 
 > **Note**  
 > Aurora DSQL doesn’t support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`.  
@@ -19,6 +18,8 @@ npm install @mastra/dsql
 - AWS credentials with access to the DSQL cluster (IAM authentication)
 
 ## Usage
+
+### Storage
 
 ```typescript
 import { DSQLStore } from '@mastra/dsql';
@@ -67,22 +68,44 @@ const messages = await store.listMessages({ threadId: 'thread-123' });
 
 ## Configuration
 
-### Basic Configuration
+### Connection Methods
+
+`DSQLStore` supports multiple connection methods:
+
+**1. Host Configuration (Recommended)**
 
 ```typescript
 import { DSQLStore } from '@mastra/dsql';
 
 const store = new DSQLStore({
-  // Required
   id: 'my-dsql-store',
   host: 'abc123.dsql.us-east-1.on.aws',
-
-  // Optional - Connection settings
-  user: 'admin', // default: 'admin'
-  database: 'postgres', // default: 'postgres'
-  region: 'us-east-1', // auto-detected from host if not specified
-  schemaName: 'public', // default: 'public'
+  // region is auto-detected from host, or specify explicitly
+  // user: 'admin', // default
+  // database: 'postgres', // default
+  schemaName: 'custom_schema', // optional
 });
+```
+
+**2. Pre-configured pg.Pool**
+
+```typescript
+import { Pool } from 'pg';
+import { AuroraDSQLClient } from '@aws/aurora-dsql-node-postgres-connector';
+import { DSQLStore } from '@mastra/dsql';
+
+const pool = new Pool({
+  host: 'abc123.dsql.us-east-1.on.aws',
+  Client: AuroraDSQLClient,
+  region: 'us-east-1',
+});
+
+const store = new DSQLStore({
+  id: 'my-dsql-store',
+  pool,
+});
+
+// Use store.pool for other libraries that need a pg.Pool
 ```
 
 ### Custom AWS Credentials
@@ -120,7 +143,8 @@ const store = new DSQLStore({
 | Option                      | Type                          | Default         | Description                                                                                               |
 | --------------------------- | ----------------------------- | --------------- | --------------------------------------------------------------------------------------------------------- |
 | `id`                        | string                        | (required)      | Unique identifier for this store instance                                                                 |
-| `host`                      | string                        | (required)      | DSQL cluster endpoint (e.g., `abc123.dsql.us-east-1.on.aws`)                                              |
+| `host`                      | string                        | (required)\*    | DSQL cluster endpoint (e.g., `abc123.dsql.us-east-1.on.aws`)                                              |
+| `pool`                      | pg.Pool                       | -               | Pre-configured pg.Pool instance (cannot be used with host)                                                |
 | `user`                      | string                        | `'admin'`       | Database user (Aurora DSQL built-in admin role is `admin`)                                                |
 | `database`                  | string                        | `'postgres'`    | Database name (Aurora DSQL exposes a single built-in database named `postgres` per cluster)               |
 | `region`                    | string                        | (auto-detected) | AWS region, extracted from host if not provided                                                           |
@@ -132,6 +156,8 @@ const store = new DSQLStore({
 | `maxLifetimeSeconds`        | number                        | `3300`          | Maximum connection lifetime in seconds (must be `< 3600` due to Aurora DSQL’s 60-minute connection limit) |
 | `connectionTimeoutMillis`   | number                        | `5000`          | Connection acquisition timeout in milliseconds                                                            |
 | `allowExitOnIdle`           | boolean                       | `true`          | Allow the process to exit when all connections are idle                                                   |
+
+\* Either `host` or `pool` is required.
 
 ### Default Connection Pool Settings
 
@@ -180,14 +206,15 @@ You usually interact with it like any other Mastra store, but there are some imp
   - Individual connections are limited to about 60 minutes.
   - The default `maxLifetimeSeconds: 3300` ensures connections are recycled before hitting this limit.
 
-For a complete, up-to-date list of supported and unsupported features, see the Aurora DSQL documentation:
+## Features
 
-- [Aurora DSQL Documentation](https://docs.aws.amazon.com/aurora-dsql/)
-- [SQL Reference](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-aurora-dsql-sql.html)
-- [Supported SQL Features](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-supported-sql-features.html)
-- [Unsupported PostgreSQL Features](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-unsupported-features.html)
-- [Supported Data Types](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-supported-data-types.html)
-- [Asynchronous Indexes](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html)
+### Storage Features
+
+- Thread and message storage with JSON support
+- Atomic transactions for data consistency
+- Efficient batch operations
+- Rich metadata support
+- Timestamp tracking
 
 ## Storage Methods
 
@@ -245,10 +272,13 @@ For a complete, up-to-date list of supported and unsupported features, see the A
 
 The store creates performance indexes during initialization for common query patterns:
 
-- `mastra_threads_resourceid_createdat_idx`: (`resourceId`, `createdAt`)
-- `mastra_messages_thread_id_createdat_idx`: (`thread_id`, `createdAt`)
-- `mastra_traces_name_starttime_idx`: (`name`, `startTime`)
-- `mastra_scores_trace_id_span_id_created_at_idx`: (`traceId`, `spanId`, `createdAt`)
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt)
+- `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt)
+- `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt)
+- `mastra_ai_spans_name_idx`: (name)
+- `mastra_ai_spans_spantype_startedat_idx`: (spanType, startedAt)
+- `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt)
 
 Notes:
 
@@ -289,7 +319,39 @@ const threadIndexes = await store.listIndexes('mastra_threads');
 
 // Get detailed statistics for an index
 const stats = await store.describeIndex('idx_threads_resource');
+console.log(stats);
+// {
+//   name: 'idx_threads_resource',
+//   table: 'mastra_threads',
+//   columns: ['resourceId'],
+//   unique: false,
+//   size: '128 KB',
+//   definition: 'CREATE INDEX idx_threads_resource...',
+//   method: 'btree',
+//   scans: 1542,
+//   tuples_read: 45230,
+//   tuples_fetched: 12050
+// }
 
 // Drop an index
 await store.dropIndex('idx_threads_status');
 ```
+
+### Index Options
+
+- `name` (required): Index name
+- `table` (required): Table name
+- `columns` (required): Array of column names (ASC/DESC automatically stripped for Aurora DSQL)
+- `unique`: Create unique index (default: false)
+- `concurrent`: Ignored in Aurora DSQL (indexes are always async)
+- `where`: Partial index condition
+- `method`: Ignored in Aurora DSQL (only btree supported)
+
+## Related Links
+
+- [Aurora DSQL Documentation](https://docs.aws.amazon.com/aurora-dsql/)
+- [SQL Reference](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-aurora-dsql-sql.html)
+- [Supported SQL Features](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-supported-sql-features.html)
+- [Unsupported PostgreSQL Features](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-unsupported-features.html)
+- [Supported Data Types](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-supported-data-types.html)
+- [Asynchronous Indexes](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html)
