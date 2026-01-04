@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
   Processor,
   ProcessInputArgs,
@@ -8,13 +9,13 @@ import type {
   ProcessOutputResultArgs,
 } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
-import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import {
   buildObserverSystemPrompt,
   buildObserverPrompt,
   parseObserverOutput,
   optimizeObservationsForContext,
+  formatMessagesForObserver,
 } from './observer-agent';
 import {
   REFLECTOR_SYSTEM_PROMPT,
@@ -978,19 +979,12 @@ ${suggestedResponse}
       if (messages.length === 0) continue;
 
       // Format messages with timestamps
-      const formattedMessages = messages
-        .filter(msg => msg.role !== 'system') // Exclude system messages
-        .map(msg => {
-          const timestamp = msg.createdAt ? new Date(msg.createdAt).toISOString() : 'unknown';
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          return `[${timestamp}] ${msg.role}: ${content}`;
-        })
-        .join('\n');
+      const formattedMessages = formatMessagesForObserver(messages);
 
       if (formattedMessages) {
-        blocks.push(`<unobserved-context thread="${threadId}">
+        blocks.push(`<other-conversation id="${threadId}">
 ${formattedMessages}
-</unobserved-context>`);
+</other-conversation>`);
       }
     }
 
