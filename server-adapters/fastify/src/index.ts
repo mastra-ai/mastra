@@ -442,6 +442,23 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   registerContextMiddleware(): void {
+    // Override the default JSON parser to allow empty bodies
+    // This matches Express behavior where empty POST requests with Content-Type: application/json are allowed
+    this.app.removeContentTypeParser('application/json');
+    this.app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+      try {
+        // Allow empty body
+        if (!body || (typeof body === 'string' && body.trim() === '')) {
+          done(null, undefined);
+          return;
+        }
+        const parsed = JSON.parse(body as string);
+        done(null, parsed);
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    });
+
     // Register content type parser for multipart/form-data
     // This allows Fastify to accept multipart requests without parsing them
     // We'll parse them manually in getParams using busboy
