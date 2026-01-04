@@ -16,7 +16,17 @@ import { PRIMITIVE_TYPES } from '../types';
 import type { NetworkValidationConfig, ValidationContext } from './validation';
 import { runValidation, formatValidationFeedback } from './validation';
 
-async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
+async function getRoutingAgent({
+  requestContext,
+  agent,
+  routingConfig,
+}: {
+  agent: Agent;
+  requestContext: RequestContext;
+  routingConfig?: {
+    additionalInstructions?: string;
+  };
+}) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
   const agentsToUse = await agent.listAgents({ requestContext: requestContext });
   const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
@@ -48,6 +58,10 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
     })
     .join('\n');
 
+  const additionalInstructionsSection = routingConfig?.additionalInstructions
+    ? `\n## Additional Instructions\n${routingConfig.additionalInstructions}`
+    : '';
+
   const instructions = `
           You are a router in a network of specialized AI agents.
           Your job is to decide which agent should handle each step of a task.
@@ -69,6 +83,7 @@ async function getRoutingAgent({ requestContext, agent }: { agent: Agent; reques
           When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
           When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
+          ${additionalInstructionsSection}
         `;
 
   return new Agent({
@@ -236,6 +251,8 @@ export async function createNetworkLoop({
   agent,
   generateId,
   routingAgentOptions,
+  routing,
+  completion,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -243,6 +260,15 @@ export async function createNetworkLoop({
   agent: Agent;
   routingAgentOptions?: Pick<MultiPrimitiveExecutionOptions, 'modelSettings'>;
   generateId: () => string;
+  routing?: {
+    additionalInstructions?: string;
+    verboseIntrospection?: boolean;
+  };
+  completion?: {
+    evaluate?: (context: any) => Promise<{ isComplete: boolean; finalResult?: string; reason?: string }>;
+    additionalInstructions?: string;
+    skipLLMEvaluation?: boolean;
+  };
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -276,7 +302,7 @@ export async function createNetworkLoop({
         completionReason: z.string(),
       });
 
-      const routingAgent = await getRoutingAgent({ requestContext, agent });
+      const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
       let completionResult;
 
@@ -301,7 +327,60 @@ export async function createNetworkLoop({
       });
 
       if (inputData.primitiveType !== 'none' && inputData?.result) {
-        const completionPrompt = `
+        // Check for custom completion evaluator
+        if (completion?.evaluate) {
+          const memory = await agent.getMemory({ requestContext });
+          const threadMessages = memory
+            ? await memory.getMessages({ threadId: initData?.threadId || runId })
+            : [];
+
+          const customResult = await completion.evaluate({
+            task: inputData.task,
+            iteration: iterationCount,
+            maxIterations: 0, // Will be set by caller
+            primitiveResult: typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result,
+            primitive: {
+              id: inputData.primitiveId,
+              type: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
+            },
+            messages: threadMessages,
+            threadId: initData?.threadId,
+            requestContext,
+          });
+
+          if (customResult.isComplete) {
+            const endPayload = {
+              task: inputData.task,
+              primitiveId: '',
+              primitiveType: 'none' as const,
+              prompt: '',
+              result: customResult.finalResult || inputData.result,
+              isComplete: true,
+              selectionReason: customResult.reason || 'Custom evaluator marked complete',
+              iteration: iterationCount,
+              runId: stepId,
+            };
+
+            await writer.write({
+              type: 'routing-agent-end',
+              payload: endPayload,
+              from: ChunkFrom.NETWORK,
+              runId,
+            });
+
+            return endPayload;
+          }
+          // If custom evaluator says not complete, continue to primitive selection below
+        } else if (completion?.skipLLMEvaluation) {
+          // Skip LLM evaluation entirely - will rely on validation or maxSteps
+          // Continue to primitive selection
+        } else {
+          // Default LLM-based completion evaluation
+          const additionalCompletionInstructions = completion?.additionalInstructions
+            ? `\n\nAdditional completion criteria:\n${completion.additionalInstructions}`
+            : '';
+
+          const completionPrompt = `
                           The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
                           This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
 
@@ -309,6 +388,7 @@ export async function createNetworkLoop({
                           Original task: ${inputData.task}.
 
                           When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
+                          ${additionalCompletionInstructions}
 
                           You must return this JSON shape.
 
@@ -463,6 +543,7 @@ export async function createNetworkLoop({
 
           return endPayload;
         }
+        } // end else (LLM-based completion evaluation)
       }
 
       const prompt: MessageListInput = [
@@ -1184,6 +1265,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   resourceId,
   messages,
   validation,
+  routing,
+  completion,
+  onIterationComplete,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1200,6 +1284,31 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
    * When provided, the network will run external checks to verify task completion.
    */
   validation?: NetworkValidationConfig;
+  /**
+   * Optional routing configuration to customize primitive selection behavior.
+   */
+  routing?: {
+    additionalInstructions?: string;
+    verboseIntrospection?: boolean;
+  };
+  /**
+   * Optional completion configuration to customize task completion evaluation.
+   */
+  completion?: {
+    evaluate?: (context: any) => Promise<{ isComplete: boolean; finalResult?: string; reason?: string }>;
+    additionalInstructions?: string;
+    skipLLMEvaluation?: boolean;
+  };
+  /**
+   * Optional callback fired after each iteration completes.
+   */
+  onIterationComplete?: (context: {
+    iteration: number;
+    primitiveId: string;
+    primitiveType: 'agent' | 'workflow' | 'tool';
+    result: string;
+    isComplete: boolean;
+  }) => void | Promise<void>;
 }) {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1225,6 +1334,8 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     agent: routingAgent,
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
+    routing,
+    completion,
   });
 
   // Validation step: runs external checks when LLM says task is complete
