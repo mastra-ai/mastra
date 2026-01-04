@@ -161,7 +161,13 @@ export type ValidationRunResult = CompletionRunResult;
 // ============================================================================
 
 /**
- * Run a single scorer and return the result
+ * Run a single scorer and return the result.
+ * 
+ * Scorers receive:
+ * - `run.input` - CompletionContext with all network state
+ * - `run.output` - The primitive's result (what we're evaluating)
+ * - `run.runId` - The network run ID
+ * - `run.requestContext` - Custom context from the request
  */
 async function runSingleScorer(
   scorer: MastraScorer<any, any, any, any>,
@@ -171,8 +177,10 @@ async function runSingleScorer(
 
   try {
     const result = await scorer.run({
-      output: context.primitiveResult,
+      runId: context.runId,
       input: context,
+      output: context.primitiveResult,
+      requestContext: context.customContext,
     });
 
     const score = typeof result.score === 'number' ? result.score : 0;

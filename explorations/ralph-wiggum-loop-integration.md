@@ -82,10 +82,16 @@ Scorers are created using `createScorer` from the evals module. For completion, 
 
 ### Code-based Scorer
 
+Scorers receive a `run` object with:
+- `run.input` - `CompletionContext` with all network state
+- `run.output` - The primitive's result (what we're evaluating)
+- `run.runId` - The network run ID
+- `run.requestContext` - Custom context from the request
+
 ```typescript
 import { createScorer } from '@mastra/core/evals';
 
-// Run tests
+// Simple scorer - run tests
 const testsScorer = createScorer({
   id: 'tests',
   description: 'Run unit tests',
@@ -98,22 +104,35 @@ const testsScorer = createScorer({
   }
 });
 
-// Check API health
-const apiScorer = createScorer({
-  id: 'api-health',
-  description: 'Check if API is healthy',
-}).generateScore(async () => {
-  const res = await fetch('http://localhost:3000/health');
-  return res.ok ? 1 : 0;
+// Context-aware scorer - access full network state
+const progressScorer = createScorer({
+  id: 'progress',
+  description: 'Check progress',
+}).generateScore(async ({ run }) => {
+  // run.input is CompletionContext
+  const ctx = run.input;
+  
+  console.log(`Iteration: ${ctx.iteration}`);
+  console.log(`Task: ${ctx.originalTask}`);
+  console.log(`Primitive: ${ctx.selectedPrimitive.id}`);
+  console.log(`Result: ${run.output}`); // Same as ctx.primitiveResult
+  
+  // Access messages history
+  const hasCodeOutput = ctx.messages.some(m => 
+    m.content?.includes?.('```')
+  );
+  
+  return hasCodeOutput ? 1 : 0;
 });
 
-// Context-aware scorer
-const iterationScorer = createScorer({
-  id: 'iteration-check',
-  description: 'Check iteration count',
+// Use custom request context
+const envScorer = createScorer({
+  id: 'env-check',
+  description: 'Environment-aware check',
 }).generateScore(async ({ run }) => {
-  const context = run.input; // CompletionContext
-  return context.iteration >= 3 ? 1 : 0;
+  const isProd = run.requestContext?.env === 'production';
+  // Stricter checks in prod
+  return isProd ? runStrictChecks() : 1;
 });
 ```
 
