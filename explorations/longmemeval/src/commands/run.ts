@@ -58,7 +58,11 @@ export class RunCommand {
     const runDir = join(options.outputDir || this.outputDir, options.memoryConfig, runId);
     await mkdir(runDir, { recursive: true });
 
-    console.log(chalk.blue(`\n🚀 Starting LongMemEval benchmark run: ${runId}\n`));
+    console.log(
+      chalk.blue(`
+🚀 Starting LongMemEval benchmark run: ${runId}
+`),
+    );
     console.log(chalk.gray(`Dataset: ${options.dataset}`));
     console.log(chalk.gray(`Model: ${options.model}`));
     console.log(chalk.gray(`Memory Config: ${options.memoryConfig}`));
@@ -70,7 +74,8 @@ export class RunCommand {
     const preparedDir = join(options.preparedDataDir || this.preparedDataDir, options.dataset, options.memoryConfig);
 
     if (!existsSync(preparedDir)) {
-      throw new Error(`Prepared data not found at: ${preparedDir}\nPlease run 'longmemeval prepare' first.`);
+      throw new Error(`Prepared data not found at: ${preparedDir}
+Please run 'longmemeval prepare' first.`);
     }
 
     // Load prepared questions
@@ -112,17 +117,25 @@ export class RunCommand {
     if (skippedCount > 0) {
       console.log(
         chalk.yellow(
-          `\n⚠️  ${skippedCount} question${skippedCount > 1 ? 's' : ''} skipped due to incomplete preparation.`,
+          `
+⚠️  ${skippedCount} question${skippedCount > 1 ? 's' : ''} skipped due to incomplete preparation.`,
         ),
       );
-      console.log(chalk.gray(`   Run 'prepare' command to complete preparation.\n`));
+      console.log(
+        chalk.gray(`   Run 'prepare' command to complete preparation.
+`),
+      );
     }
 
     if (failedCount > 0) {
       console.log(
-        chalk.red(`\n⚠️  ${failedCount} question${failedCount > 1 ? 's' : ''} skipped due to failed preparation.`),
+        chalk.red(`
+⚠️  ${failedCount} question${failedCount > 1 ? 's' : ''} skipped due to failed preparation.`),
       );
-      console.log(chalk.gray(`   Check error logs and re-run 'prepare' command.\n`));
+      console.log(
+        chalk.gray(`   Check error logs and re-run 'prepare' command.
+`),
+      );
     }
 
     // Filter by questionId if specified
@@ -132,7 +145,11 @@ export class RunCommand {
       if (questionsToProcess.length === 0) {
         throw new Error(`Question with ID "${options.questionId}" not found in prepared data`);
       }
-      console.log(chalk.yellow(`\nFocusing on question: ${options.questionId}\n`));
+      console.log(
+        chalk.yellow(`
+Focusing on question: ${options.questionId}
+`),
+      );
     } else {
       // Apply offset and subset if requested
       const offset = options.offset || 0;
@@ -145,13 +162,17 @@ export class RunCommand {
       }
       if (offset > 0 || options.subset) {
         console.log(
-          chalk.gray(`\nProcessing questions ${offset + 1}-${offset + questionsToProcess.length} of ${preparedQuestions.length} total\n`),
+          chalk.gray(`
+Processing questions ${offset + 1}-${offset + questionsToProcess.length} of ${preparedQuestions.length} total
+`),
         );
       }
     }
 
     console.log(
-      chalk.yellow(`\nEvaluating ${questionsToProcess.length} question${questionsToProcess.length !== 1 ? 's' : ''}\n`),
+      chalk.yellow(`
+Evaluating ${questionsToProcess.length} question${questionsToProcess.length !== 1 ? 's' : ''}
+`),
     );
 
     // Process questions with concurrency control
@@ -176,7 +197,9 @@ export class RunCommand {
       let progressText = `Overall: ${completedCount}/${questionsToProcess.length} (${inProgressCount} in progress, ${Math.round(rate * 60)} q/min, ~${remaining}s remaining)`;
 
       if (activeEvaluations.size > 0 && concurrency > 1) {
-        progressText += '\n\nActive evaluations:';
+        progressText += `
+
+Active evaluations:`;
 
         // Sort active evaluations by completion status
         const sortedEvaluations = Array.from(activeEvaluations.entries())
@@ -194,7 +217,8 @@ export class RunCommand {
 
         sortedEvaluations.forEach(({ index, info, progress }) => {
           const percentage = (progress * 100).toFixed(0);
-          progressText += `\n  [${index + 1}] ${info.questionId} - ${info.status} (${percentage}%)`;
+          progressText += `
+  [${index + 1}] ${info.questionId} - ${info.status} (${percentage}%)`;
         });
       }
 
@@ -297,7 +321,11 @@ export class RunCommand {
     questionSpinner.succeed(`Evaluated ${results.length} questions`);
 
     // Calculate metrics
-    console.log(chalk.blue('\n📊 Calculating metrics...\n'));
+    console.log(
+      chalk.blue(`
+📊 Calculating metrics...
+`),
+    );
     const metrics = this.calculateMetrics(results);
 
     // Save results
@@ -448,7 +476,12 @@ Be specific rather than generic when the user has expressed clear preferences in
       context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
     });
 
-    console.log(response.text + `\n\n`);
+    console.log(
+      response.text +
+        `
+
+`,
+    );
 
     const evalAgent = new Agent({
       id: 'longmemeval-metric-agent',
@@ -471,36 +504,44 @@ Be specific rather than generic when the user has expressed clear preferences in
     const result = await metric.measure(input, response.text);
     const isCorrect = result.score === 1;
 
-    // Run improved question if it exists
+    // Run improved evaluation if improved question OR improved answer exists
     let improvedHypothesis: string | undefined;
     let improvedIsCorrect: boolean | undefined;
 
-    if (meta.improvedQuestion) {
-      updateStatus(`Running improved question for ${meta.questionId}...`);
+    // Normalize: if only improvedAnswer exists, copy the original question to improvedQuestion
+    // This simplifies the logic - we always run a "fixed" evaluation if either field is set
+    const improvedQuestion = meta.improvedQuestion ?? (meta.improvedAnswer ? meta.question : undefined);
+    const improvedAnswer = meta.improvedAnswer ?? meta.answer;
 
-      // Create a separate thread for the improved question evaluation
-      const improvedThreadId = `eval_improved_${meta.questionId}_${Date.now()}`;
+    if (improvedQuestion) {
+      // If the improved question is the same as the original (only answer changed),
+      // reuse the vanilla response. Otherwise, run a new query.
+      if (improvedQuestion === meta.question) {
+        improvedHypothesis = response.text;
+      } else {
+        updateStatus(`Running improved question for ${meta.questionId}...`);
 
-      const improvedResponse = await agent.generate(meta.improvedQuestion, {
-        threadId: improvedThreadId,
-        resourceId: meta.resourceId,
-        modelSettings: {
-          temperature: 0,
-        },
-        context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
-      });
+        // Create a separate thread for the improved question evaluation
+        const improvedThreadId = `eval_improved_${meta.questionId}_${Date.now()}`;
 
-      improvedHypothesis = improvedResponse.text;
+        const improvedResponse = await agent.generate(improvedQuestion, {
+          threadId: improvedThreadId,
+          resourceId: meta.resourceId,
+          modelSettings: {
+            temperature: 0,
+          },
+          context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
+        });
 
-      // Use improvedAnswer if provided, otherwise fall back to original answer
-      const expectedAnswer = meta.improvedAnswer ?? meta.answer;
+        improvedHypothesis = improvedResponse.text;
+      }
 
       const improvedInput = JSON.stringify({
-        question: meta.improvedQuestion,
-        answer: expectedAnswer,
+        question: improvedQuestion,
+        answer: improvedAnswer,
       });
 
-      const improvedResult = await metric.measure(improvedInput, improvedResponse.text);
+      const improvedResult = await metric.measure(improvedInput, improvedHypothesis);
       improvedIsCorrect = improvedResult.score === 1;
     }
 
@@ -522,16 +563,17 @@ Be specific rather than generic when the user has expressed clear preferences in
       }
 
       // Show improved result if applicable
-      if (meta.improvedQuestion) {
-        const improvedExpectedAnswer = meta.improvedAnswer ?? meta.answer;
+      if (improvedQuestion) {
+        // Show whether it's an improved question or just improved answer
+        const label = meta.improvedQuestion ? 'improved Q' : 'improved A';
         console.log(
-          chalk.cyan(`  ↳ improved:`),
+          chalk.cyan(`  ↳ ${label}:`),
           chalk[improvedIsCorrect ? 'green' : 'red'](`${improvedIsCorrect ? '✓' : '✗'}`),
         );
         if (!improvedIsCorrect) {
-          console.log(chalk.gray(`    Q: "${meta.improvedQuestion}"`));
+          console.log(chalk.gray(`    Q: "${improvedQuestion}"`));
           console.log(chalk.gray(`    A: "${improvedHypothesis}"`));
-          console.log(chalk.yellow(`    Expected: "${improvedExpectedAnswer}"`));
+          console.log(chalk.yellow(`    Expected: "${improvedAnswer}"`));
         }
       }
     }
@@ -541,7 +583,7 @@ Be specific rather than generic when the user has expressed clear preferences in
       hypothesis: response.text,
       question_type: meta.questionType as QuestionType,
       is_correct: isCorrect,
-      improved_question: meta.improvedQuestion,
+      improved_question: improvedQuestion,
       improved_hypothesis: improvedHypothesis,
       improved_is_correct: improvedIsCorrect,
     };
@@ -590,7 +632,10 @@ Be specific rather than generic when the user has expressed clear preferences in
     };
     await writeFile(metricsPath, JSON.stringify(metricsData, null, 2));
 
-    console.log(chalk.gray(`\nResults saved to: ${runDir}`));
+    console.log(
+      chalk.gray(`
+Results saved to: ${runDir}`),
+    );
   }
 
   private calculateMetrics(results: EvaluationResult[]): BenchmarkMetrics {
@@ -645,11 +690,10 @@ Be specific rather than generic when the user has expressed clear preferences in
             metrics.fixed_accuracy_by_type![type] = { correct: 0, total: 0, accuracy: 0 };
           }
           metrics.fixed_accuracy_by_type![type].total++;
-          
+
           // Use improved_is_correct if this question has an improved version, otherwise use is_correct
-          const isCorrectFixed = result.improved_question !== undefined 
-            ? result.improved_is_correct 
-            : result.is_correct;
+          const isCorrectFixed =
+            result.improved_question !== undefined ? result.improved_is_correct : result.is_correct;
           if (isCorrectFixed) {
             metrics.fixed_accuracy_by_type![type].correct++;
           }
@@ -707,11 +751,18 @@ Be specific rather than generic when the user has expressed clear preferences in
   }
 
   private displayMetrics(metrics: BenchmarkMetrics, options?: RunOptions): void {
-    console.log(chalk.bold('\n📊 Benchmark Results\n'));
+    console.log(
+      chalk.bold(`
+📊 Benchmark Results
+`),
+    );
 
     // Display configuration if provided
     if (options) {
-      console.log(chalk.bold('Configuration:\n'));
+      console.log(
+        chalk.bold(`Configuration:
+`),
+      );
       console.log(chalk.gray('Dataset:'), chalk.cyan(options.dataset));
       console.log(chalk.gray('Model:'), chalk.cyan(options.model));
       console.log(chalk.gray('Memory Config:'), chalk.cyan(options.memoryConfig));
@@ -741,7 +792,7 @@ Be specific rather than generic when the user has expressed clear preferences in
     };
 
     // Helper to get color based on accuracy
-    const getColor = (accuracy: number) => accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red';
+    const getColor = (accuracy: number) => (accuracy >= 0.8 ? 'green' : accuracy >= 0.6 ? 'yellow' : 'red');
 
     // Display regular question types (vanilla)
     for (const [type, typeMetrics] of sortedTypes) {
@@ -769,7 +820,7 @@ Be specific rather than generic when the user has expressed clear preferences in
     }
 
     console.log();
-    
+
     // Overall accuracy (vanilla)
     const accuracyColor = getColor(metrics.overall_accuracy);
     console.log(
