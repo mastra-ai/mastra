@@ -4,11 +4,12 @@ import xxhash from 'xxhash-wasm';
 import type { Processor } from '..';
 import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
+import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MastraStorage, MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
 
 const DEFAULT_TOP_K = 4;
@@ -17,19 +18,31 @@ const DEFAULT_CACHE_MAX_SIZE = 1000; // Maximum number of cached embeddings
 
 export interface SemanticRecallOptions {
   /**
-   * Storage instance for retrieving messages
+   * Storage instance for retrieving messages.
+   * If not provided, the processor will attempt to get storage from the mastra instance
+   * passed in the processor context.
    */
-  storage: MemoryStorage;
+  storage?: MemoryStorage;
 
   /**
-   * Vector store for semantic search
+   * Vector store for semantic search.
+   * If not provided, the processor will attempt to get the first vector store from the mastra instance
+   * passed in the processor context.
    */
-  vector: MastraVector;
+  vector?: MastraVector;
 
   /**
-   * Embedder for generating query embeddings
+   * Name of the vector store to use when getting from mastra instance.
+   * Only used when `vector` is not provided explicitly.
+   * If not provided, the first available vector store will be used.
    */
-  embedder: MastraEmbeddingModel<string>;
+  vectorName?: string;
+
+  /**
+   * Embedder for generating query embeddings.
+   * Required for semantic search functionality.
+   */
+  embedder?: MastraEmbeddingModel<string>;
 
   /**
    * Number of most similar messages to retrieve
@@ -118,9 +131,10 @@ export class SemanticRecall implements Processor {
   readonly id = 'semantic-recall';
   readonly name = 'SemanticRecall';
 
-  private storage: MemoryStorage;
-  private vector: MastraVector;
-  private embedder: MastraEmbeddingModel<string>;
+  private storage?: MemoryStorage;
+  private vector?: MastraVector;
+  private vectorName?: string;
+  private embedder?: MastraEmbeddingModel<string>;
   private topK: number;
   private messageRange: { before: number; after: number };
   private scope: 'thread' | 'resource';
@@ -135,9 +149,10 @@ export class SemanticRecall implements Processor {
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
 
-  constructor(options: SemanticRecallOptions) {
+  constructor(options: SemanticRecallOptions = {}) {
     this.storage = options.storage;
     this.vector = options.vector;
+    this.vectorName = options.vectorName;
     this.embedder = options.embedder;
     this.topK = options.topK ?? DEFAULT_TOP_K;
     this.scope = options.scope ?? 'resource'; // Default to 'resource' to match main's behavior
@@ -167,14 +182,69 @@ export class SemanticRecall implements Processor {
     }
   }
 
+  /**
+   * Get MemoryStorage from options or from mastra instance
+   */
+  private async getMemoryStorage(mastra?: Mastra): Promise<MemoryStorage | undefined> {
+    if (this.storage) {
+      return this.storage;
+    }
+    const mastraStorage = mastra?.getStorage();
+    return mastraStorage?.stores?.memory;
+  }
+
+  /**
+   * Get vector store from options or fall back to mastra instance
+   */
+  private getVectorStore(mastra?: Mastra): MastraVector | undefined {
+    if (this.vector) {
+      return this.vector;
+    }
+
+    if (!mastra) {
+      return undefined;
+    }
+
+    // If vectorName is specified, use that
+    if (this.vectorName) {
+      try {
+        return mastra.getVector(this.vectorName);
+      } catch {
+        return undefined;
+      }
+    }
+
+    // Otherwise, get the first available vector store
+    const vectors = mastra.listVectors();
+    if (vectors) {
+      const vectorKeys = Object.keys(vectors);
+      if (vectorKeys.length > 0 && vectorKeys[0]) {
+        return vectors[vectorKeys[0]];
+      }
+    }
+
+    return undefined;
+  }
+
   async processInput(args: {
     messages: MastraDBMessage[];
     messageList: MessageList;
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
+    /** Optional Mastra instance for accessing primitives when not explicitly provided */
+    mastra?: Mastra;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList, requestContext } = args;
+    const { messages, messageList, requestContext, mastra } = args;
+
+    // Get storage and vector from options or mastra
+    const storage = await this.getMemoryStorage(mastra);
+    const vector = this.getVectorStore(mastra);
+
+    if (!storage || !vector || !this.embedder) {
+      // Required dependencies not available, return messages unchanged
+      return messageList;
+    }
 
     // Get memory context from RequestContext
     const memoryContext = parseMemoryRequestContext(requestContext);
@@ -204,6 +274,8 @@ export class SemanticRecall implements Processor {
         query: userQuery,
         threadId,
         resourceId,
+        storage,
+        vector,
       });
 
       if (similarMessages.length === 0) {
@@ -343,17 +415,21 @@ export class SemanticRecall implements Processor {
     query,
     threadId,
     resourceId,
+    storage,
+    vector,
   }: {
     query: string;
     threadId: string;
     resourceId?: string;
+    storage: MemoryStorage;
+    vector: MastraVector;
   }): Promise<MastraDBMessage[]> {
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
 
     // Generate embeddings for the query
     const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
-    await this.ensureVectorIndex(indexName, dimension);
+    await this.ensureVectorIndex(indexName, dimension, vector);
 
     // Perform vector search for each embedding
     const vectorResults: Array<{
@@ -363,7 +439,7 @@ export class SemanticRecall implements Processor {
     }> = [];
 
     for (const embedding of embeddings) {
-      const results = await this.vector.query({
+      const results = await vector.query({
         indexName,
         queryVector: embedding,
         topK: this.topK,
@@ -381,7 +457,7 @@ export class SemanticRecall implements Processor {
     }
 
     // Retrieve messages with context
-    const result = await this.storage.listMessages({
+    const result = await storage.listMessages({
       threadId,
       resourceId,
       include: filteredResults.map(r => ({
@@ -431,7 +507,8 @@ export class SemanticRecall implements Processor {
     // Note: embedderOptions may contain providerOptions for controlling embedding behavior
     // (e.g., outputDimensionality for Google models). The user is responsible for providing
     // options compatible with their embedder's SDK version.
-    const result = await this.embedder.doEmbed({
+    // Note: this.embedder is guaranteed to exist when this method is called (checked in processInput/processOutputResult)
+    const result = await this.embedder!.doEmbed({
       values: [content],
       ...(this.embedderOptions as any),
     });
@@ -451,7 +528,7 @@ export class SemanticRecall implements Processor {
    * Get default index name based on embedder model
    */
   private getDefaultIndexName(): string {
-    const model = this.embedder.modelId || 'default';
+    const model = this.embedder?.modelId || 'default';
     // Sanitize model ID to create valid SQL identifier:
     // - Replace hyphens, periods, and other special chars with underscores
     // - Ensure it starts with a letter or underscore
@@ -464,14 +541,14 @@ export class SemanticRecall implements Processor {
   /**
    * Ensure vector index exists with correct dimensions
    */
-  private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
+  private async ensureVectorIndex(indexName: string, dimension: number, vector: MastraVector): Promise<void> {
     // Check if index exists
-    const indexes = await this.vector.listIndexes();
+    const indexes = await vector.listIndexes();
     const indexExists = indexes.includes(indexName);
 
     if (!indexExists) {
       // Create index if it doesn't exist
-      await this.vector.createIndex({
+      await vector.createIndex({
         indexName,
         dimension,
         metric: 'cosine',
@@ -489,10 +566,15 @@ export class SemanticRecall implements Processor {
     abort: (reason?: string) => never;
     tracingContext?: TracingContext;
     requestContext?: RequestContext;
+    /** Optional Mastra instance for accessing primitives when not explicitly provided */
+    mastra?: Mastra;
   }): Promise<MessageList | MastraDBMessage[]> {
-    const { messages, messageList, requestContext } = args;
+    const { messages, messageList, requestContext, mastra } = args;
 
-    if (!this.vector || !this.embedder || !this.storage) {
+    // Get vector from options or mastra
+    const vector = this.getVectorStore(mastra);
+
+    if (!vector || !this.embedder) {
       // Return messageList if available to signal no transformation occurred
       return messageList || messages;
     }
@@ -592,8 +674,8 @@ export class SemanticRecall implements Processor {
 
       // If we have embeddings, ensure index exists and upsert them
       if (vectors.length > 0) {
-        await this.ensureVectorIndex(indexName, vectorDimension);
-        await this.vector.upsert({
+        await this.ensureVectorIndex(indexName, vectorDimension, vector);
+        await vector.upsert({
           indexName,
           vectors,
           ids,

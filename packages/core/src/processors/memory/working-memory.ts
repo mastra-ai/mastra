@@ -5,7 +5,7 @@ import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage, MemoryConfig } from '../../memory';
 import type { RequestContext } from '../../request-context';
-import type { MemoryStorage } from '../../storage';
+import type { MastraStorage, MemoryStorage } from '../../storage';
 
 export interface WorkingMemoryTemplate {
   format: 'markdown' | 'json';
@@ -78,6 +78,17 @@ export class WorkingMemory implements Processor {
     this.logger = options.logger;
   }
 
+  /**
+   * Get MemoryStorage from options or from mastra instance
+   */
+  private async getMemoryStorage(mastra?: Mastra): Promise<MemoryStorage | undefined> {
+    if (this.options.storage) {
+      return this.options.storage;
+    }
+    const mastraStorage = mastra?.getStorage();
+    return mastraStorage?.stores?.memory;
+  }
+
   async processInput(args: {
     messages: MastraDBMessage[];
     messageList: MessageList;
@@ -88,8 +99,8 @@ export class WorkingMemory implements Processor {
   }): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, requestContext, mastra } = args;
 
-    // Get storage from options, or fall back to mastra instance
-    const storage = this.options.storage ?? mastra?.getStorage();
+    // Get memory storage from options, or fall back to mastra instance
+    const storage = await this.getMemoryStorage(mastra);
 
     if (!storage) {
       this.logger?.warn('[WorkingMemory] No storage available - skipping working memory injection');
