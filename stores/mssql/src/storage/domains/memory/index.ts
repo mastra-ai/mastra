@@ -630,11 +630,15 @@ export class MemoryMSSQL extends MemoryStorage {
       const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM ${tableName}${actualWhereClause}`);
       const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
 
+      // When metadata filter is applied, we need to fetch all messages first, then filter and paginate in memory
+      const needsPostFetchFiltering = filter?.metadata != null && Object.keys(filter.metadata).length > 0;
+
       const fetchBaseMessages = async (): Promise<any[]> => {
         const request = this.pool.request();
         bindWhereParams(request);
 
-        if (perPageInput === false) {
+        // Fetch all when perPage is false OR when metadata filter requires post-fetch filtering
+        if (perPageInput === false || needsPostFetchFiltering) {
           const result = await request.query(`${baseQuery}${actualWhereClause} ${orderByStatement}`);
           return result.recordset || [];
         }
@@ -679,7 +683,25 @@ export class MemoryMSSQL extends MemoryStorage {
         });
       }
       // Parse and format messages to V2
-      const parsed = this._parseAndFormatMessages(messages, 'v2');
+      let parsed = this._parseAndFormatMessages(messages, 'v2');
+
+      // Apply metadata filter (post-fetch filtering)
+      let filteredTotal = total;
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        const filtered = (parsed as any[]).filter((msg: any) => {
+          const metadata = msg.content?.metadata;
+          if (!metadata) return false;
+          for (const [key, value] of Object.entries(filter.metadata!)) {
+            if (metadata[key] !== value) return false;
+          }
+          return true;
+        });
+        // Update total to reflect filtered count
+        filteredTotal = filtered.length;
+        // Apply pagination in memory after filtering
+        parsed = filtered.slice(offset, offset + perPage) as typeof parsed;
+      }
+
       const mult = direction === 'ASC' ? 1 : -1;
 
       const finalMessages = (parsed as MastraDBMessage[]).sort((a, b) => {
@@ -707,11 +729,12 @@ export class MemoryMSSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageCount = finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).length;
-      const hasMore = perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
+      const actualTotal = needsPostFetchFiltering ? filteredTotal : total;
+      const hasMore = perPageInput !== false && returnedThreadMessageCount < actualTotal && offset + perPage < actualTotal;
 
       return {
         messages: finalMessages,
-        total,
+        total: actualTotal,
         page,
         perPage: perPageForResponse,
         hasMore,
