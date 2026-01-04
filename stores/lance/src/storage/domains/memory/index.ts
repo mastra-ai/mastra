@@ -39,11 +39,11 @@ export class StoreMemoryLance extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    // Add resourceId column for backwards compatibility
+    // Add resourceId and metadataJson columns for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
+      ifNotExists: ['resourceId', 'metadataJson'],
     });
   }
 
@@ -718,20 +718,39 @@ export class StoreMemoryLance extends MemoryStorage {
    * Parse message data from LanceDB record format to MastraDBMessage format
    */
   private parseMessageData(data: any): MastraDBMessage {
-    const { thread_id, ...rest } = data;
+    const { thread_id, metadataJson, ...rest } = data;
+    let content =
+      typeof data.content === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(data.content);
+            } catch {
+              return data.content;
+            }
+          })()
+        : data.content;
+
+    // If metadataJson is available, use it as the authoritative source for metadata
+    // This enables efficient JSON filtering while maintaining backwards compatibility
+    if (metadataJson && typeof content === 'object') {
+      let parsedMetadataJson = metadataJson;
+      if (typeof metadataJson === 'string') {
+        try {
+          parsedMetadataJson = JSON.parse(metadataJson);
+        } catch {
+          // use as is if parsing fails
+        }
+      }
+      content = {
+        ...content,
+        metadata: parsedMetadataJson,
+      };
+    }
+
     return {
       ...rest,
       threadId: thread_id,
-      content:
-        typeof data.content === 'string'
-          ? (() => {
-              try {
-                return JSON.parse(data.content);
-              } catch {
-                return data.content;
-              }
-            })()
-          : data.content,
+      content,
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
     } as MastraDBMessage;

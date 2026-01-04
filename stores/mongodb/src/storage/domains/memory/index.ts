@@ -67,6 +67,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       { collection: TABLE_MESSAGES, keys: { resourceId: 1 } },
       { collection: TABLE_MESSAGES, keys: { createdAt: -1 } },
       { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
+      { collection: TABLE_MESSAGES, keys: { metadataJson: 1 } },
       // Resources collection indexes
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
@@ -132,6 +133,15 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       } catch {
         // use content as is if it's not JSON
       }
+    }
+
+    // If metadataJson is available, use it as the authoritative source for metadata
+    // This enables efficient JSON filtering while maintaining backwards compatibility
+    if (row.metadataJson && typeof content === 'object') {
+      content = {
+        ...content,
+        metadata: row.metadataJson,
+      };
     }
 
     const result = {
@@ -407,6 +417,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           );
         }
 
+        // Extract metadata for the metadataJson field (for JSON filtering)
+        const contentMetadata =
+          typeof message.content === 'object' && message.content?.metadata ? message.content.metadata : null;
+
         return {
           updateOne: {
             filter: { id: message.id },
@@ -419,6 +433,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
                 type: message.type || 'v2',
                 createdAt: formatDateForMongoDB(time),
                 resourceId: message.resourceId,
+                metadataJson: contentMetadata,
               },
             },
             upsert: true,
@@ -503,6 +518,10 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             : {}),
         };
         updateDoc.content = JSON.stringify(newContent);
+
+        // Also update metadataJson to keep it in sync
+        updateDoc.metadataJson = newContent.metadata || null;
+
         delete updatableFields.content;
       }
 

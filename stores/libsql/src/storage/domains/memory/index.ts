@@ -42,11 +42,11 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
-    // Add resourceId column for backwards compatibility
+    // Add resourceId and metadataJson columns for backwards compatibility
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
+      ifNotExists: ['resourceId', 'metadataJson'],
     });
   }
 
@@ -63,6 +63,25 @@ export class MemoryLibSQL extends MemoryStorage {
     } catch {
       // use content as is if it's not JSON
     }
+
+    // If metadataJson is available, use it as the authoritative source for metadata
+    // This enables efficient JSON filtering while maintaining backwards compatibility
+    if (row.metadataJson && typeof content === 'object') {
+      let metadataJson = row.metadataJson;
+      // Parse metadataJson if it's a string (SQLite stores JSONB as TEXT)
+      if (typeof metadataJson === 'string') {
+        try {
+          metadataJson = JSON.parse(metadataJson);
+        } catch {
+          // use as is if parsing fails
+        }
+      }
+      content = {
+        ...content,
+        metadata: metadataJson,
+      };
+    }
+
     const result = {
       id: row.id,
       content,
@@ -92,7 +111,7 @@ export class MemoryLibSQL extends MemoryStorage {
                   ),
                   numbered_messages AS (
                     SELECT
-                      id, content, role, type, "createdAt", thread_id, "resourceId",
+                      id, content, role, type, "createdAt", thread_id, "resourceId", "metadataJson",
                       ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
                     FROM "${TABLE_MESSAGES}"
                     WHERE thread_id = (SELECT thread_id FROM target_thread)
@@ -135,7 +154,8 @@ export class MemoryLibSQL extends MemoryStorage {
           type,
           "createdAt", 
           thread_id,
-          "resourceId"
+          "resourceId",
+          "metadataJson"
         FROM "${TABLE_MESSAGES}"
         WHERE id IN (${messageIds.map(() => '?').join(', ')})
         ORDER BY "createdAt" DESC
@@ -143,7 +163,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const result = await this.#client.execute({ sql, args: messageIds });
       if (!result.rows) return { messages: [] };
 
-      const list = new MessageList().add(result.rows.map(this.parseRow), 'memory');
+      const list = new MessageList().add(result.rows.map(row => this.parseRow(row)), 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
@@ -234,7 +254,7 @@ export class MemoryLibSQL extends MemoryStorage {
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const limitValue = perPageInput === false ? total : perPage;
       const dataResult = await this.#client.execute({
-        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
+        sql: `SELECT id, content, role, type, "createdAt", "resourceId", "thread_id", "metadataJson" FROM ${TABLE_MESSAGES} ${whereClause} ${orderByStatement} LIMIT ? OFFSET ?`,
         args: [...queryParams, limitValue, offset],
       });
       const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
@@ -347,15 +367,20 @@ export class MemoryLibSQL extends MemoryStorage {
             `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
           );
         }
+        // Extract metadata for the metadataJson column (for JSON filtering)
+        const contentMetadata =
+          typeof message.content === 'object' && message.content?.metadata ? message.content.metadata : null;
+
         return {
-          sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId") 
-                  VALUES (?, ?, ?, ?, ?, ?, ?)
+          sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId", "metadataJson") 
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET
                     thread_id=excluded.thread_id,
                     content=excluded.content,
                     role=excluded.role,
                     type=excluded.type,
-                    "resourceId"=excluded."resourceId"
+                    "resourceId"=excluded."resourceId",
+                    "metadataJson"=excluded."metadataJson"
                 `,
           args: [
             message.id,
@@ -365,6 +390,7 @@ export class MemoryLibSQL extends MemoryStorage {
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
             message.resourceId,
+            contentMetadata ? JSON.stringify(contentMetadata) : null,
           ],
         };
       });
@@ -471,6 +497,11 @@ export class MemoryLibSQL extends MemoryStorage {
         };
         setClauses.push(`${parseSqlIdentifier('content', 'column name')} = ?`);
         args.push(JSON.stringify(newContent));
+
+        // Also update metadataJson to keep it in sync
+        setClauses.push(`${parseSqlIdentifier('metadataJson', 'column name')} = ?`);
+        args.push(newContent.metadata ? JSON.stringify(newContent.metadata) : null);
+
         delete updatableFields.content;
       }
 
@@ -935,7 +966,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     try {
       // Build message query with filters
-      let messageQuery = `SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
+      let messageQuery = `SELECT id, content, role, type, "createdAt", thread_id, "resourceId", "metadataJson"
                           FROM "${TABLE_MESSAGES}" WHERE thread_id = ?`;
       const messageParams: InValue[] = [sourceThreadId];
 
@@ -1035,9 +1066,12 @@ export class MemoryLibSQL extends MemoryStorage {
             parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
           }
 
+          // Use source's metadataJson if available
+          const metadataJson = sourceMsg.metadataJson ?? null;
+
           await tx.execute({
-            sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId", "metadataJson")
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               newMessageId,
               newThreadId,
@@ -1046,6 +1080,7 @@ export class MemoryLibSQL extends MemoryStorage {
               (sourceMsg.type as string) || 'v2',
               sourceMsg.createdAt as string,
               targetResourceId,
+              metadataJson as InValue,
             ],
           });
 

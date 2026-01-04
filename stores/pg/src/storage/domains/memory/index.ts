@@ -36,6 +36,11 @@ type MessageRowFromDB = {
   createdAtZ?: Date | string;
   threadId: string;
   resourceId: string;
+  /**
+   * Metadata stored as JSONB for efficient filtering.
+   * Takes precedence over content.metadata when reading.
+   */
+  metadataJson?: Record<string, unknown> | null;
 };
 
 function getSchemaName(schema?: string) {
@@ -83,7 +88,7 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
+      ifNotExists: ['resourceId', 'metadataJson'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -104,6 +109,12 @@ export class MemoryPG extends MemoryStorage {
         name: `${schemaPrefix}mastra_messages_thread_id_createdat_idx`,
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
+      },
+      {
+        name: `${schemaPrefix}mastra_messages_metadata_gin_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['metadataJson'],
+        method: 'gin',
       },
     ];
   }
@@ -463,7 +474,7 @@ export class MemoryPG extends MemoryStorage {
     if (!include || include.length === 0) return null;
 
     const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
-    const selectColumns = `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
+    const selectColumns = `id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId", "metadataJson"`;
 
     // Build a single efficient query that fetches context for all target messages
     // For each target message, we fetch:
@@ -540,6 +551,16 @@ export class MemoryPG extends MemoryStorage {
     } catch {
       // use content as is if it's not JSON
     }
+
+    // If metadataJson is available, use it as the authoritative source for metadata
+    // This enables efficient JSON filtering while maintaining backwards compatibility
+    if (row.metadataJson && typeof content === 'object') {
+      content = {
+        ...content,
+        metadata: row.metadataJson,
+      };
+    }
+
     return {
       id: normalized.id,
       content,
@@ -553,7 +574,7 @@ export class MemoryPG extends MemoryStorage {
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
-    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
+    const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId", "metadataJson"`;
 
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -626,7 +647,7 @@ export class MemoryPG extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       const orderByStatement = `ORDER BY "${field}" ${direction}`;
 
-      const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
+      const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId", "metadataJson"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
 
       const conditions: string[] = [`thread_id IN (${inPlaceholders(threadIds.length)})`];
@@ -788,15 +809,20 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
+          // Extract metadata for the metadataJson column (for JSON filtering)
+          const contentMetadata =
+            typeof message.content === 'object' && message.content?.metadata ? message.content.metadata : null;
+
           return t.none(
-            `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId", "metadataJson")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              ON CONFLICT (id) DO UPDATE SET
               thread_id = EXCLUDED.thread_id,
               content = EXCLUDED.content,
               role = EXCLUDED.role,
               type = EXCLUDED.type,
-              "resourceId" = EXCLUDED."resourceId"`,
+              "resourceId" = EXCLUDED."resourceId",
+              "metadataJson" = EXCLUDED."metadataJson"`,
             [
               message.id,
               message.threadId,
@@ -806,6 +832,7 @@ export class MemoryPG extends MemoryStorage {
               message.role,
               message.type || 'v2',
               message.resourceId,
+              contentMetadata ? JSON.stringify(contentMetadata) : null,
             ],
           );
         });
@@ -870,7 +897,7 @@ export class MemoryPG extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId", "metadataJson" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
 
     const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, messageIds);
 
@@ -930,6 +957,11 @@ export class MemoryPG extends MemoryStorage {
           };
           setClauses.push(`content = $${paramIndex++}`);
           values.push(newContent);
+
+          // Also update metadataJson to keep it in sync
+          setClauses.push(`"metadataJson" = $${paramIndex++}`);
+          values.push(newContent.metadata ? JSON.stringify(newContent.metadata) : null);
+
           delete updatableFields.content;
         }
 
@@ -1149,7 +1181,7 @@ export class MemoryPG extends MemoryStorage {
     try {
       return await this.#db.client.tx(async t => {
         // Build message query with filters
-        let messageQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"
+        let messageQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId", "metadataJson"
                             FROM ${messageTableName} WHERE thread_id = $1`;
         const messageParams: any[] = [sourceThreadId];
         let paramIndex = 2;
@@ -1245,9 +1277,12 @@ export class MemoryPG extends MemoryStorage {
             // use content as is
           }
 
+          // Extract metadata for the metadataJson column - use source's metadataJson if available
+          const metadataJson = (sourceMsg as MessageRowFromDB).metadataJson ?? null;
+
           await t.none(
-            `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            `INSERT INTO ${messageTableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId", "metadataJson")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [
               newMessageId,
               newThreadId,
@@ -1257,6 +1292,7 @@ export class MemoryPG extends MemoryStorage {
               normalizedMsg.role,
               normalizedMsg.type || 'v2',
               targetResourceId,
+              metadataJson ? JSON.stringify(metadataJson) : null,
             ],
           );
 

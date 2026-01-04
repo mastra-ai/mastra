@@ -206,6 +206,11 @@ export type StorageMessageType = {
   type: string;
   createdAt: Date;
   resourceId: string | null;
+  /**
+   * Metadata stored as JSONB for efficient filtering.
+   * This is a denormalized copy of content.metadata that enables JSON queries.
+   */
+  metadataJson?: Record<string, unknown> | null;
 };
 
 export interface StorageOrderBy<TField extends ThreadOrderBy = ThreadOrderBy> {
