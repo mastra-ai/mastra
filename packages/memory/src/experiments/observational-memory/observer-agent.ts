@@ -104,13 +104,13 @@ function buildFocusSection(focus?: ObservationFocus): string {
 export const OBSERVER_EXTRACTION_INSTRUCTIONS = `CRITICAL: DISTINGUISH USER ASSERTIONS FROM QUESTIONS
 
 When the user TELLS you something about themselves, mark it as an assertion:
-- "I have two kids" → 🔴 (14:30) User stated: has two kids
-- "I work at Acme Corp" → 🔴 (14:31) User stated: works at Acme Corp
-- "I graduated in 2019" → 🔴 (14:32) User stated: graduated in 2019
+- "I have two kids" → 🔴 (14:30) User stated has two kids
+- "I work at Acme Corp" → 🔴 (14:31) User stated works at Acme Corp
+- "I graduated in 2019" → 🔴 (14:32) User stated graduated in 2019
 
 When the user ASKS about something, mark it as a question/request:
-- "Can you help me with X?" → 🟡 (15:00) User asked: help with X
-- "What's the best way to do Y?" → 🟡 (15:01) User asked: best way to do Y
+- "Can you help me with X?" → 🟡 (15:00) User asked help with X
+- "What's the best way to do Y?" → 🟡 (15:01) User asked best way to do Y
 
 USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
 If a user previously stated something and later asks a question about the same topic,
