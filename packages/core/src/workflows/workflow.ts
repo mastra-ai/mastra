@@ -2049,6 +2049,7 @@ export class Workflow<
       result: snapshotState.result,
       error: snapshotState.error,
       payload: snapshotState.context?.input,
+      initialState: snapshotState.value,
       steps: null as any, // Will be populated below
       activeStepsPath: snapshotState.activeStepsPath,
       serializedStepGraph: snapshotState.serializedStepGraph,

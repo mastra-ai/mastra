@@ -90,6 +90,7 @@ export function WorkflowRunProvider({
           error: runExecutionResult?.error,
           runId: initialRunId,
           serializedStepGraph: runExecutionResult?.serializedStepGraph,
+          value: runExecutionResult?.initialState,
         } as WorkflowRunState)
       : undefined;
   }, [runExecutionResult, initialRunId]);
@@ -120,7 +121,14 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (runSnapshot?.runId) {
       setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
-      setPayload(runSnapshot.context?.input);
+      if (Object.keys(runSnapshot.value).length > 0) {
+        setPayload({
+          initialState: runSnapshot.value,
+          inputData: runSnapshot.context?.input,
+        });
+      } else {
+        setPayload(runSnapshot.context?.input);
+      }
       setRunId(runSnapshot.runId);
     }
   }, [runSnapshot]);
