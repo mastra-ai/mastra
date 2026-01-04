@@ -5,6 +5,18 @@
  * a universal schema interface that allows different validation libraries
  * (Zod, Valibot, ArkType, etc.) to interoperate.
  *
+ * There are two key interfaces:
+ *
+ * 1. **StandardSchemaV1** - For runtime validation
+ *    - Has a `validate()` method that validates unknown input
+ *    - Returns validated data or validation issues
+ *    - See: https://standardschema.dev/
+ *
+ * 2. **StandardJSONSchemaV1** - For JSON Schema generation
+ *    - Has a `jsonSchema.input()` method that generates JSON Schema
+ *    - Critical for AI tools: LLMs need JSON Schema to understand parameters
+ *    - See: https://standardschema.dev/json-schema
+ *
  * By embracing Standard Schema, Mastra users can bring their own validation library
  * while maintaining full compatibility with Mastra's tool system.
  */
@@ -89,8 +101,15 @@ export namespace StandardSchemaV1 {
 /**
  * Standard JSON Schema V1 interface.
  *
- * This interface extends StandardTypedV1 to add JSON Schema generation capabilities.
- * Libraries that can convert their schemas to JSON Schema implement this interface.
+ * This interface provides JSON Schema generation capabilities, which is critical
+ * for AI tools since LLMs need the JSON Schema representation to understand
+ * tool parameters.
+ *
+ * Libraries that implement this interface can generate JSON Schema from their
+ * native schema format. The `jsonSchema.input()` and `jsonSchema.output()`
+ * methods accept a target version (e.g., "draft-07", "draft-2020-12").
+ *
+ * @see https://standardschema.dev/json-schema
  */
 export interface StandardJSONSchemaV1<Input = unknown, Output = Input> {
   /** The Standard JSON Schema properties. */

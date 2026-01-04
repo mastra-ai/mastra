@@ -4,7 +4,8 @@ Schema compatibility layer for Mastra.ai that provides compatibility fixes for d
 
 ## Features
 
-- **Standard Schema Support**: Works with any [Standard Schema](https://standardschema.dev/) compatible library (Zod, Valibot, ArkType, etc.)
+- **Standard JSON Schema Support**: Works with any library implementing [Standard JSON Schema V1](https://standardschema.dev/json-schema) for JSON Schema generation
+- **Standard Schema Validation**: Supports [Standard Schema V1](https://standardschema.dev/) for runtime validation (Zod, Valibot, ArkType, etc.)
 - **JSON Schema First-Class**: Use plain JSON Schema directly without needing a validation library
 - **Provider Compatibility**: Automatic schema transformations for different AI providers
 - **Bidirectional Conversion**: Convert between Zod, JSON Schema, and AI SDK Schema formats
@@ -19,7 +20,12 @@ pnpm add @mastra/schema-compat
 
 ### Standard Schema Support
 
-Mastra now supports any validation library that implements the [Standard Schema](https://standardschema.dev/) specification. This means you can use:
+Mastra supports validation libraries that implement the [Standard Schema](https://standardschema.dev/) specification. There are two key interfaces:
+
+1. **[Standard JSON Schema V1](https://standardschema.dev/json-schema)** - For JSON Schema generation (used to describe tool parameters to LLMs)
+2. **Standard Schema V1** - For runtime validation
+
+Libraries that support these specs include:
 
 - **Zod** (v3.25+)
 - **Valibot**
@@ -27,7 +33,7 @@ Mastra now supports any validation library that implements the [Standard Schema]
 - **And more...**
 
 ```typescript
-import { convertAnySchemaToAISDKSchema, isStandardSchema } from '@mastra/schema-compat';
+import { convertAnySchemaToAISDKSchema, isStandardSchema, isStandardJSONSchema } from '@mastra/schema-compat';
 
 // Works with any Standard Schema compatible library
 const schema = yourValidationLibrary.object({
@@ -35,9 +41,33 @@ const schema = yourValidationLibrary.object({
   age: yourValidationLibrary.number(),
 });
 
+// Check for Standard JSON Schema (preferred for AI tools)
+if (isStandardJSONSchema(schema)) {
+  // Uses jsonSchema.input() to generate JSON Schema
+  const aiSchema = convertAnySchemaToAISDKSchema(schema);
+}
+
+// Or check for Standard Schema (for validation)
 if (isStandardSchema(schema)) {
   const aiSchema = convertAnySchemaToAISDKSchema(schema);
 }
+```
+
+#### Standard JSON Schema Target Formats
+
+When using `StandardJSONSchemaV1`, you can specify the target JSON Schema version:
+
+```typescript
+import { convertStandardSchemaToAISDKSchema } from '@mastra/schema-compat';
+
+// Use draft-07 (default, widely supported)
+const aiSchema1 = convertStandardSchemaToAISDKSchema(schema, 'draft-07');
+
+// Use draft-2020-12 (latest standard)
+const aiSchema2 = convertStandardSchemaToAISDKSchema(schema, 'draft-2020-12');
+
+// Use OpenAPI 3.0 format
+const aiSchema3 = convertStandardSchemaToAISDKSchema(schema, 'openapi-3.0');
 ```
 
 ### JSON Schema Support
@@ -170,9 +200,9 @@ const backToZod = convertSchemaToZod(aiSdkSchema);
 
 ### Types and Constants
 
-- `StandardSchemaV1` - Standard Schema V1 interface (from [standardschema.dev](https://standardschema.dev/))
-- `StandardJSONSchemaV1` - Standard JSON Schema V1 interface for schemas that can generate JSON Schema
-- `AnySchema` - Union type of all supported schema formats
+- `StandardSchemaV1` - Standard Schema V1 interface for runtime validation (has `~standard.validate()`)
+- `StandardJSONSchemaV1` - Standard JSON Schema V1 interface for JSON Schema generation (has `~standard.jsonSchema.input()`)
+- `AnySchema` - Union type of all supported schema formats (Zod, JSON Schema, Standard Schema, AI SDK Schema)
 - `StringCheckType`, `NumberCheckType`, `ArrayCheckType` - Check types for validation
 - `UnsupportedZodType`, `SupportedZodType`, `AllZodType` - Zod type classifications
 - `ZodShape`, `ShapeKey`, `ShapeValue` - Utility types for Zod schemas
