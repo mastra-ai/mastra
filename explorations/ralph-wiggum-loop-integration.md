@@ -195,44 +195,45 @@ interface CompletionConfig {
 
 ## How Completion Works
 
-| Config | What Runs | Final Result |
-|--------|-----------|--------------|
-| No `completion.scorers` | Default LLM check | LLM generates `finalResult` |
-| `completion.scorers: [...]` | Your scorers | Uses primitive's result |
+**Completion checks just answer: "Is this done?"**
 
-### Default LLM Check
+They do NOT generate the final result. The final result is the primitive's output.
 
-When no scorers are configured, the default LLM check:
-1. Asks the LLM: "Is this task complete?"
-2. Gets structured output: `{ isComplete, completionReason, finalResult }`
-3. The `finalResult` becomes the network's output
+| Config | What Runs |
+|--------|-----------|
+| No `completion.scorers` | Default LLM check |
+| `completion.scorers: [...]` | Your scorers |
 
-### Custom Scorers
+### What Checks Return
 
-When you provide scorers:
-1. Each scorer evaluates pass/fail (returns 0 or 1)
-2. Scorers DON'T generate the final result
-3. The primitive's result is used as the network's output
+All checks (default LLM or custom scorers) return:
+
+```typescript
+{
+  complete: boolean,        // Is the task done?
+  completionReason: string, // Why?
+}
+```
+
+That's it. The network's result comes from the primitives, not from the checks.
 
 ```
-                    ┌─────────────────────────────┐
-                    │     Completion Check        │
-                    └─────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-    ┌─────────────────┐             ┌─────────────────┐
-    │  Default LLM    │             │ Custom Scorers  │
-    │                 │             │                 │
-    │ Returns:        │             │ Return:         │
-    │ - isComplete    │             │ - score (0/1)   │
-    │ - finalResult   │             │ - reason        │
-    │ - reason        │             │                 │
-    └────────┬────────┘             └────────┬────────┘
-             │                               │
-             ▼                               ▼
-    Network uses                   Network uses
-    LLM's finalResult              primitive's result
+┌──────────────────────────────────────────────────────────┐
+│                    Agent Network                          │
+├──────────────────────────────────────────────────────────┤
+│                                                           │
+│  Primitives execute → produce result                      │
+│           │                                               │
+│           ▼                                               │
+│  Completion check: "Is this done?"                        │
+│           │                                               │
+│     ┌─────┴─────┐                                         │
+│     No          Yes                                       │
+│     │           │                                         │
+│     ▼           ▼                                         │
+│   Loop        Return primitive's result                   │
+│                                                           │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---

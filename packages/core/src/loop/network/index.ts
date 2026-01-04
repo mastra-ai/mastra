@@ -13,7 +13,7 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-import type { CompletionConfig, CompletionContext, ScorerResult } from './validation';
+import type { CompletionConfig, CompletionContext } from './validation';
 import { runValidation, formatCompletionFeedback, runDefaultCompletionCheck } from './validation';
 
 async function getRoutingAgent({
@@ -1168,11 +1168,10 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
       } else {
-        // Use the default LLM completion check (returns structured output)
+        // Use the default LLM completion check
         const defaultResult = await runDefaultCompletionCheck(routingAgent, completionContext);
         completionResult = {
           complete: defaultResult.passed,
-          finalResult: defaultResult.finalResult,
           completionReason: defaultResult.reason,
           scorers: [defaultResult],
           totalDuration: defaultResult.duration,
@@ -1194,33 +1193,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       });
 
       if (completionResult.complete) {
-        // Task is complete - use finalResult from scorer if available
-        const finalResultToUse = completionResult.finalResult || inputData.result;
-        
-        // Save final result to memory
-        const memoryInstance = await routingAgent.getMemory({ requestContext });
-        if (memoryInstance && completionResult.finalResult) {
-          await memoryInstance.saveMessages({
-            messages: [
-              {
-                id: generateId(),
-                type: 'text',
-                role: 'assistant',
-                content: {
-                  parts: [{ type: 'text', text: completionResult.finalResult }],
-                  format: 2,
-                },
-                createdAt: new Date(),
-                threadId: inputData.threadId || runId,
-                resourceId: inputData.threadResourceId || networkName,
-              },
-            ] as MastraDBMessage[],
-          });
-        }
-
+        // Task is complete - the result is the primitive's output
         return {
           ...inputData,
-          result: finalResultToUse,
           isComplete: true,
           validationPassed: true,
           completionReason: completionResult.completionReason || 'Task complete',
