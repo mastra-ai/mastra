@@ -284,10 +284,10 @@ Active evaluations:`;
               chalk.cyan(`  ↳ improved:`),
               chalk[result.improved_is_correct ? 'green' : 'red'](`${result.improved_is_correct ? '✓' : '✗'}`),
             );
-            if (!result.improved_is_correct) {
-              console.log(chalk.gray(`    Q: "${result.improved_question}"`));
-              console.log(chalk.gray(`    A: "${result.improved_hypothesis}"`));
-            }
+            // if (!result.improved_is_correct) {
+            console.log(chalk.gray(`    Q: "${result.improved_question}"`));
+            console.log(chalk.gray(`    A: "${result.improved_hypothesis}"`));
+            // }
           }
 
           // Re-render the spinner
@@ -570,9 +570,9 @@ Be specific rather than generic when the user has expressed clear preferences in
           chalk.cyan(`  ↳ ${label}:`),
           chalk[improvedIsCorrect ? 'green' : 'red'](`${improvedIsCorrect ? '✓' : '✗'}`),
         );
+        console.log(chalk.gray(`    Q: "${improvedQuestion}"`));
+        console.log(chalk.gray(`    A: "${improvedHypothesis}"`));
         if (!improvedIsCorrect) {
-          console.log(chalk.gray(`    Q: "${improvedQuestion}"`));
-          console.log(chalk.gray(`    A: "${improvedHypothesis}"`));
           console.log(chalk.yellow(`    Expected: "${improvedAnswer}"`));
         }
       }
