@@ -1,13 +1,11 @@
 /**
- * Network Validation Module
+ * Network Completion Checks
  *
- * Adds programmatic validation to the Agent Network loop.
- * This allows the network to verify task completion through external checks
- * rather than relying solely on LLM self-assessment.
+ * Provides a unified "check" concept for determining when a network task is complete.
+ * Checks can be code-based (run tests, call APIs) or LLM-based (ask an LLM to evaluate).
  *
- * The core primitive is the ValidationCheck interface - users can implement
- * any validation logic they need. Helper functions are provided for common
- * patterns but are not required.
+ * The default behavior uses a built-in LLM check that asks "is this task complete?"
+ * Users can add their own checks, mix code and LLM checks, or replace the default entirely.
  */
 
 import { z } from 'zod';
@@ -23,10 +21,10 @@ const execAsync = promisify(exec);
 // ============================================================================
 
 /**
- * Runtime context passed to validation checks.
- * Contains the full state of the network loop at validation time.
+ * Runtime context passed to completion checks.
+ * Contains the full state of the network loop at check time.
  */
-export interface ValidationContext {
+export interface CheckContext {
   // ---- Iteration State ----
   /** Current iteration number (1-based) */
   iteration: number;
@@ -49,10 +47,6 @@ export interface ValidationContext {
   primitivePrompt: string;
   /** Result from the primitive execution */
   primitiveResult: string;
-  /** Whether the LLM assessed the task as complete */
-  llmSaysComplete: boolean;
-  /** LLM's reason for completion (if complete) */
-  completionReason?: string;
 
   // ---- Identifiers ----
   /** Name of the network/routing agent */
@@ -67,67 +61,60 @@ export interface ValidationContext {
   // ---- Request Context ----
   /**
    * Custom context from the request.
-   * Access via requestContext.get() for type-safe retrieval.
    */
   customContext?: Record<string, unknown>;
 }
 
 /**
- * Result of a single validation check.
- * This is what your check function should return.
+ * Result of a completion check.
  */
-export interface ValidationResult {
-  /** Whether the check passed */
-  success: boolean;
+export interface CheckResult {
+  /** Whether the check passed (task is complete per this check) */
+  passed: boolean;
   /** Human-readable message describing the result */
   message: string;
-  /** Optional structured details (will be shown to LLM on failure) */
+  /** Optional final result to return (used when check passes) */
+  result?: string;
+  /** Optional structured details (shown to LLM on failure for next iteration) */
   details?: Record<string, unknown>;
-  /** How long the check took in ms (automatically added if not provided) */
+  /** How long the check took in ms (automatically added) */
   duration?: number;
 }
 
 /**
- * A validation check that verifies some aspect of task completion.
- *
- * Users can implement this interface directly or use helper functions
- * like `createCheck()`.
- *
- * @example Direct implementation
- * ```typescript
- * const myCheck: ValidationCheck = {
- *   id: 'api-health',
- *   name: 'API Health Check',
- *   check: async (ctx) => {
- *     // Can use context to make decisions
- *     console.log(`Checking after iteration ${ctx.iteration}`);
- *     const res = await fetch('http://localhost:3000/health');
- *     return {
- *       success: res.ok,
- *       message: res.ok ? 'API is healthy' : `API returned ${res.status}`,
- *     };
- *   },
- * };
- * ```
+ * A completion check that determines if the task is done.
+ * Checks can be code-based or LLM-based - both use this interface.
  */
-export interface ValidationCheck {
+export interface Check {
   /** Unique identifier for this check */
   id: string;
   /** Human-readable name (shown in logs/UI) */
   name: string;
-  /** Async function that performs the validation, receives runtime context */
-  check: (context: ValidationContext) => Promise<ValidationResult>;
+  /** Whether this is an LLM-based check (for internal use) */
+  isLLMCheck?: boolean;
+  /** Async function that runs the check */
+  run: (context: CheckContext) => Promise<CheckResult>;
 }
 
+// Legacy aliases for backwards compatibility
+/** @deprecated Use CheckContext instead */
+export type ValidationContext = CheckContext;
+/** @deprecated Use CheckResult instead */
+export type ValidationResult = CheckResult;
+/** @deprecated Use Check instead */
+export type ValidationCheck = Check;
+
 /**
- * Configuration for network validation
+ * Configuration for network completion checks.
  */
-export interface NetworkValidationConfig {
+export interface CompletionConfig {
   /**
-   * Array of validation checks to run.
-   * Each check should implement the ValidationCheck interface.
+   * Checks to run to determine if the task is complete.
+   * Can be code-based (createCheck) or LLM-based (createLLMCheck).
+   *
+   * If not specified, uses the default LLM completion check (taskCompletionCheck).
    */
-  checks: ValidationCheck[];
+  checks?: Check[];
 
   /**
    * How to combine check results:
@@ -137,62 +124,64 @@ export interface NetworkValidationConfig {
   strategy?: 'all' | 'any';
 
   /**
-   * How validation interacts with LLM completion assessment:
-   * - 'verify': LLM says complete AND validation passes (default)
-   * - 'override': Only validation matters, ignore LLM assessment
-   * - 'assist': Use validation to help LLM (feed results back as context)
-   */
-  mode?: 'verify' | 'override' | 'assist';
-
-  /**
-   * Maximum time for all validation checks (ms)
+   * Maximum time for all checks (ms)
    * Default: 600000 (10 minutes)
    */
   timeout?: number;
 
   /**
-   * Run validation checks in parallel (default: true)
+   * Run checks in parallel (default: true)
    */
   parallel?: boolean;
 
   /**
-   * Called after each validation run with results
+   * Called after checks run with results
    */
-  onValidation?: (results: ValidationRunResult) => void | Promise<void>;
+  onCheck?: (results: CheckRunResult) => void | Promise<void>;
 }
 
 /**
- * Result of running all validation checks
+ * Result of running all completion checks
  */
-export interface ValidationRunResult {
-  /** Whether overall validation passed (based on strategy) */
-  passed: boolean;
+export interface CheckRunResult {
+  /** Whether the task is complete (based on strategy) */
+  complete: boolean;
+  /** Final result to return (from passing check) */
+  result?: string;
   /** Individual check results */
-  results: Array<ValidationResult & { checkId: string; checkName: string }>;
+  checks: Array<CheckResult & { checkId: string; checkName: string }>;
   /** Total duration of all checks */
   totalDuration: number;
-  /** Whether validation timed out */
+  /** Whether checks timed out */
   timedOut: boolean;
 }
 
+// Legacy aliases
+/** @deprecated Use CompletionConfig instead */
+export type NetworkValidationConfig = CompletionConfig;
+/** @deprecated Use CheckRunResult instead */
+export type ValidationRunResult = CheckRunResult;
+
 // ============================================================================
-// Validation Runner
+// Check Runner
 // ============================================================================
 
 /**
- * Runs all validation checks according to the configuration
+ * Runs all completion checks according to the configuration
  */
-export async function runValidation(
-  config: NetworkValidationConfig,
-  context: ValidationContext,
-): Promise<ValidationRunResult> {
-  const strategy = config.strategy ?? 'all';
-  const parallel = config.parallel ?? true;
-  const timeout = config.timeout ?? 600000;
+export async function runChecks(checks: Check[], context: CheckContext, options?: {
+  strategy?: 'all' | 'any';
+  parallel?: boolean;
+  timeout?: number;
+}): Promise<CheckRunResult> {
+  const strategy = options?.strategy ?? 'all';
+  const parallel = options?.parallel ?? true;
+  const timeout = options?.timeout ?? 600000;
 
   const startTime = Date.now();
-  const results: ValidationRunResult['results'] = [];
+  const results: CheckRunResult['checks'] = [];
   let timedOut = false;
+  let finalResult: string | undefined;
 
   // Create a timeout promise
   const timeoutPromise = new Promise<'timeout'>(resolve => {
@@ -201,13 +190,13 @@ export async function runValidation(
 
   if (parallel) {
     // Run all checks in parallel
-    const checkPromises = config.checks.map(async check => {
+    const checkPromises = checks.map(async check => {
       try {
-        const result = await check.check(context);
+        const result = await check.run(context);
         return { ...result, checkId: check.id, checkName: check.name };
       } catch (error: any) {
         return {
-          success: false,
+          passed: false,
           message: `Check ${check.name} threw an error: ${error.message}`,
           checkId: check.id,
           checkName: check.name,
@@ -220,7 +209,6 @@ export async function runValidation(
 
     if (raceResult === 'timeout') {
       timedOut = true;
-      // Still wait for any completed checks
       const settledResults = await Promise.allSettled(checkPromises);
       for (const settled of settledResults) {
         if (settled.status === 'fulfilled') {
@@ -232,27 +220,32 @@ export async function runValidation(
     }
   } else {
     // Run checks sequentially with short-circuit logic
-    for (const check of config.checks) {
+    for (const check of checks) {
       if (Date.now() - startTime > timeout) {
         timedOut = true;
         break;
       }
 
       try {
-        const result = await check.check(context);
+        const result = await check.run(context);
         results.push({ ...result, checkId: check.id, checkName: check.name });
 
+        // Capture result from passing check
+        if (result.passed && result.result) {
+          finalResult = result.result;
+        }
+
         // Short-circuit for 'all' strategy if a check fails
-        if (strategy === 'all' && !result.success) {
+        if (strategy === 'all' && !result.passed) {
           break;
         }
         // Short-circuit for 'any' strategy if a check passes
-        if (strategy === 'any' && result.success) {
+        if (strategy === 'any' && result.passed) {
           break;
         }
       } catch (error: any) {
         results.push({
-          success: false,
+          passed: false,
           message: `Check ${check.name} threw an error: ${error.message}`,
           checkId: check.id,
           checkName: check.name,
@@ -265,47 +258,65 @@ export async function runValidation(
     }
   }
 
-  const passed =
-    strategy === 'all'
-      ? results.length === config.checks.length && results.every(r => r.success)
-      : results.some(r => r.success);
+  // Get result from first passing check (if any)
+  if (!finalResult) {
+    const passingCheck = results.find(r => r.passed && r.result);
+    if (passingCheck) {
+      finalResult = passingCheck.result;
+    }
+  }
 
-  const runResult: ValidationRunResult = {
-    passed,
-    results,
+  const complete =
+    strategy === 'all'
+      ? results.length === checks.length && results.every(r => r.passed)
+      : results.some(r => r.passed);
+
+  return {
+    complete,
+    result: finalResult,
+    checks: results,
     totalDuration: Date.now() - startTime,
     timedOut,
   };
+}
 
-  // Call the onValidation callback if provided
-  await config.onValidation?.(runResult);
-
-  return runResult;
+// Legacy wrapper
+/** @deprecated Use runChecks instead */
+export async function runValidation(
+  config: CompletionConfig,
+  context: CheckContext,
+): Promise<CheckRunResult> {
+  const result = await runChecks(config.checks || [], context, {
+    strategy: config.strategy,
+    parallel: config.parallel,
+    timeout: config.timeout,
+  });
+  await config.onCheck?.(result);
+  return result;
 }
 
 /**
- * Formats validation results into a message for the LLM
+ * Formats check results into a message for the LLM
  */
-export function formatValidationFeedback(result: ValidationRunResult): string {
+export function formatCheckFeedback(result: CheckRunResult): string {
   const lines: string[] = [];
 
-  lines.push('## Validation Results');
+  lines.push('## Completion Check Results');
   lines.push('');
-  lines.push(`Overall: ${result.passed ? '✅ PASSED' : '❌ FAILED'}`);
+  lines.push(`Overall: ${result.complete ? '✅ COMPLETE' : '❌ NOT COMPLETE'}`);
   lines.push(`Duration: ${result.totalDuration}ms`);
   if (result.timedOut) {
-    lines.push('⚠️ Validation timed out before all checks completed');
+    lines.push('⚠️ Checks timed out');
   }
   lines.push('');
 
-  for (const check of result.results) {
+  for (const check of result.checks) {
     lines.push(`### ${check.checkName} (${check.checkId})`);
-    lines.push(`Status: ${check.success ? '✅ Passed' : '❌ Failed'}`);
+    lines.push(`Status: ${check.passed ? '✅ Passed' : '❌ Failed'}`);
     lines.push(`Message: ${check.message}`);
     if (check.details) {
       lines.push('Details:');
       lines.push('```');
-      // Truncate long details
       const detailsStr = JSON.stringify(check.details, null, 2);
       lines.push(detailsStr.length > 2000 ? detailsStr.slice(0, 2000) + '...' : detailsStr);
       lines.push('```');
@@ -316,98 +327,71 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
   return lines.join('\n');
 }
 
-// ============================================================================
-// Check Creator
-// ============================================================================
+// Legacy alias
+/** @deprecated Use formatCheckFeedback instead */
+export const formatValidationFeedback = formatCheckFeedback;
 
-/**
- * The result shape returned by a check's run function
- */
-type CheckRunResult = { success: boolean; message: string; details?: Record<string, unknown> };
+// ============================================================================
+// Check Creators
+// ============================================================================
 
 /**
  * Parameters passed to the check's run function.
  * Combines user-provided args with runtime context from the network loop.
  */
-export type CheckRunParams<TArgs = undefined> = TArgs extends undefined
-  ? ValidationContext
-  : ValidationContext & { args: TArgs };
+export type CheckParams<TArgs = undefined> = TArgs extends undefined
+  ? CheckContext
+  : CheckContext & { args: TArgs };
 
 /**
- * Creates a validation check from an async function.
- *
- * The `run` function receives a single object containing:
- * - All `ValidationContext` fields (iteration, messages, etc.)
- * - `args`: Your custom static configuration (if provided)
+ * The return type for check run functions
+ */
+type CheckRunReturn = { passed: boolean; message: string; result?: string; details?: Record<string, unknown> };
+
+/**
+ * Creates a code-based completion check.
  *
  * @param options.id - Unique identifier for this check
- * @param options.name - Human-readable name (shown in logs/feedback)
- * @param options.args - Static arguments available via `params.args` in run function
- * @param options.run - Async function that performs the validation
+ * @param options.name - Human-readable name
+ * @param options.args - Static arguments available via `params.args`
+ * @param options.run - Async function that runs the check
  *
  * @example
  * ```typescript
- * // Run a command - access both args and context from single param
+ * // Run tests
  * const testsCheck = createCheck({
  *   id: 'tests',
  *   name: 'Unit Tests',
  *   args: { command: 'npm test' },
  *   run: async (params) => {
- *     // params.args.command - your static config
- *     // params.iteration, params.messages - runtime context
- *     const cmd = params.iteration > 3
- *       ? `${params.args.command} -- --coverage`
- *       : params.args.command;
- *     const result = await exec(cmd);
+ *     const result = await exec(params.args.command);
  *     return {
- *       success: result.exitCode === 0,
+ *       passed: result.exitCode === 0,
  *       message: result.exitCode === 0 ? 'Tests passed' : 'Tests failed',
- *       details: { stdout: result.stdout, iteration: params.iteration },
  *     };
  *   },
  * });
  *
- * // No args - just context
- * const outputCheck = createCheck({
- *   id: 'output-check',
- *   name: 'Output Validation',
- *   run: async (params) => {
- *     // Inspect what the agent actually did
- *     const lastMessage = params.messages.at(-1);
- *     const hasCode = lastMessage?.content?.includes('```');
- *     return {
- *       success: hasCode,
- *       message: hasCode ? 'Agent produced code' : 'No code in output',
- *     };
- *   },
- * });
- *
- * // Use requestContext for environment-specific checks
- * const envCheck = createCheck({
- *   id: 'env',
- *   name: 'Environment Check',
- *   run: async (params) => {
- *     const isProd = params.requestContext.customContext?.env === 'production';
- *     // Run stricter checks in production
- *     if (isProd && params.iteration < 3) {
- *       return { success: false, message: 'Need at least 3 iterations in prod' };
- *     }
- *     return { success: true, message: 'Environment check passed' };
- *   },
- * });
- *
- * // API check with configurable args
+ * // Check API
  * const apiCheck = createCheck({
  *   id: 'api',
  *   name: 'API Health',
- *   args: { url: 'http://localhost:3000/health', expectedStatus: 200 },
+ *   args: { url: 'http://localhost:3000/health' },
  *   run: async (params) => {
- *     console.log(`Checking API on iteration ${params.iteration}`);
  *     const res = await fetch(params.args.url);
- *     return {
- *       success: res.status === params.args.expectedStatus,
- *       message: res.ok ? 'API healthy' : `Got ${res.status}`,
- *     };
+ *     return { passed: res.ok, message: res.ok ? 'Healthy' : 'Down' };
+ *   },
+ * });
+ *
+ * // Context-aware check
+ * const progressCheck = createCheck({
+ *   id: 'progress',
+ *   name: 'Progress',
+ *   run: async (params) => {
+ *     if (params.iteration > 10) {
+ *       return { passed: false, message: 'Taking too long' };
+ *     }
+ *     return { passed: true, message: 'OK' };
  *   },
  * });
  * ```
@@ -417,27 +401,27 @@ export function createCheck<TArgs = undefined>(
     ? {
         id: string;
         name: string;
-        run: (params: ValidationContext) => Promise<CheckRunResult>;
+        run: (params: CheckContext) => Promise<CheckRunReturn>;
       }
     : {
         id: string;
         name: string;
         args: TArgs;
-        run: (params: ValidationContext & { args: TArgs }) => Promise<CheckRunResult>;
+        run: (params: CheckContext & { args: TArgs }) => Promise<CheckRunReturn>;
       },
-): ValidationCheck {
+): Check {
   return {
     id: options.id,
     name: options.name,
-    async check(context: ValidationContext) {
+    async run(context: CheckContext) {
       const start = Date.now();
       try {
         const params = 'args' in options ? { ...context, args: options.args } : context;
-        const result = await (options.run as (p: typeof params) => Promise<CheckRunResult>)(params);
+        const result = await (options.run as (p: typeof params) => Promise<CheckRunReturn>)(params);
         return { ...result, duration: Date.now() - start };
       } catch (error: any) {
         return {
-          success: false,
+          passed: false,
           message: `Check threw an error: ${error.message}`,
           details: { error: error.stack },
           duration: Date.now() - start,
@@ -447,13 +431,102 @@ export function createCheck<TArgs = undefined>(
   };
 }
 
+/**
+ * Creates an LLM-based completion check.
+ * The LLM will evaluate the task based on your instructions.
+ *
+ * @param options.id - Unique identifier for this check
+ * @param options.name - Human-readable name
+ * @param options.instructions - Instructions for the LLM to evaluate completion
+ *
+ * @example
+ * ```typescript
+ * const qualityCheck = createLLMCheck({
+ *   id: 'quality',
+ *   name: 'Code Quality Review',
+ *   instructions: `
+ *     Review the code changes and evaluate:
+ *     - Are there any obvious bugs?
+ *     - Is error handling adequate?
+ *     - Are edge cases covered?
+ *   `,
+ * });
+ * ```
+ */
+export function createLLMCheck(options: {
+  id: string;
+  name: string;
+  instructions: string;
+}): Check {
+  return {
+    id: options.id,
+    name: options.name,
+    isLLMCheck: true,
+    // The actual LLM call is handled by the network loop
+    // This just stores the config
+    async run(_context: CheckContext) {
+      // This is a placeholder - the network loop will intercept LLM checks
+      // and run them through the routing agent
+      return {
+        passed: false,
+        message: 'LLM check must be run by the network loop',
+        _llmCheckConfig: {
+          instructions: options.instructions,
+        },
+      } as CheckResult;
+    },
+  };
+}
+
+/**
+ * The default LLM completion check used by agent.network().
+ * Asks the LLM "Is this task complete?" based on system instructions.
+ *
+ * Include this in your checks array if you want the default behavior
+ * alongside your own checks.
+ *
+ * @param options.instructions - Additional instructions for completion evaluation
+ *
+ * @example
+ * ```typescript
+ * // Default + custom checks
+ * completion: {
+ *   checks: [
+ *     taskCompletionCheck(),
+ *     testsCheck,
+ *   ],
+ * }
+ *
+ * // Customized default check
+ * completion: {
+ *   checks: [
+ *     taskCompletionCheck({
+ *       instructions: 'Only mark complete when all tests pass',
+ *     }),
+ *     testsCheck,
+ *   ],
+ * }
+ * ```
+ */
+export function taskCompletionCheck(options?: { instructions?: string }): Check {
+  return createLLMCheck({
+    id: 'task-completion',
+    name: 'Task Completion',
+    instructions: options?.instructions || `
+      Evaluate if the task is complete based on the system instructions.
+      Pay close attention to what was originally requested.
+      Only mark as complete if all requirements have been satisfied.
+    `,
+  });
+}
+
 // ============================================================================
-// Validation Tool (for Agent Network primitives)
+// Tools
 // ============================================================================
 
 /**
- * Creates a tool that lets agents run shell commands for validation.
- * Add this to your agent's tools if you want the agent to decide when to validate.
+ * Creates a tool that lets agents run shell commands.
+ * Add this to your agent's tools if you want the agent to run commands.
  *
  * @example
  * ```typescript

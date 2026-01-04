@@ -1,76 +1,48 @@
 # Ralph Wiggum Loop Integration for Mastra
 
-> **Status: IMPLEMENTED** - The Agent Network with validation IS the autonomous loop
+> **Status: IMPLEMENTED** - The Agent Network with completion checks IS the autonomous loop
 
 ## What is the Ralph Wiggum Loop?
 
-The Ralph Wiggum loop (named after The Simpsons character) is an autonomous agent execution pattern where an AI agent works persistently and iteratively until completion criteria are met. The core philosophy is: **"Let the agent fail repeatedly until it succeeds."**
-
-### Core Concept
-
-```bash
-# The essence of Ralph Wiggum in bash:
-while :; do cat PROMPT.md | claude ; done
-```
+The Ralph Wiggum loop is an autonomous agent execution pattern where an AI agent works persistently and iteratively until completion criteria are met. The core philosophy: **"Let the agent fail repeatedly until it succeeds."**
 
 ### Key Characteristics
 
-1. **Persistent Iteration**: The agent loops continuously, re-attempting the task with each iteration
-2. **Context Preservation**: Each iteration sees the modified files, git history, and results from previous runs
-3. **Completion Criteria**: Clear, programmatic success metrics (tests pass, build succeeds, etc.)
-4. **Safety Controls**: Max iterations, cost limits, circuit breakers
+1. **Persistent Iteration**: The agent loops continuously
+2. **Context Preservation**: Each iteration sees results from previous runs
+3. **Completion Criteria**: Clear success metrics (tests pass, build succeeds)
+4. **Safety Controls**: Max iterations, timeouts
 5. **Failure as Data**: Each failed attempt informs the next iteration
-
-### When It Works Best
-
-- **Large refactors**: Framework migrations, dependency upgrades
-- **Batch operations**: Test coverage, documentation generation, code standardization
-- **Greenfield builds**: Overnight project scaffolding with iterative refinement
-- **Tasks with clear success metrics**: "All tests pass", "Build succeeds", "Lint clean"
-
-### When NOT to Use
-
-- Ambiguous requirements (can't define "done" precisely)
-- Architectural decisions requiring human reasoning
-- Security-sensitive code needing human review
-- Exploratory tasks requiring human curiosity
 
 ---
 
-## ✅ Implementation: Agent Network = Autonomous Loop
+## Implementation: Unified Completion Checks
 
-**There is no separate `autonomousLoop()` method.** The Agent Network with validation configuration IS the autonomous loop:
+Everything about "when is the task done?" is a **check**. Checks can be:
+- **Code-based**: Run tests, call APIs, check files
+- **LLM-based**: Ask an LLM to evaluate
 
-- **Agent Network** provides: routing, multi-primitive execution, iteration, memory
-- **Validation config** adds: programmatic completion criteria, feedback loop
-
-Together, this gives you the full Ralph Wiggum pattern without a separate API.
+By default, the network uses an LLM check that asks "is this task complete?"
 
 ### Quick Start
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { createCheck } from '@mastra/core/loop';
+import { createCheck, taskCompletionCheck } from '@mastra/core/loop';
 
-// Create validation checks with the flexible createCheck API
+// Code-based check
 const testsCheck = createCheck({
   id: 'tests',
   name: 'Unit Tests',
   args: { command: 'npm test' },
   run: async (params) => {
-    // params.args.command - your static config
-    // params.iteration, params.messages - runtime context from network
     const { execSync } = await import('child_process');
     try {
       execSync(params.args.command, { stdio: 'pipe' });
-      return { success: true, message: 'All tests passed' };
+      return { passed: true, message: 'All tests passed' };
     } catch (e: any) {
-      return { 
-        success: false, 
-        message: 'Tests failed',
-        details: { stderr: e.stderr?.toString() }
-      };
+      return { passed: false, message: 'Tests failed', details: { error: e.message } };
     }
   },
 });
@@ -80,64 +52,207 @@ const agent = new Agent({
   instructions: 'You help migrate code between frameworks.',
   model: openai('gpt-4o'),
   memory: new Memory(),
-  agents: {
-    coder: codingAgent,
-    tester: testingAgent,
-  },
-  // Set defaults for all network() calls
+  agents: { coder: codingAgent },
+  
+  // Default network options
   defaultNetworkOptions: {
     maxSteps: 20,
-    routing: {
-      additionalInstructions: 'Prefer the coder agent for implementation tasks.',
-    },
     completion: {
-      additionalInstructions: 'Only mark complete when all requested changes are made.',
+      checks: [testsCheck],
+      strategy: 'all',
     },
   },
 });
 
-// Run network with programmatic validation
-const result = await agent.network('Migrate all tests from Jest to Vitest', {
-  maxSteps: 30,
-  validation: {
-    checks: [testsCheck],
-    strategy: 'all',      // All checks must pass
-    mode: 'verify',       // LLM says complete AND validation passes
-    onValidation: (result) => {
-      console.log(`Validation: ${result.passed ? '✅' : '❌'}`);
-    },
-  },
-});
+// Run network - uses default completion checks
+const result = await agent.network('Migrate all tests from Jest to Vitest');
 
 for await (const chunk of result.fullStream) {
   if (chunk.type === 'network-validation-end') {
-    console.log(`Validation ${chunk.payload.passed ? 'passed' : 'failed'}`);
+    console.log(`Checks: ${chunk.payload.passed ? '✅' : '❌'}`);
   }
 }
 ```
 
-### How It Works
+---
+
+## API Reference
+
+### Check Creators
+
+```typescript
+import { createCheck, createLLMCheck, taskCompletionCheck } from '@mastra/core/loop';
+
+// Code-based check
+const testsCheck = createCheck({
+  id: 'tests',
+  name: 'Unit Tests',
+  args: { command: 'npm test' },
+  run: async (params) => {
+    // params.args.command - your static config
+    // params.iteration - current iteration
+    // params.messages - conversation history
+    // params.originalTask - the task prompt
+    // params.selectedPrimitive - { id, type }
+    // params.primitiveResult - result from last execution
+    
+    return { passed: true, message: 'Tests passed' };
+  },
+});
+
+// LLM-based check
+const qualityCheck = createLLMCheck({
+  id: 'quality',
+  name: 'Code Quality Review',
+  instructions: `
+    Review the code changes and evaluate:
+    - Are there any obvious bugs?
+    - Is error handling adequate?
+  `,
+});
+
+// The default completion check (can be included explicitly)
+const defaultCheck = taskCompletionCheck({
+  instructions: 'Only complete when all endpoints have tests',
+});
+```
+
+### Completion Config
+
+```typescript
+interface CompletionConfig {
+  // Checks to run (code or LLM)
+  checks?: Check[];
+  
+  // All must pass, or any one
+  strategy?: 'all' | 'any';
+  
+  // Timeout for all checks (ms)
+  timeout?: number;
+  
+  // Run checks in parallel
+  parallel?: boolean;
+  
+  // Callback after checks run
+  onCheck?: (result: CheckRunResult) => void;
+}
+```
+
+### Network Options
+
+```typescript
+interface NetworkOptions {
+  maxSteps?: number;
+  
+  completion?: CompletionConfig;
+  
+  routing?: {
+    additionalInstructions?: string;
+    verboseIntrospection?: boolean;
+  };
+  
+  memory?: AgentMemoryOption;
+  onIterationComplete?: (ctx) => void;
+}
+```
+
+---
+
+## Usage Patterns
+
+### 1. Default: LLM-only completion
+
+```typescript
+// No config - uses built-in LLM check
+await agent.network('Build a landing page');
+```
+
+### 2. Code checks only
+
+```typescript
+await agent.network('Migrate to Vitest', {
+  completion: {
+    checks: [testsCheck, buildCheck],
+  },
+});
+```
+
+### 3. Default LLM + code checks
+
+```typescript
+await agent.network('Refactor auth', {
+  completion: {
+    checks: [
+      taskCompletionCheck(), // Include default LLM check
+      testsCheck,            // Plus code checks
+    ],
+  },
+});
+```
+
+### 4. Custom LLM check
+
+```typescript
+await agent.network('Improve quality', {
+  completion: {
+    checks: [
+      createLLMCheck({
+        id: 'strict-quality',
+        name: 'Strict Quality',
+        instructions: 'Only complete when there are no TODO comments',
+      }),
+    ],
+  },
+});
+```
+
+### 5. Mixed checks
+
+```typescript
+await agent.network('Build API', {
+  completion: {
+    checks: [
+      createLLMCheck({ instructions: 'All endpoints documented' }),
+      testsCheck,
+      createCheck({
+        id: 'api',
+        name: 'API Health',
+        run: async () => {
+          const res = await fetch('http://localhost:3000/health');
+          return { passed: res.ok, message: res.ok ? 'Healthy' : 'Down' };
+        },
+      }),
+    ],
+    strategy: 'all',
+  },
+});
+```
+
+---
+
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                 Agent Network + Validation                       │
+│                    Agent Network Loop                            │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │   1. Routing Agent selects primitive (agent/workflow/tool)      │
 │                      ↓                                           │
 │   2. Execute selected primitive                                  │
 │                      ↓                                           │
-│   3. Completion Assessment (LLM or custom)                      │
+│   3. LLM Completion Check (default)                             │
+│      "Is this task complete?"                                    │
 │                      ↓                                           │
 │              ┌───────┴───────┐                                   │
-│          Not Done        Done                                    │
+│          LLM: No         LLM: Yes                                │
 │              │               │                                   │
 │              │               ▼                                   │
-│              │    4. Run Validation Checks                       │
-│              │       (programmatic verification)                 │
+│              │    4. Run Additional Checks                       │
+│              │       (if configured)                             │
 │              │               │                                   │
 │              │       ┌───────┴───────┐                          │
-│              │   Validation      Validation                      │
+│              │   Checks         Checks                           │
 │              │   Failed          Passed                          │
 │              │       │               │                           │
 │              │       ▼               ▼                           │
@@ -151,124 +266,6 @@ for await (const chunk of result.fullStream) {
 
 ---
 
-## API Reference
-
-### `createCheck(options)`
-
-Creates a validation check from an async function. The `run` function receives a single object with both your static args and runtime context from the network.
-
-```typescript
-import { createCheck } from '@mastra/core/loop';
-
-// With static args
-const check = createCheck({
-  id: 'unique-id',
-  name: 'Human-readable name',
-  args: { /* your config */ },
-  run: async (params) => {
-    // params.args - your static config
-    // params.iteration - current iteration (1-based)
-    // params.messages - conversation history
-    // params.originalTask - the task prompt
-    // params.selectedPrimitive - { id, type }
-    // params.primitiveResult - result from last execution
-    // params.llmSaysComplete - whether LLM marked as complete
-    // params.networkName, params.runId, params.threadId, etc.
-    
-    return {
-      success: boolean,
-      message: string,
-      details?: Record<string, unknown>,
-    };
-  },
-});
-
-// Without args (context only)
-const simpleCheck = createCheck({
-  id: 'simple',
-  name: 'Simple Check',
-  run: async (params) => {
-    return { success: true, message: 'OK' };
-  },
-});
-```
-
-### `NetworkOptions`
-
-Full configuration for `agent.network()`:
-
-```typescript
-interface NetworkOptions {
-  // Execution limits
-  maxSteps?: number;
-  
-  // Routing configuration
-  routing?: {
-    additionalInstructions?: string;
-    verboseIntrospection?: boolean;
-  };
-  
-  // Completion evaluation
-  completion?: {
-    // Custom evaluator (replaces LLM evaluation)
-    evaluate?: (ctx: NetworkCompletionContext) => Promise<NetworkCompletionResult>;
-    // Additional instructions for LLM evaluation
-    additionalInstructions?: string;
-    // Skip LLM evaluation (rely on validation only)
-    skipLLMEvaluation?: boolean;
-  };
-  
-  // Programmatic validation
-  validation?: {
-    checks: ValidationCheck[];
-    strategy?: 'all' | 'any';
-    mode?: 'verify' | 'override' | 'assist';
-    timeout?: number;
-    parallel?: boolean;
-    onValidation?: (result: ValidationRunResult) => void;
-  };
-  
-  // Callbacks
-  onIterationComplete?: (ctx: IterationContext) => void;
-  
-  // Memory & context
-  memory?: AgentMemoryOption;
-  requestContext?: RequestContext;
-  runId?: string;
-}
-```
-
-### `defaultNetworkOptions` on Agent
-
-Set defaults that apply to all `network()` calls:
-
-```typescript
-const agent = new Agent({
-  // ...
-  defaultNetworkOptions: {
-    maxSteps: 20,
-    routing: { additionalInstructions: '...' },
-    completion: { additionalInstructions: '...' },
-    validation: { checks: [...], mode: 'verify' },
-  },
-});
-
-// These defaults are merged with call-specific options
-await agent.network('task', { maxSteps: 30 }); // maxSteps overridden, others inherited
-```
-
----
-
-## Validation Modes
-
-| Mode | Behavior |
-|------|----------|
-| `verify` (default) | Task complete when LLM says done AND validation passes |
-| `override` | Only validation matters, LLM completion is ignored |
-| `assist` | Validation provides context to LLM but doesn't block completion |
-
----
-
 ## Stream Events
 
 ```typescript
@@ -278,7 +275,7 @@ for await (const chunk of result.fullStream) {
       console.log(`Running ${chunk.payload.checksCount} checks...`);
       break;
     case 'network-validation-end':
-      console.log(`Validation: ${chunk.payload.passed ? '✅' : '❌'}`);
+      console.log(`Checks: ${chunk.payload.passed ? '✅' : '❌'}`);
       break;
     case 'routing-agent-start':
       console.log(`Iteration ${chunk.payload.inputData.iteration}`);

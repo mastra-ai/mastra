@@ -3034,7 +3034,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       // Deep merge nested objects
       routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
       completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-      validation: options?.validation ?? defaultNetworkOptions?.validation,
     };
 
     const runId = mergedOptions?.runId || this.#mastra?.generateId() || randomUUID();
@@ -3066,9 +3065,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       messages,
       threadId,
       resourceId,
-      validation: mergedOptions?.validation,
+      validation: mergedOptions?.completion,
       routing: mergedOptions?.routing,
-      completion: mergedOptions?.completion,
       onIterationComplete: mergedOptions?.onIterationComplete,
     });
   }

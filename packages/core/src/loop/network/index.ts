@@ -13,8 +13,12 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-import type { NetworkValidationConfig, ValidationContext } from './validation';
-import { runValidation, formatValidationFeedback } from './validation';
+import type { CompletionConfig, CheckContext } from './validation';
+import { runValidation, formatCheckFeedback } from './validation';
+
+// Legacy alias
+type NetworkValidationConfig = CompletionConfig;
+type ValidationContext = CheckContext;
 
 async function getRoutingAgent({
   requestContext,
@@ -252,7 +256,6 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
-  completion,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -263,11 +266,6 @@ export async function createNetworkLoop({
   routing?: {
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
-  };
-  completion?: {
-    evaluate?: (context: any) => Promise<{ isComplete: boolean; finalResult?: string; reason?: string }>;
-    additionalInstructions?: string;
-    skipLLMEvaluation?: boolean;
   };
 }) {
   const routingStep = createStep({
@@ -327,61 +325,8 @@ export async function createNetworkLoop({
       });
 
       if (inputData.primitiveType !== 'none' && inputData?.result) {
-        // Check for custom completion evaluator
-        if (completion?.evaluate) {
-          const memory = await agent.getMemory({ requestContext });
-          const recallResult = memory
-            ? await memory.recall({ threadId: initData?.threadId || runId })
-            : { messages: [] };
-          const threadMessages = recallResult.messages;
-
-          const customResult = await completion.evaluate({
-            task: inputData.task,
-            iteration: iterationCount,
-            maxIterations: 0, // Will be set by caller
-            primitiveResult: typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result,
-            primitive: {
-              id: inputData.primitiveId,
-              type: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
-            },
-            messages: threadMessages,
-            threadId: initData?.threadId,
-            requestContext,
-          });
-
-          if (customResult.isComplete) {
-            const endPayload = {
-              task: inputData.task,
-              primitiveId: '',
-              primitiveType: 'none' as const,
-              prompt: '',
-              result: customResult.finalResult || inputData.result,
-              isComplete: true,
-              selectionReason: customResult.reason || 'Custom evaluator marked complete',
-              iteration: iterationCount,
-              runId: stepId,
-            };
-
-            await writer.write({
-              type: 'routing-agent-end',
-              payload: endPayload,
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
-
-            return endPayload;
-          }
-          // If custom evaluator says not complete, continue to primitive selection below
-        } else if (completion?.skipLLMEvaluation) {
-          // Skip LLM evaluation entirely - will rely on validation or maxSteps
-          // Continue to primitive selection
-        } else {
-          // Default LLM-based completion evaluation
-          const additionalCompletionInstructions = completion?.additionalInstructions
-            ? `\n\nAdditional completion criteria:\n${completion.additionalInstructions}`
-            : '';
-
-          const completionPrompt = `
+        // Default LLM-based completion evaluation
+        const completionPrompt = `
                           The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
                           This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
 
@@ -389,7 +334,6 @@ export async function createNetworkLoop({
                           Original task: ${inputData.task}.
 
                           When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
-                          ${additionalCompletionInstructions}
 
                           You must return this JSON shape.
 
@@ -544,7 +488,6 @@ export async function createNetworkLoop({
 
           return endPayload;
         }
-        } // end else (LLM-based completion evaluation)
       }
 
       const prompt: MessageListInput = [
@@ -1267,7 +1210,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   messages,
   validation,
   routing,
-  completion,
   onIterationComplete,
 }: {
   networkName: string;
@@ -1281,24 +1223,16 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   resourceId?: string;
   messages: MessageListInput;
   /**
-   * Optional validation configuration for programmatic completion verification.
-   * When provided, the network will run external checks to verify task completion.
+   * Completion checks configuration.
+   * When provided, runs checks to verify task completion.
    */
-  validation?: NetworkValidationConfig;
+  validation?: CompletionConfig;
   /**
    * Optional routing configuration to customize primitive selection behavior.
    */
   routing?: {
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
-  };
-  /**
-   * Optional completion configuration to customize task completion evaluation.
-   */
-  completion?: {
-    evaluate?: (context: any) => Promise<{ isComplete: boolean; finalResult?: string; reason?: string }>;
-    additionalInstructions?: string;
-    skipLLMEvaluation?: boolean;
   };
   /**
    * Optional callback fired after each iteration completes.
@@ -1336,7 +1270,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
-    completion,
   });
 
   // Validation step: runs external checks when LLM says task is complete
@@ -1357,8 +1290,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      // If no validation configured or LLM didn't say complete, pass through
-      if (!validation || !inputData.isComplete) {
+      // If no checks configured or LLM didn't say complete, pass through
+      const checks = validation?.checks || [];
+      if (checks.length === 0 || !inputData.isComplete) {
         return {
           ...inputData,
           validationPassed: undefined,
@@ -1366,24 +1300,13 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         };
       }
 
-      const mode = validation.mode ?? 'verify';
-
-      // Skip validation in 'assist' mode - it's only for context, not gatekeeping
-      if (mode === 'assist') {
-        return {
-          ...inputData,
-          validationPassed: undefined,
-          validationFeedback: undefined,
-        };
-      }
-
-      // Build validation context with all relevant state
+      // Build check context with relevant state
       const memory = await routingAgent.getMemory({ requestContext });
       const recallResult = memory
         ? await memory.recall({ threadId: inputData.threadId || runId })
         : { messages: [] };
 
-      const validationContext: ValidationContext = {
+      const checkContext: ValidationContext = {
         // Iteration state
         iteration: inputData.iteration,
         maxIterations,
@@ -1399,8 +1322,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         },
         primitivePrompt: inputData.prompt,
         primitiveResult: inputData.result,
-        llmSaysComplete: inputData.isComplete === true,
-        completionReason: inputData.completionReason,
 
         // Identifiers
         networkName,
@@ -1412,47 +1333,47 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         customContext: requestContext?.toJSON?.() as Record<string, unknown> | undefined,
       };
 
-      // Run validation checks
+      // Run completion checks
       await writer?.write({
         type: 'network-validation-start',
         payload: {
           runId,
           iteration: inputData.iteration,
-          checksCount: validation.checks.length,
+          checksCount: checks.length,
         },
         from: ChunkFrom.NETWORK,
         runId,
       });
 
-      const validationResult = await runValidation(validation, validationContext);
+      const checkResult = await runValidation(validation!, checkContext);
 
       await writer?.write({
         type: 'network-validation-end',
         payload: {
           runId,
           iteration: inputData.iteration,
-          passed: validationResult.passed,
-          results: validationResult.results,
-          duration: validationResult.totalDuration,
+          passed: checkResult.complete,
+          results: checkResult.checks,
+          duration: checkResult.totalDuration,
         },
         from: ChunkFrom.NETWORK,
         runId,
       });
 
-      if (validationResult.passed) {
-        // Validation passed - task is truly complete
+      if (checkResult.complete) {
+        // All checks passed - task is truly complete
         return {
           ...inputData,
           isComplete: true,
           validationPassed: true,
           completionReason: inputData.completionReason
-            ? `${inputData.completionReason} (validation passed)`
-            : 'Validation passed',
+            ? `${inputData.completionReason} (checks passed)`
+            : 'All checks passed',
         };
       } else {
-        // Validation failed - override LLM's completion assessment
+        // Checks failed - override LLM's completion assessment
         // Format feedback to inject into the next iteration
-        const feedback = formatValidationFeedback(validationResult);
+        const feedback = formatCheckFeedback(checkResult);
 
         // Save validation feedback to memory so the next iteration can see it
         const memory = await routingAgent.getMemory({ requestContext });
