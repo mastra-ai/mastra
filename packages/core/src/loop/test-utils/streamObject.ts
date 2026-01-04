@@ -282,7 +282,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: createMessageListWithUserMessage(),
             options: {
-              onError: () => { },
+              onError: () => {},
             },
             modelSettings: {
               maxRetries: 0,
