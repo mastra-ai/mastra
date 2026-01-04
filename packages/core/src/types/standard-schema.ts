@@ -171,19 +171,29 @@ export namespace StandardJSONSchemaV1 {
 /**
  * Checks if a value is a Standard Schema (implements the ~standard interface).
  *
+ * Note: Some libraries like ArkType return functions with a ~standard property,
+ * so we check for both objects and functions.
+ *
  * @param value - The value to check
  * @returns True if the value implements StandardSchemaV1, false otherwise
  */
 export function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  // Check for object or function (ArkType returns functions)
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return false;
+  }
+
+  if (!('~standard' in value)) {
+    return false;
+  }
+
+  const std = (value as any)['~standard'];
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    '~standard' in value &&
-    typeof (value as any)['~standard'] === 'object' &&
-    (value as any)['~standard'] !== null &&
-    typeof (value as any)['~standard'].version === 'number' &&
-    typeof (value as any)['~standard'].vendor === 'string' &&
-    typeof (value as any)['~standard'].validate === 'function'
+    typeof std === 'object' &&
+    std !== null &&
+    typeof std.version === 'number' &&
+    typeof std.vendor === 'string' &&
+    typeof std.validate === 'function'
   );
 }
 
