@@ -30,7 +30,7 @@
   "dependencies": {
     "@aws-sdk/types": "^3.731.0",
     "@aws/aurora-dsql-node-postgres-connector": "^0.1.1",
-    "pg-promise": "^11.15.0"
+    "pg": "^8.14.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -39,6 +39,7 @@
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "22.13.17",
+    "@types/pg": "^8.11.14",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

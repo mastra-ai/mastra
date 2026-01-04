@@ -5,6 +5,8 @@
  * index creation to validate the performance improvements.
  */
 
+import type { MemoryStorage } from '@mastra/core/storage';
+import { DsqlDB } from '../db';
 import { DSQLStore } from '../index';
 import { TEST_CONFIG } from '../test-utils';
 
@@ -32,15 +34,20 @@ interface PerformanceComparison {
 
 export class DSQLPerformanceTest {
   private store: DSQLStore;
+  private memory!: MemoryStorage;
+  private dbOps: DsqlDB;
   private config: PerformanceTestConfig;
 
   constructor(config: PerformanceTestConfig) {
     this.config = config;
     this.store = new DSQLStore(TEST_CONFIG);
+    // Create a DsqlDB instance for index operations (since these are not exposed on the main store)
+    this.dbOps = new DsqlDB({ client: this.store.db });
   }
 
   async init(): Promise<void> {
     await this.store.init();
+    this.memory = (await this.store.getStore('memory'))!;
   }
 
   async cleanup(): Promise<void> {
@@ -54,30 +61,30 @@ export class DSQLPerformanceTest {
     // Threads
     let deleted = 0;
     do {
-      const result = await db.result(
+      const result = await db.query(
         'DELETE FROM mastra_threads WHERE id IN (SELECT id FROM mastra_threads WHERE title LIKE $1 OR id LIKE $2 LIMIT $3)',
         ['perf_test_%', 'thread_%', batchSize],
       );
-      deleted = result.rowCount;
+      deleted = result.rowCount ?? 0;
     } while (deleted > 0);
 
     // Messages
     do {
-      const result = await db.result(
+      const result = await db.query(
         'DELETE FROM mastra_messages WHERE id IN (SELECT id FROM mastra_messages WHERE content LIKE $1 OR id LIKE $2 LIMIT $3)',
         ['%perf_test%', 'message_%', batchSize],
       );
-      deleted = result.rowCount;
+      deleted = result.rowCount ?? 0;
     } while (deleted > 0);
 
     // Traces
     try {
       do {
-        const result = await db.result(
+        const result = await db.query(
           'DELETE FROM mastra_traces WHERE id IN (SELECT id FROM mastra_traces WHERE id LIKE $1 LIMIT $2)',
           ['trace_%', batchSize],
         );
-        deleted = result.rowCount;
+        deleted = result.rowCount ?? 0;
       } while (deleted > 0);
     } catch {
       // Table might not exist
@@ -130,7 +137,7 @@ export class DSQLPerformanceTest {
 
     for (const indexName of indexesToDrop) {
       try {
-        await this.store.stores.operations.dropIndex(indexName);
+        await this.dbOps.dropIndex(indexName);
       } catch (error) {
         // Ignore errors for non-existent indexes
         console.warn(`Could not drop index ${indexName}:`, error);
@@ -138,10 +145,11 @@ export class DSQLPerformanceTest {
     }
   }
 
-  async createAutomaticIndexes(): Promise<void> {
+  async createDefaultIndexes(): Promise<void> {
     console.info('Creating indexes...');
-    const operations = this.store.stores.operations as any; // Cast to access DSQL-specific method
-    await operations.createAutomaticIndexes();
+    // Note: Indexes are now created by domain classes during init()
+    // This method re-initializes the store to ensure indexes are created
+    await this.store.init();
   }
 
   async seedTestData(): Promise<void> {
@@ -381,7 +389,7 @@ export class DSQLPerformanceTest {
     results.push(
       await this.measureOperation(
         'listThreadsByResourceId',
-        () => this.store.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
+        () => this.memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
         scenario,
       ),
     );
@@ -392,7 +400,7 @@ export class DSQLPerformanceTest {
       await this.measureOperation(
         'listMessages',
         () =>
-          this.store.listMessages({
+          this.memory.listMessages({
             threadId,
             perPage: 20,
             page: 0,
@@ -413,7 +421,7 @@ export class DSQLPerformanceTest {
     const withoutIndexes = await this.runPerformanceTests('without_indexes');
 
     // Then, test with indexes
-    await this.createAutomaticIndexes();
+    await this.createDefaultIndexes();
     await this.analyzeCurrentQueries(); // Show query plans with indexes
     const withIndexes = await this.runPerformanceTests('with_indexes');
 
