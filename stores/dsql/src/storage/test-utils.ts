@@ -1,14 +1,14 @@
+import { AuroraDSQLClient } from '@aws/aurora-dsql-node-postgres-connector';
 import { createSampleThread } from '@internal/storage-test-utils';
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { DSQLConfig } from '../shared/config';
+import { getEffectiveRegion, DSQL_POOL_DEFAULTS } from '../shared/config';
+import type { HostConfig } from '../shared/config';
+import { DsqlDB } from './db';
 import { DSQLStore } from '.';
 
-/**
- * Test configuration for Aurora DSQL.
- * Uses the same environment variables as integration tests.
- */
-export const TEST_CONFIG: DSQLConfig = {
+export const TEST_CONFIG: HostConfig = {
   id: 'test-dsql-store',
   host: process.env.DSQL_HOST || '',
   region: process.env.DSQL_REGION,
@@ -23,13 +23,38 @@ export function canRunDSQLTests(): boolean {
   return !!(process.env.DSQL_HOST && process.env.DSQL_INTEGRATION === 'true');
 }
 
+/**
+ * Creates a test pool with IAM authentication for DSQL.
+ * Returns a pre-configured pg.Pool using AuroraDSQLClient.
+ */
+export function createTestPool(): Pool {
+  const region = getEffectiveRegion(TEST_CONFIG);
+  const poolConfig = {
+    host: TEST_CONFIG.host,
+    user: TEST_CONFIG.user ?? 'admin',
+    database: TEST_CONFIG.database ?? 'postgres',
+    Client: AuroraDSQLClient,
+    region,
+    max: DSQL_POOL_DEFAULTS.max,
+    min: DSQL_POOL_DEFAULTS.min,
+    idleTimeoutMillis: DSQL_POOL_DEFAULTS.idleTimeoutMillis,
+    maxLifetimeSeconds: DSQL_POOL_DEFAULTS.maxLifetimeSeconds,
+    connectionTimeoutMillis: DSQL_POOL_DEFAULTS.connectionTimeoutMillis,
+    allowExitOnIdle: DSQL_POOL_DEFAULTS.allowExitOnIdle,
+  };
+  return new Pool(poolConfig);
+}
+
 export function dsqlTests() {
   let store: DSQLStore;
+  let dbOps: DsqlDB;
 
   describe('DSQL specific tests', () => {
     beforeAll(async () => {
       store = new DSQLStore(TEST_CONFIG);
       await store.init();
+      // Create DsqlDB instance for low-level operations
+      dbOps = new DsqlDB({ client: store.db });
     });
 
     afterAll(async () => {
@@ -39,35 +64,27 @@ export function dsqlTests() {
     });
 
     describe('Public Fields Access', () => {
-      it('should expose db field as public', () => {
+      it('should expose client field as public', () => {
         expect(store.db).toBeDefined();
         expect(typeof store.db).toBe('object');
         expect(store.db.query).toBeDefined();
         expect(typeof store.db.query).toBe('function');
       });
 
-      it('should expose pgp field as public', () => {
-        expect(store.pgp).toBeDefined();
-        expect(typeof store.pgp).toBe('function');
-        expect(store.pgp.end).toBeDefined();
-        expect(typeof store.pgp.end).toBe('function');
+      it('should expose pool field as public', () => {
+        expect(store.pool).toBeDefined();
+        expect(store.pool).toBeInstanceOf(Pool);
       });
 
-      it('should allow direct database queries via public db field', async () => {
-        const result = await store.db.one('SELECT 1 as test');
+      it('should allow direct database queries via public client field', async () => {
+        const result = await store.db.one<{ test: number }>('SELECT 1 as test');
         expect(result.test).toBe(1);
       });
 
-      it('should allow access to pgp utilities via public pgp field', () => {
-        const helpers = store.pgp.helpers;
-        expect(helpers).toBeDefined();
-        expect(helpers.insert).toBeDefined();
-        expect(helpers.update).toBeDefined();
-      });
-
-      it('should maintain connection state through public db field', async () => {
-        const result1 = await store.db.one('SELECT NOW() as timestamp1');
-        const result2 = await store.db.one('SELECT NOW() as timestamp2');
+      it('should maintain connection state through public client field', async () => {
+        // Test multiple queries to ensure connection state
+        const result1 = await store.db.one<{ timestamp1: Date }>('SELECT NOW() as timestamp1');
+        const result2 = await store.db.one<{ timestamp2: Date }>('SELECT NOW() as timestamp2');
 
         expect(result1.timestamp1).toBeDefined();
         expect(result2.timestamp2).toBeDefined();
@@ -79,6 +96,8 @@ export function dsqlTests() {
         await expect(store.db.connect()).rejects.toThrow();
         store = new DSQLStore(TEST_CONFIG);
         await store.init();
+        // Recreate dbOps with new store connection
+        dbOps = new DsqlDB({ client: store.db });
       });
     });
 
@@ -93,37 +112,43 @@ export function dsqlTests() {
       } as Record<string, StorageColumn>;
 
       beforeEach(async () => {
+        // Only clear tables if store is initialized
         try {
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          // Clear tables before each test
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
+          // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
         }
       });
 
       afterEach(async () => {
+        // Only clear tables if store is initialized
         try {
-          await store.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
-          await store.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
+          // Clear tables before each test
+          await dbOps.clearTable({ tableName: camelCaseTable as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: snakeCaseTable as TABLE_NAMES });
         } catch (error) {
+          // Ignore errors during table clearing
           console.warn('Error clearing tables:', error);
         }
       });
 
       it('should create and upsert to a camelCase table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: camelCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: camelCaseTable as TABLE_NAMES,
           record: { id: '1', name: 'Alice', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: camelCaseTable as TABLE_NAMES,
           keys: { id: '1' },
         });
@@ -132,18 +157,18 @@ export function dsqlTests() {
 
       it('should create and upsert to a snake_case table without quoting errors', async () => {
         await expect(
-          store.createTable({
+          dbOps.createTable({
             tableName: snakeCaseTable as TABLE_NAMES,
             schema: BASE_SCHEMA,
           }),
         ).resolves.not.toThrow();
 
-        await store.insert({
+        await dbOps.insert({
           tableName: snakeCaseTable as TABLE_NAMES,
           record: { id: '2', name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
         });
 
-        const row: any = await store.load({
+        const row: any = await dbOps.load({
           tableName: snakeCaseTable as TABLE_NAMES,
           keys: { id: '2' },
         });
@@ -162,19 +187,19 @@ export function dsqlTests() {
         } as Record<string, StorageColumn>;
 
         try {
-          await store.createTable({ tableName: tableName as TABLE_NAMES, schema });
-          await store.insert({
+          await dbOps.createTable({ tableName: tableName as TABLE_NAMES, schema });
+          await dbOps.insert({
             tableName: tableName as TABLE_NAMES,
             record: { id: 'test', counter: 0, createdAt: new Date(), updatedAt: new Date() },
           });
 
-          const result: any = await store.load({
+          const result: any = await dbOps.load({
             tableName: tableName as TABLE_NAMES,
             keys: { id: 'test' },
           });
           expect(result?.counter).toBe(0);
         } finally {
-          await store.clearTable({ tableName: tableName as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: tableName as TABLE_NAMES });
         }
       });
 
@@ -188,7 +213,7 @@ export function dsqlTests() {
         } as Record<string, StorageColumn>;
 
         try {
-          await store.createTable({ tableName: tableName as TABLE_NAMES, schema });
+          await dbOps.createTable({ tableName: tableName as TABLE_NAMES, schema });
 
           const records = Array.from({ length: 100 }, (_, i) => ({
             id: `batch-${i}`,
@@ -197,7 +222,7 @@ export function dsqlTests() {
             updatedAt: new Date(),
           }));
 
-          await store.batchInsert({
+          await dbOps.batchInsert({
             tableName: tableName as TABLE_NAMES,
             records,
           });
@@ -205,7 +230,7 @@ export function dsqlTests() {
           const result = await store.db.one(`SELECT COUNT(*) as count FROM "${tableName}"`);
           expect(Number(result.count)).toBe(100);
         } finally {
-          await store.clearTable({ tableName: tableName as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: tableName as TABLE_NAMES });
         }
       });
 
@@ -219,7 +244,7 @@ export function dsqlTests() {
         } as Record<string, StorageColumn>;
 
         try {
-          await store.createTable({ tableName: tableName as TABLE_NAMES, schema });
+          await dbOps.createTable({ tableName: tableName as TABLE_NAMES, schema });
 
           const columnInfo = await store.db.oneOrNone(
             `SELECT data_type FROM information_schema.columns 
@@ -230,7 +255,7 @@ export function dsqlTests() {
           // Aurora DSQL converts JSONB to TEXT
           expect(columnInfo?.data_type).toBe('text');
         } finally {
-          await store.clearTable({ tableName: tableName as TABLE_NAMES });
+          await dbOps.clearTable({ tableName: tableName as TABLE_NAMES });
         }
       });
     });
@@ -239,6 +264,18 @@ export function dsqlTests() {
       let testThreadId: string;
       let testResourceId: string;
       let testMessageId: string;
+      let memory: MemoryStorage;
+
+      beforeAll(async () => {
+        store = new DSQLStore(TEST_CONFIG);
+        await store.init();
+        memory = (await store.getStore('memory'))!;
+      });
+      afterAll(async () => {
+        try {
+          await store.close();
+        } catch {}
+      });
 
       beforeEach(async () => {
         testThreadId = `thread-${Date.now()}`;
@@ -249,7 +286,7 @@ export function dsqlTests() {
       it('should use createdAtZ over createdAt for messages when both exist', async () => {
         // Create a thread first
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Directly insert a message with both createdAt and createdAtZ where they differ
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
@@ -262,14 +299,14 @@ export function dsqlTests() {
         );
 
         // Test listMessagesById
-        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        const messagesByIdResult = await memory.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtZValue.getTime());
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).not.toBe(createdAtValue.getTime());
 
         // Test listMessages
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
         });
         expect(messagesResult.messages.length).toBe(1);
@@ -281,7 +318,7 @@ export function dsqlTests() {
       it('should fallback to createdAt when createdAtZ is null for legacy messages', async () => {
         // Create a thread first
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Directly insert a message with only createdAt (simulating old records)
         const createdAtValue = new Date('2024-01-01T10:00:00Z');
@@ -293,13 +330,13 @@ export function dsqlTests() {
         );
 
         // Test listMessagesById
-        const messagesByIdResult = await store.listMessagesById({ messageIds: [testMessageId] });
+        const messagesByIdResult = await memory.listMessagesById({ messageIds: [testMessageId] });
         expect(messagesByIdResult.messages.length).toBe(1);
         expect(messagesByIdResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesByIdResult.messages[0]?.createdAt.getTime()).toBe(createdAtValue.getTime());
 
         // Test listMessages
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
         });
         expect(messagesResult.messages.length).toBe(1);
@@ -312,11 +349,11 @@ export function dsqlTests() {
         const threadCreatedAt = new Date('2024-01-01T10:00:00Z');
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
         thread.createdAt = threadCreatedAt;
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Save a message through the normal API with a different timestamp
         const messageCreatedAt = new Date('2024-01-01T12:00:00Z');
-        await store.saveMessages({
+        await memory.saveMessages({
           messages: [
             {
               id: testMessageId,
@@ -330,13 +367,13 @@ export function dsqlTests() {
         });
 
         // Get thread
-        const retrievedThread = await store.getThreadById({ threadId: testThreadId });
+        const retrievedThread = await memory.getThreadById({ threadId: testThreadId });
         expect(retrievedThread).toBeTruthy();
         expect(retrievedThread?.createdAt).toBeInstanceOf(Date);
         expect(retrievedThread?.createdAt.getTime()).toBe(threadCreatedAt.getTime());
 
         // Get messages
-        const messagesResult = await store.listMessages({ threadId: testThreadId });
+        const messagesResult = await memory.listMessages({ threadId: testThreadId });
         expect(messagesResult.messages.length).toBe(1);
         expect(messagesResult.messages[0]?.createdAt).toBeInstanceOf(Date);
         expect(messagesResult.messages[0]?.createdAt.getTime()).toBe(messageCreatedAt.getTime());
@@ -345,7 +382,7 @@ export function dsqlTests() {
       it('should handle included messages with correct timestamp fallback', async () => {
         // Create a thread
         const thread = createSampleThread({ id: testThreadId, resourceId: testResourceId });
-        await store.saveThread({ thread });
+        await memory.saveThread({ thread });
 
         // Create multiple messages
         const msg1Id = `${testMessageId}-1`;
@@ -380,7 +417,7 @@ export function dsqlTests() {
         );
 
         // Test listMessages with include
-        const messagesResult = await store.listMessages({
+        const messagesResult = await memory.listMessages({
           threadId: testThreadId,
           include: [
             {
@@ -394,30 +431,22 @@ export function dsqlTests() {
         expect(messagesResult.messages.length).toBe(3);
 
         // Find each message and verify correct timestamps
-        const message1 = messagesResult.messages.find(m => m.id === msg1Id);
+        const message1 = messagesResult.messages.find((m: any) => m.id === msg1Id);
         expect(message1).toBeDefined();
         expect(message1?.createdAt).toBeInstanceOf(Date);
         expect(message1?.createdAt.getTime()).toBe(date1.getTime());
 
-        const message2 = messagesResult.messages.find(m => m.id === msg2Id);
+        const message2 = messagesResult.messages.find((m: any) => m.id === msg2Id);
         expect(message2).toBeDefined();
         expect(message2?.createdAt).toBeInstanceOf(Date);
         expect(message2?.createdAt.getTime()).toBe(date2.getTime());
 
-        const message3 = messagesResult.messages.find(m => m.id === msg3Id);
+        const message3 = messagesResult.messages.find((m: any) => m.id === msg3Id);
         expect(message3).toBeDefined();
         expect(message3?.createdAt).toBeInstanceOf(Date);
         // Should use createdAtZ (date2Z), not createdAt (date3)
         expect(message3?.createdAt.getTime()).toBe(date2Z.getTime());
         expect(message3?.createdAt.getTime()).not.toBe(date3.getTime());
-      });
-    });
-
-    describe('Store Initialization', () => {
-      it('throws if store is not initialized', () => {
-        const uninitializedStore = new DSQLStore(TEST_CONFIG);
-        expect(() => uninitializedStore.db).toThrow(/DSQLStore: Store is not initialized/);
-        expect(() => uninitializedStore.pgp).toThrow(/DSQLStore: Store is not initialized/);
       });
     });
   });
