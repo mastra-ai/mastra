@@ -261,231 +261,89 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
 }
 
 // ============================================================================
-// Check Creators - Composable primitives for building validation checks
+// Check Creator
 // ============================================================================
-
-/**
- * Options for createCheck
- */
-export interface CreateCheckOptions {
-  /** Unique identifier for this check */
-  id: string;
-  /** Human-readable name (shown in logs/feedback) */
-  name: string;
-}
 
 /**
  * Creates a validation check from an async function.
- * This is the primary way to create custom validation logic.
+ *
+ * The function you provide should return `{ success: boolean, message: string }`.
+ * Optionally include `details` for additional context shown to the LLM on failure.
  *
  * @example
  * ```typescript
- * const apiHealthCheck = createCheck({
- *   id: 'api-health',
- *   name: 'API Health Check',
- * }, async () => {
- *   const res = await fetch('http://localhost:3000/health');
- *   return {
- *     success: res.ok,
- *     message: res.ok ? 'API is healthy' : `API returned ${res.status}`,
- *   };
+ * // Run shell commands
+ * const testsCheck = createCheck({
+ *   id: 'tests',
+ *   name: 'Unit Tests',
+ *   run: async () => {
+ *     const { exitCode, stdout, stderr } = await $`npm test`;
+ *     return {
+ *       success: exitCode === 0,
+ *       message: exitCode === 0 ? 'All tests passed' : 'Tests failed',
+ *       details: { stdout, stderr },
+ *     };
+ *   },
  * });
  *
- * const dbConnectionCheck = createCheck({
- *   id: 'db-connection',
- *   name: 'Database Connection',
- * }, async () => {
- *   try {
+ * // Check an API
+ * const apiCheck = createCheck({
+ *   id: 'api-health',
+ *   name: 'API Health',
+ *   run: async () => {
+ *     const res = await fetch('http://localhost:3000/health');
+ *     return {
+ *       success: res.ok,
+ *       message: res.ok ? 'API healthy' : `API returned ${res.status}`,
+ *     };
+ *   },
+ * });
+ *
+ * // Check database
+ * const dbCheck = createCheck({
+ *   id: 'db',
+ *   name: 'Database',
+ *   run: async () => {
  *     await db.query('SELECT 1');
- *     return { success: true, message: 'Database connected' };
- *   } catch (e) {
- *     return { success: false, message: `Database error: ${e.message}` };
- *   }
+ *     return { success: true, message: 'Connected' };
+ *   },
+ * });
+ *
+ * // Check file exists
+ * const fileCheck = createCheck({
+ *   id: 'dist-exists',
+ *   name: 'Build Output',
+ *   run: async () => {
+ *     const exists = await fs.access('./dist/index.js').then(() => true).catch(() => false);
+ *     return {
+ *       success: exists,
+ *       message: exists ? 'Build output exists' : 'Build output missing',
+ *     };
+ *   },
  * });
  * ```
  */
-export function createCheck(
-  options: CreateCheckOptions,
-  fn: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>,
-): ValidationCheck {
-  return {
-    id: options.id,
-    name: options.name,
-    async check() {
-      const start = Date.now();
-      try {
-        const result = await fn();
-        return { ...result, duration: Date.now() - start };
-      } catch (error: any) {
-        return {
-          success: false,
-          message: `Check threw an error: ${error.message}`,
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Options for createCommandCheck
- */
-export interface CreateCommandCheckOptions {
+export function createCheck(options: {
   /** Unique identifier for this check */
   id: string;
   /** Human-readable name (shown in logs/feedback) */
   name: string;
-  /** The shell command to run */
-  command: string;
-  /** Working directory (optional) */
-  cwd?: string;
-  /** Timeout in milliseconds (default: 60000) */
-  timeout?: number;
-  /** Custom success message (default: "Command succeeded") */
-  successMessage?: string;
-  /** Custom failure message prefix (default: "Command failed") */
-  failureMessage?: string;
-}
-
-/**
- * Creates a validation check that runs a shell command.
- * The check passes if the command exits with code 0.
- *
- * @example
- * ```typescript
- * // Run tests
- * const testsCheck = createCommandCheck({
- *   id: 'tests',
- *   name: 'Unit Tests',
- *   command: 'npm test',
- *   timeout: 300000,
- * });
- *
- * // Run build
- * const buildCheck = createCommandCheck({
- *   id: 'build',
- *   name: 'Build',
- *   command: 'npm run build',
- *   successMessage: 'Build completed successfully',
- * });
- *
- * // Run custom script
- * const migrationCheck = createCommandCheck({
- *   id: 'db-migrate',
- *   name: 'Database Migrations',
- *   command: 'npm run db:migrate:status',
- *   cwd: './packages/api',
- * });
- *
- * // Run with custom project commands
- * const e2eCheck = createCommandCheck({
- *   id: 'e2e',
- *   name: 'E2E Tests',
- *   command: 'pnpm test:e2e',
- *   timeout: 600000,
- * });
- * ```
- */
-export function createCommandCheck(options: CreateCommandCheckOptions): ValidationCheck {
+  /** Async function that performs the validation */
+  run: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>;
+}): ValidationCheck {
   return {
     id: options.id,
     name: options.name,
     async check() {
       const start = Date.now();
       try {
-        const { stdout, stderr } = await execAsync(options.command, {
-          timeout: options.timeout ?? 60000,
-          cwd: options.cwd,
-        });
-        return {
-          success: true,
-          message: options.successMessage ?? 'Command succeeded',
-          details: {
-            command: options.command,
-            stdout: stdout.slice(-2000),
-            stderr: stderr.slice(-500),
-          },
-          duration: Date.now() - start,
-        };
-      } catch (error: any) {
-        return {
-          success: false,
-          message: `${options.failureMessage ?? 'Command failed'}: ${error.message?.slice(0, 200)}`,
-          details: {
-            command: options.command,
-            stdout: error.stdout?.slice(-2000),
-            stderr: error.stderr?.slice(-2000),
-            exitCode: error.code,
-          },
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates a check that runs a custom shell command
- */
-export function commandSucceeds(
-  command: string,
-  options?: { timeout?: number; cwd?: string; name?: string; id?: string },
-): ValidationCheck {
-  return {
-    id: options?.id ?? `command-${command.slice(0, 20).replace(/\s/g, '-')}`,
-    name: options?.name ?? `Command: ${command.slice(0, 50)}`,
-    async check() {
-      const start = Date.now();
-      try {
-        const { stdout, stderr } = await execAsync(command, {
-          timeout: options?.timeout ?? 60000,
-          cwd: options?.cwd,
-        });
-        return {
-          success: true,
-          message: `Command succeeded`,
-          details: {
-            stdout: stdout.slice(-1000),
-            stderr: stderr.slice(-500),
-          },
-          duration: Date.now() - start,
-        };
-      } catch (error: any) {
-        return {
-          success: false,
-          message: `Command failed: ${error.message?.slice(0, 200)}`,
-          details: {
-            stdout: error.stdout?.slice(-1500),
-            stderr: error.stderr?.slice(-1500),
-            exitCode: error.code,
-          },
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates a check from a custom async function
- */
-export function customCheck(
-  id: string,
-  name: string,
-  fn: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>,
-): ValidationCheck {
-  return {
-    id,
-    name,
-    async check() {
-      const start = Date.now();
-      try {
-        const result = await fn();
+        const result = await options.run();
         return { ...result, duration: Date.now() - start };
       } catch (error: any) {
         return {
           success: false,
           message: `Check threw an error: ${error.message}`,
+          details: { error: error.stack },
           duration: Date.now() - start,
         };
       }
@@ -493,165 +351,52 @@ export function customCheck(
   };
 }
 
+// ============================================================================
+// Validation Tool (for Agent Network primitives)
+// ============================================================================
+
 /**
- * Creates a check that verifies a file exists
+ * Creates a tool that lets agents run shell commands for validation.
+ * Add this to your agent's tools if you want the agent to decide when to validate.
+ *
+ * @example
+ * ```typescript
+ * const agent = new Agent({
+ *   instructions: 'After making changes, run commands to verify your work.',
+ *   tools: {
+ *     runCommand: createRunCommandTool(),
+ *   },
+ * });
+ * ```
  */
-export function fileExists(path: string, options?: { name?: string }): ValidationCheck {
-  return {
-    id: `file-exists-${path.replace(/[^a-z0-9]/gi, '-')}`,
-    name: options?.name ?? `File Exists: ${path}`,
-    async check() {
-      const start = Date.now();
+export function createRunCommandTool() {
+  return createTool({
+    id: 'run-command',
+    description:
+      'Execute a shell command and return the result. Use this to verify your work by running tests, builds, linting, or any other validation commands.',
+    inputSchema: z.object({
+      command: z.string().describe('The shell command to execute'),
+      timeout: z.number().default(60000).describe('Timeout in milliseconds'),
+      cwd: z.string().optional().describe('Working directory'),
+    }),
+    execute: async ({ command, timeout, cwd }) => {
       try {
-        const fs = await import('fs/promises');
-        await fs.access(path);
+        const { stdout, stderr } = await execAsync(command, { timeout, cwd });
         return {
           success: true,
-          message: `File ${path} exists`,
-          duration: Date.now() - start,
-        };
-      } catch {
-        return {
-          success: false,
-          message: `File ${path} does not exist`,
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates a check that verifies a file contains a pattern
- */
-export function fileContains(
-  path: string,
-  pattern: string | RegExp,
-  options?: { name?: string },
-): ValidationCheck {
-  return {
-    id: `file-contains-${path.replace(/[^a-z0-9]/gi, '-')}`,
-    name: options?.name ?? `File Contains Pattern: ${path}`,
-    async check() {
-      const start = Date.now();
-      try {
-        const fs = await import('fs/promises');
-        const content = await fs.readFile(path, 'utf-8');
-        const matches = typeof pattern === 'string' ? content.includes(pattern) : pattern.test(content);
-
-        return {
-          success: matches,
-          message: matches
-            ? `File ${path} contains expected pattern`
-            : `File ${path} does not contain expected pattern`,
-          duration: Date.now() - start,
+          exitCode: 0,
+          stdout: stdout.slice(-3000),
+          stderr: stderr.slice(-1000),
         };
       } catch (error: any) {
         return {
           success: false,
-          message: `Could not read file ${path}: ${error.message}`,
-          duration: Date.now() - start,
+          exitCode: error.code,
+          stdout: error.stdout?.slice(-2000),
+          stderr: error.stderr?.slice(-2000),
+          message: error.message,
         };
       }
     },
-  };
-}
-
-// ============================================================================
-// Validation Tools (for Agent Network primitives)
-// ============================================================================
-
-/**
- * Creates validation tools that can be added to an agent's toolset.
- * This allows the routing agent to explicitly call validation.
- */
-export function createValidationTools() {
-  return {
-    runTests: createTool({
-      id: 'run-tests',
-      description:
-        'Run the project test suite to verify changes work correctly. Call this after making code changes to ensure tests pass before marking task complete.',
-      inputSchema: z.object({
-        command: z.string().default('npm test').describe('The test command to run'),
-        timeout: z.number().default(300000).describe('Timeout in milliseconds'),
-        cwd: z.string().optional().describe('Working directory'),
-      }),
-      execute: async ({ command, timeout, cwd }) => {
-        const check = testsPass(command, { timeout, cwd });
-        return check.check();
-      },
-    }),
-
-    runBuild: createTool({
-      id: 'run-build',
-      description:
-        'Build the project to verify there are no compilation errors. Call this after making code changes before marking task complete.',
-      inputSchema: z.object({
-        command: z.string().default('npm run build').describe('The build command to run'),
-        timeout: z.number().default(600000).describe('Timeout in milliseconds'),
-        cwd: z.string().optional().describe('Working directory'),
-      }),
-      execute: async ({ command, timeout, cwd }) => {
-        const check = buildSucceeds(command, { timeout, cwd });
-        return check.check();
-      },
-    }),
-
-    runLint: createTool({
-      id: 'run-lint',
-      description: 'Run linting to check for code style issues after making code changes.',
-      inputSchema: z.object({
-        command: z.string().default('npm run lint').describe('The lint command to run'),
-        timeout: z.number().default(120000).describe('Timeout in milliseconds'),
-        cwd: z.string().optional().describe('Working directory'),
-      }),
-      execute: async ({ command, timeout, cwd }) => {
-        const check = lintPasses(command, { timeout, cwd });
-        return check.check();
-      },
-    }),
-
-    checkTypes: createTool({
-      id: 'check-types',
-      description: 'Run TypeScript type checking to ensure type safety after making code changes.',
-      inputSchema: z.object({
-        command: z.string().default('npx tsc --noEmit').describe('The type check command'),
-        timeout: z.number().default(300000).describe('Timeout in milliseconds'),
-        cwd: z.string().optional().describe('Working directory'),
-      }),
-      execute: async ({ command, timeout, cwd }) => {
-        const check = typeChecks(command, { timeout, cwd });
-        return check.check();
-      },
-    }),
-
-    runCommand: createTool({
-      id: 'run-shell-command',
-      description: 'Execute a shell command and return the result. Useful for custom validation or verification.',
-      inputSchema: z.object({
-        command: z.string().describe('The command to execute'),
-        timeout: z.number().default(60000).describe('Timeout in milliseconds'),
-        cwd: z.string().optional().describe('Working directory'),
-      }),
-      execute: async ({ command, timeout, cwd }) => {
-        try {
-          const { stdout, stderr } = await execAsync(command, { timeout, cwd });
-          return {
-            success: true,
-            exitCode: 0,
-            stdout: stdout.slice(-3000),
-            stderr: stderr.slice(-1000),
-          };
-        } catch (error: any) {
-          return {
-            success: false,
-            exitCode: error.code,
-            stdout: error.stdout?.slice(-2000),
-            stderr: error.stderr?.slice(-2000),
-            message: error.message,
-          };
-        }
-      },
-    }),
-  };
+  });
 }
