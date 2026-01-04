@@ -11,6 +11,7 @@ import { DatasetLoader } from './data/loader';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType } from './data/types';
 import { PrepareCommand } from './commands/prepare';
 import { RunCommand } from './commands/run';
+import { SyncCommand } from './commands/sync';
 
 const program = new Command();
 
@@ -384,6 +385,37 @@ program
       }
 
       console.log(chalk.gray(`\nTo run a specific question: longmemeval run --question-id <id> ...`));
+    } catch (error) {
+      console.error(chalk.red('\nError:'), error);
+      process.exit(1);
+    }
+  });
+
+// Sync command - sync improved_question/improved_answer from dataset to prepared meta.json files
+program
+  .command('sync')
+  .description('Sync improved_question and improved_answer from dataset JSON to prepared meta.json files')
+  .requiredOption('-d, --dataset <dataset>', 'Dataset to sync from (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .option('-c, --memory-config <config>', 'Memory configuration', 'working-memory')
+  .option('--prepared-data <dir>', 'Directory containing prepared data', './prepared-data')
+  .action(async options => {
+    try {
+      console.log(chalk.blue('\n🔄 Syncing Improved Questions/Answers\n'));
+
+      // Validate dataset option
+      const validDatasets = ['longmemeval_s', 'longmemeval_m', 'longmemeval_oracle'];
+      if (!validDatasets.includes(options.dataset)) {
+        console.error(chalk.red(`Invalid dataset: ${options.dataset}`));
+        console.error(chalk.gray(`Valid options: ${validDatasets.join(', ')}`));
+        process.exit(1);
+      }
+
+      const syncCommand = new SyncCommand();
+      await syncCommand.run({
+        dataset: options.dataset,
+        memoryConfig: options.memoryConfig,
+        preparedDataDir: options.preparedData,
+      });
     } catch (error) {
       console.error(chalk.red('\nError:'), error);
       process.exit(1);
