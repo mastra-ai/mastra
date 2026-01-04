@@ -1,6 +1,6 @@
 # Ralph Wiggum Loop Integration for Mastra
 
-> **Status: IMPLEMENTED** - The Agent Network with completion checks IS the autonomous loop
+> **Status: IMPLEMENTED** - The Agent Network with completion scorers IS the autonomous loop
 
 ## What is the Ralph Wiggum Loop?
 
@@ -16,35 +16,35 @@ The Ralph Wiggum loop is an autonomous agent execution pattern where an AI agent
 
 ---
 
-## Implementation: Unified Completion Checks
+## Implementation: Scorers for Completion
 
-Everything about "when is the task done?" is a **check**. Checks can be:
-- **Code-based**: Run tests, call APIs, check files
-- **LLM-based**: Ask an LLM to evaluate
+Completion checks are just **MastraScorers** that return 0 (not complete) or 1 (complete).
 
-By default, the network uses an LLM check that asks "is this task complete?"
+This unifies:
+- **Evals** (offline testing) 
+- **Completion** (runtime loop control)
+
+Same primitive, different contexts.
 
 ### Quick Start
 
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { createCheck, taskCompletionCheck } from '@mastra/core/loop';
+import { createScorer } from '@mastra/core/evals';
+import { execSync } from 'child_process';
 
-// Code-based check
-const testsCheck = createCheck({
+// Create a completion scorer
+const testsScorer = createScorer({
   id: 'tests',
-  name: 'Unit Tests',
-  args: { command: 'npm test' },
-  run: async (params) => {
-    const { execSync } = await import('child_process');
-    try {
-      execSync(params.args.command, { stdio: 'pipe' });
-      return { passed: true, message: 'All tests passed' };
-    } catch (e: any) {
-      return { passed: false, message: 'Tests failed', details: { error: e.message } };
-    }
-  },
+  description: 'Run unit tests to verify code works',
+}).generateScore(async ({ run }) => {
+  try {
+    execSync('npm test', { stdio: 'pipe' });
+    return 1; // Tests passed
+  } catch {
+    return 0; // Tests failed
+  }
 });
 
 const agent = new Agent({
@@ -58,101 +58,106 @@ const agent = new Agent({
   defaultNetworkOptions: {
     maxSteps: 20,
     completion: {
-      checks: [testsCheck],
+      scorers: [testsScorer],
       strategy: 'all',
     },
   },
 });
 
-// Run network - uses default completion checks
+// Run network - uses default completion scorers
 const result = await agent.network('Migrate all tests from Jest to Vitest');
 
 for await (const chunk of result.fullStream) {
   if (chunk.type === 'network-validation-end') {
-    console.log(`Checks: ${chunk.payload.passed ? '✅' : '❌'}`);
+    console.log(`Completion: ${chunk.payload.passed ? '✅' : '❌'}`);
   }
 }
 ```
 
 ---
 
-## API Reference
+## Creating Completion Scorers
 
-### Check Creators
+Scorers are created using `createScorer` from the evals module. For completion, they should return 0 or 1.
+
+### Code-based Scorer
 
 ```typescript
-import { createCheck, createLLMCheck, taskCompletionCheck } from '@mastra/core/loop';
+import { createScorer } from '@mastra/core/evals';
 
-// Code-based check
-const testsCheck = createCheck({
+// Run tests
+const testsScorer = createScorer({
   id: 'tests',
-  name: 'Unit Tests',
-  args: { command: 'npm test' },
-  run: async (params) => {
-    // params.args.command - your static config
-    // params.iteration - current iteration
-    // params.messages - conversation history
-    // params.originalTask - the task prompt
-    // params.selectedPrimitive - { id, type }
-    // params.primitiveResult - result from last execution
-    
-    return { passed: true, message: 'Tests passed' };
-  },
+  description: 'Run unit tests',
+}).generateScore(async () => {
+  try {
+    execSync('npm test', { stdio: 'pipe' });
+    return 1;
+  } catch {
+    return 0;
+  }
 });
 
-// LLM-based check
-const qualityCheck = createLLMCheck({
-  id: 'quality',
-  name: 'Code Quality Review',
-  instructions: `
-    Review the code changes and evaluate:
-    - Are there any obvious bugs?
-    - Is error handling adequate?
-  `,
+// Check API health
+const apiScorer = createScorer({
+  id: 'api-health',
+  description: 'Check if API is healthy',
+}).generateScore(async () => {
+  const res = await fetch('http://localhost:3000/health');
+  return res.ok ? 1 : 0;
 });
 
-// The default completion check (can be included explicitly)
-const defaultCheck = taskCompletionCheck({
-  instructions: 'Only complete when all endpoints have tests',
+// Context-aware scorer
+const iterationScorer = createScorer({
+  id: 'iteration-check',
+  description: 'Check iteration count',
+}).generateScore(async ({ run }) => {
+  const context = run.input; // CompletionContext
+  return context.iteration >= 3 ? 1 : 0;
 });
 ```
 
-### Completion Config
+### LLM-based Scorer
+
+```typescript
+const qualityScorer = createScorer({
+  id: 'code-quality',
+  description: 'LLM evaluates code quality',
+  judge: {
+    model: openai('gpt-4o-mini'),
+    instructions: 'You evaluate code quality.',
+  },
+}).generateScore({
+  description: 'Evaluate if the code meets quality standards',
+  createPrompt: ({ run }) => `
+    Evaluate this code change:
+    ${run.output}
+    
+    Return 1 if it's high quality, 0 if not.
+  `,
+});
+```
+
+---
+
+## Completion Config
 
 ```typescript
 interface CompletionConfig {
-  // Checks to run (code or LLM)
-  checks?: Check[];
+  // Scorers to run (return 0 or 1)
+  scorers?: MastraScorer[];
   
-  // All must pass, or any one
+  // 'all' = all must pass, 'any' = one must pass
   strategy?: 'all' | 'any';
   
-  // Timeout for all checks (ms)
+  // Timeout for all scorers (ms)
   timeout?: number;
   
-  // Run checks in parallel
+  // Run scorers in parallel
   parallel?: boolean;
   
-  // Callback after checks run
-  onCheck?: (result: CheckRunResult) => void;
-}
-```
-
-### Network Options
-
-```typescript
-interface NetworkOptions {
-  maxSteps?: number;
-  
-  completion?: CompletionConfig;
-  
-  routing?: {
-    additionalInstructions?: string;
-    verboseIntrospection?: boolean;
-  };
-  
-  memory?: AgentMemoryOption;
-  onIterationComplete?: (ctx) => void;
+  // Callback after scoring
+  onComplete?: (result: CompletionRunResult) => void;
 }
 ```
 
@@ -163,67 +168,42 @@ interface NetworkOptions {
 ### 1. Default: LLM-only completion
 
 ```typescript
-// No config - uses built-in LLM check
+// No config - uses built-in LLM evaluation
 await agent.network('Build a landing page');
 ```
 
-### 2. Code checks only
+### 2. Code scorers only
 
 ```typescript
 await agent.network('Migrate to Vitest', {
   completion: {
-    checks: [testsCheck, buildCheck],
+    scorers: [testsScorer, buildScorer],
   },
 });
 ```
 
-### 3. Default LLM + code checks
-
-```typescript
-await agent.network('Refactor auth', {
-  completion: {
-    checks: [
-      taskCompletionCheck(), // Include default LLM check
-      testsCheck,            // Plus code checks
-    ],
-  },
-});
-```
-
-### 4. Custom LLM check
-
-```typescript
-await agent.network('Improve quality', {
-  completion: {
-    checks: [
-      createLLMCheck({
-        id: 'strict-quality',
-        name: 'Strict Quality',
-        instructions: 'Only complete when there are no TODO comments',
-      }),
-    ],
-  },
-});
-```
-
-### 5. Mixed checks
+### 3. Mixed scorers
 
 ```typescript
 await agent.network('Build API', {
   completion: {
-    checks: [
-      createLLMCheck({ instructions: 'All endpoints documented' }),
-      testsCheck,
-      createCheck({
-        id: 'api',
-        name: 'API Health',
-        run: async () => {
-          const res = await fetch('http://localhost:3000/health');
-          return { passed: res.ok, message: res.ok ? 'Healthy' : 'Down' };
-        },
-      }),
+    scorers: [
+      testsScorer,      // Code-based
+      qualityScorer,    // LLM-based
+      apiScorer,        // Code-based
     ],
     strategy: 'all',
+  },
+});
+```
+
+### 4. Any-pass strategy
+
+```typescript
+await agent.network('Fix the bug', {
+  completion: {
+    scorers: [testsScorer, manualApprovalScorer],
+    strategy: 'any', // Either tests pass OR manual approval
   },
 });
 ```
@@ -241,19 +221,19 @@ await agent.network('Build API', {
 │                      ↓                                           │
 │   2. Execute selected primitive                                  │
 │                      ↓                                           │
-│   3. LLM Completion Check (default)                             │
+│   3. LLM Completion Evaluation (default)                        │
 │      "Is this task complete?"                                    │
 │                      ↓                                           │
 │              ┌───────┴───────┐                                   │
 │          LLM: No         LLM: Yes                                │
 │              │               │                                   │
 │              │               ▼                                   │
-│              │    4. Run Additional Checks                       │
+│              │    4. Run Completion Scorers                      │
 │              │       (if configured)                             │
 │              │               │                                   │
 │              │       ┌───────┴───────┐                          │
-│              │   Checks         Checks                           │
-│              │   Failed          Passed                          │
+│              │   Score=0        Score=1                          │
+│              │   (failed)       (passed)                         │
 │              │       │               │                           │
 │              │       ▼               ▼                           │
 │              │   5. Inject      6. Complete!                     │
@@ -272,10 +252,13 @@ await agent.network('Build API', {
 for await (const chunk of result.fullStream) {
   switch (chunk.type) {
     case 'network-validation-start':
-      console.log(`Running ${chunk.payload.checksCount} checks...`);
+      console.log(`Running ${chunk.payload.checksCount} scorers...`);
       break;
     case 'network-validation-end':
-      console.log(`Checks: ${chunk.payload.passed ? '✅' : '❌'}`);
+      console.log(`Complete: ${chunk.payload.passed ? '✅' : '❌'}`);
+      for (const scorer of chunk.payload.results) {
+        console.log(`  ${scorer.scorerName}: ${scorer.score}`);
+      }
       break;
     case 'routing-agent-start':
       console.log(`Iteration ${chunk.payload.inputData.iteration}`);
@@ -283,3 +266,13 @@ for await (const chunk of result.fullStream) {
   }
 }
 ```
+
+---
+
+## Benefits of Using Scorers
+
+1. **Unified Primitives**: Same `createScorer` API for evals and completion
+2. **Reusable**: Use your eval scorers as completion checks
+3. **Composable**: Mix code and LLM scorers freely
+4. **Observable**: Scorer results include score + reason
+5. **Testable**: Scorers can be tested independently

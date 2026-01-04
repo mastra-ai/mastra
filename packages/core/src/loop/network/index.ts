@@ -13,12 +13,8 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-import type { CompletionConfig, CheckContext } from './validation';
-import { runValidation, formatCheckFeedback } from './validation';
-
-// Legacy alias
-type NetworkValidationConfig = CompletionConfig;
-type ValidationContext = CheckContext;
+import type { CompletionConfig, CompletionContext } from './validation';
+import { runValidation, formatCompletionFeedback } from './validation';
 
 async function getRoutingAgent({
   requestContext,
@@ -1290,9 +1286,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      // If no checks configured or LLM didn't say complete, pass through
-      const checks = validation?.checks || [];
-      if (checks.length === 0 || !inputData.isComplete) {
+      // If no scorers configured or LLM didn't say complete, pass through
+      const scorers = validation?.scorers || [];
+      if (scorers.length === 0 || !inputData.isComplete) {
         return {
           ...inputData,
           validationPassed: undefined,
@@ -1300,67 +1296,58 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         };
       }
 
-      // Build check context with relevant state
+      // Build completion context with relevant state
       const memory = await routingAgent.getMemory({ requestContext });
       const recallResult = memory
         ? await memory.recall({ threadId: inputData.threadId || runId })
         : { messages: [] };
 
-      const checkContext: ValidationContext = {
-        // Iteration state
+      const completionContext: CompletionContext = {
         iteration: inputData.iteration,
         maxIterations,
-
-        // Messages & conversation
         messages: recallResult.messages,
         originalTask: inputData.task,
-
-        // Routing agent state
         selectedPrimitive: {
           id: inputData.primitiveId,
           type: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
         },
         primitivePrompt: inputData.prompt,
         primitiveResult: inputData.result,
-
-        // Identifiers
         networkName,
         runId,
         threadId: inputData.threadId,
         resourceId: inputData.threadResourceId,
-
-        // Custom context from request
         customContext: requestContext?.toJSON?.() as Record<string, unknown> | undefined,
       };
 
-      // Run completion checks
+      // Run completion scorers
       await writer?.write({
         type: 'network-validation-start',
         payload: {
           runId,
           iteration: inputData.iteration,
-          checksCount: checks.length,
+          checksCount: scorers.length,
         },
         from: ChunkFrom.NETWORK,
         runId,
       });
 
-      const checkResult = await runValidation(validation!, checkContext);
+      const completionResult = await runValidation(validation!, completionContext);
 
       await writer?.write({
         type: 'network-validation-end',
         payload: {
           runId,
           iteration: inputData.iteration,
-          passed: checkResult.complete,
-          results: checkResult.checks,
-          duration: checkResult.totalDuration,
+          passed: completionResult.complete,
+          results: completionResult.scorers,
+          duration: completionResult.totalDuration,
         },
         from: ChunkFrom.NETWORK,
         runId,
       });
 
-      if (checkResult.complete) {
+      if (completionResult.complete) {
         // All checks passed - task is truly complete
         return {
           ...inputData,
@@ -1373,7 +1360,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       } else {
         // Checks failed - override LLM's completion assessment
         // Format feedback to inject into the next iteration
-        const feedback = formatCheckFeedback(checkResult);
+        const feedback = formatCompletionFeedback(completionResult);
 
         // Save validation feedback to memory so the next iteration can see it
         const memory = await routingAgent.getMemory({ requestContext });

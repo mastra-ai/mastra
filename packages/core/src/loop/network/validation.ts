@@ -1,13 +1,29 @@
 /**
- * Network Completion Checks (Scorers)
+ * Network Completion Scorers
  *
- * Completion checks are scorers that return 0 (failed) or 1 (passed).
- * This unifies the concepts - checks ARE scorers with binary scores.
+ * Completion checks are just MastraScorers that return 0 (failed) or 1 (passed).
+ * This unifies completion checking with the evaluation system.
  *
- * You can use:
- * - `createCheck()` - simple API for code-based checks
- * - `createLLMCheck()` - LLM-based evaluation
- * - Any MastraScorer that returns 0 or 1
+ * @example
+ * ```typescript
+ * import { createScorer } from '@mastra/core/evals';
+ *
+ * // Simple completion scorer
+ * const testsScorer = createScorer({
+ *   id: 'tests',
+ *   description: 'Run unit tests',
+ * }).generateScore(async ({ run }) => {
+ *   const result = await exec('npm test');
+ *   return result.exitCode === 0 ? 1 : 0;
+ * });
+ *
+ * // Use in network
+ * await agent.network(messages, {
+ *   completion: {
+ *     scorers: [testsScorer],
+ *   },
+ * });
+ * ```
  */
 
 import { z } from 'zod';
@@ -24,23 +40,18 @@ const execAsync = promisify(exec);
 // ============================================================================
 
 /**
- * Runtime context passed to completion checks.
- * Contains the full state of the network loop at check time.
+ * Runtime context passed to completion scoring.
+ * Available via run.input when using a completion scorer.
  */
-export interface CheckContext {
-  // ---- Iteration State ----
+export interface CompletionContext {
   /** Current iteration number (1-based) */
   iteration: number;
   /** Maximum iterations allowed */
   maxIterations?: number;
-
-  // ---- Messages & Conversation ----
   /** All messages in the conversation thread */
   messages: MastraDBMessage[];
   /** The original task/prompt that started this network run */
   originalTask: string;
-
-  // ---- Routing Agent State ----
   /** Which primitive was selected this iteration */
   selectedPrimitive: {
     id: string;
@@ -50,8 +61,6 @@ export interface CheckContext {
   primitivePrompt: string;
   /** Result from the primitive execution */
   primitiveResult: string;
-
-  // ---- Identifiers ----
   /** Name of the network/routing agent */
   networkName: string;
   /** ID of the current run */
@@ -60,232 +69,161 @@ export interface CheckContext {
   threadId?: string;
   /** Resource ID (if using memory) */
   resourceId?: string;
-
-  // ---- Request Context ----
-  /**
-   * Custom context from the request.
-   */
+  /** Custom context from the request */
   customContext?: Record<string, unknown>;
 }
 
 /**
- * Result of a completion check.
+ * Result of running a single scorer
  */
-export interface CheckResult {
-  /** Whether the check passed (task is complete per this check) */
+export interface ScorerResult {
+  /** The score (0 = failed, 1 = passed) */
+  score: number;
+  /** Whether this scorer passed (score === 1) */
   passed: boolean;
-  /** Human-readable message describing the result */
-  message: string;
-  /** Optional final result to return (used when check passes) */
-  result?: string;
-  /** Optional structured details (shown to LLM on failure for next iteration) */
-  details?: Record<string, unknown>;
-  /** How long the check took in ms (automatically added) */
-  duration?: number;
+  /** Reason from the scorer */
+  reason?: string;
+  /** Scorer ID */
+  scorerId: string;
+  /** Scorer name */
+  scorerName: string;
+  /** Duration in ms */
+  duration: number;
 }
 
 /**
- * A completion check that determines if the task is done.
- * Checks can be code-based or LLM-based - both use this interface.
- */
-export interface Check {
-  /** Unique identifier for this check */
-  id: string;
-  /** Human-readable name (shown in logs/UI) */
-  name: string;
-  /** Whether this is an LLM-based check (for internal use) */
-  isLLMCheck?: boolean;
-  /** Async function that runs the check */
-  run: (context: CheckContext) => Promise<CheckResult>;
-}
-
-// Legacy aliases for backwards compatibility
-/** @deprecated Use CheckContext instead */
-export type ValidationContext = CheckContext;
-/** @deprecated Use CheckResult instead */
-export type ValidationResult = CheckResult;
-/** @deprecated Use Check instead */
-export type ValidationCheck = Check;
-
-/**
- * A completion scorer - either a Check or a MastraScorer.
- * Scorers must return a score of 0 (failed) or 1 (passed).
- */
-export type CompletionScorer = Check | MastraScorer<any, any, any, any>;
-
-/**
- * Configuration for network completion checks.
+ * Configuration for network completion.
  */
 export interface CompletionConfig {
   /**
    * Scorers to run to determine if the task is complete.
-   * Can be:
-   * - Code-based checks (createCheck)
-   * - LLM-based checks (createLLMCheck)
-   * - Any MastraScorer that returns 0 or 1
-   *
-   * If not specified, uses the default LLM completion check.
+   * Each scorer should return 0 (not complete) or 1 (complete).
    *
    * @example
    * ```typescript
    * completion: {
-   *   checks: [
-   *     testsCheck,                    // createCheck
-   *     qualityScorer,                 // MastraScorer
-   *     taskCompletionCheck(),         // default LLM check
-   *   ],
+   *   scorers: [testsScorer, buildScorer],
    * }
    * ```
    */
-  checks?: CompletionScorer[];
+  scorers?: MastraScorer<any, any, any, any>[];
 
   /**
-   * How to combine check results:
-   * - 'all': All checks must pass (score = 1) (default)
-   * - 'any': At least one check must pass
+   * How to combine scorer results:
+   * - 'all': All scorers must pass (score = 1) (default)
+   * - 'any': At least one scorer must pass
    */
   strategy?: 'all' | 'any';
 
   /**
-   * Maximum time for all checks (ms)
+   * Maximum time for all scorers (ms)
    * Default: 600000 (10 minutes)
    */
   timeout?: number;
 
   /**
-   * Run checks in parallel (default: true)
+   * Run scorers in parallel (default: true)
    */
   parallel?: boolean;
 
   /**
-   * Called after checks run with results
+   * Called after scorers run with results
    */
-  onCheck?: (results: CheckRunResult) => void | Promise<void>;
+  onComplete?: (results: CompletionRunResult) => void | Promise<void>;
 }
 
 /**
- * Result of running all completion checks
+ * Result of running all completion scorers
  */
-export interface CheckRunResult {
+export interface CompletionRunResult {
   /** Whether the task is complete (based on strategy) */
   complete: boolean;
-  /** Final result to return (from passing check) */
-  result?: string;
-  /** Individual check results */
-  checks: Array<CheckResult & { checkId: string; checkName: string }>;
-  /** Total duration of all checks */
+  /** Individual scorer results */
+  scorers: ScorerResult[];
+  /** Total duration of all scorers */
   totalDuration: number;
-  /** Whether checks timed out */
+  /** Whether scoring timed out */
   timedOut: boolean;
 }
 
-// Legacy aliases
+// Legacy type aliases for backwards compatibility
+/** @deprecated Use CompletionContext instead */
+export type CheckContext = CompletionContext;
 /** @deprecated Use CompletionConfig instead */
 export type NetworkValidationConfig = CompletionConfig;
-/** @deprecated Use CheckRunResult instead */
-export type ValidationRunResult = CheckRunResult;
+/** @deprecated Use CompletionRunResult instead */
+export type CheckRunResult = CompletionRunResult;
+/** @deprecated Use CompletionRunResult instead */
+export type ValidationRunResult = CompletionRunResult;
 
 // ============================================================================
-// Check Runner
+// Scorer Runner
 // ============================================================================
 
 /**
- * Type guard to check if a scorer is a Check (has .run method)
+ * Run a single scorer and return the result
  */
-function isCheck(scorer: CompletionScorer): scorer is Check {
-  return 'run' in scorer && typeof scorer.run === 'function';
-}
-
-/**
- * Run a single scorer and return a CheckResult
- */
-async function runScorer(
-  scorer: CompletionScorer,
-  context: CheckContext,
-): Promise<CheckResult & { checkId: string; checkName: string }> {
+async function runSingleScorer(
+  scorer: MastraScorer<any, any, any, any>,
+  context: CompletionContext,
+): Promise<ScorerResult> {
   const start = Date.now();
 
-  if (isCheck(scorer)) {
-    // It's a Check - run directly
-    try {
-      const result = await scorer.run(context);
-      return {
-        ...result,
-        checkId: scorer.id,
-        checkName: scorer.name,
-        duration: result.duration ?? Date.now() - start,
-      };
-    } catch (error: any) {
-      return {
-        passed: false,
-        message: `Check ${scorer.name} threw an error: ${error.message}`,
-        checkId: scorer.id,
-        checkName: scorer.name,
-        duration: Date.now() - start,
-      };
-    }
-  } else {
-    // It's a MastraScorer - run and interpret score
-    try {
-      const scorerResult = await scorer.run({
-        output: context.primitiveResult,
-        input: context.originalTask,
-      });
+  try {
+    const result = await scorer.run({
+      output: context.primitiveResult,
+      input: context,
+    });
 
-      // Score must be 0 or 1
-      const score = scorerResult.score;
-      const passed = score === 1;
+    const score = typeof result.score === 'number' ? result.score : 0;
+    const reason = typeof result.reason === 'string' ? result.reason : undefined;
 
-      return {
-        passed,
-        message: scorerResult.reason || (passed ? 'Scorer passed (score=1)' : `Scorer failed (score=${score})`),
-        checkId: scorer.id,
-        checkName: scorer.name ?? scorer.id,
-        duration: Date.now() - start,
-        details: { score, reason: scorerResult.reason },
-      };
-    } catch (error: any) {
-      return {
-        passed: false,
-        message: `Scorer ${scorer.name ?? scorer.id} threw an error: ${error.message}`,
-        checkId: scorer.id,
-        checkName: scorer.name ?? scorer.id,
-        duration: Date.now() - start,
-      };
-    }
+    return {
+      score,
+      passed: score === 1,
+      reason,
+      scorerId: scorer.id,
+      scorerName: scorer.name ?? scorer.id,
+      duration: Date.now() - start,
+    };
+  } catch (error: any) {
+    return {
+      score: 0,
+      passed: false,
+      reason: `Scorer threw an error: ${error.message}`,
+      scorerId: scorer.id,
+      scorerName: scorer.name ?? scorer.id,
+      duration: Date.now() - start,
+    };
   }
 }
 
 /**
  * Runs all completion scorers according to the configuration
  */
-export async function runChecks(
-  scorers: CompletionScorer[],
-  context: CheckContext,
+export async function runCompletionScorers(
+  scorers: MastraScorer<any, any, any, any>[],
+  context: CompletionContext,
   options?: {
     strategy?: 'all' | 'any';
     parallel?: boolean;
     timeout?: number;
   },
-): Promise<CheckRunResult> {
+): Promise<CompletionRunResult> {
   const strategy = options?.strategy ?? 'all';
   const parallel = options?.parallel ?? true;
   const timeout = options?.timeout ?? 600000;
 
   const startTime = Date.now();
-  const results: CheckRunResult['checks'] = [];
+  const results: ScorerResult[] = [];
   let timedOut = false;
-  let finalResult: string | undefined;
 
-  // Create a timeout promise
   const timeoutPromise = new Promise<'timeout'>(resolve => {
     setTimeout(() => resolve('timeout'), timeout);
   });
 
   if (parallel) {
-    // Run all scorers in parallel
-    const scorerPromises = scorers.map(scorer => runScorer(scorer, context));
-
+    const scorerPromises = scorers.map(scorer => runSingleScorer(scorer, context));
     const raceResult = await Promise.race([Promise.all(scorerPromises), timeoutPromise]);
 
     if (raceResult === 'timeout') {
@@ -300,81 +238,62 @@ export async function runChecks(
       results.push(...raceResult);
     }
   } else {
-    // Run scorers sequentially with short-circuit logic
     for (const scorer of scorers) {
       if (Date.now() - startTime > timeout) {
         timedOut = true;
         break;
       }
 
-      const result = await runScorer(scorer, context);
+      const result = await runSingleScorer(scorer, context);
       results.push(result);
 
-      // Capture result from passing check
-      if (result.passed && result.result) {
-        finalResult = result.result;
-      }
-
-      // Short-circuit for 'all' strategy if a check fails
-      if (strategy === 'all' && !result.passed) {
-        break;
-      }
-      // Short-circuit for 'any' strategy if a check passes
-      if (strategy === 'any' && result.passed) {
-        break;
-      }
-    }
-  }
-          duration: 0,
-        });
-        if (strategy === 'all') {
-          break;
-        }
-      }
-    }
-  }
-
-  // Get result from first passing check (if any)
-  if (!finalResult) {
-    const passingCheck = results.find(r => r.passed && r.result);
-    if (passingCheck) {
-      finalResult = passingCheck.result;
+      // Short-circuit
+      if (strategy === 'all' && !result.passed) break;
+      if (strategy === 'any' && result.passed) break;
     }
   }
 
   const complete =
     strategy === 'all'
-      ? results.length === checks.length && results.every(r => r.passed)
+      ? results.length === scorers.length && results.every(r => r.passed)
       : results.some(r => r.passed);
 
   return {
     complete,
-    result: finalResult,
-    checks: results,
+    scorers: results,
     totalDuration: Date.now() - startTime,
     timedOut,
   };
 }
 
-// Legacy wrapper
-/** @deprecated Use runChecks instead */
+// Legacy function aliases
+/** @deprecated Use runCompletionScorers instead */
+export async function runChecks(
+  scorers: MastraScorer<any, any, any, any>[],
+  context: CompletionContext,
+  options?: { strategy?: 'all' | 'any'; parallel?: boolean; timeout?: number },
+): Promise<CompletionRunResult> {
+  return runCompletionScorers(scorers, context, options);
+}
+
+/** @deprecated Use runCompletionScorers instead */
 export async function runValidation(
   config: CompletionConfig,
-  context: CheckContext,
-): Promise<CheckRunResult> {
-  const result = await runChecks(config.checks || [], context, {
+  context: CompletionContext,
+): Promise<CompletionRunResult> {
+  const result = await runCompletionScorers(config.scorers || [], context, {
     strategy: config.strategy,
     parallel: config.parallel,
     timeout: config.timeout,
   });
-  await config.onCheck?.(result);
+  await config.onComplete?.(result);
   return result;
 }
 
 /**
- * Formats check results into a message for the LLM
+ * Formats scorer results into a message for the LLM
  */
-export function formatCheckFeedback(result: CheckRunResult): string {
+export function formatCompletionFeedback(result: CompletionRunResult): string {
   const lines: string[] = [];
 
   lines.push('## Completion Check Results');
@@ -382,20 +301,15 @@ export function formatCheckFeedback(result: CheckRunResult): string {
   lines.push(`Overall: ${result.complete ? '✅ COMPLETE' : '❌ NOT COMPLETE'}`);
   lines.push(`Duration: ${result.totalDuration}ms`);
   if (result.timedOut) {
-    lines.push('⚠️ Checks timed out');
+    lines.push('⚠️ Scoring timed out');
   }
   lines.push('');
 
-  for (const check of result.checks) {
-    lines.push(`### ${check.checkName} (${check.checkId})`);
-    lines.push(`Status: ${check.passed ? '✅ Passed' : '❌ Failed'}`);
-    lines.push(`Message: ${check.message}`);
-    if (check.details) {
-      lines.push('Details:');
-      lines.push('```');
-      const detailsStr = JSON.stringify(check.details, null, 2);
-      lines.push(detailsStr.length > 2000 ? detailsStr.slice(0, 2000) + '...' : detailsStr);
-      lines.push('```');
+  for (const scorer of result.scorers) {
+    lines.push(`### ${scorer.scorerName} (${scorer.scorerId})`);
+    lines.push(`Score: ${scorer.score} ${scorer.passed ? '✅' : '❌'}`);
+    if (scorer.reason) {
+      lines.push(`Reason: ${scorer.reason}`);
     }
     lines.push('');
   }
@@ -404,197 +318,10 @@ export function formatCheckFeedback(result: CheckRunResult): string {
 }
 
 // Legacy alias
-/** @deprecated Use formatCheckFeedback instead */
-export const formatValidationFeedback = formatCheckFeedback;
-
-// ============================================================================
-// Check Creators
-// ============================================================================
-
-/**
- * Parameters passed to the check's run function.
- * Combines user-provided args with runtime context from the network loop.
- */
-export type CheckParams<TArgs = undefined> = TArgs extends undefined
-  ? CheckContext
-  : CheckContext & { args: TArgs };
-
-/**
- * The return type for check run functions
- */
-type CheckRunReturn = { passed: boolean; message: string; result?: string; details?: Record<string, unknown> };
-
-/**
- * Creates a code-based completion check.
- *
- * @param options.id - Unique identifier for this check
- * @param options.name - Human-readable name
- * @param options.args - Static arguments available via `params.args`
- * @param options.run - Async function that runs the check
- *
- * @example
- * ```typescript
- * // Run tests
- * const testsCheck = createCheck({
- *   id: 'tests',
- *   name: 'Unit Tests',
- *   args: { command: 'npm test' },
- *   run: async (params) => {
- *     const result = await exec(params.args.command);
- *     return {
- *       passed: result.exitCode === 0,
- *       message: result.exitCode === 0 ? 'Tests passed' : 'Tests failed',
- *     };
- *   },
- * });
- *
- * // Check API
- * const apiCheck = createCheck({
- *   id: 'api',
- *   name: 'API Health',
- *   args: { url: 'http://localhost:3000/health' },
- *   run: async (params) => {
- *     const res = await fetch(params.args.url);
- *     return { passed: res.ok, message: res.ok ? 'Healthy' : 'Down' };
- *   },
- * });
- *
- * // Context-aware check
- * const progressCheck = createCheck({
- *   id: 'progress',
- *   name: 'Progress',
- *   run: async (params) => {
- *     if (params.iteration > 10) {
- *       return { passed: false, message: 'Taking too long' };
- *     }
- *     return { passed: true, message: 'OK' };
- *   },
- * });
- * ```
- */
-export function createCheck<TArgs = undefined>(
-  options: TArgs extends undefined
-    ? {
-        id: string;
-        name: string;
-        run: (params: CheckContext) => Promise<CheckRunReturn>;
-      }
-    : {
-        id: string;
-        name: string;
-        args: TArgs;
-        run: (params: CheckContext & { args: TArgs }) => Promise<CheckRunReturn>;
-      },
-): Check {
-  return {
-    id: options.id,
-    name: options.name,
-    async run(context: CheckContext) {
-      const start = Date.now();
-      try {
-        const params = 'args' in options ? { ...context, args: options.args } : context;
-        const result = await (options.run as (p: typeof params) => Promise<CheckRunReturn>)(params);
-        return { ...result, duration: Date.now() - start };
-      } catch (error: any) {
-        return {
-          passed: false,
-          message: `Check threw an error: ${error.message}`,
-          details: { error: error.stack },
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates an LLM-based completion check.
- * The LLM will evaluate the task based on your instructions.
- *
- * @param options.id - Unique identifier for this check
- * @param options.name - Human-readable name
- * @param options.instructions - Instructions for the LLM to evaluate completion
- *
- * @example
- * ```typescript
- * const qualityCheck = createLLMCheck({
- *   id: 'quality',
- *   name: 'Code Quality Review',
- *   instructions: `
- *     Review the code changes and evaluate:
- *     - Are there any obvious bugs?
- *     - Is error handling adequate?
- *     - Are edge cases covered?
- *   `,
- * });
- * ```
- */
-export function createLLMCheck(options: {
-  id: string;
-  name: string;
-  instructions: string;
-}): Check {
-  return {
-    id: options.id,
-    name: options.name,
-    isLLMCheck: true,
-    // The actual LLM call is handled by the network loop
-    // This just stores the config
-    async run(_context: CheckContext) {
-      // This is a placeholder - the network loop will intercept LLM checks
-      // and run them through the routing agent
-      return {
-        passed: false,
-        message: 'LLM check must be run by the network loop',
-        _llmCheckConfig: {
-          instructions: options.instructions,
-        },
-      } as CheckResult;
-    },
-  };
-}
-
-/**
- * The default LLM completion check used by agent.network().
- * Asks the LLM "Is this task complete?" based on system instructions.
- *
- * Include this in your checks array if you want the default behavior
- * alongside your own checks.
- *
- * @param options.instructions - Additional instructions for completion evaluation
- *
- * @example
- * ```typescript
- * // Default + custom checks
- * completion: {
- *   checks: [
- *     taskCompletionCheck(),
- *     testsCheck,
- *   ],
- * }
- *
- * // Customized default check
- * completion: {
- *   checks: [
- *     taskCompletionCheck({
- *       instructions: 'Only mark complete when all tests pass',
- *     }),
- *     testsCheck,
- *   ],
- * }
- * ```
- */
-export function taskCompletionCheck(options?: { instructions?: string }): Check {
-  return createLLMCheck({
-    id: 'task-completion',
-    name: 'Task Completion',
-    instructions: options?.instructions || `
-      Evaluate if the task is complete based on the system instructions.
-      Pay close attention to what was originally requested.
-      Only mark as complete if all requirements have been satisfied.
-    `,
-  });
-}
+/** @deprecated Use formatCompletionFeedback instead */
+export const formatCheckFeedback = formatCompletionFeedback;
+/** @deprecated Use formatCompletionFeedback instead */
+export const formatValidationFeedback = formatCompletionFeedback;
 
 // ============================================================================
 // Tools
@@ -602,23 +329,18 @@ export function taskCompletionCheck(options?: { instructions?: string }): Check 
 
 /**
  * Creates a tool that lets agents run shell commands.
- * Add this to your agent's tools if you want the agent to run commands.
  *
  * @example
  * ```typescript
  * const agent = new Agent({
- *   instructions: 'After making changes, run commands to verify your work.',
- *   tools: {
- *     runCommand: createRunCommandTool(),
- *   },
+ *   tools: { runCommand: createRunCommandTool() },
  * });
  * ```
  */
 export function createRunCommandTool() {
   return createTool({
     id: 'run-command',
-    description:
-      'Execute a shell command and return the result. Use this to verify your work by running tests, builds, linting, or any other validation commands.',
+    description: 'Execute a shell command and return the result.',
     inputSchema: z.object({
       command: z.string().describe('The shell command to execute'),
       timeout: z.number().default(60000).describe('Timeout in milliseconds'),

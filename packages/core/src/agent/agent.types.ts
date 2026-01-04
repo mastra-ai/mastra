@@ -3,7 +3,7 @@ import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../eval
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
-import type { CompletionConfig, Check, CheckRunResult } from '../loop/network/validation';
+import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -13,8 +13,8 @@ import type { OutputWriter } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
 
-// Re-export check types for convenience
-export type { Check, CheckRunResult, CompletionConfig } from '../loop/network/validation';
+// Re-export completion types for convenience
+export type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 
 /**
  * Configuration for the routing agent's behavior.
@@ -72,27 +72,24 @@ export type NetworkOptions = {
   /**
    * Completion configuration - controls when the task is considered done.
    *
-   * Checks can be code-based (createCheck) or LLM-based (createLLMCheck).
-   * By default, uses an LLM check that asks "is this task complete?"
+   * Uses MastraScorers that return 0 (not complete) or 1 (complete).
+   * By default, the LLM evaluates completion.
    *
    * @example
    * ```typescript
-   * // Just code checks
-   * completion: {
-   *   checks: [testsCheck, buildCheck],
-   * }
+   * import { createScorer } from '@mastra/core/evals';
    *
-   * // Default LLM + code checks
-   * completion: {
-   *   checks: [taskCompletionCheck(), testsCheck],
-   * }
+   * const testsScorer = createScorer({
+   *   id: 'tests',
+   *   description: 'Run tests',
+   * }).generateScore(async () => {
+   *   const result = await exec('npm test');
+   *   return result.exitCode === 0 ? 1 : 0;
+   * });
    *
-   * // Custom LLM check
+   * // Use scorers for completion
    * completion: {
-   *   checks: [
-   *     createLLMCheck({ instructions: 'Only complete when all tests pass' }),
-   *     testsCheck,
-   *   ],
+   *   scorers: [testsScorer],
    * }
    * ```
    */
