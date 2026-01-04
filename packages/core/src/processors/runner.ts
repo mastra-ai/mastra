@@ -7,6 +7,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
@@ -85,22 +86,31 @@ export class ProcessorRunner {
   public readonly outputProcessors: ProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  private readonly mastra?: Mastra;
 
   constructor({
     inputProcessors,
     outputProcessors,
     logger,
     agentName,
+    mastra,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
+    /**
+     * Optional reference to the Mastra instance.
+     * When provided, it will be passed to all processor methods,
+     * allowing processors to access other Mastra primitives.
+     */
+    mastra?: Mastra;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.mastra = mastra;
   }
 
   /**
@@ -260,6 +270,7 @@ export class ProcessorRunner {
         tracingContext: { currentSpan: processorSpan },
         requestContext,
         retryCount,
+        mastra: this.mastra,
       });
 
       // Stop recording and get mutations for this processor
@@ -414,6 +425,7 @@ export class ProcessorRunner {
               requestContext,
               messageList,
               retryCount,
+              mastra: this.mastra,
             });
 
             if (state.span && !state.span.isEvent) {
@@ -628,6 +640,7 @@ export class ProcessorRunner {
         messageList,
         requestContext,
         retryCount,
+        mastra: this.mastra,
       });
 
       // Handle MessageList, MastraDBMessage[], or { messages, systemMessages } return types
@@ -889,6 +902,7 @@ export class ProcessorRunner {
             abort,
             tracingContext: { currentSpan: processorSpan },
             retryCount: args.retryCount ?? 0,
+            mastra: this.mastra,
           }),
           {
             messageList,
@@ -1103,6 +1117,7 @@ export class ProcessorRunner {
           tracingContext: { currentSpan: processorSpan },
           requestContext,
           retryCount,
+          mastra: this.mastra,
         });
 
         // Stop recording and get mutations for this processor

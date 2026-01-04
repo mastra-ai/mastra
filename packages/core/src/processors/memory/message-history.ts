@@ -1,5 +1,6 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
+import type { Mastra } from '../../mastra';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import type { TracingContext } from '../../observability';
@@ -10,7 +11,12 @@ import type { MemoryStorage } from '../../storage';
  * Options for the MessageHistory processor
  */
 export interface MessageHistoryOptions {
-  storage: MemoryStorage;
+  /**
+   * Storage instance for retrieving and persisting message history.
+   * If not provided, the processor will attempt to get storage from the mastra instance
+   * passed in the processor context.
+   */
+  storage?: MemoryStorage;
   lastMessages?: number;
 }
 
@@ -25,10 +31,10 @@ export interface MessageHistoryOptions {
 export class MessageHistory implements Processor {
   readonly id = 'message-history';
   readonly name = 'MessageHistory';
-  private storage: MemoryStorage;
+  private storage?: MemoryStorage;
   private lastMessages?: number;
 
-  constructor(options: MessageHistoryOptions) {
+  constructor(options: MessageHistoryOptions = {}) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
   }

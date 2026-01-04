@@ -224,6 +224,7 @@ export class MastraModelOutput<OUTPUT extends OutputSchema = undefined> extends 
         outputProcessors: options.outputProcessors,
         logger: this.logger,
         agentName: 'MastraModelOutput',
+        mastra: options.mastra,
       });
     }
 
