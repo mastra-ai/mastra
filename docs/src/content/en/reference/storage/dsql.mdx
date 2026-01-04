@@ -1,0 +1,559 @@
+---
+title: "Reference: Aurora DSQL Storage | Storage"
+description: Documentation for the Amazon Aurora DSQL storage implementation in Mastra.
+---
+
+# Aurora DSQL Storage
+
+The Aurora DSQL storage implementation provides storage using Amazon Aurora DSQL with IAM authentication.
+
+Aurora DSQL does not support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`. For vector storage, use a separate vector store such as `@mastra/s3vectors`.
+
+## Installation
+
+```bash copy
+npm install @mastra/dsql@beta
+```
+
+## Prerequisites
+
+- Amazon Aurora DSQL cluster
+- AWS credentials with access to the DSQL cluster (IAM authentication)
+
+## Usage
+
+```typescript copy showLineNumbers
+import { DSQLStore } from "@mastra/dsql";
+
+const storage = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+  // region is auto-detected from host, or specify explicitly:
+  // region: 'us-east-1',
+  // user: 'admin', // default
+  // database: 'postgres', // default
+});
+
+// Initialize the store (creates tables if needed)
+await storage.init();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      description: "Unique identifier for this store instance",
+      isOptional: false,
+    },
+    {
+      name: "host",
+      type: "string",
+      description:
+        "DSQL cluster endpoint (e.g., abc123.dsql.us-east-1.on.aws)",
+      isOptional: false,
+    },
+    {
+      name: "pool",
+      type: "pg.Pool",
+      description:
+        "Pre-configured pg.Pool instance. Use this for direct control over the connection pool. Cannot be used with host configuration.",
+      isOptional: true,
+    },
+    {
+      name: "user",
+      type: "string",
+      description:
+        "Database user. Aurora DSQL's admin role is 'admin'.",
+      isOptional: true,
+      default: "'admin'",
+    },
+    {
+      name: "database",
+      type: "string",
+      description:
+        "Database name. Aurora DSQL exposes a single database named 'postgres' per cluster.",
+      isOptional: true,
+      default: "'postgres'",
+    },
+    {
+      name: "region",
+      type: "string",
+      description: "AWS region. Extracted from host if not provided.",
+      isOptional: true,
+    },
+    {
+      name: "schemaName",
+      type: "string",
+      description:
+        "PostgreSQL schema name where Mastra tables and indexes are created.",
+      isOptional: true,
+      default: "'public'",
+    },
+    {
+      name: "customCredentialsProvider",
+      type: "AwsCredentialIdentityProvider",
+      description: "Custom AWS credentials provider for IAM authentication.",
+      isOptional: true,
+    },
+    {
+      name: "max",
+      type: "number",
+      description: "Maximum connections in the pool.",
+      isOptional: true,
+      default: "10",
+    },
+    {
+      name: "min",
+      type: "number",
+      description: "Minimum connections in the pool.",
+      isOptional: true,
+      default: "0",
+    },
+    {
+      name: "idleTimeoutMillis",
+      type: "number",
+      description: "Close idle connections after this many milliseconds.",
+      isOptional: true,
+      default: "600000",
+    },
+    {
+      name: "maxLifetimeSeconds",
+      type: "number",
+      description:
+        "Maximum connection lifetime in seconds. Must be less than 3600 due to Aurora DSQL's 60-minute connection limit.",
+      isOptional: true,
+      default: "3300",
+    },
+    {
+      name: "connectionTimeoutMillis",
+      type: "number",
+      description: "Connection acquisition timeout in milliseconds.",
+      isOptional: true,
+      default: "5000",
+    },
+    {
+      name: "allowExitOnIdle",
+      type: "boolean",
+      description:
+        "Allow the process to exit when all connections are idle.",
+      isOptional: true,
+      default: "true",
+    },
+  ]}
+/>
+
+## Constructor Examples
+
+You can instantiate `DSQLStore` in the following ways:
+
+```typescript copy showLineNumbers
+import { DSQLStore } from "@mastra/dsql";
+
+// Basic configuration (region auto-detected from host)
+const store1 = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+});
+
+// With explicit region and schema
+const store2 = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+  region: "us-east-1",
+  schemaName: "my_app",
+});
+
+// With custom credentials provider
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
+
+const store3 = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+  customCredentialsProvider: fromNodeProviderChain(),
+});
+
+// With connection pool settings
+const store4 = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+  max: 20,
+  min: 2,
+  idleTimeoutMillis: 300000,
+  maxLifetimeSeconds: 3000,
+  connectionTimeoutMillis: 10000,
+});
+
+// Using a pre-configured pg.Pool
+import { Pool } from "pg";
+import { AuroraDSQLClient } from "@aws/aurora-dsql-node-postgres-connector";
+
+const pool = new Pool({
+  host: "abc123.dsql.us-east-1.on.aws",
+  Client: AuroraDSQLClient,
+  region: "us-east-1",
+});
+
+const store5 = new DSQLStore({
+  id: "my-dsql-store",
+  pool,
+});
+```
+
+## Additional Notes
+
+### Schema Management
+
+The storage implementation handles schema creation and updates automatically. It creates the following tables:
+
+- `mastra_workflow_snapshot`: Stores workflow state and execution data
+- `mastra_threads`: Stores conversation threads
+- `mastra_messages`: Stores individual messages
+- `mastra_ai_spans`: Stores span data for observability
+- `mastra_scorers`: Stores scoring and evaluation data
+- `mastra_resources`: Stores resource working memory data
+- `mastra_agents`: Stores agent data
+
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript copy showLineNumbers
+import { Mastra } from "@mastra/core";
+import { DSQLStore } from "@mastra/dsql";
+
+const storage = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+});
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+
+```typescript copy showLineNumbers
+import { DSQLStore } from "@mastra/dsql";
+
+const storage = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+});
+
+// Required when using storage directly
+await storage.init();
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore("memory");
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+:::
+
+### Direct Database and Pool Access
+
+`DSQLStore` exposes both the underlying database client and the pg.Pool instance as public fields:
+
+```typescript copy showLineNumbers
+storage.db;   // Database client for executing queries
+storage.pool; // Underlying pg.Pool instance
+```
+
+This enables direct queries and custom transaction management. When using these fields:
+
+- You are responsible for proper connection and transaction handling.
+- Closing the store (`storage.close()`) will destroy the connection pool if it was created by the store.
+- Direct access bypasses any additional logic or validation provided by DSQLStore methods.
+
+This approach is intended for advanced scenarios where low-level access is required.
+
+### Aurora DSQL Specifics
+
+**IAM-only authentication**
+
+Connections are authenticated with IAM. There are no database passwords. `@mastra/dsql` uses `@aws/aurora-dsql-node-postgres-connector` to generate short-lived auth tokens. You can provide a custom credentials provider via `customCredentialsProvider`.
+
+**Single database, schema-based isolation**
+
+Each cluster exposes a single database named `postgres`. Logical separation is done via schemas. The `schemaName` option controls where Mastra tables are created.
+
+**No PostgreSQL extensions**
+
+`CREATE EXTENSION` is not supported. This includes `pgvector`, `PostGIS`, and others. For vector storage, use a separate store such as `@mastra/s3vectors` alongside `DSQLStore`.
+
+**JSON stored as text**
+
+JSON/JSONB are available as query types but not as column types. `@mastra/dsql` stores structured fields (metadata, content, etc.) in `TEXT` columns and casts to JSON at query time.
+
+**Schema and DDL constraints**
+
+Some PostgreSQL features are not available:
+
+- Foreign key constraints
+- `TRUNCATE`
+- Synchronous `CREATE INDEX`
+
+Indexes are created asynchronously using `CREATE INDEX ASYNC`. The store's `init()` and index helper APIs respect these constraints.
+
+**Transactions and optimistic concurrency**
+
+Aurora DSQL uses optimistic concurrency control (OCC) and may return retriable OCC errors under contention. There are limits on transaction duration and size. Large bulk operations should be split into smaller batches at the application level.
+
+**Connection lifetime**
+
+Individual connections are limited to about 60 minutes. The default `maxLifetimeSeconds: 3300` ensures connections are recycled before hitting this limit.
+
+## Usage Example
+
+### Adding memory to an agent
+
+To add Aurora DSQL memory to an agent use the `Memory` class and create a new `storage` key using `DSQLStore`. The `host` should point to your Aurora DSQL cluster endpoint.
+
+```typescript title="src/mastra/agents/example-dsql-agent.ts" copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { DSQLStore } from "@mastra/dsql";
+
+export const dsqlAgent = new Agent({
+  id: "dsql-agent",
+  name: "DSQL Agent",
+  instructions:
+    "You are an AI agent with the ability to automatically recall memories from previous interactions.",
+  model: "openai/gpt-5.1",
+  memory: new Memory({
+    storage: new DSQLStore({
+      id: "dsql-agent-storage",
+      host: process.env.DSQL_HOST!,
+    }),
+    options: {
+      generateTitle: true, // Explicitly enable automatic title generation
+    },
+  }),
+});
+```
+
+### Using the agent
+
+Use `memoryOptions` to scope recall for this request. Set `lastMessages: 5` to limit recency-based recall, and use `semanticRecall` to fetch the `topK: 3` most relevant messages, including `messageRange: 2` neighboring messages for context around each match.
+
+```typescript title="src/test-dsql-agent.ts" copy showLineNumbers
+import "dotenv/config";
+
+import { mastra } from "./mastra";
+
+const threadId = "123";
+const resourceId = "user-456";
+
+const agent = mastra.getAgent("dsql-agent");
+
+const message = await agent.stream("My name is Mastra", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+});
+
+await message.textStream.pipeTo(new WritableStream());
+
+const stream = await agent.stream("What's my name?", {
+  memory: {
+    thread: threadId,
+    resource: resourceId,
+  },
+  memoryOptions: {
+    lastMessages: 5,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+  },
+});
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+## Index Management
+
+Aurora DSQL storage provides index management capabilities to optimize query performance.
+
+### Automatic Performance Indexes
+
+Aurora DSQL storage automatically creates composite indexes during initialization for common query patterns:
+
+- `mastra_threads_resourceid_createdat_idx`: (resourceId, createdAt)
+- `mastra_messages_thread_id_createdat_idx`: (thread_id, createdAt)
+- `mastra_ai_spans_traceid_startedat_idx`: (traceId, startedAt)
+- `mastra_ai_spans_parentspanid_startedat_idx`: (parentSpanId, startedAt)
+- `mastra_ai_spans_name_idx`: (name)
+- `mastra_ai_spans_spantype_startedat_idx`: (spanType, startedAt)
+- `mastra_scores_trace_id_span_id_created_at_idx`: (traceId, spanId, createdAt)
+
+Aurora DSQL creates these indexes asynchronously using `CREATE INDEX ASYNC`. Because index creation is asynchronous, new indexes may not be immediately available after `init()`. The store will continue to function without them, but queries may be slower until index creation completes.
+
+### Creating Custom Indexes
+
+Create additional indexes to optimize specific query patterns:
+
+```typescript copy showLineNumbers
+await storage.createIndex({
+  name: "idx_threads_resource",
+  table: "mastra_threads",
+  columns: ["resourceId"],
+});
+
+await storage.createIndex({
+  name: "idx_messages_composite",
+  table: "mastra_messages",
+  columns: ["thread_id", "createdAt"],
+});
+```
+
+Aurora DSQL does not allow `ASC`/`DESC` in `CREATE INDEX ASYNC`. If you include them, they will be automatically stripped.
+
+### Index Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "Unique name for the index",
+      isOptional: false,
+    },
+    {
+      name: "table",
+      type: "string",
+      description: "Table name (e.g., 'mastra_threads')",
+      isOptional: false,
+    },
+    {
+      name: "columns",
+      type: "string[]",
+      description:
+        "Array of column names. ASC/DESC modifiers are automatically stripped for Aurora DSQL compatibility.",
+      isOptional: false,
+    },
+    {
+      name: "unique",
+      type: "boolean",
+      description: "Create a unique index.",
+      isOptional: true,
+      default: "false",
+    },
+    {
+      name: "concurrent",
+      type: "boolean",
+      description: "Ignored in Aurora DSQL. Indexes are always created asynchronously.",
+      isOptional: true,
+    },
+    {
+      name: "where",
+      type: "string",
+      description: "Partial index condition.",
+      isOptional: true,
+    },
+    {
+      name: "method",
+      type: "string",
+      description: "Ignored in Aurora DSQL. Only btree indexes are supported.",
+      isOptional: true,
+    },
+    {
+      name: "opclass",
+      type: "string",
+      description: "Ignored in Aurora DSQL.",
+      isOptional: true,
+    },
+    {
+      name: "storage",
+      type: "Record<string, any>",
+      description: "Ignored in Aurora DSQL.",
+      isOptional: true,
+    },
+    {
+      name: "tablespace",
+      type: "string",
+      description: "Ignored in Aurora DSQL. Tablespaces are not supported.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Managing Indexes
+
+List and monitor existing indexes:
+
+```typescript copy showLineNumbers
+// List all indexes
+const allIndexes = await storage.listIndexes();
+console.log(allIndexes);
+// [
+//   {
+//     name: 'mastra_threads_pkey',
+//     table: 'mastra_threads',
+//     columns: ['id'],
+//     unique: true,
+//     size: '16 KB',
+//     definition: 'CREATE UNIQUE INDEX...'
+//   },
+//   ...
+// ]
+
+// List indexes for a specific table
+const threadIndexes = await storage.listIndexes("mastra_threads");
+
+// Get detailed statistics for an index
+const stats = await storage.describeIndex("idx_threads_resource");
+console.log(stats);
+// {
+//   name: 'idx_threads_resource',
+//   table: 'mastra_threads',
+//   columns: ['resourceId'],
+//   unique: false,
+//   size: '128 KB',
+//   definition: 'CREATE INDEX idx_threads_resource...',
+//   method: 'btree',
+//   scans: 1542,
+//   tuples_read: 45230,
+//   tuples_fetched: 12050
+// }
+
+// Drop an index
+await storage.dropIndex("idx_threads_status");
+```
+
+### Schema-Specific Indexes
+
+When using custom schemas, indexes are created with schema prefixes:
+
+```typescript copy showLineNumbers
+const storage = new DSQLStore({
+  id: "my-dsql-store",
+  host: "abc123.dsql.us-east-1.on.aws",
+  schemaName: "custom_schema",
+});
+
+// Creates index as: custom_schema_idx_threads_status
+await storage.createIndex({
+  name: "idx_threads_status",
+  table: "mastra_threads",
+  columns: ["status"],
+});
+```
+
+## Related Resources
+
+- [Aurora DSQL Documentation](https://docs.aws.amazon.com/aurora-dsql/)
+- [SQL Reference](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-aurora-dsql-sql.html)
+- [Supported SQL Features](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-supported-sql-features.html)
+- [Unsupported PostgreSQL Features](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-unsupported-features.html)
+- [Supported Data Types](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-postgresql-compatibility-supported-data-types.html)
+- [Asynchronous Indexes](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-create-index-async.html)
