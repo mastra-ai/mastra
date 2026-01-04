@@ -64,6 +64,7 @@ import type {
   OutputWriter,
 } from './types';
 import { createTimeTravelExecutionParams, getZodErrors } from './utils';
+import { validateAsync, formatValidationIssues } from '../validation';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -2292,16 +2293,14 @@ export class Run<
     let inputDataToUse = inputData;
 
     if (this.validateInputs && this.inputSchema) {
-      const validatedInputData = await this.inputSchema.safeParseAsync(inputData);
+      // Use unified validation that supports both Zod and Standard Schema
+      const result = await validateAsync(this.inputSchema, inputData);
 
-      if (!validatedInputData.success) {
-        const errors = getZodErrors(validatedInputData.error);
-        throw new Error(
-          'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-        );
+      if (!result.success) {
+        throw new Error('Invalid input data: \n' + formatValidationIssues(result.issues));
       }
 
-      inputDataToUse = validatedInputData.data;
+      inputDataToUse = result.data;
     }
 
     return inputDataToUse;
@@ -2310,19 +2309,17 @@ export class Run<
   protected async _validateInitialState(initialState: z.input<TState>) {
     let initialStateToUse = initialState;
     if (this.validateInputs) {
-      let inputSchema: z.ZodType<any> | undefined = this.stateSchema;
+      let inputSchema = this.stateSchema;
 
       if (inputSchema) {
-        const validatedInputData = await inputSchema.safeParseAsync(initialState);
+        // Use unified validation that supports both Zod and Standard Schema
+        const result = await validateAsync<z.input<TState>>(inputSchema, initialState);
 
-        if (!validatedInputData.success) {
-          const errors = getZodErrors(validatedInputData.error);
-          throw new Error(
-            'Invalid input data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-          );
+        if (!result.success) {
+          throw new Error('Invalid input data: \n' + formatValidationIssues(result.issues));
         }
 
-        initialStateToUse = validatedInputData.data;
+        initialStateToUse = result.data;
       }
     }
 
@@ -2338,16 +2335,14 @@ export class Run<
     if (suspendedStep && suspendedStep.resumeSchema && this.validateInputs) {
       const resumeSchema = suspendedStep.resumeSchema;
 
-      const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
+      // Use unified validation that supports both Zod and Standard Schema
+      const result = await validateAsync(resumeSchema, resumeData);
 
-      if (!validatedResumeData.success) {
-        const errors = getZodErrors(validatedResumeData.error);
-        throw new Error(
-          'Invalid resume data: \n' + errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
-        );
+      if (!result.success) {
+        throw new Error('Invalid resume data: \n' + formatValidationIssues(result.issues));
       }
 
-      resumeDataToUse = validatedResumeData.data;
+      resumeDataToUse = result.data;
     }
 
     return resumeDataToUse;
@@ -2362,15 +2357,14 @@ export class Run<
     if (step && step.inputSchema && this.validateInputs) {
       const inputSchema = step.inputSchema;
 
-      const validatedInputData = await inputSchema.safeParseAsync(inputData);
+      // Use unified validation that supports both Zod and Standard Schema
+      const result = await validateAsync(inputSchema, inputData);
 
-      if (!validatedInputData.success) {
-        const errors = getZodErrors(validatedInputData.error);
-        const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-        throw new Error('Invalid inputData: \n' + errorMessages);
+      if (!result.success) {
+        throw new Error('Invalid inputData: \n' + formatValidationIssues(result.issues));
       }
 
-      inputDataToUse = validatedInputData.data;
+      inputDataToUse = result.data;
     }
 
     return inputDataToUse;

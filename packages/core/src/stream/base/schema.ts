@@ -4,6 +4,7 @@ import { isZodType } from '@mastra/schema-compat';
 import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
+import { isStandardJSONSchema, type StandardJSONSchemaV1 } from '../../types/standard-schema';
 
 export type PartialSchemaOutput<OUTPUT extends OutputSchema = undefined> = OUTPUT extends undefined
   ? undefined
@@ -15,15 +16,18 @@ export type InferSchemaOutput<OUTPUT extends OutputSchema> = OUTPUT extends unde
     ? OBJECT // Zod v4
     : OUTPUT extends z3.Schema<infer OBJECT, z3.ZodTypeDef, any>
       ? OBJECT // Zod v3
-      : OUTPUT extends Schema<infer OBJECT>
-        ? OBJECT // JSON Schema (AI SDK's Schema type)
-        : OUTPUT extends JSONSchema7
-          ? any // JSONSchema7 - we can't infer the exact type statically
-          : unknown; // Fallback
+      : OUTPUT extends StandardJSONSchemaV1<infer INPUT, infer OBJECT>
+        ? OBJECT // Standard JSON Schema
+        : OUTPUT extends Schema<infer OBJECT>
+          ? OBJECT // JSON Schema (AI SDK's Schema type)
+          : OUTPUT extends JSONSchema7
+            ? any // JSONSchema7 - we can't infer the exact type statically
+            : unknown; // Fallback
 
 export type OutputSchema<OBJECT = any> =
   | z4.ZodType<OBJECT, any>
   | z3.Schema<OBJECT, z3.ZodTypeDef, any>
+  | StandardJSONSchemaV1<any, OBJECT>
   | Schema<OBJECT>
   | JSONSchema7
   | undefined;
@@ -39,6 +43,12 @@ export function asJsonSchema(schema: OutputSchema): JSONSchema7 | undefined {
   if (!schema) {
     return undefined;
   }
+
+  // Handle Standard JSON Schema (libraries like ArkType, Zod v3.25+ that implement StandardJSONSchemaV1)
+  if (isStandardJSONSchema(schema)) {
+    return schema['~standard'].jsonSchema.input({ target: 'draft-07' }) as JSONSchema7;
+  }
+
   // Handle JSONSchema7 directly (plain object without safeParse or jsonSchema property)
   if (
     schema &&

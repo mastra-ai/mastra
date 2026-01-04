@@ -3,6 +3,7 @@ import type z from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import { removeUndefinedValues } from '../utils';
+import { validateAsync, formatValidationIssues } from '../validation';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
@@ -35,11 +36,11 @@ export async function validateStepInput({
   if (validateInputs) {
     const inputSchema = step.inputSchema;
 
-    const validatedInput = await inputSchema.safeParseAsync(prevOutput);
+    // Use unified validation that supports both Zod and Standard Schema
+    const result = await validateAsync(inputSchema, prevOutput);
 
-    if (!validatedInput.success) {
-      const errors = getZodErrors(validatedInput.error);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+    if (!result.success) {
+      const errorMessages = formatValidationIssues(result.issues);
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
@@ -47,12 +48,12 @@ export async function validateStepInput({
           category: ErrorCategory.USER,
           text: 'Step input validation failed: \n' + errorMessages,
         },
-        // keep the original zod error as the cause for consumers
-        validatedInput.error,
+        // Preserve original error (e.g., ZodError) as cause for consumers
+        result.cause,
       );
     } else {
-      const isEmptyData = isEmpty(validatedInput.data);
-      inputData = isEmptyData ? prevOutput : validatedInput.data;
+      const isEmptyData = isEmpty(result.data);
+      inputData = isEmptyData ? prevOutput : result.data;
     }
   }
 
@@ -69,10 +70,10 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
   const resumeSchema = step.resumeSchema;
 
   if (resumeSchema) {
-    const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
-    if (!validatedResumeData.success) {
-      const errors = getZodErrors(validatedResumeData.error);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+    // Use unified validation that supports both Zod and Standard Schema
+    const result = await validateAsync(resumeSchema, resumeData);
+    if (!result.success) {
+      const errorMessages = formatValidationIssues(result.issues);
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
@@ -80,11 +81,11 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
           category: ErrorCategory.USER,
           text: 'Step resume data validation failed: \n' + errorMessages,
         },
-        // keep the original zod error as the cause for consumers
-        validatedResumeData.error,
+        // Preserve original error (e.g., ZodError) as cause for consumers
+        result.cause,
       );
     } else {
-      resumeData = validatedResumeData.data;
+      resumeData = result.data;
     }
   }
   return { resumeData, validationError };
@@ -108,10 +109,10 @@ export async function validateStepSuspendData({
   const suspendSchema = step.suspendSchema;
 
   if (suspendSchema && validateInputs) {
-    const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
-    if (!validatedSuspendData.success) {
-      const errors = getZodErrors(validatedSuspendData.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+    // Use unified validation that supports both Zod and Standard Schema
+    const result = await validateAsync(suspendSchema, suspendData);
+    if (!result.success) {
+      const errorMessages = formatValidationIssues(result.issues);
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_SUSPEND_DATA_VALIDATION_FAILED',
@@ -119,11 +120,11 @@ export async function validateStepSuspendData({
           category: ErrorCategory.USER,
           text: 'Step suspend data validation failed: \n' + errorMessages,
         },
-        // keep the original zod error as the cause for consumers
-        validatedSuspendData.error,
+        // Preserve original error (e.g., ZodError) as cause for consumers
+        result.cause,
       );
     } else {
-      suspendData = validatedSuspendData.data;
+      suspendData = result.data;
     }
   }
   return { suspendData, validationError };
@@ -147,13 +148,13 @@ export async function validateStepStateData({
   const stateSchema = step.stateSchema;
 
   if (stateSchema && validateInputs) {
-    const validatedStateData = await stateSchema.safeParseAsync(stateData);
-    if (!validatedStateData.success) {
-      const errors = getZodErrors(validatedStateData.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+    // Use unified validation that supports both Zod and Standard Schema
+    const result = await validateAsync(stateSchema, stateData);
+    if (!result.success) {
+      const errorMessages = formatValidationIssues(result.issues);
       validationError = new Error('Step state data validation failed: \n' + errorMessages);
     } else {
-      stateData = validatedStateData.data;
+      stateData = result.data;
     }
   }
   return { stateData, validationError };
