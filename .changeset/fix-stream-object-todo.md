@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-Fix TODO in streamObject tests by uncommenting responseFormat expectation
+Improved test coverage to verify that enum structured outputs send the correct schema constraint to the model
