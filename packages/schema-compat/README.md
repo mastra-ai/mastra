@@ -20,36 +20,125 @@ pnpm add @mastra/schema-compat
 
 ### Standard Schema Support
 
-Mastra supports validation libraries that implement the [Standard Schema](https://standardschema.dev/) specification. There are two key interfaces:
+Mastra supports validation libraries that implement the [Standard Schema](https://standardschema.dev/) specification. For AI tools, libraries should implement **BOTH** interfaces:
 
-1. **[Standard JSON Schema V1](https://standardschema.dev/json-schema)** - For JSON Schema generation (used to describe tool parameters to LLMs)
-2. **Standard Schema V1** - For runtime validation
+1. **[Standard JSON Schema V1](https://standardschema.dev/json-schema)** - For JSON Schema generation (LLMs need this to understand tool parameters)
+2. **[Standard Schema V1](https://standardschema.dev/)** - For runtime validation
 
-Libraries that support these specs include:
+#### Recommended: Use AI SDK's `asSchema`
 
-- **Zod** (v3.25+)
-- **Valibot**
-- **ArkType**
-- **And more...**
+The easiest way to use any Standard Schema library with Mastra is via AI SDK's `asSchema` function:
 
 ```typescript
-import { convertAnySchemaToAISDKSchema, isStandardSchema, isStandardJSONSchema } from '@mastra/schema-compat';
+import { asSchema } from '@ai-sdk/provider-utils';
+import { type } from 'arktype';
 
-// Works with any Standard Schema compatible library
-const schema = yourValidationLibrary.object({
-  name: yourValidationLibrary.string(),
-  age: yourValidationLibrary.number(),
+// ArkType implements both StandardSchemaV1 and StandardJSONSchemaV1
+const userSchema = type({
+  name: 'string',
+  email: 'string',
+  age: 'number?',
 });
 
-// Check for Standard JSON Schema (preferred for AI tools)
-if (isStandardJSONSchema(schema)) {
-  // Uses jsonSchema.input() to generate JSON Schema
-  const aiSchema = convertAnySchemaToAISDKSchema(schema);
+// Convert to AI SDK Schema - works seamlessly!
+const aiSchema = asSchema(userSchema);
+
+// Use with Mastra tools
+const tool = createTool({
+  id: 'get-user',
+  inputSchema: userSchema, // Pass directly - Mastra handles conversion
+  execute: async ({ context }) => {
+    // context is fully typed!
+    return { user: context.name };
+  },
+});
+```
+
+### Library Examples
+
+#### Zod (Full Support)
+
+Zod v3.25+ implements both Standard Schema interfaces:
+
+```typescript
+import { z } from 'zod';
+import { asSchema } from '@ai-sdk/provider-utils';
+
+const weatherSchema = z.object({
+  location: z.string().describe('City name or coordinates'),
+  units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
+  days: z.number().int().min(1).max(14).describe('Forecast days'),
+});
+
+const aiSchema = asSchema(weatherSchema);
+// ✅ JSON Schema generated automatically
+// ✅ Validation works with transforms and refinements
+```
+
+#### ArkType (Full Support)
+
+ArkType implements both interfaces with excellent TypeScript inference:
+
+```typescript
+import { type } from 'arktype';
+import { asSchema } from '@ai-sdk/provider-utils';
+
+const querySchema = type({
+  table: "'users' | 'orders' | 'products'",
+  select: 'string[]',
+  where: {
+    field: 'string',
+    operator: "'=' | '!=' | '>' | '<'",
+    value: 'string | number',
+  },
+  limit: 'number?',
+});
+
+const aiSchema = asSchema(querySchema);
+// ✅ JSON Schema generated via ~standard.jsonSchema.input()
+// ✅ Validation via ~standard.validate()
+```
+
+#### Valibot (Validation Only)
+
+Valibot v1.x implements `StandardSchemaV1` for validation but **not** `StandardJSONSchemaV1` for JSON Schema generation:
+
+```typescript
+import * as v from 'valibot';
+import { isStandardSchema, isStandardJSONSchema } from '@mastra/schema-compat';
+
+const searchSchema = v.object({
+  query: v.pipe(v.string(), v.minLength(1)),
+  maxResults: v.optional(v.pipe(v.number(), v.integer())),
+});
+
+console.log(isStandardSchema(searchSchema));     // ✅ true - can validate
+console.log(isStandardJSONSchema(searchSchema)); // ❌ false - no JSON Schema generation
+
+// Use Valibot's validation directly via Standard Schema interface:
+const result = await searchSchema['~standard'].validate({ query: 'test' });
+if ('value' in result) {
+  console.log('Valid:', result.value);
+} else {
+  console.log('Errors:', result.issues);
+}
+```
+
+> **Note**: For Valibot to work with AI SDK's `asSchema`, you'd need a library that generates JSON Schema from Valibot schemas (like `@valibot/to-json-schema` when available).
+
+#### Checking Library Capabilities
+
+```typescript
+import { isStandardSchema, isStandardJSONSchema } from '@mastra/schema-compat';
+
+// Check if a schema can validate
+if (isStandardSchema(schema)) {
+  const result = await schema['~standard'].validate(data);
 }
 
-// Or check for Standard Schema (for validation)
-if (isStandardSchema(schema)) {
-  const aiSchema = convertAnySchemaToAISDKSchema(schema);
+// Check if a schema can generate JSON Schema (preferred for AI tools)
+if (isStandardJSONSchema(schema)) {
+  const jsonSchema = schema['~standard'].jsonSchema.input({ target: 'draft-07' });
 }
 ```
 

@@ -45,6 +45,10 @@ export {
   type AnySchema,
 } from './utils';
 
+// NOTE: For converting Standard Schema to AI SDK Schema, use `asSchema` from '@ai-sdk/provider-utils':
+// import { asSchema } from '@ai-sdk/provider-utils';
+// const aiSchema = asSchema(yourValibotOrArkTypeSchema);
+
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
 export { DeepSeekSchemaCompatLayer } from './provider-compats/deepseek';

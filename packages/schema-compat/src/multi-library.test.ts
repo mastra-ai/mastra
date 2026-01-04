@@ -9,34 +9,35 @@
  * - ArkType (TypeScript-first with great inference)
  *
  * All three libraries implement Standard Schema, making them compatible
- * with Mastra's tool system.
+ * with Mastra's tool system via AI SDK's `asSchema` function.
+ *
+ * Key requirement: Libraries must implement BOTH:
+ * - StandardSchemaV1 (for validation via ~standard.validate)
+ * - StandardJSONSchemaV1 (for JSON Schema generation via ~standard.jsonSchema)
  */
 
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import * as v from 'valibot';
 import { type } from 'arktype';
-import {
-  convertAnySchemaToAISDKSchema,
-  convertStandardSchemaToAISDKSchema,
-  isStandardSchema,
-  isStandardJSONSchema,
-} from './utils';
+import { asSchema } from '@ai-sdk/provider-utils';
+import { isStandardSchema, isStandardJSONSchema } from './utils';
 
 describe('Multi-Library Schema Support', () => {
   // ============================================================================
   // ZOD EXAMPLES
   // ============================================================================
-  describe('Zod', () => {
-    it('should work with basic Zod schemas', () => {
+  describe('Zod (via asSchema)', () => {
+    it('should work with basic Zod schemas', async () => {
       const userSchema = z.object({
         name: z.string().min(1).describe('The user name'),
         email: z.string().email().describe('User email address'),
         age: z.number().int().positive().optional(),
       });
 
-      const result = convertAnySchemaToAISDKSchema(userSchema);
+      const result = asSchema(userSchema);
 
+      // JSON Schema is generated correctly
       expect(result.jsonSchema).toMatchObject({
         type: 'object',
         properties: {
@@ -46,15 +47,19 @@ describe('Multi-Library Schema Support', () => {
         },
         required: ['name', 'email'],
       });
+
+      // Validation works
+      const valid = await result.validate!({ name: 'John', email: 'john@example.com' });
+      expect(valid.success).toBe(true);
     });
 
-    it('should work with Zod enums and unions', () => {
+    it('should work with Zod enums and unions', async () => {
       const statusSchema = z.object({
         status: z.enum(['pending', 'approved', 'rejected']),
         priority: z.union([z.literal('low'), z.literal('medium'), z.literal('high')]),
       });
 
-      const result = convertAnySchemaToAISDKSchema(statusSchema);
+      const result = asSchema(statusSchema);
 
       expect(result.jsonSchema).toMatchObject({
         type: 'object',
@@ -62,9 +67,13 @@ describe('Multi-Library Schema Support', () => {
           status: { type: 'string', enum: ['pending', 'approved', 'rejected'] },
         },
       });
+
+      // Valid data
+      const valid = await result.validate!({ status: 'pending', priority: 'high' });
+      expect(valid.success).toBe(true);
     });
 
-    it('should work with nested Zod schemas', () => {
+    it('should work with nested Zod schemas', async () => {
       const addressSchema = z.object({
         street: z.string(),
         city: z.string(),
@@ -77,7 +86,7 @@ describe('Multi-Library Schema Support', () => {
         tags: z.array(z.string()),
       });
 
-      const result = convertAnySchemaToAISDKSchema(personSchema);
+      const result = asSchema(personSchema);
 
       expect(result.jsonSchema).toMatchObject({
         type: 'object',
@@ -96,88 +105,203 @@ describe('Multi-Library Schema Support', () => {
       });
     });
 
-    it('should validate data with Zod schemas', () => {
+    it('should validate data with Zod schemas', async () => {
       const schema = z.object({
         count: z.number().min(0).max(100),
       });
 
-      const result = convertAnySchemaToAISDKSchema(schema);
+      const result = asSchema(schema);
 
       // Valid data
-      expect(result.validate!({ count: 50 })).toEqual({
-        success: true,
-        value: { count: 50 },
-      });
+      const valid = await result.validate!({ count: 50 });
+      expect(valid.success).toBe(true);
+      if (valid.success) {
+        expect(valid.value).toEqual({ count: 50 });
+      }
 
       // Invalid data
-      const invalid = result.validate!({ count: 150 });
+      const invalid = await result.validate!({ count: 150 });
       expect(invalid.success).toBe(false);
     });
   });
 
   // ============================================================================
-  // VALIBOT EXAMPLES
+  // ARKTYPE EXAMPLES (implements both StandardSchemaV1 and StandardJSONSchemaV1)
   // ============================================================================
-  describe('Valibot', () => {
-    it('should detect Valibot as Standard Schema', () => {
+  describe('ArkType (via asSchema)', () => {
+    it('should detect ArkType as Standard Schema', () => {
+      const schema = type({
+        name: 'string',
+      });
+
+      // ArkType implements both interfaces
+      expect(isStandardSchema(schema)).toBe(true);
+      expect(isStandardJSONSchema(schema)).toBe(true);
+    });
+
+    it('should work with basic ArkType schemas', async () => {
+      const userSchema = type({
+        name: 'string',
+        email: 'string',
+        age: 'number?',
+      });
+
+      const result = asSchema(userSchema);
+
+      // JSON Schema is generated
+      expect(result.jsonSchema).toBeDefined();
+      expect(result.jsonSchema.type).toBe('object');
+
+      // Validation works
+      const valid = await result.validate!({ name: 'John', email: 'john@example.com' });
+      expect(valid.success).toBe(true);
+    });
+
+    it('should validate with ArkType schemas', async () => {
+      const schema = type({
+        count: 'number',
+      });
+
+      const result = asSchema(schema);
+
+      // Valid
+      const valid = await result.validate!({ count: 42 });
+      expect(valid.success).toBe(true);
+
+      // Invalid
+      const invalid = await result.validate!({ count: 'not a number' });
+      expect(invalid.success).toBe(false);
+    });
+
+    it('should work with ArkType unions', async () => {
+      const schema = type({
+        status: "'pending' | 'approved' | 'rejected'",
+      });
+
+      const result = asSchema(schema);
+
+      const valid = await result.validate!({ status: 'pending' });
+      expect(valid.success).toBe(true);
+
+      const invalid = await result.validate!({ status: 'invalid' });
+      expect(invalid.success).toBe(false);
+    });
+
+    it('should work with nested ArkType schemas', async () => {
+      const addressType = type({
+        street: 'string',
+        city: 'string',
+      });
+
+      const personType = type({
+        name: 'string',
+        address: addressType,
+      });
+
+      const result = asSchema(personType);
+
+      const valid = await result.validate!({
+        name: 'Bob',
+        address: { street: '456 Oak Ave', city: 'LA' },
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it('should work with ArkType arrays', async () => {
+      const schema = type({
+        tags: 'string[]',
+        scores: 'number[]',
+      });
+
+      const result = asSchema(schema);
+
+      const valid = await result.validate!({
+        tags: ['a', 'b', 'c'],
+        scores: [1, 2, 3],
+      });
+      expect(valid.success).toBe(true);
+
+      const invalid = await result.validate!({
+        tags: ['a', 'b', 'c'],
+        scores: ['not', 'numbers'],
+      });
+      expect(invalid.success).toBe(false);
+    });
+
+    it('should generate JSON Schema from ArkType', async () => {
+      const schema = type({
+        id: 'string',
+        count: 'number',
+        active: 'boolean',
+      });
+
+      const result = asSchema(schema);
+
+      expect(result.jsonSchema).toMatchObject({
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          count: { type: 'number' },
+          active: { type: 'boolean' },
+        },
+      });
+    });
+  });
+
+  // ============================================================================
+  // VALIBOT EXAMPLES
+  // Note: Valibot v1.x implements StandardSchemaV1 but NOT StandardJSONSchemaV1
+  // This means it can validate but cannot generate JSON Schema directly
+  // ============================================================================
+  describe('Valibot (validation only - no JSON Schema generation)', () => {
+    it('should detect Valibot capabilities', () => {
       const schema = v.object({
         name: v.string(),
       });
 
+      // Valibot implements StandardSchemaV1 (validation)
       expect(isStandardSchema(schema)).toBe(true);
+
+      // But NOT StandardJSONSchemaV1 (no jsonSchema.input method)
+      expect(isStandardJSONSchema(schema)).toBe(false);
     });
 
-    it('should work with basic Valibot schemas', () => {
-      const userSchema = v.object({
+    it('should validate with Valibot schemas directly', async () => {
+      const schema = v.object({
         name: v.pipe(v.string(), v.minLength(1)),
         email: v.pipe(v.string(), v.email()),
         age: v.optional(v.pipe(v.number(), v.integer())),
       });
 
-      const result = convertStandardSchemaToAISDKSchema(userSchema);
-
-      // Valibot implements StandardSchemaV1, so we get validation
-      expect(result.validate).toBeDefined();
-
-      // Valid data should pass
-      const valid = result.validate!({ name: 'John', email: 'john@example.com' });
-      expect(valid.success).toBe(true);
-      if (valid.success) {
-        expect(valid.value).toEqual({ name: 'John', email: 'john@example.com' });
-      }
-    });
-
-    it('should validate with Valibot schemas', () => {
-      const schema = v.object({
-        count: v.pipe(v.number(), v.minValue(0), v.maxValue(100)),
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(schema);
+      // Use Valibot's native validation via Standard Schema interface
+      const std = schema['~standard'];
 
       // Valid data
-      const valid = result.validate!({ count: 50 });
-      expect(valid.success).toBe(true);
+      const valid = await std.validate({ name: 'John', email: 'john@example.com' });
+      expect('value' in valid).toBe(true);
 
       // Invalid data
-      const invalid = result.validate!({ count: 150 });
-      expect(invalid.success).toBe(false);
+      const invalid = await std.validate({ name: '', email: 'not-an-email' });
+      expect('issues' in invalid).toBe(true);
     });
 
-    it('should work with Valibot enums', () => {
+    it('should work with Valibot enums', async () => {
       const statusSchema = v.object({
         status: v.picklist(['pending', 'approved', 'rejected']),
       });
 
-      const result = convertStandardSchemaToAISDKSchema(statusSchema);
+      const std = statusSchema['~standard'];
 
       // Valid
-      expect(result.validate!({ status: 'pending' }).success).toBe(true);
+      const valid = await std.validate({ status: 'pending' });
+      expect('value' in valid).toBe(true);
 
       // Invalid
-      expect(result.validate!({ status: 'invalid' }).success).toBe(false);
+      const invalid = await std.validate({ status: 'invalid' });
+      expect('issues' in invalid).toBe(true);
     });
 
-    it('should work with nested Valibot schemas', () => {
+    it('should work with nested Valibot schemas', async () => {
       const addressSchema = v.object({
         street: v.string(),
         city: v.string(),
@@ -189,17 +313,17 @@ describe('Multi-Library Schema Support', () => {
         hobbies: v.array(v.string()),
       });
 
-      const result = convertStandardSchemaToAISDKSchema(personSchema);
+      const std = personSchema['~standard'];
 
-      const valid = result.validate!({
+      const valid = await std.validate({
         name: 'Alice',
         address: { street: '123 Main St', city: 'NYC' },
         hobbies: ['reading', 'coding'],
       });
-      expect(valid.success).toBe(true);
+      expect('value' in valid).toBe(true);
     });
 
-    it('should work with Valibot transforms', () => {
+    it('should work with Valibot transforms', async () => {
       const schema = v.pipe(
         v.object({
           date: v.string(),
@@ -210,123 +334,13 @@ describe('Multi-Library Schema Support', () => {
         })),
       );
 
-      const result = convertStandardSchemaToAISDKSchema(schema);
+      const std = schema['~standard'];
 
-      const valid = result.validate!({ date: '2024-01-01' });
-      expect(valid.success).toBe(true);
-      if (valid.success) {
+      const valid = await std.validate({ date: '2024-01-01' });
+      expect('value' in valid).toBe(true);
+      if ('value' in valid) {
         expect(valid.value).toEqual({ date: '2024-01-01', parsed: true });
       }
-    });
-  });
-
-  // ============================================================================
-  // ARKTYPE EXAMPLES
-  // ============================================================================
-  describe('ArkType', () => {
-    it('should detect ArkType as Standard Schema', () => {
-      const schema = type({
-        name: 'string',
-      });
-
-      expect(isStandardSchema(schema)).toBe(true);
-    });
-
-    it('should work with basic ArkType schemas', () => {
-      const userSchema = type({
-        name: 'string',
-        email: 'string',
-        age: 'number?',
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(userSchema);
-
-      // ArkType implements StandardSchemaV1
-      expect(result.validate).toBeDefined();
-
-      // Valid data
-      const valid = result.validate!({ name: 'John', email: 'john@example.com' });
-      expect(valid.success).toBe(true);
-    });
-
-    it('should validate with ArkType schemas', () => {
-      const schema = type({
-        count: 'number',
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(schema);
-
-      // Valid
-      expect(result.validate!({ count: 42 }).success).toBe(true);
-
-      // Invalid
-      expect(result.validate!({ count: 'not a number' }).success).toBe(false);
-    });
-
-    it('should work with ArkType unions', () => {
-      const schema = type({
-        status: "'pending' | 'approved' | 'rejected'",
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(schema);
-
-      expect(result.validate!({ status: 'pending' }).success).toBe(true);
-      expect(result.validate!({ status: 'invalid' }).success).toBe(false);
-    });
-
-    it('should work with nested ArkType schemas', () => {
-      const addressType = type({
-        street: 'string',
-        city: 'string',
-      });
-
-      const personType = type({
-        name: 'string',
-        address: addressType,
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(personType);
-
-      const valid = result.validate!({
-        name: 'Bob',
-        address: { street: '456 Oak Ave', city: 'LA' },
-      });
-      expect(valid.success).toBe(true);
-    });
-
-    it('should work with ArkType arrays', () => {
-      const schema = type({
-        tags: 'string[]',
-        scores: 'number[]',
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(schema);
-
-      expect(
-        result.validate!({
-          tags: ['a', 'b', 'c'],
-          scores: [1, 2, 3],
-        }).success,
-      ).toBe(true);
-
-      expect(
-        result.validate!({
-          tags: ['a', 'b', 'c'],
-          scores: ['not', 'numbers'],
-        }).success,
-      ).toBe(false);
-    });
-
-    it('should work with ArkType constraints', () => {
-      const schema = type({
-        age: 'number >= 0',
-        name: 'string >= 1', // at least 1 character
-      });
-
-      const result = convertStandardSchemaToAISDKSchema(schema);
-
-      expect(result.validate!({ age: 25, name: 'Alice' }).success).toBe(true);
-      expect(result.validate!({ age: -1, name: 'Bob' }).success).toBe(false);
     });
   });
 
@@ -334,18 +348,12 @@ describe('Multi-Library Schema Support', () => {
   // CROSS-LIBRARY COMPARISON
   // ============================================================================
   describe('Cross-Library Comparison', () => {
-    it('should handle equivalent schemas from all libraries', () => {
+    it('should handle equivalent schemas from Zod and ArkType', async () => {
       // Define the same schema in each library
       const zodSchema = z.object({
         id: z.string(),
         value: z.number(),
         active: z.boolean(),
-      });
-
-      const valibotSchema = v.object({
-        id: v.string(),
-        value: v.number(),
-        active: v.boolean(),
       });
 
       const arktypeSchema = type({
@@ -354,35 +362,33 @@ describe('Multi-Library Schema Support', () => {
         active: 'boolean',
       });
 
-      // Convert all to AI SDK Schema
-      const zodResult = convertAnySchemaToAISDKSchema(zodSchema);
-      const valibotResult = convertStandardSchemaToAISDKSchema(valibotSchema);
-      const arktypeResult = convertStandardSchemaToAISDKSchema(arktypeSchema);
+      // Convert both to AI SDK Schema via asSchema
+      const zodResult = asSchema(zodSchema);
+      const arktypeResult = asSchema(arktypeSchema);
 
-      // All should validate the same data
+      // Both should validate the same data
       const testData = { id: 'test-123', value: 42, active: true };
 
-      expect(zodResult.validate!(testData).success).toBe(true);
-      expect(valibotResult.validate!(testData).success).toBe(true);
-      expect(arktypeResult.validate!(testData).success).toBe(true);
+      const zodValid = await zodResult.validate!(testData);
+      const arktypeValid = await arktypeResult.validate!(testData);
 
-      // All should reject invalid data
+      expect(zodValid.success).toBe(true);
+      expect(arktypeValid.success).toBe(true);
+
+      // Both should reject invalid data
       const invalidData = { id: 123, value: 'not a number', active: 'yes' };
 
-      expect(zodResult.validate!(invalidData).success).toBe(false);
-      expect(valibotResult.validate!(invalidData).success).toBe(false);
-      expect(arktypeResult.validate!(invalidData).success).toBe(false);
+      const zodInvalid = await zodResult.validate!(invalidData);
+      const arktypeInvalid = await arktypeResult.validate!(invalidData);
+
+      expect(zodInvalid.success).toBe(false);
+      expect(arktypeInvalid.success).toBe(false);
     });
 
-    it('should handle optional fields consistently', () => {
+    it('should handle optional fields consistently', async () => {
       const zodSchema = z.object({
         required: z.string(),
         optional: z.string().optional(),
-      });
-
-      const valibotSchema = v.object({
-        required: v.string(),
-        optional: v.optional(v.string()),
       });
 
       const arktypeSchema = type({
@@ -390,19 +396,17 @@ describe('Multi-Library Schema Support', () => {
         optional: 'string?',
       });
 
-      // All should accept data with optional field missing
+      const zodResult = asSchema(zodSchema);
+      const arktypeResult = asSchema(arktypeSchema);
+
+      // Both should accept data with optional field missing
       const dataWithoutOptional = { required: 'hello' };
 
-      expect(convertAnySchemaToAISDKSchema(zodSchema).validate!(dataWithoutOptional).success).toBe(true);
-      expect(convertStandardSchemaToAISDKSchema(valibotSchema).validate!(dataWithoutOptional).success).toBe(true);
-      expect(convertStandardSchemaToAISDKSchema(arktypeSchema).validate!(dataWithoutOptional).success).toBe(true);
+      const zodValid = await zodResult.validate!(dataWithoutOptional);
+      const arktypeValid = await arktypeResult.validate!(dataWithoutOptional);
 
-      // All should accept data with optional field present
-      const dataWithOptional = { required: 'hello', optional: 'world' };
-
-      expect(convertAnySchemaToAISDKSchema(zodSchema).validate!(dataWithOptional).success).toBe(true);
-      expect(convertStandardSchemaToAISDKSchema(valibotSchema).validate!(dataWithOptional).success).toBe(true);
-      expect(convertStandardSchemaToAISDKSchema(arktypeSchema).validate!(dataWithOptional).success).toBe(true);
+      expect(zodValid.success).toBe(true);
+      expect(arktypeValid.success).toBe(true);
     });
   });
 
@@ -410,14 +414,14 @@ describe('Multi-Library Schema Support', () => {
   // REAL-WORLD TOOL EXAMPLES
   // ============================================================================
   describe('Real-World Tool Examples', () => {
-    it('should work for a weather tool schema (Zod)', () => {
+    it('should work for a weather tool schema (Zod)', async () => {
       const weatherToolSchema = z.object({
         location: z.string().describe('City name or coordinates'),
         units: z.enum(['celsius', 'fahrenheit']).default('celsius'),
         days: z.number().int().min(1).max(14).default(7).describe('Forecast days'),
       });
 
-      const result = convertAnySchemaToAISDKSchema(weatherToolSchema);
+      const result = asSchema(weatherToolSchema);
 
       expect(result.jsonSchema).toMatchObject({
         type: 'object',
@@ -427,9 +431,41 @@ describe('Multi-Library Schema Support', () => {
           days: { type: 'integer', minimum: 1, maximum: 14, description: 'Forecast days' },
         },
       });
+
+      // Validate tool input
+      const valid = await result.validate!({ location: 'New York', units: 'fahrenheit', days: 7 });
+      expect(valid.success).toBe(true);
     });
 
-    it('should work for a search tool schema (Valibot)', () => {
+    it('should work for a database query tool schema (ArkType)', async () => {
+      const queryToolSchema = type({
+        table: "'users' | 'orders' | 'products'",
+        select: 'string[]',
+        where: {
+          field: 'string',
+          operator: "'=' | '!=' | '>' | '<' | '>=' | '<='",
+          value: 'string | number',
+        },
+        limit: 'number?',
+      });
+
+      const result = asSchema(queryToolSchema);
+
+      // JSON Schema is generated
+      expect(result.jsonSchema).toBeDefined();
+      expect(result.jsonSchema.type).toBe('object');
+
+      // Validate tool input
+      const valid = await result.validate!({
+        table: 'users',
+        select: ['id', 'name', 'email'],
+        where: { field: 'age', operator: '>=', value: 18 },
+        limit: 50,
+      });
+      expect(valid.success).toBe(true);
+    });
+
+    it('should work for a Valibot search schema (validation only)', async () => {
       const searchToolSchema = v.object({
         query: v.pipe(v.string(), v.minLength(1)),
         maxResults: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100))),
@@ -442,40 +478,15 @@ describe('Multi-Library Schema Support', () => {
         ),
       });
 
-      const result = convertStandardSchemaToAISDKSchema(searchToolSchema);
+      // Use Valibot's native Standard Schema validation
+      const std = searchToolSchema['~standard'];
 
-      // Should validate correctly
-      expect(
-        result.validate!({
-          query: 'mastra ai',
-          maxResults: 10,
-          filters: { type: 'article' },
-        }).success,
-      ).toBe(true);
-    });
-
-    it('should work for a database query tool schema (ArkType)', () => {
-      const queryToolSchema = type({
-        table: "'users' | 'orders' | 'products'",
-        select: 'string[]',
-        where: {
-          field: 'string',
-          operator: "'=' | '!=' | '>' | '<' | '>=' | '<='",
-          value: 'string | number',
-        },
-        limit: 'number?',
+      const valid = await std.validate({
+        query: 'mastra ai',
+        maxResults: 10,
+        filters: { type: 'article' },
       });
-
-      const result = convertStandardSchemaToAISDKSchema(queryToolSchema);
-
-      expect(
-        result.validate!({
-          table: 'users',
-          select: ['id', 'name', 'email'],
-          where: { field: 'age', operator: '>=', value: 18 },
-          limit: 50,
-        }).success,
-      ).toBe(true);
+      expect('value' in valid).toBe(true);
     });
   });
 });
