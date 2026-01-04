@@ -335,43 +335,54 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
 type CheckRunResult = { success: boolean; message: string; details?: Record<string, unknown> };
 
 /**
+ * Parameters passed to the check's run function.
+ * Combines user-provided args with runtime context from the network loop.
+ */
+export type CheckRunParams<TArgs = undefined> = TArgs extends undefined
+  ? ValidationContext
+  : ValidationContext & { args: TArgs };
+
+/**
  * Creates a validation check from an async function.
  *
- * The `run` function receives:
+ * The `run` function receives a single object containing:
+ * - All `ValidationContext` fields (iteration, messages, etc.)
  * - `args`: Your custom static configuration (if provided)
- * - `context`: Runtime state from the network loop (messages, iteration, etc.)
  *
  * @param options.id - Unique identifier for this check
  * @param options.name - Human-readable name (shown in logs/feedback)
- * @param options.args - Static arguments passed to the run function (your custom config)
+ * @param options.args - Static arguments available via `params.args` in run function
  * @param options.run - Async function that performs the validation
  *
  * @example
  * ```typescript
- * // Run a command - use context to vary behavior
+ * // Run a command - access both args and context from single param
  * const testsCheck = createCheck({
  *   id: 'tests',
  *   name: 'Unit Tests',
  *   args: { command: 'npm test' },
- *   run: async (args, ctx) => {
- *     // Could run more thorough tests on later iterations
- *     const cmd = ctx.iteration > 3 ? `${args.command} -- --coverage` : args.command;
+ *   run: async (params) => {
+ *     // params.args.command - your static config
+ *     // params.iteration, params.messages - runtime context
+ *     const cmd = params.iteration > 3
+ *       ? `${params.args.command} -- --coverage`
+ *       : params.args.command;
  *     const result = await exec(cmd);
  *     return {
  *       success: result.exitCode === 0,
  *       message: result.exitCode === 0 ? 'Tests passed' : 'Tests failed',
- *       details: { stdout: result.stdout, iteration: ctx.iteration },
+ *       details: { stdout: result.stdout, iteration: params.iteration },
  *     };
  *   },
  * });
  *
- * // Check based on conversation content
+ * // No args - just context
  * const outputCheck = createCheck({
  *   id: 'output-check',
  *   name: 'Output Validation',
- *   run: async (ctx) => {
+ *   run: async (params) => {
  *     // Inspect what the agent actually did
- *     const lastMessage = ctx.messages.at(-1);
+ *     const lastMessage = params.messages.at(-1);
  *     const hasCode = lastMessage?.content?.includes('```');
  *     return {
  *       success: hasCode,
@@ -380,29 +391,30 @@ type CheckRunResult = { success: boolean; message: string; details?: Record<stri
  *   },
  * });
  *
- * // Dynamic check based on iteration
- * const progressCheck = createCheck({
- *   id: 'progress',
- *   name: 'Progress Check',
- *   run: async (ctx) => {
- *     // Fail if we're past iteration 5 and still not done
- *     if (ctx.iteration > 5 && !ctx.llmSaysComplete) {
- *       return { success: false, message: 'Taking too long, need human review' };
+ * // Use requestContext for environment-specific checks
+ * const envCheck = createCheck({
+ *   id: 'env',
+ *   name: 'Environment Check',
+ *   run: async (params) => {
+ *     const isProd = params.requestContext.customContext?.env === 'production';
+ *     // Run stricter checks in production
+ *     if (isProd && params.iteration < 3) {
+ *       return { success: false, message: 'Need at least 3 iterations in prod' };
  *     }
- *     return { success: true, message: 'Progress acceptable' };
+ *     return { success: true, message: 'Environment check passed' };
  *   },
  * });
  *
- * // With static args for configuration
+ * // API check with configurable args
  * const apiCheck = createCheck({
  *   id: 'api',
  *   name: 'API Health',
  *   args: { url: 'http://localhost:3000/health', expectedStatus: 200 },
- *   run: async (args, ctx) => {
- *     console.log(`Checking API on iteration ${ctx.iteration}`);
- *     const res = await fetch(args.url);
+ *   run: async (params) => {
+ *     console.log(`Checking API on iteration ${params.iteration}`);
+ *     const res = await fetch(params.args.url);
  *     return {
- *       success: res.status === args.expectedStatus,
+ *       success: res.status === params.args.expectedStatus,
  *       message: res.ok ? 'API healthy' : `Got ${res.status}`,
  *     };
  *   },
@@ -414,13 +426,13 @@ export function createCheck<TArgs = undefined>(
     ? {
         id: string;
         name: string;
-        run: (context: ValidationContext) => Promise<CheckRunResult>;
+        run: (params: ValidationContext) => Promise<CheckRunResult>;
       }
     : {
         id: string;
         name: string;
         args: TArgs;
-        run: (args: TArgs, context: ValidationContext) => Promise<CheckRunResult>;
+        run: (params: ValidationContext & { args: TArgs }) => Promise<CheckRunResult>;
       },
 ): ValidationCheck {
   return {
@@ -429,9 +441,8 @@ export function createCheck<TArgs = undefined>(
     async check(context: ValidationContext) {
       const start = Date.now();
       try {
-        const result = await ('args' in options
-          ? options.run(options.args, context)
-          : (options.run as (ctx: ValidationContext) => Promise<CheckRunResult>)(context));
+        const params = 'args' in options ? { ...context, args: options.args } : context;
+        const result = await (options.run as (p: typeof params) => Promise<CheckRunResult>)(params);
         return { ...result, duration: Date.now() - start };
       } catch (error: any) {
         return {
