@@ -373,9 +373,6 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const whereClause = conditions.join(' AND ');
 
-      // Get total count
-      const total = await table.countRows(whereClause);
-
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const query = table.query().where(whereClause);
       let allRecords = await query.toArray();
@@ -398,6 +395,9 @@ export class StoreMemoryLance extends MemoryStorage {
           return true;
         });
       }
+
+      // Get total count after filtering
+      const total = allRecords.length;
 
       // Sort records
       allRecords.sort((a, b) => {
@@ -551,11 +551,20 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const transformedMessages = messages.map((message: MastraDBMessage | MastraMessageV1) => {
         const { threadId, type, ...rest } = message;
+        // Extract metadata for the metadataJson column (for JSON filtering)
+        let metadataJson: Record<string, unknown> | null = null;
+        if ('content' in message && typeof message.content === 'object' && message.content !== null) {
+          const content = message.content as { metadata?: Record<string, unknown> };
+          if (content.metadata) {
+            metadataJson = content.metadata;
+          }
+        }
         return {
           ...rest,
           thread_id: threadId,
           type: type ?? 'v2',
           content: JSON.stringify(message.content),
+          metadataJson: metadataJson ? JSON.stringify(metadataJson) : null,
         };
       });
 
@@ -830,6 +839,8 @@ export class StoreMemoryLance extends MemoryStorage {
               ...(existingContent.metadata || {}),
               ...(updates.content.metadata || {}),
             };
+            // Sync metadataJson column for JSON filtering
+            updatePayload.metadataJson = JSON.stringify(newContent.metadata);
           }
 
           // Update content string if provided

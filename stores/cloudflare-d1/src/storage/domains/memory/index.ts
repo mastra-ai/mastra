@@ -479,6 +479,14 @@ export class MemoryStorageD1 extends MemoryStorage {
       // Prepare all messages for insertion (set timestamps, thread_id, etc.)
       const messagesToInsert = messages.map(message => {
         const createdAt = message.createdAt ? new Date(message.createdAt) : now;
+        // Extract metadata for the metadataJson column (for JSON filtering)
+        let metadataJson: string | null = null;
+        if (typeof message.content === 'object' && message.content !== null) {
+          const content = message.content as { metadata?: Record<string, unknown> };
+          if (content.metadata) {
+            metadataJson = JSON.stringify(content.metadata);
+          }
+        }
         return {
           id: message.id,
           thread_id: message.threadId,
@@ -487,6 +495,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           role: message.role,
           type: message.type || 'v2',
           resourceId: message.resourceId,
+          metadataJson,
         };
       });
 
@@ -960,6 +969,13 @@ export class MemoryStorageD1 extends MemoryStorage {
           };
           setClauses.push(`content = ?`);
           values.push(JSON.stringify(newContent));
+
+          // Sync metadataJson column if metadata was updated
+          if (updatableFields.content.metadata || newContent.metadata) {
+            setClauses.push(`metadataJson = ?`);
+            values.push(JSON.stringify(newContent.metadata || {}));
+          }
+
           delete updatableFields.content;
         }
 
