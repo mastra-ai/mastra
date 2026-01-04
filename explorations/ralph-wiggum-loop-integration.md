@@ -195,19 +195,45 @@ interface CompletionConfig {
 
 ## How Completion Works
 
-**Everything goes through the completion check system.**
+| Config | What Runs | Final Result |
+|--------|-----------|--------------|
+| No `completion.scorers` | Default LLM check | LLM generates `finalResult` |
+| `completion.scorers: [...]` | Your scorers | Uses primitive's result |
 
-| Config | What Runs |
-|--------|-----------|
-| No `completion.scorers` | Default LLM check (structured output with `finalResult`) |
-| `completion.scorers: [...]` | Only those scorers |
+### Default LLM Check
 
-The default LLM check returns:
-- `isComplete`: boolean
-- `completionReason`: why it's complete or not
-- `finalResult`: the final output to return
+When no scorers are configured, the default LLM check:
+1. Asks the LLM: "Is this task complete?"
+2. Gets structured output: `{ isComplete, completionReason, finalResult }`
+3. The `finalResult` becomes the network's output
 
-This metadata flows back into the network result.
+### Custom Scorers
+
+When you provide scorers:
+1. Each scorer evaluates pass/fail (returns 0 or 1)
+2. Scorers DON'T generate the final result
+3. The primitive's result is used as the network's output
+
+```
+                    ┌─────────────────────────────┐
+                    │     Completion Check        │
+                    └─────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+    ┌─────────────────┐             ┌─────────────────┐
+    │  Default LLM    │             │ Custom Scorers  │
+    │                 │             │                 │
+    │ Returns:        │             │ Return:         │
+    │ - isComplete    │             │ - score (0/1)   │
+    │ - finalResult   │             │ - reason        │
+    │ - reason        │             │                 │
+    └────────┬────────┘             └────────┬────────┘
+             │                               │
+             ▼                               ▼
+    Network uses                   Network uses
+    LLM's finalResult              primitive's result
+```
 
 ---
 
