@@ -1,4 +1,4 @@
-import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -11,57 +11,6 @@ export function getTableName({ indexName, schemaName }: { indexName: string; sch
   const quotedIndexName = `"${parsedIndexName}"`;
   const quotedSchemaName = schemaName;
   return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
-}
-
-/**
- * Build date range filter for queries
- */
-export function buildDateRangeFilter(dateRange: PaginationArgs['dateRange'], fieldName: string): Record<string, any> {
-  const filters: Record<string, any> = {};
-  if (dateRange?.start) {
-    filters[`${fieldName}_gte`] = dateRange.start;
-  }
-  if (dateRange?.end) {
-    filters[`${fieldName}_lte`] = dateRange.end;
-  }
-  return filters;
-}
-
-/**
- * Prepare WHERE clause for Aurora DSQL queries
- */
-export function prepareWhereClause(
-  filters: Record<string, any>,
-  _schema?: Record<string, StorageColumn>,
-): { sql: string; args: any[] } {
-  const conditions: string[] = [];
-  const args: any[] = [];
-  let paramIndex = 1;
-
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value === undefined) return;
-
-    // Handle special operators
-    if (key.endsWith('_gte')) {
-      const fieldName = key.slice(0, -4);
-      conditions.push(`"${parseSqlIdentifier(fieldName, 'field name')}" >= $${paramIndex++}`);
-      args.push(value instanceof Date ? value.toISOString() : value);
-    } else if (key.endsWith('_lte')) {
-      const fieldName = key.slice(0, -4);
-      conditions.push(`"${parseSqlIdentifier(fieldName, 'field name')}" <= $${paramIndex++}`);
-      args.push(value instanceof Date ? value.toISOString() : value);
-    } else if (value === null) {
-      conditions.push(`"${parseSqlIdentifier(key, 'field name')}" IS NULL`);
-    } else {
-      conditions.push(`"${parseSqlIdentifier(key, 'field name')}" = $${paramIndex++}`);
-      args.push(value instanceof Date ? value.toISOString() : value);
-    }
-  });
-
-  return {
-    sql: conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '',
-    args,
-  };
 }
 
 /**
