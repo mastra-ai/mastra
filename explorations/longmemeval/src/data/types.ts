@@ -20,6 +20,7 @@ export interface LongMemEvalQuestion {
   question: string;
   improved_question?: string; // Clarified version for vague/ambiguous questions
   improved_answer?: string; // Updated answer for the clarified question (if different)
+  improvement_note?: string; // Notes about why this question failed (for tracking investigated failures)
   answer: string;
   question_date: string;
   haystack_session_ids: string[];
@@ -38,6 +39,8 @@ export interface EvaluationResult {
   improved_question?: string;
   improved_hypothesis?: string;
   improved_is_correct?: boolean;
+  // Track if this question has any improvement info (for filtering uninvestigated failures)
+  has_improvement_info?: boolean;
 }
 
 export type DatasetType = 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';

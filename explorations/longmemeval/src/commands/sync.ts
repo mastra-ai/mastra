@@ -68,10 +68,12 @@ export class SyncCommand {
       // Check if there are updates to sync
       const hasImprovedQuestion = sourceQuestion.improved_question !== undefined;
       const hasImprovedAnswer = sourceQuestion.improved_answer !== undefined;
+      const hasImprovementNote = sourceQuestion.improvement_note !== undefined;
 
       const needsUpdate =
         meta.improvedQuestion !== sourceQuestion.improved_question ||
-        meta.improvedAnswer !== sourceQuestion.improved_answer;
+        meta.improvedAnswer !== sourceQuestion.improved_answer ||
+        meta.improvementNote !== sourceQuestion.improvement_note;
 
       if (!needsUpdate) {
         skipped++;
@@ -91,15 +93,22 @@ export class SyncCommand {
         delete meta.improvedAnswer;
       }
 
+      if (hasImprovementNote) {
+        meta.improvementNote = sourceQuestion.improvement_note;
+      } else {
+        delete meta.improvementNote;
+      }
+
       // Write updated meta.json
       await writeFile(metaPath, JSON.stringify(meta, null, 2));
 
       // Log the update
-      if (hasImprovedQuestion || hasImprovedAnswer) {
+      if (hasImprovedQuestion || hasImprovedAnswer || hasImprovementNote) {
         console.log(
           chalk.green(`✓ ${questionId}`),
           hasImprovedQuestion ? chalk.cyan('(improved_question)') : '',
           hasImprovedAnswer ? chalk.magenta('(improved_answer)') : '',
+          hasImprovementNote ? chalk.yellow('(improvement_note)') : '',
         );
       } else {
         console.log(chalk.gray(`○ ${questionId} (cleared improved fields)`));

@@ -37,6 +37,7 @@ interface PreparedQuestionMeta {
   question: string;
   improvedQuestion?: string; // Clarified version for vague/ambiguous questions
   improvedAnswer?: string; // Updated answer for the clarified question (if different)
+  improvementNote?: string; // Notes about why this question failed (for tracking investigated failures)
   answer: string;
   evidenceSessionIds?: string[];
   questionDate?: string;
@@ -334,6 +335,9 @@ Active evaluations:`;
     // Display results
     this.displayMetrics(metrics, options);
 
+    // Display uninvestigated failures
+    this.displayUninvestigatedFailures(results);
+
     return metrics;
   }
 
@@ -438,6 +442,7 @@ Be specific rather than generic when the user has expressed clear preferences in
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
       model: modelProvider,
+      // model: 'cerebras/zai-glm-4.6',
       instructions: agentInstructions,
       memory,
       // For OM, use processors instead of memory
@@ -586,6 +591,7 @@ Be specific rather than generic when the user has expressed clear preferences in
       improved_question: improvedQuestion,
       improved_hypothesis: improvedHypothesis,
       improved_is_correct: improvedIsCorrect,
+      has_improvement_info: !!(meta.improvedQuestion || meta.improvedAnswer || meta.improvementNote),
     };
   }
 
@@ -838,5 +844,43 @@ Results saved to: ${runDir}`),
         chalk.gray(`(${metrics.improved_total} questions clarified)`),
       );
     }
+  }
+
+  private displayUninvestigatedFailures(results: EvaluationResult[]): void {
+    // Find failures that have no improvement info (not yet investigated)
+    const uninvestigatedFailures = results.filter(
+      r => r.is_correct === false && !r.has_improvement_info,
+    );
+
+    if (uninvestigatedFailures.length === 0) {
+      return;
+    }
+
+    console.log(
+      chalk.yellow(`
+🔍 Failures for Investigation (${uninvestigatedFailures.length})
+`),
+    );
+    console.log(chalk.gray('These questions failed and have no improved_question, improved_answer, or improvement_note:\n'));
+
+    // Group by question type for easier review
+    const byType = new Map<string, string[]>();
+    for (const result of uninvestigatedFailures) {
+      const type = result.question_type || 'unknown';
+      if (!byType.has(type)) {
+        byType.set(type, []);
+      }
+      byType.get(type)!.push(result.question_id);
+    }
+
+    // Display grouped by type
+    for (const [type, questionIds] of Array.from(byType.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+      console.log(chalk.cyan(`  ${type}:`));
+      for (const id of questionIds) {
+        console.log(chalk.gray(`    - ${id}`));
+      }
+    }
+
+    console.log();
   }
 }

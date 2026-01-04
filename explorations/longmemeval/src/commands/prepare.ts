@@ -897,6 +897,7 @@ export class PrepareCommand {
       question: question.question,
       improvedQuestion: question.improved_question, // Clarified version for vague/ambiguous questions
       improvedAnswer: question.improved_answer, // Expected answer for improved question (if different)
+      improvementNote: question.improvement_note, // Notes about why this question failed (for tracking)
       answer: question.answer,
       questionDate: question.question_date,
       resourceId,
