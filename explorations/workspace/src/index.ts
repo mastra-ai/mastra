@@ -5,7 +5,11 @@
  * Provides filesystem and executor capabilities at agent and thread levels.
  */
 
-// Filesystem types
+// =============================================================================
+// Filesystem
+// =============================================================================
+
+// Types
 export type {
   // Core types
   FileContent,
@@ -35,7 +39,7 @@ export type {
   S3FSProviderConfig,
 } from './filesystem/types';
 
-// Filesystem errors
+// Errors
 export {
   FilesystemError,
   FileNotFoundError,
@@ -47,7 +51,15 @@ export {
   PermissionError,
 } from './filesystem/types';
 
-// Executor types
+// Providers
+export { LocalFilesystem, createLocalFilesystem } from './filesystem/local';
+export { MemoryFilesystem, createMemoryFilesystem } from './filesystem/memory';
+
+// =============================================================================
+// Executor
+// =============================================================================
+
+// Types
 export type {
   // Core types
   Runtime,
@@ -73,7 +85,7 @@ export type {
   ComputeSDKExecutorConfig,
 } from './executor/types';
 
-// Executor errors
+// Errors
 export {
   ExecutorError,
   ExecutionError,
@@ -82,7 +94,14 @@ export {
   UnsupportedRuntimeError,
 } from './executor/types';
 
-// Workspace types
+// Providers
+export { LocalExecutor, createLocalExecutor } from './executor/local';
+
+// =============================================================================
+// Workspace
+// =============================================================================
+
+// Types
 export type {
   // Core types
   WorkspaceScope,
@@ -110,7 +129,7 @@ export type {
   HybridWorkspaceConfig,
 } from './workspace/types';
 
-// Workspace errors
+// Errors
 export {
   WorkspaceError,
   WorkspaceNotFoundError,
@@ -119,3 +138,11 @@ export {
   ExecutorNotAvailableError,
   WorkspaceLimitError,
 } from './workspace/types';
+
+// Factory functions
+export {
+  BaseWorkspace,
+  createWorkspace,
+  createLocalWorkspace,
+  createMemoryWorkspace,
+} from './workspace/workspace';
