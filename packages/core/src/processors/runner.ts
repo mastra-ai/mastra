@@ -781,22 +781,10 @@ export class ProcessorRunner {
       const check = messageList.makeMessageSourceChecker();
 
       // Handle workflow as processor with inputStep phase
+      // Note: No wrapper span is created here - processor workflows have their own
+      // internal tracing marked as internal via tracingPolicy. This avoids creating
+      // spans for processors that don't implement processInputStep.
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSpan = tracingContext?.currentSpan;
-        const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-        const processorSpan = parentSpan?.createChildSpan({
-          type: SpanType.PROCESSOR_RUN,
-          name: `input step processor workflow: ${processorOrWorkflow.id}`,
-          entityType: EntityType.INPUT_PROCESSOR,
-          entityId: processorOrWorkflow.id,
-          entityName: processorOrWorkflow.name,
-          attributes: {
-            processorType: 'input',
-            processorIndex: index,
-          },
-          input: { messages: processableMessages, stepNumber },
-        });
-
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
           const result = await this.executeWorkflowAsProcessor(
@@ -814,13 +802,10 @@ export class ProcessorRunner {
           );
 
           Object.assign(stepInput, result);
-
-          processorSpan?.end({ output: messageList.get.all.db() });
         } catch (error) {
           if (error instanceof TripWire) {
             throw error;
           }
-          processorSpan?.error({ error: error as Error, endSpan: true });
           throw error;
         }
         continue;
@@ -1008,22 +993,10 @@ export class ProcessorRunner {
       const check = messageList.makeMessageSourceChecker();
 
       // Handle workflow as processor with outputStep phase
+      // Note: No wrapper span is created here - processor workflows have their own
+      // internal tracing marked as internal via tracingPolicy. This avoids creating
+      // spans for processors that don't implement processOutputStep.
       if (isProcessorWorkflow(processorOrWorkflow)) {
-        const currentSpan = tracingContext?.currentSpan;
-        const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
-        const processorSpan = parentSpan?.createChildSpan({
-          type: SpanType.PROCESSOR_RUN,
-          name: `output step processor workflow: ${processorOrWorkflow.id}`,
-          entityType: EntityType.OUTPUT_PROCESSOR,
-          entityId: processorOrWorkflow.id,
-          entityName: processorOrWorkflow.name,
-          attributes: {
-            processorType: 'output',
-            processorIndex: index,
-          },
-          input: { messages: processableMessages, stepNumber, finishReason, toolCalls, text },
-        });
-
         try {
           const currentSystemMessages = messageList.getAllSystemMessages();
           await this.executeWorkflowAsProcessor(
@@ -1043,13 +1016,10 @@ export class ProcessorRunner {
             tracingContext,
             requestContext,
           );
-
-          processorSpan?.end({ output: messageList.get.all.db() });
         } catch (error) {
           if (error instanceof TripWire) {
             throw error;
           }
-          processorSpan?.error({ error: error as Error, endSpan: true });
           throw error;
         }
         continue;

@@ -392,16 +392,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       },
     });
 
-    console.log('workflow');
-    console.log(workflow.id);
-
     for (const processorOrWorkflow of validProcessors) {
       // Convert processor to step, or use workflow directly (nested workflows are allowed)
       const step = isProcessorWorkflow(processorOrWorkflow)
         ? processorOrWorkflow
         : createStep(processorOrWorkflow as Exclude<T, ProcessorWorkflow>);
 
-      console.log(`adding step: ${step.id}`);
       workflow = workflow.then(step);
     }
 
