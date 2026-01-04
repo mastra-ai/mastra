@@ -1,10 +1,13 @@
 /**
  * Network Validation Module
  *
- * Adds Ralph Wiggum-style programmatic validation to the Agent Network loop.
+ * Adds programmatic validation to the Agent Network loop.
  * This allows the network to verify task completion through external checks
- * (tests pass, build succeeds, etc.) rather than relying solely on LLM
- * self-assessment.
+ * rather than relying solely on LLM self-assessment.
+ *
+ * The core primitive is the ValidationCheck interface - users can implement
+ * any validation logic they need. Helper functions are provided for common
+ * patterns but are not required.
  */
 
 import { z } from 'zod';
@@ -15,32 +18,51 @@ import { createTool } from '../../tools';
 const execAsync = promisify(exec);
 
 // ============================================================================
-// Types
+// Core Types
 // ============================================================================
 
 /**
- * Result of a single validation check
+ * Result of a single validation check.
+ * This is what your check function should return.
  */
 export interface ValidationResult {
   /** Whether the check passed */
   success: boolean;
   /** Human-readable message describing the result */
   message: string;
-  /** Optional structured details about the result */
+  /** Optional structured details (will be shown to LLM on failure) */
   details?: Record<string, unknown>;
-  /** How long the check took in ms */
+  /** How long the check took in ms (automatically added if not provided) */
   duration?: number;
 }
 
 /**
- * A validation check that can be run to verify task completion
+ * A validation check that verifies some aspect of task completion.
+ *
+ * Users can implement this interface directly or use helper functions
+ * like `createCheck()` or `createCommandCheck()`.
+ *
+ * @example Direct implementation
+ * ```typescript
+ * const myCheck: ValidationCheck = {
+ *   id: 'api-health',
+ *   name: 'API Health Check',
+ *   check: async () => {
+ *     const res = await fetch('http://localhost:3000/health');
+ *     return {
+ *       success: res.ok,
+ *       message: res.ok ? 'API is healthy' : `API returned ${res.status}`,
+ *     };
+ *   },
+ * };
+ * ```
  */
 export interface ValidationCheck {
   /** Unique identifier for this check */
   id: string;
-  /** Human-readable name */
+  /** Human-readable name (shown in logs/UI) */
   name: string;
-  /** Function that performs the validation */
+  /** Async function that performs the validation */
   check: () => Promise<ValidationResult>;
 }
 
@@ -49,7 +71,8 @@ export interface ValidationCheck {
  */
 export interface NetworkValidationConfig {
   /**
-   * Array of validation checks to run
+   * Array of validation checks to run.
+   * Each check should implement the ValidationCheck interface.
    */
   checks: ValidationCheck[];
 
@@ -238,30 +261,147 @@ export function formatValidationFeedback(result: ValidationRunResult): string {
 }
 
 // ============================================================================
-// Validation Check Factories
+// Check Creators - Composable primitives for building validation checks
 // ============================================================================
 
 /**
- * Creates a check that verifies tests pass
+ * Options for createCheck
  */
-export function testsPass(
-  command = 'npm test',
-  options?: { timeout?: number; cwd?: string; name?: string },
+export interface CreateCheckOptions {
+  /** Unique identifier for this check */
+  id: string;
+  /** Human-readable name (shown in logs/feedback) */
+  name: string;
+}
+
+/**
+ * Creates a validation check from an async function.
+ * This is the primary way to create custom validation logic.
+ *
+ * @example
+ * ```typescript
+ * const apiHealthCheck = createCheck({
+ *   id: 'api-health',
+ *   name: 'API Health Check',
+ * }, async () => {
+ *   const res = await fetch('http://localhost:3000/health');
+ *   return {
+ *     success: res.ok,
+ *     message: res.ok ? 'API is healthy' : `API returned ${res.status}`,
+ *   };
+ * });
+ *
+ * const dbConnectionCheck = createCheck({
+ *   id: 'db-connection',
+ *   name: 'Database Connection',
+ * }, async () => {
+ *   try {
+ *     await db.query('SELECT 1');
+ *     return { success: true, message: 'Database connected' };
+ *   } catch (e) {
+ *     return { success: false, message: `Database error: ${e.message}` };
+ *   }
+ * });
+ * ```
+ */
+export function createCheck(
+  options: CreateCheckOptions,
+  fn: () => Promise<{ success: boolean; message: string; details?: Record<string, unknown> }>,
 ): ValidationCheck {
   return {
-    id: 'tests-pass',
-    name: options?.name ?? 'Tests Pass',
+    id: options.id,
+    name: options.name,
     async check() {
       const start = Date.now();
       try {
-        const { stdout, stderr } = await execAsync(command, {
-          timeout: options?.timeout ?? 300000,
-          cwd: options?.cwd,
+        const result = await fn();
+        return { ...result, duration: Date.now() - start };
+      } catch (error: any) {
+        return {
+          success: false,
+          message: `Check threw an error: ${error.message}`,
+          duration: Date.now() - start,
+        };
+      }
+    },
+  };
+}
+
+/**
+ * Options for createCommandCheck
+ */
+export interface CreateCommandCheckOptions {
+  /** Unique identifier for this check */
+  id: string;
+  /** Human-readable name (shown in logs/feedback) */
+  name: string;
+  /** The shell command to run */
+  command: string;
+  /** Working directory (optional) */
+  cwd?: string;
+  /** Timeout in milliseconds (default: 60000) */
+  timeout?: number;
+  /** Custom success message (default: "Command succeeded") */
+  successMessage?: string;
+  /** Custom failure message prefix (default: "Command failed") */
+  failureMessage?: string;
+}
+
+/**
+ * Creates a validation check that runs a shell command.
+ * The check passes if the command exits with code 0.
+ *
+ * @example
+ * ```typescript
+ * // Run tests
+ * const testsCheck = createCommandCheck({
+ *   id: 'tests',
+ *   name: 'Unit Tests',
+ *   command: 'npm test',
+ *   timeout: 300000,
+ * });
+ *
+ * // Run build
+ * const buildCheck = createCommandCheck({
+ *   id: 'build',
+ *   name: 'Build',
+ *   command: 'npm run build',
+ *   successMessage: 'Build completed successfully',
+ * });
+ *
+ * // Run custom script
+ * const migrationCheck = createCommandCheck({
+ *   id: 'db-migrate',
+ *   name: 'Database Migrations',
+ *   command: 'npm run db:migrate:status',
+ *   cwd: './packages/api',
+ * });
+ *
+ * // Run with custom project commands
+ * const e2eCheck = createCommandCheck({
+ *   id: 'e2e',
+ *   name: 'E2E Tests',
+ *   command: 'pnpm test:e2e',
+ *   timeout: 600000,
+ * });
+ * ```
+ */
+export function createCommandCheck(options: CreateCommandCheckOptions): ValidationCheck {
+  return {
+    id: options.id,
+    name: options.name,
+    async check() {
+      const start = Date.now();
+      try {
+        const { stdout, stderr } = await execAsync(options.command, {
+          timeout: options.timeout ?? 60000,
+          cwd: options.cwd,
         });
         return {
           success: true,
-          message: 'All tests passed',
+          message: options.successMessage ?? 'Command succeeded',
           details: {
+            command: options.command,
             stdout: stdout.slice(-2000),
             stderr: stderr.slice(-500),
           },
@@ -270,128 +410,12 @@ export function testsPass(
       } catch (error: any) {
         return {
           success: false,
-          message: `Tests failed: ${error.message?.slice(0, 200)}`,
+          message: `${options.failureMessage ?? 'Command failed'}: ${error.message?.slice(0, 200)}`,
           details: {
+            command: options.command,
             stdout: error.stdout?.slice(-2000),
             stderr: error.stderr?.slice(-2000),
             exitCode: error.code,
-          },
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates a check that verifies the build succeeds
- */
-export function buildSucceeds(
-  command = 'npm run build',
-  options?: { timeout?: number; cwd?: string; name?: string },
-): ValidationCheck {
-  return {
-    id: 'build-succeeds',
-    name: options?.name ?? 'Build Succeeds',
-    async check() {
-      const start = Date.now();
-      try {
-        const { stdout, stderr } = await execAsync(command, {
-          timeout: options?.timeout ?? 600000,
-          cwd: options?.cwd,
-        });
-        return {
-          success: true,
-          message: 'Build completed successfully',
-          details: {
-            stdout: stdout.slice(-1000),
-            stderr: stderr.slice(-500),
-          },
-          duration: Date.now() - start,
-        };
-      } catch (error: any) {
-        return {
-          success: false,
-          message: `Build failed: ${error.message?.slice(0, 200)}`,
-          details: {
-            stdout: error.stdout?.slice(-2000),
-            stderr: error.stderr?.slice(-2000),
-          },
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates a check that verifies lint passes
- */
-export function lintPasses(
-  command = 'npm run lint',
-  options?: { timeout?: number; cwd?: string; name?: string },
-): ValidationCheck {
-  return {
-    id: 'lint-passes',
-    name: options?.name ?? 'Lint Passes',
-    async check() {
-      const start = Date.now();
-      try {
-        const { stdout, stderr } = await execAsync(command, {
-          timeout: options?.timeout ?? 120000,
-          cwd: options?.cwd,
-        });
-        return {
-          success: true,
-          message: 'No lint errors',
-          details: { stdout: stdout.slice(-1000) },
-          duration: Date.now() - start,
-        };
-      } catch (error: any) {
-        return {
-          success: false,
-          message: `Lint errors found`,
-          details: {
-            stdout: error.stdout?.slice(-2000),
-            stderr: error.stderr?.slice(-1000),
-          },
-          duration: Date.now() - start,
-        };
-      }
-    },
-  };
-}
-
-/**
- * Creates a check that verifies TypeScript compiles
- */
-export function typeChecks(
-  command = 'npx tsc --noEmit',
-  options?: { timeout?: number; cwd?: string; name?: string },
-): ValidationCheck {
-  return {
-    id: 'type-checks',
-    name: options?.name ?? 'TypeScript Compiles',
-    async check() {
-      const start = Date.now();
-      try {
-        const { stdout, stderr } = await execAsync(command, {
-          timeout: options?.timeout ?? 300000,
-          cwd: options?.cwd,
-        });
-        return {
-          success: true,
-          message: 'No type errors',
-          details: { stdout: stdout.slice(-1000) },
-          duration: Date.now() - start,
-        };
-      } catch (error: any) {
-        return {
-          success: false,
-          message: `Type errors found`,
-          details: {
-            stdout: error.stdout?.slice(-2000),
-            stderr: error.stderr?.slice(-1000),
           },
           duration: Date.now() - start,
         };
