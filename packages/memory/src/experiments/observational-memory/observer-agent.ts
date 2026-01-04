@@ -126,6 +126,7 @@ CONVERSATION CONTEXT:
 - Relevant code snippets
 - Any specifically formatted text or ascii that would need to be reproduced or referenced in later interactions (preserve these verbatim in memory)
 - Any blocks of any text which the user and assistant are iteratively collaborating back and forth on should be preserved verbatim
+- When who/what/where/when is mentioned, note that in the observation. Example: if the user received went on a trip with someone, observe who that someone was, where the trip was, when it happened, and what happened, not just that the user went on the trip.
 
 ACTIONABLE INSIGHTS:
 - What worked well in explanations
