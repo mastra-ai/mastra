@@ -10,7 +10,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../pro
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream/base/schema';
 import type { OutputWriter } from '../workflows/types';
-import type { MessageListInput, Message } from './message-list';
+import type { MessageListInput, MastraDBMessage } from './message-list';
 import type { AgentMemoryOption, ToolsetsInput, ToolsInput, StructuredOutputOptions, AgentMethodType } from './types';
 
 // ============================================================================
@@ -35,7 +35,7 @@ export interface NetworkCompletionContext {
     type: 'agent' | 'workflow' | 'tool';
   };
   /** All messages in the conversation */
-  messages: Message[];
+  messages: MastraDBMessage[];
   /** Thread ID (if using memory) */
   threadId?: string;
   /** Request context */

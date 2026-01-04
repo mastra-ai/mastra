@@ -330,9 +330,10 @@ export async function createNetworkLoop({
         // Check for custom completion evaluator
         if (completion?.evaluate) {
           const memory = await agent.getMemory({ requestContext });
-          const threadMessages = memory
-            ? await memory.getMessages({ threadId: initData?.threadId || runId })
-            : [];
+          const recallResult = memory
+            ? await memory.recall({ threadId: initData?.threadId || runId })
+            : { messages: [] };
+          const threadMessages = recallResult.messages;
 
           const customResult = await completion.evaluate({
             task: inputData.task,
@@ -1378,9 +1379,9 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
 
       // Build validation context with all relevant state
       const memory = await routingAgent.getMemory({ requestContext });
-      const threadMessages = memory
-        ? await memory.getMessages({ threadId: inputData.threadId || runId })
-        : [];
+      const recallResult = memory
+        ? await memory.recall({ threadId: inputData.threadId || runId })
+        : { messages: [] };
 
       const validationContext: ValidationContext = {
         // Iteration state
@@ -1388,7 +1389,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         maxIterations,
 
         // Messages & conversation
-        messages: threadMessages,
+        messages: recallResult.messages,
         originalTask: inputData.task,
 
         // Routing agent state
@@ -1407,21 +1408,8 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         threadId: inputData.threadId,
         resourceId: inputData.threadResourceId,
 
-        // Request context (sanitized)
-        requestContext: {
-          customContext: requestContext?.customContext,
-          serverRequest: requestContext?.serverRequest
-            ? {
-                url: requestContext.serverRequest.url,
-                method: requestContext.serverRequest.method,
-                headers: Object.fromEntries(
-                  Array.from(requestContext.serverRequest.headers?.entries?.() || []).filter(
-                    ([key]) => !key.toLowerCase().includes('auth') && !key.toLowerCase().includes('cookie'),
-                  ),
-                ),
-              }
-            : undefined,
-        },
+        // Custom context from request
+        customContext: requestContext?.toJSON?.() as Record<string, unknown> | undefined,
       };
 
       // Run validation checks

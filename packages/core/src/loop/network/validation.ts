@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createTool } from '../../tools';
-import type { Message } from '../../agent';
+import type { MastraDBMessage } from '../../agent';
 
 const execAsync = promisify(exec);
 
@@ -35,7 +35,7 @@ export interface ValidationContext {
 
   // ---- Messages & Conversation ----
   /** All messages in the conversation thread */
-  messages: Message[];
+  messages: MastraDBMessage[];
   /** The original task/prompt that started this network run */
   originalTask: string;
 
@@ -66,19 +66,10 @@ export interface ValidationContext {
 
   // ---- Request Context ----
   /**
-   * The request context containing runtime configuration.
-   * Includes custom context, server request, and telemetry.
+   * Custom context from the request.
+   * Access via requestContext.get() for type-safe retrieval.
    */
-  requestContext: {
-    /** Custom user-provided context */
-    customContext?: Record<string, unknown>;
-    /** Server request info (if available) */
-    serverRequest?: {
-      url?: string;
-      method?: string;
-      headers?: Record<string, string>;
-    };
-  };
+  customContext?: Record<string, unknown>;
 }
 
 /**
