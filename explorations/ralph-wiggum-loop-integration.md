@@ -176,12 +176,14 @@ interface CompletionConfig {
 
 ## How Completion Works
 
-| Config | Completion Determined By |
-|--------|-------------------------|
-| No `completion.scorers` | Built-in LLM evaluation (default) |
-| `completion.scorers: [...]` | Only those scorers (LLM skipped) |
+**Everything is a scorer.** Even the default LLM completion is a scorer under the hood.
 
-When you provide scorers, they **completely replace** the default LLM completion check.
+| Config | Scorers Used |
+|--------|-------------|
+| No `completion.scorers` | Default LLM scorer (asks "is this complete?") |
+| `completion.scorers: [...]` | Only those scorers |
+
+When you provide scorers, they **replace** the default LLM scorer.
 
 ---
 
@@ -244,25 +246,17 @@ await agent.network('Fix the bug', {
 │                      ↓                                           │
 │   2. Execute selected primitive                                  │
 │                      ↓                                           │
-│   3. LLM Completion Evaluation (default)                        │
-│      "Is this task complete?"                                    │
+│   3. Run Completion Scorers                                      │
+│      (default LLM scorer if none configured)                     │
 │                      ↓                                           │
 │              ┌───────┴───────┐                                   │
-│          LLM: No         LLM: Yes                                │
+│          Score=0         Score=1                                 │
+│          (not done)      (complete)                              │
 │              │               │                                   │
-│              │               ▼                                   │
-│              │    4. Run Completion Scorers                      │
-│              │       (if configured)                             │
-│              │               │                                   │
-│              │       ┌───────┴───────┐                          │
-│              │   Score=0        Score=1                          │
-│              │   (failed)       (passed)                         │
-│              │       │               │                           │
-│              │       ▼               ▼                           │
-│              │   5. Inject      6. Complete!                     │
-│              │   feedback          ✅                            │
-│              │       │                                           │
-│              └───────┴──────► Loop back to step 1               │
+│              ▼               ▼                                   │
+│   4. Inject feedback    5. Complete! ✅                          │
+│              │                                                   │
+│              └──────────► Loop back to step 1                   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```

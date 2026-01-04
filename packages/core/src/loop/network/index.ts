@@ -14,7 +14,7 @@ import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
 import type { CompletionConfig, CompletionContext } from './validation';
-import { runValidation, formatCompletionFeedback } from './validation';
+import { runValidation, formatCompletionFeedback, createDefaultCompletionScorer } from './validation';
 
 async function getRoutingAgent({
   requestContext,
@@ -300,8 +300,6 @@ export async function createNetworkLoop({
 
       const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
-      let completionResult;
-
       // Increment iteration counter. Must use nullish coalescing (??) not ternary (?)
       // to avoid treating 0 as falsy. Initial value is -1, so first iteration becomes 0.
       const iterationCount = (inputData.iteration ?? -1) + 1;
@@ -322,174 +320,8 @@ export async function createNetworkLoop({
         from: ChunkFrom.NETWORK,
       });
 
-      // Check if scorers are configured - they replace the default LLM completion check
-      const hasScorers = completion?.scorers && completion.scorers.length > 0;
-
-      if (inputData.primitiveType !== 'none' && inputData?.result && !hasScorers) {
-        // Default LLM-based completion evaluation (only when no scorers configured)
-        const completionPrompt = `
-                          The ${inputData.primitiveType} ${inputData.primitiveId} has contributed to the task.
-                          This is the result from the agent: ${typeof inputData.result === 'object' ? JSON.stringify(inputData.result) : inputData.result}
-
-                          You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
-                          Original task: ${inputData.task}.
-
-                          When generating the final result, make sure to take into account previous decision making history and results of all the previous iterations from conversation history. These are messages whose text is a JSON structure with "isNetwork" true.
-
-                          You must return this JSON shape.
-
-                          {
-                              "isComplete": boolean,
-                              "completionReason": string,
-                              "finalResult": string
-                          }
-                      `;
-
-        const streamOptions = {
-          structuredOutput: {
-            schema: completionSchema,
-          },
-          requestContext: requestContext,
-          maxSteps: 1,
-          memory: {
-            thread: initData?.threadId ?? runId,
-            resource: initData?.threadResourceId ?? networkName,
-            options: {
-              readOnly: true,
-              workingMemory: {
-                enabled: false,
-              },
-            },
-          },
-          ...routingAgentOptions,
-        } satisfies AgentExecutionOptions<any>;
-
-        // Try streaming with structured output
-        let completionStream = await routingAgent.stream(completionPrompt, streamOptions);
-
-        let currentText = '';
-        let currentTextIdx = 0;
-        await writer.write({
-          type: 'routing-agent-text-start',
-          payload: {
-            runId: stepId,
-          },
-          from: ChunkFrom.NETWORK,
-          runId,
-        });
-
-        // Stream and check for errors
-        for await (const chunk of completionStream.objectStream) {
-          if (chunk?.finalResult) {
-            currentText = chunk.finalResult;
-          }
-
-          const currentSlice = currentText.slice(currentTextIdx);
-          if (chunk?.isComplete && currentSlice.length) {
-            await writer.write({
-              type: 'routing-agent-text-delta',
-              payload: {
-                runId: stepId,
-                text: currentSlice,
-              },
-              from: ChunkFrom.NETWORK,
-              runId,
-            });
-            currentTextIdx = currentText.length;
-          }
-        }
-
-        // If error detected, retry with JSON prompt injection fallback
-        // TODO ujpdate tryStreamWithJsonFallback to not await the result so we can re-use it here
-        if (completionStream.error) {
-          console.warn('Error detected in structured output stream. Attempting fallback with JSON prompt injection.');
-
-          // Reset text tracking for fallback
-          currentText = '';
-          currentTextIdx = 0;
-
-          // Create fallback stream with jsonPromptInjection
-          completionStream = await routingAgent.stream(completionPrompt, {
-            ...streamOptions,
-            structuredOutput: {
-              ...streamOptions.structuredOutput,
-              jsonPromptInjection: true,
-            },
-          });
-
-          // Stream from fallback
-          for await (const chunk of completionStream.objectStream) {
-            if (chunk?.finalResult) {
-              currentText = chunk.finalResult;
-            }
-
-            const currentSlice = currentText.slice(currentTextIdx);
-            if (chunk?.isComplete && currentSlice.length) {
-              await writer.write({
-                type: 'routing-agent-text-delta',
-                payload: {
-                  runId: stepId,
-                  text: currentSlice,
-                },
-                from: ChunkFrom.NETWORK,
-                runId,
-              });
-              currentTextIdx = currentText.length;
-            }
-          }
-        }
-
-        completionResult = await completionStream.getFullOutput();
-
-        if (completionResult?.object?.isComplete) {
-          const endPayload = {
-            task: inputData.task,
-            primitiveId: '',
-            primitiveType: 'none' as const,
-            prompt: '',
-            result: completionResult.object.finalResult,
-            isComplete: true,
-            selectionReason: completionResult.object.completionReason || '',
-            iteration: iterationCount,
-            runId: stepId,
-          };
-
-          await writer.write({
-            type: 'routing-agent-end',
-            payload: {
-              ...endPayload,
-              usage: await completionStream.usage,
-            },
-            from: ChunkFrom.NETWORK,
-            runId,
-          });
-
-          const memory = await agent.getMemory({ requestContext: requestContext });
-          await memory?.saveMessages({
-            messages: [
-              {
-                id: generateId(),
-                type: 'text',
-                role: 'assistant',
-                content: {
-                  parts: [
-                    {
-                      type: 'text',
-                      text: completionResult?.object?.finalResult || '',
-                    },
-                  ],
-                  format: 2,
-                },
-                createdAt: new Date(),
-                threadId: initData?.threadId || runId,
-                resourceId: initData?.threadResourceId || networkName,
-              },
-            ] as MastraDBMessage[],
-          });
-
-          return endPayload;
-        }
-      }
+      // Completion is now always handled by scorers in the validation step
+      // The routing step only handles primitive selection
 
       const prompt: MessageListInput = [
         {
@@ -499,7 +331,6 @@ export async function createNetworkLoop({
 
                     The user has given you the following task:
                     ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult?.object?.finalResult}` : ''}
 
                     # Rules:
 
@@ -1292,20 +1123,13 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       validationFeedback: z.string().optional(),
     }),
     execute: async ({ inputData, writer }) => {
-      const scorers = validation?.scorers || [];
-      
-      // If no scorers configured, pass through (LLM decision is final)
-      if (scorers.length === 0) {
-        return {
-          ...inputData,
-          validationPassed: undefined,
-          validationFeedback: undefined,
-        };
-      }
-      
-      // Scorers are configured - they determine completion (not the LLM)
+      // Use configured scorers, or default LLM scorer if none provided
+      const configuredScorers = validation?.scorers || [];
+      const scorers = configuredScorers.length > 0
+        ? configuredScorers
+        : [createDefaultCompletionScorer(routingAgent)];
 
-      // Build completion context with relevant state
+      // Build completion context
       const memory = await routingAgent.getMemory({ requestContext });
       const recallResult = memory
         ? await memory.recall({ threadId: inputData.threadId || runId })
@@ -1341,7 +1165,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         runId,
       });
 
-      const completionResult = await runValidation(validation!, completionContext);
+      const completionResult = await runValidation({ ...validation, scorers }, completionContext);
 
       await writer?.write({
         type: 'network-validation-end',

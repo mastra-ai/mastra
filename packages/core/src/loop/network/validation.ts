@@ -30,8 +30,8 @@ import { z } from 'zod';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createTool } from '../../tools';
-import type { MastraDBMessage } from '../../agent';
-import type { MastraScorer } from '../../evals/base';
+import type { MastraDBMessage, Agent } from '../../agent';
+import { createScorer, MastraScorer } from '../../evals/base';
 
 const execAsync = promisify(exec);
 
@@ -324,31 +324,52 @@ export const formatCheckFeedback = formatCompletionFeedback;
 export const formatValidationFeedback = formatCompletionFeedback;
 
 // ============================================================================
-// Default Completion Scorer
+// Default LLM Completion Scorer
 // ============================================================================
 
 /**
- * Creates an LLM-based completion scorer.
+ * Creates the default LLM completion scorer.
+ * This is what runs when no scorers are configured.
  * 
- * Use this when you want to include the default LLM completion check
- * alongside other scorers, or customize the LLM evaluation.
- * 
- * @example
- * ```typescript
- * import { createCompletionScorer } from '@mastra/core/loop';
- * import { openai } from '@ai-sdk/openai';
- * 
- * const llmScorer = createCompletionScorer({
- *   model: openai('gpt-4o-mini'),
- *   instructions: 'Only mark complete when all tests pass',
- * });
- * 
- * // Use with other scorers
- * completion: {
- *   scorers: [llmScorer, testsScorer],
- * }
- * ```
+ * @internal Used by the network loop
  */
+export function createDefaultCompletionScorer(agent: Agent): MastraScorer<any, any, any, any> {
+  return createScorer({
+    id: 'default-completion',
+    description: 'Default LLM completion check',
+  }).generateScore(async ({ run }) => {
+    const ctx = run.input as CompletionContext;
+    
+    const completionPrompt = `
+      The ${ctx.selectedPrimitive.type} ${ctx.selectedPrimitive.id} has contributed to the task.
+      This is the result: ${ctx.primitiveResult}
+
+      You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete.
+      Original task: ${ctx.originalTask}
+
+      Return 1 if the task is complete, 0 if not complete.
+    `;
+
+    try {
+      const result = await agent.generate(completionPrompt, {
+        maxSteps: 1,
+      });
+      
+      // Parse the response - look for indicators of completion
+      const text = result.text.toLowerCase();
+      const isComplete = text.includes('1') || 
+                         text.includes('complete') || 
+                         text.includes('done') ||
+                         text.includes('finished');
+      
+      return isComplete ? 1 : 0;
+    } catch {
+      return 0; // On error, assume not complete
+    }
+  });
+}
+
+// Re-export for users who want to create custom scorers
 export { createScorer } from '../../evals/base';
 
 // ============================================================================
