@@ -1,11 +1,13 @@
 /**
- * Network Completion Checks
+ * Network Completion Checks (Scorers)
  *
- * Provides a unified "check" concept for determining when a network task is complete.
- * Checks can be code-based (run tests, call APIs) or LLM-based (ask an LLM to evaluate).
+ * Completion checks are scorers that return 0 (failed) or 1 (passed).
+ * This unifies the concepts - checks ARE scorers with binary scores.
  *
- * The default behavior uses a built-in LLM check that asks "is this task complete?"
- * Users can add their own checks, mix code and LLM checks, or replace the default entirely.
+ * You can use:
+ * - `createCheck()` - simple API for code-based checks
+ * - `createLLMCheck()` - LLM-based evaluation
+ * - Any MastraScorer that returns 0 or 1
  */
 
 import { z } from 'zod';
@@ -13,6 +15,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createTool } from '../../tools';
 import type { MastraDBMessage } from '../../agent';
+import type { MastraScorer } from '../../evals/base';
 
 const execAsync = promisify(exec);
 
@@ -105,20 +108,40 @@ export type ValidationResult = CheckResult;
 export type ValidationCheck = Check;
 
 /**
+ * A completion scorer - either a Check or a MastraScorer.
+ * Scorers must return a score of 0 (failed) or 1 (passed).
+ */
+export type CompletionScorer = Check | MastraScorer<any, any, any, any>;
+
+/**
  * Configuration for network completion checks.
  */
 export interface CompletionConfig {
   /**
-   * Checks to run to determine if the task is complete.
-   * Can be code-based (createCheck) or LLM-based (createLLMCheck).
+   * Scorers to run to determine if the task is complete.
+   * Can be:
+   * - Code-based checks (createCheck)
+   * - LLM-based checks (createLLMCheck)
+   * - Any MastraScorer that returns 0 or 1
    *
-   * If not specified, uses the default LLM completion check (taskCompletionCheck).
+   * If not specified, uses the default LLM completion check.
+   *
+   * @example
+   * ```typescript
+   * completion: {
+   *   checks: [
+   *     testsCheck,                    // createCheck
+   *     qualityScorer,                 // MastraScorer
+   *     taskCompletionCheck(),         // default LLM check
+   *   ],
+   * }
+   * ```
    */
-  checks?: Check[];
+  checks?: CompletionScorer[];
 
   /**
    * How to combine check results:
-   * - 'all': All checks must pass (default)
+   * - 'all': All checks must pass (score = 1) (default)
    * - 'any': At least one check must pass
    */
   strategy?: 'all' | 'any';
@@ -167,13 +190,84 @@ export type ValidationRunResult = CheckRunResult;
 // ============================================================================
 
 /**
- * Runs all completion checks according to the configuration
+ * Type guard to check if a scorer is a Check (has .run method)
  */
-export async function runChecks(checks: Check[], context: CheckContext, options?: {
-  strategy?: 'all' | 'any';
-  parallel?: boolean;
-  timeout?: number;
-}): Promise<CheckRunResult> {
+function isCheck(scorer: CompletionScorer): scorer is Check {
+  return 'run' in scorer && typeof scorer.run === 'function';
+}
+
+/**
+ * Run a single scorer and return a CheckResult
+ */
+async function runScorer(
+  scorer: CompletionScorer,
+  context: CheckContext,
+): Promise<CheckResult & { checkId: string; checkName: string }> {
+  const start = Date.now();
+
+  if (isCheck(scorer)) {
+    // It's a Check - run directly
+    try {
+      const result = await scorer.run(context);
+      return {
+        ...result,
+        checkId: scorer.id,
+        checkName: scorer.name,
+        duration: result.duration ?? Date.now() - start,
+      };
+    } catch (error: any) {
+      return {
+        passed: false,
+        message: `Check ${scorer.name} threw an error: ${error.message}`,
+        checkId: scorer.id,
+        checkName: scorer.name,
+        duration: Date.now() - start,
+      };
+    }
+  } else {
+    // It's a MastraScorer - run and interpret score
+    try {
+      const scorerResult = await scorer.run({
+        output: context.primitiveResult,
+        input: context.originalTask,
+      });
+
+      // Score must be 0 or 1
+      const score = scorerResult.score;
+      const passed = score === 1;
+
+      return {
+        passed,
+        message: scorerResult.reason || (passed ? 'Scorer passed (score=1)' : `Scorer failed (score=${score})`),
+        checkId: scorer.id,
+        checkName: scorer.name ?? scorer.id,
+        duration: Date.now() - start,
+        details: { score, reason: scorerResult.reason },
+      };
+    } catch (error: any) {
+      return {
+        passed: false,
+        message: `Scorer ${scorer.name ?? scorer.id} threw an error: ${error.message}`,
+        checkId: scorer.id,
+        checkName: scorer.name ?? scorer.id,
+        duration: Date.now() - start,
+      };
+    }
+  }
+}
+
+/**
+ * Runs all completion scorers according to the configuration
+ */
+export async function runChecks(
+  scorers: CompletionScorer[],
+  context: CheckContext,
+  options?: {
+    strategy?: 'all' | 'any';
+    parallel?: boolean;
+    timeout?: number;
+  },
+): Promise<CheckRunResult> {
   const strategy = options?.strategy ?? 'all';
   const parallel = options?.parallel ?? true;
   const timeout = options?.timeout ?? 600000;
@@ -189,27 +283,14 @@ export async function runChecks(checks: Check[], context: CheckContext, options?
   });
 
   if (parallel) {
-    // Run all checks in parallel
-    const checkPromises = checks.map(async check => {
-      try {
-        const result = await check.run(context);
-        return { ...result, checkId: check.id, checkName: check.name };
-      } catch (error: any) {
-        return {
-          passed: false,
-          message: `Check ${check.name} threw an error: ${error.message}`,
-          checkId: check.id,
-          checkName: check.name,
-          duration: 0,
-        };
-      }
-    });
+    // Run all scorers in parallel
+    const scorerPromises = scorers.map(scorer => runScorer(scorer, context));
 
-    const raceResult = await Promise.race([Promise.all(checkPromises), timeoutPromise]);
+    const raceResult = await Promise.race([Promise.all(scorerPromises), timeoutPromise]);
 
     if (raceResult === 'timeout') {
       timedOut = true;
-      const settledResults = await Promise.allSettled(checkPromises);
+      const settledResults = await Promise.allSettled(scorerPromises);
       for (const settled of settledResults) {
         if (settled.status === 'fulfilled') {
           results.push(settled.value);
@@ -219,36 +300,31 @@ export async function runChecks(checks: Check[], context: CheckContext, options?
       results.push(...raceResult);
     }
   } else {
-    // Run checks sequentially with short-circuit logic
-    for (const check of checks) {
+    // Run scorers sequentially with short-circuit logic
+    for (const scorer of scorers) {
       if (Date.now() - startTime > timeout) {
         timedOut = true;
         break;
       }
 
-      try {
-        const result = await check.run(context);
-        results.push({ ...result, checkId: check.id, checkName: check.name });
+      const result = await runScorer(scorer, context);
+      results.push(result);
 
-        // Capture result from passing check
-        if (result.passed && result.result) {
-          finalResult = result.result;
-        }
+      // Capture result from passing check
+      if (result.passed && result.result) {
+        finalResult = result.result;
+      }
 
-        // Short-circuit for 'all' strategy if a check fails
-        if (strategy === 'all' && !result.passed) {
-          break;
-        }
-        // Short-circuit for 'any' strategy if a check passes
-        if (strategy === 'any' && result.passed) {
-          break;
-        }
-      } catch (error: any) {
-        results.push({
-          passed: false,
-          message: `Check ${check.name} threw an error: ${error.message}`,
-          checkId: check.id,
-          checkName: check.name,
+      // Short-circuit for 'all' strategy if a check fails
+      if (strategy === 'all' && !result.passed) {
+        break;
+      }
+      // Short-circuit for 'any' strategy if a check passes
+      if (strategy === 'any' && result.passed) {
+        break;
+      }
+    }
+  }
           duration: 0,
         });
         if (strategy === 'all') {
