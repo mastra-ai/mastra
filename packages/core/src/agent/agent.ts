@@ -3008,6 +3008,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       messages,
       threadId,
       resourceId,
+      validation: options?.validation,
     });
   }
 

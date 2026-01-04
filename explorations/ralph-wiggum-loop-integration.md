@@ -1,4 +1,6 @@
-# Ralph Wiggum Loop Integration Analysis for Mastra
+# Ralph Wiggum Loop Integration for Mastra
+
+> **Status: IMPLEMENTED** - See usage examples below
 
 ## What is the Ralph Wiggum Loop?
 
@@ -32,6 +34,171 @@ while :; do cat PROMPT.md | claude ; done
 - Architectural decisions requiring human reasoning
 - Security-sensitive code needing human review
 - Exploratory tasks requiring human curiosity
+
+---
+
+## ✅ Implementation: Validation for Agent Network
+
+The Ralph Wiggum pattern has been integrated into Mastra's Agent Network by adding **programmatic validation** to the existing routing and completion flow.
+
+### Quick Start
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { testsPass, buildSucceeds, lintPasses } from '@mastra/core/loop';
+
+const agent = new Agent({
+  id: 'code-migrator',
+  instructions: 'You help migrate code between frameworks.',
+  model: openai('gpt-4o'),
+  memory: new Memory(),
+  agents: {
+    coder: codingAgent,
+    tester: testingAgent,
+  },
+});
+
+// Run network with programmatic validation
+const result = await agent.network('Migrate all tests from Jest to Vitest', {
+  maxSteps: 30,
+  validation: {
+    // External checks to verify task completion
+    checks: [
+      testsPass('npm test'),
+      buildSucceeds('npm run build'),
+      lintPasses('npm run lint'),
+    ],
+    
+    // All checks must pass
+    strategy: 'all',
+    
+    // 'verify' = LLM says complete AND validation passes
+    // 'override' = Only validation matters
+    // 'assist' = Use validation for context only
+    mode: 'verify',
+    
+    // Optional callback after each validation run
+    onValidation: (result) => {
+      console.log(`Validation: ${result.passed ? '✅' : '❌'}`);
+      result.results.forEach(r => console.log(`  ${r.checkName}: ${r.message}`));
+    },
+  },
+});
+
+for await (const chunk of result.fullStream) {
+  if (chunk.type === 'network-validation-end') {
+    console.log(`Validation ${chunk.payload.passed ? 'passed' : 'failed'}`);
+  }
+}
+```
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 Agent Network + Validation                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   1. Routing Agent selects primitive (agent/workflow/tool)      │
+│                      ↓                                           │
+│   2. Execute selected primitive                                  │
+│                      ↓                                           │
+│   3. LLM Completion Assessment: "Is the task complete?"         │
+│                      ↓                                           │
+│              ┌───────┴───────┐                                   │
+│          LLM: No         LLM: Yes                                │
+│              │               │                                   │
+│              │               ▼                                   │
+│              │    4. Run Validation Checks                       │
+│              │       • npm test                                  │
+│              │       • npm run build                             │
+│              │       • npm run lint                              │
+│              │               │                                   │
+│              │       ┌───────┴───────┐                          │
+│              │   Validation      Validation                      │
+│              │   Failed          Passed                          │
+│              │       │               │                           │
+│              │       ▼               ▼                           │
+│              │   5. Inject      6. Complete!                     │
+│              │   feedback          ✅                            │
+│              │       │                                           │
+│              └───────┴──────► Loop back to step 1               │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Validation Check Factories
+
+```typescript
+import { 
+  testsPass,
+  buildSucceeds, 
+  lintPasses,
+  typeChecks,
+  commandSucceeds,
+  customCheck,
+  fileExists,
+  fileContains,
+} from '@mastra/core/loop';
+
+// Pre-built checks
+testsPass('npm test')
+buildSucceeds('npm run build')
+lintPasses('npm run lint')
+typeChecks('npx tsc --noEmit')
+
+// Custom command
+commandSucceeds('npm run e2e', { timeout: 300000, name: 'E2E Tests' })
+
+// Custom async function
+customCheck('api-health', 'API Health Check', async () => {
+  const response = await fetch('http://localhost:3000/health');
+  return {
+    success: response.ok,
+    message: response.ok ? 'API is healthy' : 'API is down',
+  };
+})
+
+// File checks
+fileExists('./dist/index.js')
+fileContains('./package.json', '"version"')
+```
+
+### Validation Tools (Alternative Approach)
+
+Instead of automatic validation, you can give the agent validation tools and let it decide when to validate:
+
+```typescript
+import { createValidationTools } from '@mastra/core/loop';
+
+const agent = new Agent({
+  instructions: `You help migrate code. 
+    IMPORTANT: After making changes, call runTests to verify your work.
+    Do not consider the task complete until all tests pass.`,
+  tools: {
+    ...createValidationTools(), // Adds: runTests, runBuild, runLint, checkTypes, runCommand
+  },
+});
+```
+
+### Stream Events
+
+The network emits new events for validation:
+
+```typescript
+for await (const chunk of result.fullStream) {
+  switch (chunk.type) {
+    case 'network-validation-start':
+      console.log(`Running ${chunk.payload.checksCount} validation checks...`);
+      break;
+    case 'network-validation-end':
+      console.log(`Validation ${chunk.payload.passed ? 'passed' : 'failed'}`);
+      console.log(`Duration: ${chunk.payload.duration}ms`);
+      break;
+  }
+}
+```
 
 ---
 

@@ -13,6 +13,8 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
+import type { NetworkValidationConfig } from './validation';
+import { runValidation, formatValidationFeedback } from './validation';
 
 async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
   const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
@@ -1181,6 +1183,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   threadId,
   resourceId,
   messages,
+  validation,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1192,6 +1195,11 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   threadId?: string;
   resourceId?: string;
   messages: MessageListInput;
+  /**
+   * Optional validation configuration for programmatic completion verification.
+   * When provided, the network will run external checks to verify task completion.
+   */
+  validation?: NetworkValidationConfig;
 }) {
   // Validate that memory is available before starting the network
   const memoryToUse = await routingAgent.getMemory({ requestContext });
@@ -1219,10 +1227,151 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     generateId,
   });
 
+  // Validation step: runs external checks when LLM says task is complete
+  // If validation fails, marks isComplete=false and adds feedback for next iteration
+  const validationStep = createStep({
+    id: 'validation-step',
+    inputSchema: networkWorkflow.outputSchema,
+    outputSchema: z.object({
+      task: z.string(),
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
+      prompt: z.string(),
+      result: z.string(),
+      isComplete: z.boolean().optional(),
+      completionReason: z.string().optional(),
+      iteration: z.number(),
+      validationPassed: z.boolean().optional(),
+      validationFeedback: z.string().optional(),
+    }),
+    execute: async ({ inputData, writer }) => {
+      // If no validation configured or LLM didn't say complete, pass through
+      if (!validation || !inputData.isComplete) {
+        return {
+          ...inputData,
+          validationPassed: undefined,
+          validationFeedback: undefined,
+        };
+      }
+
+      const mode = validation.mode ?? 'verify';
+
+      // Skip validation in 'assist' mode - it's only for context, not gatekeeping
+      if (mode === 'assist') {
+        return {
+          ...inputData,
+          validationPassed: undefined,
+          validationFeedback: undefined,
+        };
+      }
+
+      // Run validation checks
+      await writer?.write({
+        type: 'network-validation-start',
+        payload: {
+          runId,
+          iteration: inputData.iteration,
+          checksCount: validation.checks.length,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      const validationResult = await runValidation(validation);
+
+      await writer?.write({
+        type: 'network-validation-end',
+        payload: {
+          runId,
+          iteration: inputData.iteration,
+          passed: validationResult.passed,
+          results: validationResult.results,
+          duration: validationResult.totalDuration,
+        },
+        from: ChunkFrom.NETWORK,
+        runId,
+      });
+
+      if (validationResult.passed) {
+        // Validation passed - task is truly complete
+        return {
+          ...inputData,
+          isComplete: true,
+          validationPassed: true,
+          completionReason: inputData.completionReason
+            ? `${inputData.completionReason} (validation passed)`
+            : 'Validation passed',
+        };
+      } else {
+        // Validation failed - override LLM's completion assessment
+        // Format feedback to inject into the next iteration
+        const feedback = formatValidationFeedback(validationResult);
+
+        // Save validation feedback to memory so the next iteration can see it
+        const memory = await routingAgent.getMemory({ requestContext });
+        if (memory) {
+          await memory.saveMessages({
+            messages: [
+              {
+                id: generateId(),
+                type: 'text',
+                role: 'user',
+                content: {
+                  parts: [
+                    {
+                      type: 'text',
+                      text: `[VALIDATION FAILED]\n\nThe LLM assessed the task as complete, but automated validation checks failed.\n\n${feedback}\n\nPlease address these validation failures and continue working on the task.`,
+                    },
+                  ],
+                  format: 2,
+                },
+                createdAt: new Date(),
+                threadId: inputData.threadId || runId,
+                resourceId: inputData.threadResourceId || networkName,
+              },
+            ] as MastraDBMessage[],
+          });
+        }
+
+        return {
+          ...inputData,
+          isComplete: false, // Override - force another iteration
+          validationPassed: false,
+          validationFeedback: feedback,
+          // Update result to include validation context for next routing decision
+          result: inputData.result
+            ? `${inputData.result}\n\n[VALIDATION FAILED - See feedback above]`
+            : '[VALIDATION FAILED - See feedback above]',
+        };
+      }
+    },
+  });
+
   const finalStep = createStep({
     id: 'final-step',
-    inputSchema: networkWorkflow.outputSchema,
-    outputSchema: networkWorkflow.outputSchema,
+    inputSchema: z.object({
+      task: z.string(),
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
+      prompt: z.string(),
+      result: z.string(),
+      isComplete: z.boolean().optional(),
+      completionReason: z.string().optional(),
+      iteration: z.number(),
+      validationPassed: z.boolean().optional(),
+      validationFeedback: z.string().optional(),
+    }),
+    outputSchema: z.object({
+      task: z.string(),
+      primitiveId: z.string(),
+      primitiveType: PRIMITIVE_TYPES,
+      prompt: z.string(),
+      result: z.string(),
+      isComplete: z.boolean().optional(),
+      completionReason: z.string().optional(),
+      iteration: z.number(),
+      validationPassed: z.boolean().optional(),
+    }),
     execute: async ({ inputData, writer }) => {
       const finalData = {
         ...inputData,
@@ -1240,6 +1389,20 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       return finalData;
     },
   });
+
+  // Create a combined step that runs network iteration + validation
+  const iterationWithValidation = createWorkflow({
+    id: 'iteration-with-validation',
+    inputSchema: networkWorkflow.inputSchema,
+    outputSchema: validationStep.outputSchema,
+    options: {
+      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      validateInputs: false,
+    },
+  })
+    .then(networkWorkflow)
+    .then(validationStep)
+    .commit();
 
   const mainWorkflow = createWorkflow({
     id: 'agent-loop-main-workflow',
@@ -1263,14 +1426,20 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       isComplete: z.boolean().optional(),
       completionReason: z.string().optional(),
       iteration: z.number(),
+      validationPassed: z.boolean().optional(),
     }),
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
     },
   })
-    .dountil(networkWorkflow, async ({ inputData }) => {
-      return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
+    .dountil(iterationWithValidation, async ({ inputData }) => {
+      // Complete when: (LLM says complete AND validation passed) OR max iterations reached
+      const llmComplete = inputData.isComplete === true;
+      const validationOk = inputData.validationPassed !== false; // true or undefined (no validation)
+      const maxReached = Boolean(maxIterations && inputData.iteration >= maxIterations);
+
+      return (llmComplete && validationOk) || maxReached;
     })
     .then(finalStep)
     .commit();
