@@ -510,11 +510,14 @@ Be specific rather than generic when the user has expressed clear preferences in
     const result = await metric.measure(input, response.text);
     let isCorrect = result.score === 1;
 
+    // Check if there's an improved version - if so, we'll only retry that one
+    const hasImprovedVersion = !!(meta.improvedQuestion || meta.improvedAnswer);
+
     // Retry up to 5 times if requiresRetry is set and the first attempt failed
-    // This handles cases where the eval agent has flaky reasoning
+    // Only retry vanilla if there's NO improved version (otherwise we retry the improved one)
     let retryCount = 0;
     const maxRetries = 5;
-    while (!isCorrect && meta.requiresRetry && retryCount < maxRetries) {
+    while (!isCorrect && meta.requiresRetry && !hasImprovedVersion && retryCount < maxRetries) {
       retryCount++;
       updateStatus(`Retry ${retryCount}/${maxRetries} for ${meta.questionId}...`);
 
@@ -576,6 +579,29 @@ Be specific rather than generic when the user has expressed clear preferences in
 
       const improvedResult = await metric.measure(improvedInput, improvedHypothesis);
       improvedIsCorrect = improvedResult.score === 1;
+
+      // Retry improved version up to 5 times if requiresRetry is set and first attempt failed
+      let improvedRetryCount = 0;
+      while (!improvedIsCorrect && meta.requiresRetry && improvedRetryCount < maxRetries) {
+        improvedRetryCount++;
+        updateStatus(`Retry improved ${improvedRetryCount}/${maxRetries} for ${meta.questionId}...`);
+
+        const retryThreadId = `eval_improved_retry_${meta.questionId}_${improvedRetryCount}_${Date.now()}`;
+        const retryResponse = await agent.generate(improvedQuestion, {
+          threadId: retryThreadId,
+          resourceId: meta.resourceId,
+          modelSettings: {
+            temperature: 0,
+          },
+          context: meta.questionDate ? [{ role: 'system', content: `Todays date is ${meta.questionDate}` }] : undefined,
+        });
+
+        const retryResult = await metric.measure(improvedInput, retryResponse.text);
+        if (retryResult.score === 1) {
+          improvedIsCorrect = true;
+          improvedHypothesis = retryResponse.text;
+        }
+      }
     }
 
     const elapsed = ((Date.now() - questionStart) / 1000).toFixed(1);
@@ -882,9 +908,7 @@ Results saved to: ${runDir}`),
 
   private displayUninvestigatedFailures(results: EvaluationResult[]): void {
     // Find failures that have no improvement info (not yet investigated)
-    const uninvestigatedFailures = results.filter(
-      r => r.is_correct === false && !r.has_improvement_info,
-    );
+    const uninvestigatedFailures = results.filter(r => r.is_correct === false && !r.has_improvement_info);
 
     if (uninvestigatedFailures.length === 0) {
       return;
@@ -895,7 +919,9 @@ Results saved to: ${runDir}`),
 🔍 Failures for Investigation (${uninvestigatedFailures.length})
 `),
     );
-    console.log(chalk.gray('These questions failed and have no improved_question, improved_answer, or improvement_note:\n'));
+    console.log(
+      chalk.gray('These questions failed and have no improved_question, improved_answer, or improvement_note:\n'),
+    );
 
     // Group by question type for easier review
     const byType = new Map<string, string[]>();
