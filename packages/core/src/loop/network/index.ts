@@ -13,7 +13,7 @@ import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream'
 import { createStep, createWorkflow } from '../../workflows';
 import { zodToJsonSchema } from '../../zod-to-json';
 import { PRIMITIVE_TYPES } from '../types';
-import type { NetworkValidationConfig } from './validation';
+import type { NetworkValidationConfig, ValidationContext } from './validation';
 import { runValidation, formatValidationFeedback } from './validation';
 
 async function getRoutingAgent({ requestContext, agent }: { agent: Agent; requestContext: RequestContext }) {
@@ -1265,6 +1265,54 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         };
       }
 
+      // Build validation context with all relevant state
+      const memory = await routingAgent.getMemory({ requestContext });
+      const threadMessages = memory
+        ? await memory.getMessages({ threadId: inputData.threadId || runId })
+        : [];
+
+      const validationContext: ValidationContext = {
+        // Iteration state
+        iteration: inputData.iteration,
+        maxIterations,
+
+        // Messages & conversation
+        messages: threadMessages,
+        originalTask: inputData.task,
+
+        // Routing agent state
+        selectedPrimitive: {
+          id: inputData.primitiveId,
+          type: inputData.primitiveType as 'agent' | 'workflow' | 'tool',
+        },
+        primitivePrompt: inputData.prompt,
+        primitiveResult: inputData.result,
+        llmSaysComplete: inputData.isComplete === true,
+        completionReason: inputData.completionReason,
+
+        // Identifiers
+        networkName,
+        runId,
+        threadId: inputData.threadId,
+        resourceId: inputData.threadResourceId,
+
+        // Request context (sanitized)
+        requestContext: {
+          customContext: requestContext?.customContext,
+          serverRequest: requestContext?.serverRequest
+            ? {
+                url: requestContext.serverRequest.url,
+                method: requestContext.serverRequest.method,
+                headers: Object.fromEntries(
+                  Array.from(requestContext.serverRequest.headers?.entries?.() || []).filter(
+                    ([key]) => !key.toLowerCase().includes('auth') && !key.toLowerCase().includes('cookie'),
+                  ),
+                ),
+              }
+            : undefined,
+        },
+      };
+
       // Run validation checks
       await writer?.write({
         type: 'network-validation-start',
@@ -1277,7 +1325,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
         runId,
       });
 
-      const validationResult = await runValidation(validation);
+      const validationResult = await runValidation(validation, validationContext);
 
       await writer?.write({
         type: 'network-validation-end',

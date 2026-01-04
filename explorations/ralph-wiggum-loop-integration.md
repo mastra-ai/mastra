@@ -1,6 +1,6 @@
 # Ralph Wiggum Loop Integration for Mastra
 
-> **Status: IMPLEMENTED** - See usage examples below
+> **Status: IMPLEMENTED** - The Agent Network with validation IS the autonomous loop
 
 ## What is the Ralph Wiggum Loop?
 
@@ -37,9 +37,14 @@ while :; do cat PROMPT.md | claude ; done
 
 ---
 
-## ✅ Implementation: Validation for Agent Network
+## ✅ Implementation: Agent Network = Autonomous Loop
 
-The Ralph Wiggum pattern has been integrated into Mastra's Agent Network by adding **programmatic validation** to the existing routing and completion flow.
+**There is no separate `autonomousLoop()` method.** The Agent Network with validation configuration IS the autonomous loop:
+
+- **Agent Network** provides: routing, multi-primitive execution, iteration, memory
+- **Validation config** adds: programmatic completion criteria, feedback loop
+
+Together, this gives you the full Ralph Wiggum pattern without a separate API.
 
 ### Quick Start
 

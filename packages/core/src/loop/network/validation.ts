@@ -24,29 +24,61 @@ const execAsync = promisify(exec);
 
 /**
  * Runtime context passed to validation checks.
- * Contains the current state of the network loop.
+ * Contains the full state of the network loop at validation time.
  */
 export interface ValidationContext {
+  // ---- Iteration State ----
   /** Current iteration number (1-based) */
   iteration: number;
   /** Maximum iterations allowed */
   maxIterations?: number;
-  /** All messages in the conversation */
+
+  // ---- Messages & Conversation ----
+  /** All messages in the conversation thread */
   messages: Message[];
-  /** The original task/prompt */
+  /** The original task/prompt that started this network run */
   originalTask: string;
+
+  // ---- Routing Agent State ----
+  /** Which primitive was selected this iteration */
+  selectedPrimitive: {
+    id: string;
+    type: 'agent' | 'workflow' | 'tool';
+  };
+  /** The prompt/input sent to the selected primitive */
+  primitivePrompt: string;
+  /** Result from the primitive execution */
+  primitiveResult: string;
+  /** Whether the LLM assessed the task as complete */
+  llmSaysComplete: boolean;
+  /** LLM's reason for completion (if complete) */
+  completionReason?: string;
+
+  // ---- Identifiers ----
+  /** Name of the network/routing agent */
+  networkName: string;
+  /** ID of the current run */
+  runId: string;
   /** Current thread ID (if using memory) */
   threadId?: string;
   /** Resource ID (if using memory) */
   resourceId?: string;
-  /** Name of the network */
-  networkName: string;
-  /** ID of the current run */
-  runId: string;
-  /** Result from the last primitive execution (if any) */
-  lastResult?: unknown;
-  /** Whether the LLM assessed the task as complete */
-  llmSaysComplete: boolean;
+
+  // ---- Request Context ----
+  /**
+   * The request context containing runtime configuration.
+   * Includes custom context, server request, and telemetry.
+   */
+  requestContext: {
+    /** Custom user-provided context */
+    customContext?: Record<string, unknown>;
+    /** Server request info (if available) */
+    serverRequest?: {
+      url?: string;
+      method?: string;
+      headers?: Record<string, string>;
+    };
+  };
 }
 
 /**
