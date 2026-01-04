@@ -2,7 +2,6 @@ import { EmbeddingModelV2, TooManyEmbeddingValuesForCallError } from '@ai-sdk/pr
 import { xxh3 } from '@node-rs/xxhash';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { OpenAIEmbedding } from '@ai-sdk/openai';
 import { Mutex } from 'async-mutex';
 
 // Global cache statistics
