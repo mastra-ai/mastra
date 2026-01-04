@@ -18,17 +18,48 @@ export type ZodLikeSchema =
   | StandardSchemaV1;
 
 /**
+ * Helper type to check if a schema has Zod's _output property for precise type inference.
+ * Zod v3 uses _output, Zod v4 uses _zod.output
+ */
+type HasZodOutput<T> = T extends { _output: any } ? true : T extends { _zod: { output: any } } ? true : false;
+
+/**
+ * Extract Zod's output type from either v3 or v4 format.
+ */
+type ExtractZodOutput<T> = T extends { _output: infer U }
+  ? U
+  : T extends { _zod: { output: infer U } }
+    ? U
+    : never;
+
+/**
+ * Extract Zod's input type from either v3 or v4 format.
+ */
+type ExtractZodInput<T> = T extends { _input: infer U }
+  ? U
+  : T extends { _zod: { input: infer U } }
+    ? U
+    : never;
+
+/**
  * Helper type for extracting the inferred type from a Zod-like schema after parsing.
  *
- * Supports both:
- * - Zod schemas (via parse method return type)
- * - Standard Schema (via ~standard.types.output)
+ * Priority order:
+ * 1. Zod schemas (via _output or _zod.output) - most precise
+ * 2. Zod schemas (via parse method return type) - fallback for older Zod
+ * 3. Standard Schema (via ~standard.types.output) - for non-Zod libraries
+ *
+ * This order ensures Zod schemas use their precise type inference even though
+ * Zod v3.25+ also implements Standard Schema.
  */
-export type InferZodLikeSchema<T> = T extends StandardSchemaV1
-  ? StandardSchemaV1.InferOutput<T>
-  : T extends { parse: (data: unknown) => infer U }
-    ? U
-    : any;
+export type InferZodLikeSchema<T> =
+  HasZodOutput<T> extends true
+    ? ExtractZodOutput<T>
+    : T extends { parse: (data: unknown) => infer U }
+      ? U
+      : T extends StandardSchemaV1
+        ? StandardSchemaV1.InferOutput<T>
+        : any;
 
 /**
  * Helper type for extracting the input type from a Zod-like schema.
@@ -38,14 +69,17 @@ export type InferZodLikeSchema<T> = T extends StandardSchemaV1
  * - InferZodLikeSchemaInput<T> gives the type before transformation
  * - InferZodLikeSchema<T> gives the type after transformation
  *
- * Supports both:
- * - Zod schemas (via _input property or parse method)
- * - Standard Schema (via ~standard.types.input)
+ * Priority order:
+ * 1. Zod schemas (via _input or _zod.input) - most precise for transforms
+ * 2. Zod schemas (via parse method return type) - fallback
+ * 3. Standard Schema (via ~standard.types.input) - for non-Zod libraries
  */
-export type InferZodLikeSchemaInput<T> = T extends StandardSchemaV1
-  ? StandardSchemaV1.InferInput<T>
-  : T extends { _input: infer U }
+export type InferZodLikeSchemaInput<T> = T extends { _input: infer U }
+  ? U
+  : T extends { _zod: { input: infer U } }
     ? U
     : T extends { parse: (data: unknown) => infer U }
       ? U
-      : any;
+      : T extends StandardSchemaV1
+        ? StandardSchemaV1.InferInput<T>
+        : any;

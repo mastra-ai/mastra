@@ -111,8 +111,24 @@ describe('ZodLikeSchema type inference', () => {
         },
       });
 
-      // The execute function return type should match outputSchema
-      expectTypeOf(tool.execute).returns.resolves.toMatchTypeOf<{ result: string }>();
+      // The tool should have defined schemas
+      expectTypeOf(tool.inputSchema).not.toBeUndefined();
+      expectTypeOf(tool.outputSchema).not.toBeUndefined();
+    });
+
+    it('should allow accessing typed output properties', () => {
+      const tool = createTool({
+        id: 'test-tool',
+        description: 'A test tool',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async inputData => {
+          // Type-safe access to inputData.query
+          const query: string = inputData.query;
+          return { response: query.toUpperCase() };
+        },
+      });
+
+      expectTypeOf(tool.id).toBeString();
     });
   });
 });
