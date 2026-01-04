@@ -61,13 +61,15 @@ describe('Fastify Server Adapter', () => {
         const fetchOptions: RequestInit = {
           method: httpRequest.method,
           headers: {
-            'Content-Type': 'application/json',
             ...(httpRequest.headers || {}),
           },
         };
 
         // Add body for POST/PUT/PATCH
+        // Only set Content-Type to application/json when there's actually a body
+        // Fastify rejects empty bodies with Content-Type: application/json
         if (httpRequest.body && ['POST', 'PUT', 'PATCH'].includes(httpRequest.method)) {
+          (fetchOptions.headers as Record<string, string>)['Content-Type'] = 'application/json';
           fetchOptions.body = JSON.stringify(httpRequest.body);
         }
 

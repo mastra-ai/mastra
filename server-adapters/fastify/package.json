@@ -27,7 +27,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/server": "workspace:*",
-    "@fastify/multipart": "^9.3.0"
+    "@fastify/busboy": "^3.2.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

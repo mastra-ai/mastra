@@ -1,3 +1,4 @@
+import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -137,7 +138,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       if (contentType.includes('multipart/form-data')) {
         try {
-          body = await this.parseMultipartFormData(request);
+          const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+          body = await this.parseMultipartFormData(request, maxFileSize);
         } catch (error) {
           console.error('Failed to parse multipart form data:', error);
           // Re-throw size limit errors, let others fall through to validation
@@ -154,41 +156,63 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   /**
-   * Parse multipart/form-data using @fastify/multipart.
+   * Parse multipart/form-data using @fastify/busboy.
    * Converts file uploads to Buffers and parses JSON field values.
    *
    * @param request - The Fastify request object
+   * @param maxFileSize - Optional maximum file size in bytes
    */
-  private async parseMultipartFormData(request: FastifyRequest): Promise<Record<string, unknown>> {
-    const result: Record<string, unknown> = {};
+  private parseMultipartFormData(request: FastifyRequest, maxFileSize?: number): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const result: Record<string, unknown> = {};
 
-    // Use fastify multipart - assumes @fastify/multipart is registered
-    const parts = (request as any).parts?.();
+      const busboy = new Busboy({
+        headers: {
+          'content-type': request.headers['content-type'] as string,
+        },
+        limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
+      });
 
-    if (!parts) {
-      // If @fastify/multipart is not registered, try to read body directly
-      return request.body as Record<string, unknown>;
-    }
-
-    for await (const part of parts) {
-      if (part.type === 'file') {
-        // Convert file stream to buffer
+      busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
         const chunks: Buffer[] = [];
-        for await (const chunk of part.file) {
-          chunks.push(chunk);
-        }
-        result[part.fieldname] = Buffer.concat(chunks);
-      } else {
-        // Field value - try to parse as JSON
-        try {
-          result[part.fieldname] = JSON.parse(part.value);
-        } catch {
-          result[part.fieldname] = part.value;
-        }
-      }
-    }
+        let limitExceeded = false;
 
-    return result;
+        file.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+        });
+
+        file.on('limit', () => {
+          limitExceeded = true;
+          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+        });
+
+        file.on('end', () => {
+          if (!limitExceeded) {
+            result[fieldname] = Buffer.concat(chunks);
+          }
+        });
+      });
+
+      busboy.on('field', (fieldname: string, value: string) => {
+        // Try to parse JSON strings (like 'options')
+        try {
+          result[fieldname] = JSON.parse(value);
+        } catch {
+          result[fieldname] = value;
+        }
+      });
+
+      busboy.on('finish', () => {
+        resolve(result);
+      });
+
+      busboy.on('error', (error: Error) => {
+        reject(error);
+      });
+
+      // Pipe the raw request to busboy
+      request.raw.pipe(busboy);
+    });
   }
 
   async sendResponse(
@@ -230,20 +254,34 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       const { server, httpPath } = result as MCPHttpTransportResult;
 
       try {
+        // Hijack the response to bypass Fastify's response handling
+        // This is required when we write directly to reply.raw
+        reply.hijack();
+
+        // Attach parsed body to raw request so MCP server's readJsonBody can use it
+        // Fastify consumes the body stream, so we need to provide the pre-parsed body
+        const rawReq = request.raw as typeof request.raw & { body?: unknown };
+        if (request.body !== undefined) {
+          rawReq.body = request.body;
+        }
+
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
           httpPath,
-          req: request.raw,
+          req: rawReq,
           res: reply.raw,
         });
         // Response handled by startHTTP
       } catch {
-        if (!reply.sent) {
-          await reply.status(500).send({
-            jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
-            id: null,
-          });
+        if (!reply.raw.headersSent) {
+          reply.raw.writeHead(500, { 'Content-Type': 'application/json' });
+          reply.raw.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null,
+            }),
+          );
         }
       }
     } else if (route.responseType === 'mcp-sse') {
@@ -256,17 +294,29 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
       try {
+        // Hijack the response to bypass Fastify's response handling
+        // This is required when we write directly to reply.raw for SSE
+        reply.hijack();
+
+        // Attach parsed body to raw request so MCP server's readJsonBody can use it
+        // Fastify consumes the body stream, so we need to provide the pre-parsed body
+        const rawReq = request.raw as typeof request.raw & { body?: unknown };
+        if (request.body !== undefined) {
+          rawReq.body = request.body;
+        }
+
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
           ssePath,
           messagePath,
-          req: request.raw,
+          req: rawReq,
           res: reply.raw,
         });
         // Response handled by startSSE
       } catch {
-        if (!reply.sent) {
-          await reply.status(500).send({ error: 'Error handling MCP SSE request' });
+        if (!reply.raw.headersSent) {
+          reply.raw.writeHead(500, { 'Content-Type': 'application/json' });
+          reply.raw.end(JSON.stringify({ error: 'Error handling MCP SSE request' }));
         }
       }
     } else {
@@ -392,6 +442,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   registerContextMiddleware(): void {
+    // Register content type parser for multipart/form-data
+    // This allows Fastify to accept multipart requests without parsing them
+    // We'll parse them manually in getParams using busboy
+    this.app.addContentTypeParser('multipart/form-data', (_request, _payload, done) => {
+      // Don't parse the body, we'll handle it manually with busboy
+      done(null, undefined);
+    });
+
     this.app.addHook('preHandler', this.createContextMiddleware());
   }
 

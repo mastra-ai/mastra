@@ -26,7 +26,7 @@ describe('Fastify MCP Transport Routes Integration', () => {
       });
 
       // Initialize routes
-      adapter.init();
+      await adapter.init();
 
       // Start server on random port
       const address = await app.listen({ port: 0 });
