@@ -101,6 +101,7 @@ program
   )
   .option('-o, --output <dir>', 'Output directory for prepared data', './prepared-data')
   .option('--subset <n>', 'Prepare only a subset of n questions', parseInt)
+  .option('--offset <n>', 'Skip first n questions when using --subset', parseInt)
   .option('--concurrency <n>', 'Number of questions to process in parallel', parseInt)
   .option('--question-id <id>', 'Prepare a specific question by ID')
   .option('--resume-from-message-id <id>', 'Resume processing from a specific message ID')
