@@ -101,11 +101,17 @@ export class WorkflowsConvex extends WorkflowsStorage {
     snapshot: WorkflowRunState;
   }): Promise<void> {
     const now = new Date();
-    // Check if a record already exists to preserve createdAt
-    const existing = await this.#db.load<{ createdAt?: string } | null>({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
-    });
+    // Use semantic operation to check for existing record
+    let existing: { createdAt?: string } | null = null;
+    try {
+      existing = await this.#db.getWorkflowRun<{ createdAt?: string }>(workflowName, runId);
+    } catch {
+      // Fallback to load
+      existing = await this.#db.load<{ createdAt?: string } | null>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: workflowName, run_id: runId },
+      });
+    }
 
     await this.#db.insert({
       tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -127,10 +133,17 @@ export class WorkflowsConvex extends WorkflowsStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunState | null> {
-    const row = await this.#db.load<{ snapshot: WorkflowRunState | string } | null>({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      keys: { workflow_name: workflowName, run_id: runId },
-    });
+    // Use semantic operation for optimized lookup
+    let row: { snapshot: WorkflowRunState | string } | null = null;
+    try {
+      row = await this.#db.getWorkflowRun<{ snapshot: WorkflowRunState | string }>(workflowName, runId);
+    } catch {
+      // Fallback to load
+      row = await this.#db.load<{ snapshot: WorkflowRunState | string } | null>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: workflowName, run_id: runId },
+      });
+    }
 
     if (!row) return null;
     return typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : JSON.parse(JSON.stringify(row.snapshot));
@@ -139,8 +152,32 @@ export class WorkflowsConvex extends WorkflowsStorage {
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
 
-    let rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
+    // Use semantic operation for optimized listing
+    let rows: RawWorkflowRun[];
+    try {
+      const response = await this.#db.listWorkflowRuns<RawWorkflowRun>({
+        workflowName,
+        resourceId,
+        status,
+        limit: 1000, // Safe batch size
+      });
+      rows = response.result;
+    } catch {
+      // Fallback to queryTable with filter
+      if (workflowName) {
+        rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
+          { field: 'workflow_name', value: workflowName },
+        ]);
+      } else if (resourceId) {
+        rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
+          { field: 'resourceId', value: resourceId },
+        ]);
+      } else {
+        rows = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
+      }
+    }
 
+    // Apply any remaining filters that weren't handled server-side
     if (workflowName) rows = rows.filter(run => run.workflow_name === workflowName);
     if (resourceId) rows = rows.filter(run => run.resourceId === resourceId);
     if (fromDate) rows = rows.filter(run => new Date(run.createdAt).getTime() >= fromDate.getTime());
@@ -180,18 +217,23 @@ export class WorkflowsConvex extends WorkflowsStorage {
     runId: string;
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
-    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined);
+    // If we have workflowName, use the semantic operation
+    if (workflowName) {
+      try {
+        const match = await this.#db.getWorkflowRun<RawWorkflowRun>(workflowName, runId);
+        if (!match) return null;
+        return this.deserializeWorkflowRun(match);
+      } catch {
+        // Fall through to generic lookup
+      }
+    }
+
+    // Fallback: query all runs and filter
+    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, undefined, 1000);
     const match = runs.find(run => run.run_id === runId && (!workflowName || run.workflow_name === workflowName));
     if (!match) return null;
 
-    return {
-      workflowName: match.workflow_name,
-      runId: match.run_id,
-      snapshot: this.ensureSnapshot(match),
-      createdAt: new Date(match.createdAt),
-      updatedAt: new Date(match.updatedAt),
-      resourceId: match.resourceId,
-    };
+    return this.deserializeWorkflowRun(match);
   }
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
@@ -199,10 +241,27 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }
 
   private async getRun(workflowName: string, runId: string): Promise<RawWorkflowRun | null> {
-    const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
-      { field: 'workflow_name', value: workflowName },
-    ]);
-    return runs.find(run => run.run_id === runId) ?? null;
+    // Use semantic operation for optimized lookup
+    try {
+      return await this.#db.getWorkflowRun<RawWorkflowRun>(workflowName, runId);
+    } catch {
+      // Fallback to queryTable with filter
+      const runs = await this.#db.queryTable<RawWorkflowRun>(TABLE_WORKFLOW_SNAPSHOT, [
+        { field: 'workflow_name', value: workflowName },
+      ]);
+      return runs.find(run => run.run_id === runId) ?? null;
+    }
+  }
+
+  private deserializeWorkflowRun(run: RawWorkflowRun): WorkflowRun {
+    return {
+      workflowName: run.workflow_name,
+      runId: run.run_id,
+      snapshot: this.ensureSnapshot(run),
+      createdAt: new Date(run.createdAt),
+      updatedAt: new Date(run.updatedAt),
+      resourceId: run.resourceId,
+    };
   }
 
   private ensureSnapshot(run: { snapshot: WorkflowRunState | string }): WorkflowRunState {

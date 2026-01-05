@@ -8,11 +8,16 @@ import {
 import type { GenericMutationCtx as MutationCtx } from 'convex/server';
 import { mutationGeneric } from 'convex/server';
 
-import type { StorageRequest, StorageResponse } from '../storage/types';
+import type { EqualityFilter, StorageRequest, StorageResponse } from '../storage/types';
 
 // Vector-specific table names (not in @mastra/core)
 const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';
 const VECTOR_TABLE_PREFIX = 'mastra_vector_';
+
+// Safe batch sizes to stay within Convex limits
+const QUERY_BATCH_SIZE = 1000; // Safe for most queries
+const VECTOR_BATCH_SIZE = 500; // Smaller for vector data (embeddings are large)
+const DELETE_BATCH_SIZE = 25; // Small batches for deletes to stay within 1s timeout
 
 /**
  * Determines which Convex table to use based on the logical table name.
@@ -44,24 +49,57 @@ function resolveTable(tableName: string): { convexTable: string; isTyped: boolea
 
 /**
  * Main storage mutation handler.
- * Routes operations to the appropriate typed table.
+ * Routes operations to the appropriate typed table and uses indexes when possible.
  */
 export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest): Promise<StorageResponse> => {
   try {
-    const { convexTable, isTyped } = resolveTable(request.tableName);
+    // Handle semantic operations first (these are optimized)
+    if ('op' in request) {
+      switch (request.op) {
+        // Thread semantic operations
+        case 'getThread':
+          return handleGetThread(ctx, request.threadId);
+        case 'listThreadsByResource':
+          return handleListThreadsByResource(ctx, request);
 
-    // Handle vector data tables specially (but NOT vector_indexes which is a typed table)
-    if (request.tableName.startsWith(VECTOR_TABLE_PREFIX) && request.tableName !== TABLE_VECTOR_INDEXES) {
-      return handleVectorOperation(ctx, request);
+        // Message semantic operations
+        case 'getMessages':
+          return handleGetMessages(ctx, request);
+        case 'getMessagesByResource':
+          return handleGetMessagesByResource(ctx, request);
+
+        // Workflow semantic operations
+        case 'getWorkflowRun':
+          return handleGetWorkflowRun(ctx, request.workflowName, request.runId);
+        case 'listWorkflowRuns':
+          return handleListWorkflowRuns(ctx, request);
+
+        // Vector semantic operations
+        case 'vectorSearch':
+          return handleVectorSearch(ctx, request);
+        case 'getVectorIndexStats':
+          return handleGetVectorIndexStats(ctx, request.indexName);
+        case 'upsertVectors':
+          return handleUpsertVectors(ctx, request);
+      }
     }
 
-    // Handle typed tables
+    // Handle generic operations (with index optimization where possible)
+    const tableName = 'tableName' in request ? request.tableName : '';
+    const { convexTable, isTyped } = resolveTable(tableName);
+
+    // Handle vector data tables specially (but NOT vector_indexes which is a typed table)
+    if (tableName.startsWith(VECTOR_TABLE_PREFIX) && tableName !== TABLE_VECTOR_INDEXES) {
+      return handleVectorOperation(ctx, request as any);
+    }
+
+    // Handle typed tables with index optimization
     if (isTyped) {
-      return handleTypedOperation(ctx, convexTable, request);
+      return handleTypedOperation(ctx, convexTable, tableName, request as any);
     }
 
     // Fallback to generic table for unknown tables
-    return handleGenericOperation(ctx, request);
+    return handleGenericOperation(ctx, request as any);
   } catch (error) {
     const err = error as Error;
     return {
@@ -71,15 +109,285 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
   }
 });
 
+// ============================================================================
+// Semantic Operation Handlers - Use optimal indexes
+// ============================================================================
+
+/**
+ * Get a thread by ID using the by_record_id index.
+ */
+async function handleGetThread(ctx: MutationCtx<any>, threadId: string): Promise<StorageResponse> {
+  const doc = await ctx.db
+    .query('mastra_threads')
+    .withIndex('by_record_id', (q: any) => q.eq('id', threadId))
+    .unique();
+  return { ok: true, result: doc };
+}
+
+/**
+ * List threads by resource ID using the by_resource index.
+ */
+async function handleListThreadsByResource(
+  ctx: MutationCtx<any>,
+  request: { resourceId: string; limit?: number; cursor?: string; orderBy?: string; orderDirection?: string },
+): Promise<StorageResponse> {
+  const { resourceId, limit = QUERY_BATCH_SIZE, cursor, orderDirection = 'desc' } = request;
+
+  let query = ctx.db.query('mastra_threads').withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+
+  // Apply cursor if provided (for pagination)
+  if (cursor) {
+    query = query.filter((q: any) =>
+      orderDirection === 'desc' ? q.lt(q.field('createdAt'), cursor) : q.gt(q.field('createdAt'), cursor),
+    );
+  }
+
+  const docs = await query.order(orderDirection as 'asc' | 'desc').take(Math.min(limit, QUERY_BATCH_SIZE));
+
+  const nextCursor = docs.length === limit && docs.length > 0 ? docs[docs.length - 1]?.createdAt : undefined;
+
+  return { ok: true, result: docs, cursor: nextCursor, hasMore: docs.length === limit };
+}
+
+/**
+ * Get messages for a thread using the by_thread_created index.
+ */
+async function handleGetMessages(
+  ctx: MutationCtx<any>,
+  request: { threadId: string; limit?: number; cursor?: string; orderDirection?: string },
+): Promise<StorageResponse> {
+  const { threadId, limit = QUERY_BATCH_SIZE, cursor, orderDirection = 'asc' } = request;
+
+  let query = ctx.db.query('mastra_messages').withIndex('by_thread', (q: any) => q.eq('thread_id', threadId));
+
+  // Apply cursor if provided (for pagination)
+  if (cursor) {
+    query = query.filter((q: any) =>
+      orderDirection === 'desc' ? q.lt(q.field('createdAt'), cursor) : q.gt(q.field('createdAt'), cursor),
+    );
+  }
+
+  const docs = await query.order(orderDirection as 'asc' | 'desc').take(Math.min(limit, QUERY_BATCH_SIZE));
+
+  const nextCursor = docs.length === limit && docs.length > 0 ? docs[docs.length - 1]?.createdAt : undefined;
+
+  return { ok: true, result: docs, cursor: nextCursor, hasMore: docs.length === limit };
+}
+
+/**
+ * Get messages by resource ID using the by_resource index.
+ */
+async function handleGetMessagesByResource(
+  ctx: MutationCtx<any>,
+  request: { resourceId: string; limit?: number; cursor?: string },
+): Promise<StorageResponse> {
+  const { resourceId, limit = QUERY_BATCH_SIZE, cursor } = request;
+
+  let query = ctx.db.query('mastra_messages').withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+
+  if (cursor) {
+    query = query.filter((q: any) => q.gt(q.field('createdAt'), cursor));
+  }
+
+  const docs = await query.order('desc').take(Math.min(limit, QUERY_BATCH_SIZE));
+
+  const nextCursor = docs.length === limit && docs.length > 0 ? docs[docs.length - 1]?.createdAt : undefined;
+
+  return { ok: true, result: docs, cursor: nextCursor, hasMore: docs.length === limit };
+}
+
+/**
+ * Get a workflow run using the by_workflow_run index.
+ */
+async function handleGetWorkflowRun(
+  ctx: MutationCtx<any>,
+  workflowName: string,
+  runId: string,
+): Promise<StorageResponse> {
+  const doc = await ctx.db
+    .query('mastra_workflow_snapshots')
+    .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', workflowName).eq('run_id', runId))
+    .unique();
+  return { ok: true, result: doc };
+}
+
+/**
+ * List workflow runs with optional filters, using appropriate indexes.
+ */
+async function handleListWorkflowRuns(
+  ctx: MutationCtx<any>,
+  request: { workflowName?: string; resourceId?: string; status?: string; limit?: number; cursor?: string },
+): Promise<StorageResponse> {
+  const { workflowName, resourceId, status, limit = QUERY_BATCH_SIZE, cursor } = request;
+
+  let query;
+
+  // Choose the best index based on available filters
+  if (workflowName) {
+    query = ctx.db
+      .query('mastra_workflow_snapshots')
+      .withIndex('by_workflow', (q: any) => q.eq('workflow_name', workflowName));
+  } else if (resourceId) {
+    query = ctx.db
+      .query('mastra_workflow_snapshots')
+      .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+  } else {
+    // Fallback to createdAt index for general listing
+    query = ctx.db.query('mastra_workflow_snapshots').withIndex('by_created');
+  }
+
+  // Apply cursor for pagination
+  if (cursor) {
+    query = query.filter((q: any) => q.lt(q.field('createdAt'), cursor));
+  }
+
+  let docs = await query.order('desc').take(Math.min(limit, QUERY_BATCH_SIZE));
+
+  // Apply in-memory filters for fields without dedicated indexes
+  if (status) {
+    docs = docs.filter((doc: any) => {
+      const snapshot = typeof doc.snapshot === 'string' ? JSON.parse(doc.snapshot) : doc.snapshot;
+      return snapshot?.status === status;
+    });
+  }
+
+  const nextCursor = docs.length === limit && docs.length > 0 ? docs[docs.length - 1]?.createdAt : undefined;
+
+  return { ok: true, result: docs, cursor: nextCursor, hasMore: docs.length === limit };
+}
+
+// ============================================================================
+// Vector Semantic Operations
+// ============================================================================
+
+/**
+ * Perform vector similarity search.
+ * Note: For full native vector search, users should define a vectorIndex in their schema.
+ * This implementation uses the by_index index and performs similarity calculation server-side.
+ */
+async function handleVectorSearch(
+  ctx: MutationCtx<any>,
+  request: {
+    indexName: string;
+    queryVector: number[];
+    topK: number;
+    filter?: Record<string, any>;
+    includeVector?: boolean;
+  },
+): Promise<StorageResponse> {
+  const { indexName, queryVector, topK, filter, includeVector = false } = request;
+
+  // Use a safe batch size for vectors (embeddings are large)
+  const fetchLimit = Math.min(VECTOR_BATCH_SIZE, topK * 10);
+
+  const docs = await ctx.db
+    .query('mastra_vectors')
+    .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
+    .take(fetchLimit);
+
+  // Apply metadata filter if provided
+  let filtered = docs;
+  if (filter && Object.keys(filter).length > 0) {
+    filtered = docs.filter((doc: any) => matchesFilter(doc.metadata, filter));
+  }
+
+  // Calculate cosine similarity server-side
+  const scored = filtered
+    .map((doc: any) => ({
+      id: doc.id,
+      score: cosineSimilarity(queryVector, doc.embedding),
+      metadata: doc.metadata,
+      ...(includeVector ? { vector: doc.embedding } : {}),
+    }))
+    .filter(result => Number.isFinite(result.score))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+
+  return { ok: true, result: scored };
+}
+
+/**
+ * Get vector index statistics without loading all vectors.
+ */
+async function handleGetVectorIndexStats(ctx: MutationCtx<any>, indexName: string): Promise<StorageResponse> {
+  // Get index metadata
+  const indexMeta = await ctx.db
+    .query('mastra_vector_indexes')
+    .withIndex('by_record_id', (q: any) => q.eq('id', indexName))
+    .unique();
+
+  if (!indexMeta) {
+    return { ok: false, error: `Index ${indexName} not found` };
+  }
+
+  // Count vectors efficiently by sampling
+  // Note: For accurate count, we'd need a separate counter or aggregate query
+  const sampleDocs = await ctx.db
+    .query('mastra_vectors')
+    .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
+    .take(VECTOR_BATCH_SIZE + 1);
+
+  const hasMore = sampleDocs.length > VECTOR_BATCH_SIZE;
+
+  return {
+    ok: true,
+    result: {
+      dimension: indexMeta.dimension,
+      count: hasMore ? `${VECTOR_BATCH_SIZE}+` : sampleDocs.length,
+      metric: indexMeta.metric || 'cosine',
+    },
+  };
+}
+
+/**
+ * Upsert vectors in batches.
+ */
+async function handleUpsertVectors(
+  ctx: MutationCtx<any>,
+  request: {
+    indexName: string;
+    vectors: Array<{ id: string; embedding: number[]; metadata?: Record<string, any> }>;
+  },
+): Promise<StorageResponse> {
+  const { indexName, vectors } = request;
+
+  for (const vector of vectors) {
+    const existing = await ctx.db
+      .query('mastra_vectors')
+      .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', vector.id))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        embedding: vector.embedding,
+        metadata: vector.metadata,
+      });
+    } else {
+      await ctx.db.insert('mastra_vectors', {
+        id: vector.id,
+        indexName,
+        embedding: vector.embedding,
+        metadata: vector.metadata,
+      });
+    }
+  }
+
+  return { ok: true, result: vectors.map(v => v.id) };
+}
+
+// ============================================================================
+// Generic Operation Handlers - With index optimization
+// ============================================================================
+
 /**
  * Handle operations on typed tables (threads, messages, etc.)
- * Records are stored with their `id` field as a regular field (not _id).
- * We query by the `id` field to find/update records.
+ * Now with smart index selection based on filter patterns.
  */
 async function handleTypedOperation(
   ctx: MutationCtx<any>,
   convexTable: string,
-  request: StorageRequest,
+  tableName: string,
+  request: any,
 ): Promise<StorageResponse> {
   switch (request.op) {
     case 'insert': {
@@ -137,25 +445,35 @@ async function handleTypedOperation(
         return { ok: true, result: doc || null };
       }
 
-      // Query by other fields - use take() to avoid 32k limit
-      const docs = await ctx.db.query(convexTable).take(10000);
+      // Try to use specific indexes based on table and keys
+      const indexedResult = await tryIndexedLoad(ctx, convexTable, tableName, keys);
+      if (indexedResult !== undefined) {
+        return { ok: true, result: indexedResult };
+      }
+
+      // Fallback: limited scan with filter
+      const docs = await ctx.db.query(convexTable).take(QUERY_BATCH_SIZE);
       const match = docs.find((doc: any) => Object.entries(keys).every(([key, value]) => doc[key] === value));
       return { ok: true, result: match || null };
     }
 
     case 'queryTable': {
-      // Use take() to avoid hitting Convex's 32k document limit
-      const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
-      let docs = await ctx.db.query(convexTable).take(maxDocs);
+      const filters = request.filters as EqualityFilter[] | undefined;
+      const limit = Math.min(request.limit ?? QUERY_BATCH_SIZE, QUERY_BATCH_SIZE);
 
-      // Apply filters if provided
-      if (request.filters && request.filters.length > 0) {
-        docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
+      // Try to use an index based on the filter pattern
+      const indexedDocs = await tryIndexedQuery(ctx, convexTable, tableName, filters, limit);
+
+      if (indexedDocs !== undefined) {
+        return { ok: true, result: indexedDocs };
       }
 
-      // Apply limit if provided
-      if (request.limit) {
-        docs = docs.slice(0, request.limit);
+      // Fallback: scan with in-memory filter (log warning)
+      console.warn(`[mastra-convex] No index available for queryTable on ${tableName} with filters:`, filters);
+      let docs = await ctx.db.query(convexTable).take(limit);
+
+      if (filters && filters.length > 0) {
+        docs = docs.filter((doc: any) => filters.every(filter => doc[filter.field] === filter.value));
       }
 
       return { ok: true, result: docs };
@@ -163,12 +481,9 @@ async function handleTypedOperation(
 
     case 'clearTable':
     case 'dropTable': {
-      // Delete a small batch per call to stay within Convex's 1-second mutation timeout.
-      // Client must call repeatedly until hasMore is false.
-      const BATCH_SIZE = 25;
-      const docs = await ctx.db.query(convexTable).take(BATCH_SIZE + 1);
-      const hasMore = docs.length > BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, BATCH_SIZE) : docs;
+      const docs = await ctx.db.query(convexTable).take(DELETE_BATCH_SIZE + 1);
+      const hasMore = docs.length > DELETE_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, DELETE_BATCH_SIZE) : docs;
 
       for (const doc of docsToDelete) {
         await ctx.db.delete(doc._id);
@@ -190,15 +505,183 @@ async function handleTypedOperation(
     }
 
     default:
-      return { ok: false, error: `Unsupported operation ${(request as any).op}` };
+      return { ok: false, error: `Unsupported operation ${request.op}` };
   }
+}
+
+/**
+ * Try to load a record using an appropriate index based on table and keys.
+ */
+async function tryIndexedLoad(
+  ctx: MutationCtx<any>,
+  convexTable: string,
+  tableName: string,
+  keys: Record<string, any>,
+): Promise<any | undefined> {
+  // Workflow snapshots: use by_workflow_run for (workflow_name, run_id) lookup
+  if (tableName === TABLE_WORKFLOW_SNAPSHOT && keys.workflow_name && keys.run_id) {
+    return await ctx.db
+      .query(convexTable)
+      .withIndex('by_workflow_run', (q: any) => q.eq('workflow_name', keys.workflow_name).eq('run_id', keys.run_id))
+      .unique();
+  }
+
+  return undefined;
+}
+
+/**
+ * Try to query using an appropriate index based on table and filter pattern.
+ */
+async function tryIndexedQuery(
+  ctx: MutationCtx<any>,
+  convexTable: string,
+  tableName: string,
+  filters: EqualityFilter[] | undefined,
+  limit: number,
+): Promise<any[] | undefined> {
+  if (!filters || filters.length === 0) {
+    // No filters - just return first batch
+    return await ctx.db.query(convexTable).take(limit);
+  }
+
+  const filterMap = new Map(filters.map(f => [f.field, f.value]));
+
+  // Messages: use by_thread index when filtering by thread_id
+  if (tableName === TABLE_MESSAGES && filterMap.has('thread_id')) {
+    const threadId = filterMap.get('thread_id');
+    let docs = await ctx.db
+      .query(convexTable)
+      .withIndex('by_thread', (q: any) => q.eq('thread_id', threadId))
+      .take(limit);
+
+    // Apply remaining filters
+    const remainingFilters = filters.filter(f => f.field !== 'thread_id');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Messages: use by_resource index when filtering by resourceId
+  if (tableName === TABLE_MESSAGES && filterMap.has('resourceId')) {
+    const resourceId = filterMap.get('resourceId');
+    let docs = await ctx.db
+      .query(convexTable)
+      .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId))
+      .take(limit);
+
+    const remainingFilters = filters.filter(f => f.field !== 'resourceId');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Threads: use by_resource index when filtering by resourceId
+  if (tableName === TABLE_THREADS && filterMap.has('resourceId')) {
+    const resourceId = filterMap.get('resourceId');
+    let docs = await ctx.db
+      .query(convexTable)
+      .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId))
+      .take(limit);
+
+    const remainingFilters = filters.filter(f => f.field !== 'resourceId');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Workflow snapshots: use by_workflow index
+  if (tableName === TABLE_WORKFLOW_SNAPSHOT && filterMap.has('workflow_name')) {
+    const workflowName = filterMap.get('workflow_name');
+    let query = ctx.db.query(convexTable).withIndex('by_workflow', (q: any) => q.eq('workflow_name', workflowName));
+
+    let docs = await query.take(limit);
+
+    // Apply remaining filters (like run_id)
+    const remainingFilters = filters.filter(f => f.field !== 'workflow_name');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Workflow snapshots: use by_resource index
+  if (tableName === TABLE_WORKFLOW_SNAPSHOT && filterMap.has('resourceId')) {
+    const resourceId = filterMap.get('resourceId');
+    let docs = await ctx.db
+      .query(convexTable)
+      .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId))
+      .take(limit);
+
+    const remainingFilters = filters.filter(f => f.field !== 'resourceId');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Scores: use by_scorer index
+  if (tableName === TABLE_SCORERS && filterMap.has('scorerId')) {
+    const scorerId = filterMap.get('scorerId');
+    let docs = await ctx.db
+      .query(convexTable)
+      .withIndex('by_scorer', (q: any) => q.eq('scorerId', scorerId))
+      .take(limit);
+
+    const remainingFilters = filters.filter(f => f.field !== 'scorerId');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Scores: use by_entity index
+  if (tableName === TABLE_SCORERS && filterMap.has('entityId')) {
+    const entityId = filterMap.get('entityId');
+    const entityType = filterMap.get('entityType');
+    let query = ctx.db.query(convexTable).withIndex('by_entity', (q: any) => {
+      let qb = q.eq('entityId', entityId);
+      if (entityType !== undefined) {
+        qb = qb.eq('entityType', entityType);
+      }
+      return qb;
+    });
+
+    let docs = await query.take(limit);
+
+    const remainingFilters = filters.filter(f => f.field !== 'entityId' && f.field !== 'entityType');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // Scores: use by_run index
+  if (tableName === TABLE_SCORERS && filterMap.has('runId')) {
+    const runId = filterMap.get('runId');
+    let docs = await ctx.db
+      .query(convexTable)
+      .withIndex('by_run', (q: any) => q.eq('runId', runId))
+      .take(limit);
+
+    const remainingFilters = filters.filter(f => f.field !== 'runId');
+    if (remainingFilters.length > 0) {
+      docs = docs.filter((doc: any) => remainingFilters.every(f => doc[f.field] === f.value));
+    }
+    return docs;
+  }
+
+  // No matching index pattern found
+  return undefined;
 }
 
 /**
  * Handle operations on the vectors table.
  * Vectors are stored with indexName to support multiple indexes.
  */
-async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequest): Promise<StorageResponse> {
+async function handleVectorOperation(ctx: MutationCtx<any>, request: any): Promise<StorageResponse> {
   // Extract the index name from the table name (e.g., "mastra_vector_myindex" -> "myindex")
   const indexName = request.tableName.replace(VECTOR_TABLE_PREFIX, '');
   const convexTable = 'mastra_vectors';
@@ -211,7 +694,6 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
         throw new Error(`Vector record is missing an id`);
       }
 
-      // Find existing by composite key (indexName, id) to scope per index
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', id))
@@ -238,7 +720,6 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
         const id = record.id;
         if (!id) continue;
 
-        // Find existing by composite key (indexName, id) to scope per index
         const existing = await ctx.db
           .query(convexTable)
           .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', id))
@@ -264,7 +745,6 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     case 'load': {
       const keys = request.keys;
       if (keys.id) {
-        // Use composite key (indexName, id) to scope lookup per index
         const doc = await ctx.db
           .query(convexTable)
           .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', keys.id))
@@ -275,37 +755,28 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     case 'queryTable': {
-      // Use take() to avoid hitting Convex's 32k document limit
-      const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
+      // Use smaller batch size for vectors to avoid bandwidth limits
+      const limit = Math.min(request.limit ?? VECTOR_BATCH_SIZE, VECTOR_BATCH_SIZE);
       let docs = await ctx.db
         .query(convexTable)
         .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
-        .take(maxDocs);
+        .take(limit);
 
-      // Apply filters if provided
       if (request.filters && request.filters.length > 0) {
-        docs = docs.filter((doc: any) => request.filters!.every(filter => doc[filter.field] === filter.value));
+        docs = docs.filter((doc: any) => request.filters.every((filter: any) => doc[filter.field] === filter.value));
       }
 
-      // Apply limit if provided
-      if (request.limit) {
-        docs = docs.slice(0, request.limit);
-      }
-
-      return { ok: true, result: docs };
+      return { ok: true, result: docs, hasMore: docs.length === limit };
     }
 
     case 'clearTable':
     case 'dropTable': {
-      // Delete a small batch per call to stay within Convex's 1-second mutation timeout.
-      // Client must call repeatedly until hasMore is false.
-      const BATCH_SIZE = 25;
       const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
-        .take(BATCH_SIZE + 1);
-      const hasMore = docs.length > BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, BATCH_SIZE) : docs;
+        .take(DELETE_BATCH_SIZE + 1);
+      const hasMore = docs.length > DELETE_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, DELETE_BATCH_SIZE) : docs;
 
       for (const doc of docsToDelete) {
         await ctx.db.delete(doc._id);
@@ -315,7 +786,6 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
 
     case 'deleteMany': {
       for (const id of request.ids) {
-        // Use composite key (indexName, id) to scope deletion per index
         const doc = await ctx.db
           .query(convexTable)
           .withIndex('by_index_id', (q: any) => q.eq('indexName', indexName).eq('id', id))
@@ -328,7 +798,7 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
     }
 
     default:
-      return { ok: false, error: `Unsupported operation ${(request as any).op}` };
+      return { ok: false, error: `Unsupported operation ${request.op}` };
   }
 }
 
@@ -336,7 +806,7 @@ async function handleVectorOperation(ctx: MutationCtx<any>, request: StorageRequ
  * Handle operations on the generic documents table.
  * Used as fallback for unknown table names.
  */
-async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageRequest): Promise<StorageResponse> {
+async function handleGenericOperation(ctx: MutationCtx<any>, request: any): Promise<StorageResponse> {
   const tableName = request.tableName;
   const convexTable = 'mastra_documents';
 
@@ -401,29 +871,24 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
       const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_table', (q: any) => q.eq('table', tableName))
-        .take(10000);
+        .take(QUERY_BATCH_SIZE);
       const match = docs.find((doc: any) => Object.entries(keys).every(([key, value]) => doc.record?.[key] === value));
       return { ok: true, result: match ? match.record : null };
     }
 
     case 'queryTable': {
-      // Use take() to avoid hitting Convex's 32k document limit
-      const maxDocs = request.limit ? Math.min(request.limit * 2, 10000) : 10000;
+      const limit = Math.min(request.limit ?? QUERY_BATCH_SIZE, QUERY_BATCH_SIZE);
       const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_table', (q: any) => q.eq('table', tableName))
-        .take(maxDocs);
+        .take(limit);
 
       let records = docs.map((doc: any) => doc.record);
 
       if (request.filters && request.filters.length > 0) {
         records = records.filter((record: any) =>
-          request.filters!.every(filter => record?.[filter.field] === filter.value),
+          request.filters.every((filter: any) => record?.[filter.field] === filter.value),
         );
-      }
-
-      if (request.limit) {
-        records = records.slice(0, request.limit);
       }
 
       return { ok: true, result: records };
@@ -431,15 +896,12 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
 
     case 'clearTable':
     case 'dropTable': {
-      // Delete a small batch per call to stay within Convex's 1-second mutation timeout.
-      // Client must call repeatedly until hasMore is false.
-      const BATCH_SIZE = 25;
       const docs = await ctx.db
         .query(convexTable)
         .withIndex('by_table', (q: any) => q.eq('table', tableName))
-        .take(BATCH_SIZE + 1);
-      const hasMore = docs.length > BATCH_SIZE;
-      const docsToDelete = hasMore ? docs.slice(0, BATCH_SIZE) : docs;
+        .take(DELETE_BATCH_SIZE + 1);
+      const hasMore = docs.length > DELETE_BATCH_SIZE;
+      const docsToDelete = hasMore ? docs.slice(0, DELETE_BATCH_SIZE) : docs;
 
       for (const doc of docsToDelete) {
         await ctx.db.delete(doc._id);
@@ -461,6 +923,74 @@ async function handleGenericOperation(ctx: MutationCtx<any>, request: StorageReq
     }
 
     default:
-      return { ok: false, error: `Unsupported operation ${(request as any).op}` };
+      return { ok: false, error: `Unsupported operation ${request.op}` };
   }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Calculate cosine similarity between two vectors.
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    return -1;
+  }
+
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    const aVal = a[i] ?? 0;
+    const bVal = b[i] ?? 0;
+    dot += aVal * bVal;
+    magA += aVal * aVal;
+    magB += bVal * bVal;
+  }
+
+  if (magA === 0 || magB === 0) {
+    return -1;
+  }
+
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+}
+
+/**
+ * Check if a record's metadata matches a filter.
+ */
+function matchesFilter(metadata: Record<string, any> | undefined, filter: Record<string, any>): boolean {
+  if (!metadata) return false;
+  if (!filter || Object.keys(filter).length === 0) return true;
+
+  for (const [key, value] of Object.entries(filter)) {
+    if (key === 'metadata' && typeof value === 'object') {
+      // Handle nested metadata filter
+      return matchesFilter(metadata, value);
+    }
+
+    // Handle operators
+    if (typeof value === 'object' && value !== null) {
+      if ('$in' in value && Array.isArray(value.$in)) {
+        if (!value.$in.includes(metadata[key])) return false;
+        continue;
+      }
+      if ('$nin' in value && Array.isArray(value.$nin)) {
+        if (value.$nin.includes(metadata[key])) return false;
+        continue;
+      }
+      if ('$gt' in value && !(metadata[key] > value.$gt)) return false;
+      if ('$gte' in value && !(metadata[key] >= value.$gte)) return false;
+      if ('$lt' in value && !(metadata[key] < value.$lt)) return false;
+      if ('$lte' in value && !(metadata[key] <= value.$lte)) return false;
+      if ('$ne' in value && metadata[key] === value.$ne) return false;
+    }
+
+    // Simple equality
+    if (metadata[key] !== value) return false;
+  }
+
+  return true;
 }

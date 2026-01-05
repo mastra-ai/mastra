@@ -5,7 +5,10 @@ import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
 import { ConvexAdminClient } from '../client';
-import type { EqualityFilter } from '../types';
+import type { EqualityFilter, StorageRequest } from '../types';
+
+// Safe batch size for queries
+const QUERY_BATCH_SIZE = 1000;
 
 /**
  * Configuration for standalone domain usage.
@@ -108,11 +111,16 @@ export class ConvexDB extends MastraBase {
     return result;
   }
 
-  public async queryTable<R>(tableName: TABLE_NAMES, filters?: EqualityFilter[]): Promise<R[]> {
+  /**
+   * Query a table with optional filters.
+   * Uses indexes when possible via the server-side handler.
+   */
+  public async queryTable<R>(tableName: TABLE_NAMES, filters?: EqualityFilter[], limit?: number): Promise<R[]> {
     return this.client.callStorage<R[]>({
       op: 'queryTable',
       tableName,
       filters,
+      limit: limit ?? QUERY_BATCH_SIZE,
     });
   }
 
@@ -123,6 +131,99 @@ export class ConvexDB extends MastraBase {
       tableName,
       ids,
     });
+  }
+
+  // ============================================================================
+  // Semantic Operations - Use optimized server-side handlers
+  // ============================================================================
+
+  /**
+   * Get a thread by ID using the by_record_id index.
+   */
+  async getThread<R>(threadId: string): Promise<R | null> {
+    return this.client.callStorage<R | null>({
+      op: 'getThread',
+      threadId,
+    });
+  }
+
+  /**
+   * List threads by resource ID using the by_resource index.
+   */
+  async listThreadsByResource<R>(args: {
+    resourceId: string;
+    limit?: number;
+    cursor?: string;
+    orderBy?: 'createdAt' | 'updatedAt';
+    orderDirection?: 'asc' | 'desc';
+  }): Promise<{ result: R[]; cursor?: string; hasMore?: boolean }> {
+    return this.client.callStorageRaw<R[]>({
+      op: 'listThreadsByResource',
+      ...args,
+    });
+  }
+
+  /**
+   * Get messages for a thread using the by_thread index.
+   */
+  async getMessages<R>(args: {
+    threadId: string;
+    limit?: number;
+    cursor?: string;
+    orderDirection?: 'asc' | 'desc';
+  }): Promise<{ result: R[]; cursor?: string; hasMore?: boolean }> {
+    return this.client.callStorageRaw<R[]>({
+      op: 'getMessages',
+      ...args,
+    });
+  }
+
+  /**
+   * Get messages by resource ID using the by_resource index.
+   */
+  async getMessagesByResource<R>(args: {
+    resourceId: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ result: R[]; cursor?: string; hasMore?: boolean }> {
+    return this.client.callStorageRaw<R[]>({
+      op: 'getMessagesByResource',
+      ...args,
+    });
+  }
+
+  /**
+   * Get a workflow run using the by_workflow_run index.
+   */
+  async getWorkflowRun<R>(workflowName: string, runId: string): Promise<R | null> {
+    return this.client.callStorage<R | null>({
+      op: 'getWorkflowRun',
+      workflowName,
+      runId,
+    });
+  }
+
+  /**
+   * List workflow runs with optional filters, using appropriate indexes.
+   */
+  async listWorkflowRuns<R>(args: {
+    workflowName?: string;
+    resourceId?: string;
+    status?: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ result: R[]; cursor?: string; hasMore?: boolean }> {
+    return this.client.callStorageRaw<R[]>({
+      op: 'listWorkflowRuns',
+      ...args,
+    });
+  }
+
+  /**
+   * Call a semantic storage operation directly.
+   */
+  async callSemanticOp<R>(request: StorageRequest): Promise<R> {
+    return this.client.callStorage<R>(request);
   }
 
   private normalizeRecord(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {

@@ -34,6 +34,8 @@ type StoredMessage = {
   resourceId: string | null;
 };
 
+type StoredThread = Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string };
+
 export class MemoryConvex extends MemoryStorage {
   #db: ConvexDB;
   constructor(config: ConvexDomainConfig) {
@@ -53,15 +55,23 @@ export class MemoryConvex extends MemoryStorage {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const row = await this.#db.load<
-      (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }) | null
-    >({
-      tableName: TABLE_THREADS,
-      keys: { id: threadId },
-    });
+    // Use semantic operation for optimized lookup
+    try {
+      const row = await this.#db.getThread<StoredThread>(threadId);
+      if (!row) return null;
+      return this.deserializeThread(row);
+    } catch {
+      // Fallback to generic load
+      const row = await this.#db.load<StoredThread | null>({
+        tableName: TABLE_THREADS,
+        keys: { id: threadId },
+      });
+      if (!row) return null;
+      return this.deserializeThread(row);
+    }
+  }
 
-    if (!row) return null;
-
+  private deserializeThread(row: StoredThread): StorageThreadType {
     return {
       ...row,
       metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
@@ -133,17 +143,24 @@ export class MemoryConvex extends MemoryStorage {
     const { field, direction } = this.parseOrderBy(orderBy);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-    const rows = await this.#db.queryTable<
-      Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string }
-    >(TABLE_THREADS, [{ field: 'resourceId', value: resourceId }]);
+    // Try semantic operation first (uses by_resource index)
+    let rows: StoredThread[];
+    try {
+      const response = await this.#db.listThreadsByResource<StoredThread>({
+        resourceId,
+        limit: perPageInput === false ? 10000 : perPage + offset + 1, // Fetch enough for pagination
+        orderBy: field as 'createdAt' | 'updatedAt',
+        orderDirection: direction.toLowerCase() as 'asc' | 'desc',
+      });
+      rows = response.result;
+    } catch {
+      // Fallback to queryTable with filter (still uses index on server)
+      rows = await this.#db.queryTable<StoredThread>(TABLE_THREADS, [{ field: 'resourceId', value: resourceId }]);
+    }
 
-    const threads = rows.map(row => ({
-      ...row,
-      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-    }));
+    const threads = rows.map(row => this.deserializeThread(row));
 
+    // Sort if needed (semantic op may already be sorted, but ensure consistency)
     threads.sort((a, b) => {
       const aValue = a[field];
       const bValue = b[field];
@@ -186,11 +203,23 @@ export class MemoryConvex extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
-    // Fetch messages from all threads
+    // Fetch messages from all threads using semantic operations (uses by_thread index)
     let rows: StoredMessage[] = [];
     for (const tid of threadIds) {
-      const threadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [{ field: 'thread_id', value: tid }]);
-      rows.push(...threadRows);
+      try {
+        const response = await this.#db.getMessages<StoredMessage>({
+          threadId: tid,
+          limit: perPageInput === false ? 10000 : perPage + offset + 100, // Fetch enough for pagination + includes
+          orderDirection: direction.toLowerCase() as 'asc' | 'desc',
+        });
+        rows.push(...response.result);
+      } catch {
+        // Fallback to queryTable (still uses index on server)
+        const threadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
+          { field: 'thread_id', value: tid },
+        ]);
+        rows.push(...threadRows);
+      }
     }
 
     if (resourceId) {
