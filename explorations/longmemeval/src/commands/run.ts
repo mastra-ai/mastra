@@ -580,11 +580,12 @@ Be specific rather than generic when the user has expressed clear preferences in
       const improvedResult = await metric.measure(improvedInput, improvedHypothesis);
       improvedIsCorrect = improvedResult.score === 1;
 
-      // Retry improved version up to 5 times if requiresRetry is set and first attempt failed
+      // Retry improved version: always retry at least once, up to 5 times if requiresRetry is set
+      const improvedMaxRetries = meta.requiresRetry ? maxRetries : 1;
       let improvedRetryCount = 0;
-      while (!improvedIsCorrect && meta.requiresRetry && improvedRetryCount < maxRetries) {
+      while (!improvedIsCorrect && improvedRetryCount < improvedMaxRetries) {
         improvedRetryCount++;
-        updateStatus(`Retry improved ${improvedRetryCount}/${maxRetries} for ${meta.questionId}...`);
+        updateStatus(`Retry improved ${improvedRetryCount}/${improvedMaxRetries} for ${meta.questionId}...`);
 
         const retryThreadId = `eval_improved_retry_${meta.questionId}_${improvedRetryCount}_${Date.now()}`;
         const retryResponse = await agent.generate(improvedQuestion, {
