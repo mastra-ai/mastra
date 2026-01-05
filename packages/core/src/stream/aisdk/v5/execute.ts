@@ -9,7 +9,7 @@ import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
 import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
-import { prepareToolsAndToolChoice } from './compat';
+import { prepareToolsAndToolChoice, type ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
 
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
@@ -69,10 +69,15 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     generateId,
   });
 
+  // Determine target version based on model's specificationVersion
+  // V3 models (AI SDK v6) need 'provider' type, V2 models need 'provider-defined'
+  const targetVersion: ModelSpecVersion = model.specificationVersion === 'v3' ? 'v3' : 'v2';
+
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
     toolChoice,
     activeTools,
+    targetVersion,
   });
 
   const structuredOutputMode = structuredOutput?.schema
