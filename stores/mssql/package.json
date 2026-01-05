@@ -19,8 +19,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts stores/mssql",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/mssql",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose ps | grep mssql && break || sleep 1; done) && (for i in $(seq 1 30); do docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q mssql) | grep healthy && break || sleep 2; done)",
     "test": "vitest run",
