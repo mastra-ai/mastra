@@ -72,6 +72,8 @@ jobs:
       - name: Run build
         run: pnpm build
 
+      - name: Generate embedded documentation
+        run: pnpm turbo postbuild
 
       - name: Determine publish tag
         id: determine-tag
@@ -149,6 +151,8 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Generate embedded documentation
+        run: pnpm turbo postbuild
 
       - name: Exit prerelease mode
         id: exit-prerelease-mode
@@ -340,6 +344,8 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
+      - name: Generate embedded documentation
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" postbuild
 
       - name: Run Changeset Pre Exit
         run: pnpm changeset-cli pre exit
