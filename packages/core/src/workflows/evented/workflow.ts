@@ -32,27 +32,39 @@ export function cloneWorkflow<
   TState extends z.ZodObject<any> = z.ZodObject<any>,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any, any, EventedEngineType>[] = Step<
+  TSteps extends Step<string, any, any, any, any, any, EventedEngineType, any>[] = Step<
     string,
     any,
     any,
     any,
     any,
     any,
-    EventedEngineType
+    EventedEngineType,
+    any
   >[],
   TPrevSchema extends z.ZodType<any> = TInput,
+  TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
 >(
-  workflow: Workflow<EventedEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
+  workflow: Workflow<EventedEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema, TRequestContextSchema>,
   opts: { id: TWorkflowId },
-): Workflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  const wf: Workflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
+): Workflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, TRequestContextSchema> {
+  const wf: Workflow<
+    EventedEngineType,
+    TSteps,
+    TWorkflowId,
+    TState,
+    TInput,
+    TOutput,
+    TPrevSchema,
+    TRequestContextSchema
+  > = new Workflow({
     id: opts.id,
     inputSchema: workflow.inputSchema,
     outputSchema: workflow.outputSchema,
     steps: workflow.stepDefs,
     mastra: workflow.mastra,
     options: workflow.options,
+    requestContextSchema: workflow.requestContextSchema,
   });
 
   wf.setStepFlow(workflow.stepGraph);
