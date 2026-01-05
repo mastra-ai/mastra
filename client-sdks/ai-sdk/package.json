@@ -47,7 +47,7 @@
     "ai": "^5.0.60",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },
