@@ -96,8 +96,9 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
 /**
  * Arguments for processOutputResult method
  */
-export interface ProcessOutputResultArgs<TTripwireMetadata = unknown>
-  extends ProcessorMessageContext<TTripwireMetadata> {}
+export interface ProcessOutputResultArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
  * Arguments for processInputStep method
