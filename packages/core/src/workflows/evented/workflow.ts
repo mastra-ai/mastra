@@ -84,6 +84,7 @@ export function cloneStep<TStepId extends string>(
     suspendSchema: step.suspendSchema,
     resumeSchema: step.resumeSchema,
     stateSchema: step.stateSchema,
+    requestContextSchema: step.requestContextSchema,
     execute: step.execute,
     retries: step.retries,
     scorers: step.scorers,
