@@ -179,35 +179,47 @@ export const sendWorkflowRunEventBodySchema = z.object({
   data: z.unknown(),
 });
 
-/**
- * Schema for workflow execution result query parameters
- * Allows filtering which fields to return to reduce payload size
- */
-export const workflowExecutionResultQuerySchema = z.object({
-  fields: z
+// Shared field validation for workflow result queries
+const VALID_WORKFLOW_RESULT_FIELDS = new Set([
+  'result',
+  'error',
+  'payload',
+  'steps',
+  'activeStepsPath',
+  'serializedStepGraph',
+]);
+
+const WORKFLOW_RESULT_FIELDS_ERROR =
+  'Invalid field name. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph';
+
+const createFieldsValidator = (description: string) =>
+  z
     .string()
     .optional()
     .refine(
       value => {
         if (!value) return true;
-        const validFields = new Set(['result', 'error', 'payload', 'steps', 'activeStepsPath', 'serializedStepGraph']);
         const requestedFields = value.split(',').map(f => f.trim());
-        return requestedFields.every(field => validFields.has(field));
+        return requestedFields.every(field => VALID_WORKFLOW_RESULT_FIELDS.has(field));
       },
-      {
-        message:
-          'Invalid field name. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph',
-      },
+      { message: WORKFLOW_RESULT_FIELDS_ERROR },
     )
-    .describe(
-      'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
-    ),
-  withNestedWorkflows: z
-    .enum(['true', 'false'])
-    .optional()
-    .describe(
-      'Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.',
-    ),
+    .describe(description);
+
+const withNestedWorkflowsField = z
+  .enum(['true', 'false'])
+  .optional()
+  .describe('Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.');
+
+/**
+ * Schema for workflow execution result query parameters
+ * Allows filtering which fields to return to reduce payload size
+ */
+export const workflowExecutionResultQuerySchema = z.object({
+  fields: createFieldsValidator(
+    'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
+  ),
+  withNestedWorkflows: withNestedWorkflowsField,
 });
 
 /**
@@ -229,30 +241,10 @@ export const workflowExecutionResultSchema = z.object({
  * Schema for query parameters when getting a unified workflow run result
  */
 export const workflowRunResultQuerySchema = z.object({
-  fields: z
-    .string()
-    .optional()
-    .refine(
-      value => {
-        if (!value) return true;
-        const validFields = new Set(['result', 'error', 'payload', 'steps', 'activeStepsPath', 'serializedStepGraph']);
-        const requestedFields = value.split(',').map(f => f.trim());
-        return requestedFields.every(field => validFields.has(field));
-      },
-      {
-        message:
-          'Invalid field name. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph',
-      },
-    )
-    .describe(
-      'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
-    ),
-  withNestedWorkflows: z
-    .enum(['true', 'false'])
-    .optional()
-    .describe(
-      'Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.',
-    ),
+  fields: createFieldsValidator(
+    'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
+  ),
+  withNestedWorkflows: withNestedWorkflowsField,
 });
 
 /**
