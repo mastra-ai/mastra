@@ -10,7 +10,8 @@
       "outputs": ["./**/*.d.ts"]
     },
     "build:docs": {
-      "dependsOn": ["build:lib"]
+      "dependsOn": ["build:lib"],
+      "outputs": ["dist/docs/**"]
     },
     "build:lib": {
       "dependsOn": ["^build"],
