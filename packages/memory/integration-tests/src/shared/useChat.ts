@@ -70,7 +70,7 @@ export function setupUseChatV4() {
             PORT: port.toString(),
           },
         },
-      });
+      );
 
       // Wait for server to be ready
       await new Promise<void>((resolve, reject) => {
