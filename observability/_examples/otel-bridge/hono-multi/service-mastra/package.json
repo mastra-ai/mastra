@@ -31,6 +31,6 @@
     "mastra": "latest",
     "prettier": "^3.6.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   }
 }
