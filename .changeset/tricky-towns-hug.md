@@ -1,6 +1,6 @@
 ---
 '@mastra/express': patch
-'@mastra/client-js': patch
+'@mastra/client-js': minor
 '@mastra/hono': patch
 '@mastra/inngest': patch
 '@mastra/memory': patch
