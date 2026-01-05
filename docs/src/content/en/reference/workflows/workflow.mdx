@@ -26,6 +26,59 @@ export const workflow = createWorkflow({
 });
 ```
 
+### With Request Context Validation
+
+```typescript title="src/mastra/workflows/authenticated-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const workflow = createWorkflow({
+  id: "authenticated-workflow",
+  inputSchema: z.object({
+    text: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+    organizationId: z.string(),
+  }),
+})
+  .then(
+    createStep({
+      id: "process-step",
+      inputSchema: z.object({
+        text: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ inputData, requestContext }) => {
+        // Access validated request context in any step
+        const userId = requestContext.userId;
+        const orgId = requestContext.organizationId;
+        console.log(`Processing for user ${userId} in org ${orgId}`);
+
+        return {
+          result: `Processed: ${inputData.text}`,
+        };
+      },
+    })
+  )
+  .commit();
+
+// When starting the workflow, the framework validates the requestContext
+const run = await workflow.createRun();
+const result = await run.start({
+  inputData: { text: "hello" },
+  requestContext: {
+    userId: "user-123",
+    organizationId: "org-456",
+  },
+});
+```
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -56,6 +109,13 @@ export const workflow = createWorkflow({
       name: "options",
       type: "WorkflowOptions",
       description: "Optional options for the workflow",
+      isOptional: true,
+    },
+    {
+      name: "requestContextSchema",
+      type: "z.ZodType<any>",
+      description:
+        "Optional Zod schema defining the expected structure of request context values. When provided, the framework validates that the required context is present before workflow execution. The validated requestContext is automatically passed to all steps in the workflow and can be accessed via the `requestContext` parameter in step execute functions.",
       isOptional: true,
     },
   ]}
