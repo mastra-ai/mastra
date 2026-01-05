@@ -484,7 +484,7 @@ export class BraintrustExporter extends BaseExporter {
   /**
    * Transforms MODEL_GENERATION input to Braintrust Thread view format.
    * Converts AI SDK v5 messages to OpenAI Chat Completion format, which was Braintrust requires
-   * for proper rendering of threads.
+   * for proper rendering of threads (fixes #11023).
    */
   private transformInput(input: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
