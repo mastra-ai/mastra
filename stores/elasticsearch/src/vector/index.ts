@@ -506,22 +506,24 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     id: string,
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
-    let existingDoc;
+    let source: any;
     try {
-      // First get the current document to merge with updates
-      const result = await this.client
-        .get({
-          index: indexName,
-          id: id,
-        })
-        .catch(() => {
-          throw new Error(`Document with ID ${id} not found in index ${indexName}`);
-        });
+      // Use search with ids query instead of get() because get() doesn't return
+      // dense_vector fields in _source. Search with explicit _source does.
+      const searchResult = await this.client.search({
+        index: indexName,
+        query: { ids: { values: [id] } },
+        _source: ['id', 'metadata', 'embedding'],
+      });
 
-      if (!result || !result._source) {
+      if (searchResult.hits.hits.length === 0) {
+        throw new Error(`Document with ID ${id} not found in index ${indexName}`);
+      }
+
+      source = searchResult.hits.hits[0]?._source as any;
+      if (!source) {
         throw new Error(`Document with ID ${id} has no source data in index ${indexName}`);
       }
-      existingDoc = result;
     } catch (error) {
       throw new MastraError(
         {
@@ -537,7 +539,6 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       );
     }
 
-    const source = existingDoc._source as any;
     const updatedDoc: Record<string, any> = {
       id: source?.id || id,
     };

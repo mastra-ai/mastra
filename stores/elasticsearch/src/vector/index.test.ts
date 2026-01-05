@@ -377,11 +377,11 @@ describe('ElasticSearchVector', () => {
     });
 
     describe('updates', () => {
-      let testIndexName = 'test_vector_updates';
+      // Use vectors with distinct directions to ensure predictable query results with cosine similarity
       const testVectors = [
-        [1, 2, 3],
-        [4, 5, 6],
-        [7, 8, 9],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
       ];
 
       beforeEach(async () => {
