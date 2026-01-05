@@ -123,8 +123,8 @@
     "@mastra/schema-compat": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
     "lucide-react": "^0.474.0",
-    "react": ">=19.0.0",
-    "react-dom": ">=19.0.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "tailwindcss": "^3.0.0"
   },
   "devDependencies": {
@@ -138,8 +138,8 @@
     "@tailwindcss/container-queries": "^0.1.1",
     "@tanstack/react-query": "^5.90.9",
     "@types/node": "22.13.17",
-    "@types/react": "^19.1.9",
-    "@types/react-dom": "^19.1.7",
+    "@types/react": "^19.2.3",
+    "@types/react-dom": "^19.2.3",
     "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "catalog:",
