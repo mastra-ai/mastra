@@ -123,6 +123,7 @@ CONVERSATION CONTEXT:
 - Specific requirements or constraints mentioned
 - Contents of assistant learnings and summaries
 - Answers to users questions including full context to remember detailed summaries and explanations
+- Assistant explanations, especially complex ones. observe the fine details so that the assistant does not forget what they explained
 - Relevant code snippets
 - User preferences (like favourites, dislikes, preferences, etc)
 - Any specifically formatted text or ascii that would need to be reproduced or referenced in later interactions (preserve these verbatim in memory)
