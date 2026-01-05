@@ -128,30 +128,6 @@ export const messageEntity = new Entity({
         return value;
       },
     },
-    /**
-     * Stores the message content metadata as a separate field for efficient filtering.
-     * This is a denormalized copy of content.metadata that enables filtering queries.
-     */
-    metadataJson: {
-      type: 'string',
-      required: false,
-      set: (value?: Record<string, unknown> | string | null) => {
-        if (value && typeof value !== 'string') {
-          return JSON.stringify(value);
-        }
-        return value ?? undefined;
-      },
-      get: (value?: string) => {
-        if (value && typeof value === 'string') {
-          try {
-            return JSON.parse(value);
-          } catch {
-            return value;
-          }
-        }
-        return value;
-      },
-    },
   },
   indexes: {
     primary: {

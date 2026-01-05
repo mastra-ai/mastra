@@ -94,20 +94,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   private parseMessageData(data: any): MastraDBMessage | MastraMessageV1 {
     // Removed try/catch and JSON.parse logic - now handled by entity 'get' attributes
     // This function now primarily ensures correct typing and Date conversion.
-    let content = data.content;
-
-    // If metadataJson is available, use it as the authoritative source for metadata
-    // This enables efficient JSON filtering while maintaining backwards compatibility
-    if (data.metadataJson && typeof content === 'object') {
-      content = {
-        ...content,
-        metadata: data.metadataJson,
-      };
-    }
-
     return {
       ...data,
-      content,
+      content: data.content,
       // Ensure dates are Date objects if needed (ElectroDB might return strings)
       createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
@@ -557,10 +546,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     const messagesToSave = messages.map(msg => {
       const now = new Date().toISOString();
 
-      // Extract metadata for the metadataJson field (for JSON filtering)
-      const contentMetadata =
-        typeof msg.content === 'object' && msg.content?.metadata ? msg.content.metadata : undefined;
-
       return {
         entity: 'message', // Add entity type
         id: msg.id,
@@ -573,7 +558,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
         toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
         toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
-        metadataJson: contentMetadata ? JSON.stringify(contentMetadata) : undefined,
         createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
         updatedAt: now, // Add updatedAt
       };
@@ -857,11 +841,6 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           }
 
           updatePayload.content = JSON.stringify(newContent);
-
-          // Also update metadataJson to keep it in sync
-          if (newContent.metadata) {
-            updatePayload.metadataJson = JSON.stringify(newContent.metadata);
-          }
         }
 
         // Update the message

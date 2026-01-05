@@ -310,7 +310,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       );
     }
 
-    // Add an index to each message to maintain order, and extract metadataJson
+    // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => {
       if (!message.threadId) {
         throw new Error(
@@ -323,14 +323,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
         );
       }
 
-      // Extract metadata for the metadataJson field (for JSON filtering)
-      const contentMetadata =
-        typeof message.content === 'object' && message.content?.metadata ? message.content.metadata : null;
-
       return {
         ...message,
         _index: index,
-        metadataJson: contentMetadata,
       };
     });
 
@@ -487,25 +482,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
     return results.filter(result => result !== null) as MastraDBMessage[];
   }
 
-  private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number; metadataJson?: Record<string, unknown> | null }): MastraDBMessage {
+  private parseStoredMessage(storedMessage: MastraDBMessage & { _index?: number }): MastraDBMessage {
     const defaultMessageContent = { format: 2, parts: [{ type: 'text', text: '' }] };
-    const { _index, metadataJson, ...rest } = storedMessage;
-
-    let content = rest.content || defaultMessageContent;
-
-    // If metadataJson is available, use it as the authoritative source for metadata
-    // This enables efficient JSON filtering while maintaining backwards compatibility
-    if (metadataJson && typeof content === 'object') {
-      content = {
-        ...content,
-        metadata: metadataJson,
-      };
-    }
+    const { _index, ...rest } = storedMessage;
 
     return {
       ...rest,
       createdAt: new Date(rest.createdAt),
-      content,
+      content: rest.content || defaultMessageContent,
     } satisfies MastraDBMessage;
   }
 
@@ -950,9 +934,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
               : {}),
           };
           updatedMessage.content = newContent;
-
-          // Also update metadataJson to keep it in sync
-          (updatedMessage as any).metadataJson = newContent.metadata || null;
         }
 
         // Update other fields

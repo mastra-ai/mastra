@@ -78,6 +78,14 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
     await this.db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+
+    // Add metadataJson column for backwards compatibility with existing tables
+    await this.db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['metadataJson'],
+    });
+
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -620,33 +628,47 @@ export class MemoryMSSQL extends MemoryStorage {
         filters,
         TABLE_SCHEMAS[TABLE_MESSAGES],
       );
+
+      // Build metadata filter conditions using JSON_VALUE for native MSSQL JSON querying
+      let metadataWhereClause = '';
+      const metadataParams: Record<string, string> = {};
+      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
+        const metadataConditions: string[] = [];
+        let paramIdx = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata_${paramIdx++}`;
+          metadataConditions.push(`JSON_VALUE(metadataJson, '$.${key}') = @${paramName}`);
+          metadataParams[paramName] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        }
+        metadataWhereClause = ` AND ${metadataConditions.join(' AND ')}`;
+      }
+
+      const fullWhereClause = `${actualWhereClause}${metadataWhereClause}`;
+
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
+        Object.entries(metadataParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
       };
 
       // Get total count
       const countRequest = this.pool.request();
       bindWhereParams(countRequest);
-      const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM ${tableName}${actualWhereClause}`);
+      const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM ${tableName}${fullWhereClause}`);
       const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
-
-      // When metadata filter is applied, we need to fetch all messages first, then filter and paginate in memory
-      const needsPostFetchFiltering = filter?.metadata != null && Object.keys(filter.metadata).length > 0;
 
       const fetchBaseMessages = async (): Promise<any[]> => {
         const request = this.pool.request();
         bindWhereParams(request);
 
-        // Fetch all when perPage is false OR when metadata filter requires post-fetch filtering
-        if (perPageInput === false || needsPostFetchFiltering) {
-          const result = await request.query(`${baseQuery}${actualWhereClause} ${orderByStatement}`);
+        if (perPageInput === false) {
+          const result = await request.query(`${baseQuery}${fullWhereClause} ${orderByStatement}`);
           return result.recordset || [];
         }
 
         request.input('offset', offset);
         request.input('limit', perPage > 2147483647 ? sql.BigInt : sql.Int, perPage);
         const result = await request.query(
-          `${baseQuery}${actualWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
+          `${baseQuery}${fullWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
         );
         return result.recordset || [];
       };
@@ -683,24 +705,7 @@ export class MemoryMSSQL extends MemoryStorage {
         });
       }
       // Parse and format messages to V2
-      let parsed = this._parseAndFormatMessages(messages, 'v2');
-
-      // Apply metadata filter (post-fetch filtering)
-      let filteredTotal = total;
-      if (filter?.metadata != null && Object.keys(filter.metadata).length > 0) {
-        const filtered = (parsed as any[]).filter((msg: any) => {
-          const metadata = msg.content?.metadata;
-          if (!metadata) return false;
-          for (const [key, value] of Object.entries(filter.metadata!)) {
-            if (metadata[key] !== value) return false;
-          }
-          return true;
-        });
-        // Update total to reflect filtered count
-        filteredTotal = filtered.length;
-        // Apply pagination in memory after filtering
-        parsed = filtered.slice(offset, offset + perPage) as typeof parsed;
-      }
+      const parsed = this._parseAndFormatMessages(messages, 'v2');
 
       const mult = direction === 'ASC' ? 1 : -1;
 
@@ -729,12 +734,11 @@ export class MemoryMSSQL extends MemoryStorage {
       // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageCount = finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).length;
-      const actualTotal = needsPostFetchFiltering ? filteredTotal : total;
-      const hasMore = perPageInput !== false && returnedThreadMessageCount < actualTotal && offset + perPage < actualTotal;
+      const hasMore = perPageInput !== false && returnedThreadMessageCount < total && offset + perPage < total;
 
       return {
         messages: finalMessages,
-        total: actualTotal,
+        total,
         page,
         perPage: perPageForResponse,
         hasMore,
@@ -813,6 +817,12 @@ export class MemoryMSSQL extends MemoryStorage {
           request.input('role', message.role);
           request.input('type', message.type || 'v2');
           request.input('resourceId', message.resourceId);
+          // Extract metadata for the metadataJson column (for native JSON_VALUE querying)
+          const contentMetadata =
+            typeof message.content === 'object' && message.content?.metadata
+              ? JSON.stringify(message.content.metadata)
+              : null;
+          request.input('metadataJson', contentMetadata);
           const mergeSql = `MERGE INTO ${tableMessages} AS target
             USING (SELECT @id AS id) AS src
             ON target.id = src.id
@@ -822,9 +832,10 @@ export class MemoryMSSQL extends MemoryStorage {
               [createdAt] = @createdAt,
               role = @role,
               type = @type,
-              resourceId = @resourceId
-            WHEN NOT MATCHED THEN INSERT (id, thread_id, content, [createdAt], role, type, resourceId)
-              VALUES (@id, @thread_id, @content, @createdAt, @role, @type, @resourceId);`;
+              resourceId = @resourceId,
+              metadataJson = @metadataJson
+            WHEN NOT MATCHED THEN INSERT (id, thread_id, content, [createdAt], role, type, resourceId, metadataJson)
+              VALUES (@id, @thread_id, @content, @createdAt, @role, @type, @resourceId, @metadataJson);`;
           await request.query(mergeSql);
         }
         const threadReq = transaction.request();
@@ -929,6 +940,11 @@ export class MemoryMSSQL extends MemoryStorage {
           };
           setClauses.push(`content = @content`);
           req.input('content', JSON.stringify(newContent));
+          // Sync metadataJson column for JSON_VALUE querying
+          if (updatableFields.content.metadata || newContent.metadata) {
+            setClauses.push(`metadataJson = @metadataJson`);
+            req.input('metadataJson', JSON.stringify(newContent.metadata || {}));
+          }
           delete updatableFields.content;
         }
         for (const key in updatableFields) {
