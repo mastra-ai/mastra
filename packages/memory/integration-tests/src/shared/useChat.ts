@@ -280,7 +280,7 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
 
       const mastraDir = path.resolve(import.meta.dirname, `..`, version, `mastra`);
       mastraServer = spawn(
-        'node',
+        process.execPath,
         [
           path.resolve(import.meta.dirname, `..`, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
           'dev',
