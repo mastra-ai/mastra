@@ -113,7 +113,7 @@
     "unified": "^11.0.5",
     "use-debounce": "^10.0.6",
     "zod": "^4.1.12",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.9"
   },
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
