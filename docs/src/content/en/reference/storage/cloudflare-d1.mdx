@@ -1,6 +1,9 @@
 ---
 title: "Reference: Cloudflare D1 Storage | Storage"
 description: Documentation for the Cloudflare D1 SQL storage implementation in Mastra.
+packages:
+  - "@mastra/cloudflare-d1"
+  - "@mastra/core"
 ---
 
 # Cloudflare D1 Storage
@@ -118,14 +121,16 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { D1Store } from "@mastra/cloudflare-d1";
 
 const storage = new D1Store({
+  id: 'd1-storage',
   binding: D1Database,
 });
 
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning

@@ -1,6 +1,10 @@
 ---
 title: "MastraAuthClerk Class | Auth"
 description: "Documentation for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
+packages:
+  - "@mastra/auth-clerk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -32,12 +36,11 @@ npm install @mastra/auth-clerk@beta
 
 ## Usage example
 
-```typescript {2,7-11} title="src/mastra/index.ts"
+```typescript {2,6-10} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthClerk({
       publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
@@ -50,7 +53,11 @@ export const mastra = new Mastra({
 
 > **Note:** The default `authorizeUser` method allows all authenticated users. To customize user authorization, provide a custom `authorizeUser` function when constructing the provider.
 
-> See the [MastraAuthClerk](/reference/v1/auth/clerk) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthClerk](/reference/v1/auth/clerk) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -93,7 +100,11 @@ export const mastraClient = new MastraClient({
 ```
 
 > **Note:** The access token must be prefixed with `Bearer` in the Authorization header.
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 

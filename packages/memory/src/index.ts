@@ -1,21 +1,26 @@
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
+import { embedMany as embedManyV6 } from '@internal/ai-v6';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { MastraMemory } from '@mastra/core/memory';
+
 import type {
-  MastraMessageV1,
   MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
 } from '@mastra/core/memory';
+import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
   StorageListMessagesInput,
+  MemoryStorage,
+  StorageCloneThreadInput,
+  StorageCloneThreadOutput,
+  ThreadCloneMetadata,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -33,7 +38,7 @@ import {
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
-export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
+export { extractWorkingMemoryTags, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -42,8 +47,6 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
-
-import { extractWorkingMemoryContent, removeWorkingMemoryTags } from './working-memory-utils';
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -65,12 +68,23 @@ export class Memory extends MastraMemory {
     this.threadConfig = mergedConfig;
   }
 
+  /**
+   * Gets the memory storage domain, throwing if not available.
+   */
+  protected async getMemoryStore(): Promise<MemoryStorage> {
+    const store = await this.storage.getStore('memory');
+    if (!store) {
+      throw new Error(`Memory storage domain is not available on ${this.storage.constructor.name}`);
+    }
+    return store;
+  }
+
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
 
-    const thread = await this.storage.getThreadById({ threadId });
+    const thread = await this.getThreadById({ threadId });
 
     // For resource-scoped semantic recall, we don't need to validate that the specific thread exists
     // because we're searching across all threads for the resource
@@ -82,29 +96,6 @@ export class Memory extends MastraMemory {
     if (thread && thread.resourceId !== resourceId) {
       throw new Error(
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
-      );
-    }
-  }
-
-  protected checkStorageFeatureSupport(config: MemoryConfig) {
-    const resourceScope =
-      (typeof config.semanticRecall === 'object' && config.semanticRecall.scope !== 'thread') ||
-      // resource scope is now default
-      config.semanticRecall === true;
-
-    if (resourceScope && !this.storage.supports.selectByIncludeResourceScope) {
-      throw new Error(
-        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
-      );
-    }
-
-    if (
-      config.workingMemory?.enabled &&
-      config.workingMemory.scope === `resource` &&
-      !this.storage.supports.resourceWorkingMemory
-    ) {
-      throw new Error(
-        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support workingMemory: { scope: "resource" } yet and currently only supports per-thread working memory. Supported adapters: LibSQL, PostgreSQL, Upstash.`,
       );
     }
   }
@@ -139,15 +130,16 @@ export class Memory extends MastraMemory {
       vector?: number[];
     }[] = [];
 
+    // Log memory recall parameters, excluding potentially large schema objects
     this.logger.debug(`Memory recall() with:`, {
       threadId,
       perPage,
       page,
       orderBy: effectiveOrderBy,
-      threadConfig,
+      hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
+      workingMemoryEnabled: config.workingMemory?.enabled,
+      semanticRecallEnabled: Boolean(config.semanticRecall),
     });
-
-    this.checkStorageFeatureSupport(config);
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
     const defaultTopK = DEFAULT_TOP_K;
@@ -206,7 +198,8 @@ export class Memory extends MastraMemory {
     }
 
     // Get raw messages from storage
-    const paginatedResult = await this.storage.listMessages({
+    const memoryStore = await this.getMemoryStore();
+    const paginatedResult = await memoryStore.listMessages({
       threadId,
       resourceId,
       perPage,
@@ -242,13 +235,15 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.storage.getThreadById({ threadId });
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.getThreadById({ threadId });
   }
 
   async listThreadsByResourceId(
     args: StorageListThreadsByResourceIdInput,
   ): Promise<StorageListThreadsByResourceIdOutput> {
-    return this.storage.listThreadsByResourceId(args);
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.listThreadsByResourceId(args);
   }
 
   private async handleWorkingMemoryFromMetadata({
@@ -263,13 +258,12 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (config.workingMemory?.enabled) {
-      this.checkStorageFeatureSupport(config);
-
       const scope = config.workingMemory.scope || 'resource';
 
       // For resource scope, update the resource's working memory
       if (scope === 'resource' && resourceId) {
-        await this.storage.updateResource({
+        const memoryStore = await this.getMemoryStore();
+        await memoryStore.updateResource({
           resourceId,
           workingMemory,
         });
@@ -285,7 +279,8 @@ export class Memory extends MastraMemory {
     thread: StorageThreadType;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    const savedThread = await this.storage.saveThread({ thread });
+    const memoryStore = await this.getMemoryStore();
+    const savedThread = await memoryStore.saveThread({ thread });
 
     // Check if metadata contains workingMemory and working memory is enabled
     if (thread.metadata?.workingMemory && typeof thread.metadata.workingMemory === 'string' && thread.resourceId) {
@@ -310,7 +305,8 @@ export class Memory extends MastraMemory {
     metadata: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    const updatedThread = await this.storage.updateThread({
+    const memoryStore = await this.getMemoryStore();
+    const updatedThread = await memoryStore.updateThread({
       id,
       title,
       metadata,
@@ -329,7 +325,8 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    await this.storage.deleteThread({ threadId });
+    const memoryStore = await this.getMemoryStore();
+    await memoryStore.deleteThread({ threadId });
   }
 
   async updateWorkingMemory({
@@ -349,8 +346,6 @@ export class Memory extends MastraMemory {
       throw new Error('Working memory is not enabled for this memory instance');
     }
 
-    this.checkStorageFeatureSupport(config);
-
     const scope = config.workingMemory.scope || 'resource';
 
     // Guard: If resource-scoped working memory is enabled but no resourceId is provided, throw an error
@@ -361,20 +356,21 @@ export class Memory extends MastraMemory {
       );
     }
 
+    const memoryStore = await this.getMemoryStore();
     if (scope === 'resource' && resourceId) {
       // Update working memory in resource table
-      await this.storage.updateResource({
+      await memoryStore.updateResource({
         resourceId,
         workingMemory,
       });
     } else {
       // Update working memory in thread metadata (existing behavior)
-      const thread = await this.storage.getThreadById({ threadId });
+      const thread = await this.getThreadById({ threadId });
       if (!thread) {
         throw new Error(`Thread ${threadId} not found`);
       }
 
-      await this.storage.updateThread({
+      await memoryStore.updateThread({
         id: threadId,
         title: thread.title || 'Untitled Thread',
         metadata: {
@@ -407,8 +403,6 @@ export class Memory extends MastraMemory {
     if (!config.workingMemory?.enabled) {
       throw new Error('Working memory is not enabled for this memory instance');
     }
-
-    this.checkStorageFeatureSupport(config);
 
     // If the agent calls the update working memory tool multiple times simultaneously
     // each call could overwrite the other call
@@ -472,9 +466,10 @@ ${workingMemory}`;
         );
       }
 
+      const memoryStore = await this.getMemoryStore();
       if (scope === 'resource' && resourceId) {
         // Update working memory in resource table
-        await this.storage.updateResource({
+        await memoryStore.updateResource({
           resourceId,
           workingMemory,
         });
@@ -484,12 +479,12 @@ ${workingMemory}`;
         }
       } else {
         // Update working memory in thread metadata (existing behavior)
-        const thread = await this.storage.getThreadById({ threadId });
+        const thread = await this.getThreadById({ threadId });
         if (!thread) {
           throw new Error(`Thread ${threadId} not found`);
         }
 
-        await this.storage.updateThread({
+        await memoryStore.updateThread({
           id: threadId,
           title: thread.title || 'Untitled Thread',
           metadata: {
@@ -567,11 +562,27 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    const promise = (this.embedder.specificationVersion === `v2` ? embedManyV5 : embedMany)({
+    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
+    const specVersion = this.embedder.specificationVersion;
+
+    switch (specVersion) {
+      case 'v3':
+        embedFn = embedManyV6;
+        break;
+      case 'v2':
+        embedFn = embedManyV5;
+        break;
+      default:
+        embedFn = embedMany;
+        break;
+    }
+
+    const promise = embedFn({
       values: chunks,
       maxRetries: 3,
       // @ts-ignore
       model: this.embedder,
+      ...(this.embedderOptions || {}),
     });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
@@ -609,7 +620,8 @@ ${workingMemory}`;
       .add(updatedMessages, 'memory')
       .get.all.db();
 
-    const result = await this.storage.saveMessages({
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.saveMessages({
       messages: dbMessages,
     });
 
@@ -689,34 +701,7 @@ ${workingMemory}`;
 
     return result;
   }
-  protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
-    if (typeof message?.content === `string`) {
-      return {
-        ...message,
-        content: removeWorkingMemoryTags(message.content).trim(),
-      };
-    } else if (Array.isArray(message?.content)) {
-      // Filter out updateWorkingMemory tool-call/result content items
-      const filteredContent = message.content.filter(
-        content =>
-          (content.type !== 'tool-call' && content.type !== 'tool-result') ||
-          content.toolName !== 'updateWorkingMemory',
-      );
-      const newContent = filteredContent.map(content => {
-        if (content.type === 'text') {
-          return {
-            ...content,
-            text: removeWorkingMemoryTags(content.text).trim(),
-          };
-        }
-        return { ...content };
-      }) as MastraMessageV1['content'];
-      if (!newContent.length) return null;
-      return { ...message, content: newContent };
-    } else {
-      return { ...message };
-    }
-  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
@@ -777,8 +762,6 @@ ${workingMemory}`;
       return null;
     }
 
-    this.checkStorageFeatureSupport(config);
-
     const scope = config.workingMemory.scope || 'resource';
     let workingMemoryData: string | null = null;
 
@@ -792,11 +775,12 @@ ${workingMemory}`;
 
     if (scope === 'resource' && resourceId) {
       // Get working memory from resource table
-      const resource = await this.storage.getResourceById({ resourceId });
+      const memoryStore = await this.getMemoryStore();
+      const resource = await memoryStore.getResourceById({ resourceId });
       workingMemoryData = resource?.workingMemory || null;
     } else {
       // Get working memory from thread metadata (default behavior)
-      const thread = await this.storage.getThreadById({ threadId });
+      const thread = await this.getThreadById({ threadId });
       workingMemoryData = thread?.metadata?.workingMemory as string;
     }
 
@@ -1027,7 +1011,8 @@ ${
 
     // TODO: Possibly handle updating the vector db here when a message is updated.
 
-    return this.storage.updateMessages({ messages });
+    const memoryStore = await this.getMemoryStore();
+    return memoryStore.updateMessages({ messages });
   }
 
   /**
@@ -1066,13 +1051,297 @@ ${
     }
 
     // Delete from storage
-    await this.storage.deleteMessages(messageIds);
+    const memoryStore = await this.getMemoryStore();
+    await memoryStore.deleteMessages(messageIds);
 
     // TODO: Delete from vector store if semantic recall is enabled
     // This would require getting the messages first to know their threadId/resourceId
     // and then querying the vector store to delete associated embeddings
   }
+
+  /**
+   * Clone a thread and its messages to create a new independent thread.
+   * The cloned thread will have metadata tracking its source.
+   *
+   * If semantic recall is enabled, the cloned messages will also be embedded
+   * and added to the vector store for semantic search.
+   *
+   * @param args - Clone configuration options
+   * @param args.sourceThreadId - ID of the thread to clone
+   * @param args.newThreadId - ID for the new cloned thread (if not provided, a random UUID will be generated)
+   * @param args.resourceId - Resource ID for the new thread (defaults to source thread's resourceId)
+   * @param args.title - Title for the new cloned thread
+   * @param args.metadata - Additional metadata to merge with clone metadata
+   * @param args.options - Options for filtering which messages to include
+   * @param args.options.messageLimit - Maximum number of messages to copy (from most recent)
+   * @param args.options.messageFilter - Filter messages by date range or specific IDs
+   * @param memoryConfig - Optional memory configuration override
+   * @returns The newly created thread and the cloned messages
+   *
+   * @example
+   * ```typescript
+   * // Clone entire thread
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   * });
+   *
+   * // Clone with custom ID
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   *   newThreadId: 'my-custom-thread-id',
+   * });
+   *
+   * // Clone with message limit
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   *   title: 'My cloned conversation',
+   *   options: {
+   *     messageLimit: 10, // Only clone last 10 messages
+   *   },
+   * });
+   *
+   * // Clone with date filter
+   * const { thread, clonedMessages } = await memory.cloneThread({
+   *   sourceThreadId: 'thread-123',
+   *   options: {
+   *     messageFilter: {
+   *       startDate: new Date('2024-01-01'),
+   *       endDate: new Date('2024-06-01'),
+   *     },
+   *   },
+   * });
+   * ```
+   */
+  public async cloneThread(
+    args: StorageCloneThreadInput,
+    memoryConfig?: MemoryConfig,
+  ): Promise<StorageCloneThreadOutput> {
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.cloneThread(args);
+
+    // If semantic recall is enabled, embed the cloned messages
+    const config = this.getMergedThreadConfig(memoryConfig);
+    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
+      await this.embedClonedMessages(result.clonedMessages, config);
+    }
+
+    return result;
+  }
+
+  /**
+   * Embed cloned messages for semantic recall.
+   * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
+   */
+  private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfig): Promise<void> {
+    if (!this.vector || !this.embedder) {
+      return;
+    }
+
+    const embeddingData: Array<{
+      embeddings: number[][];
+      metadata: Array<{ message_id: string; thread_id: string | undefined; resource_id: string | undefined }>;
+    }> = [];
+    let dimension: number | undefined;
+
+    // Process embeddings concurrently
+    await Promise.all(
+      messages.map(async message => {
+        let textForEmbedding: string | null = null;
+
+        if (
+          message.content?.content &&
+          typeof message.content.content === 'string' &&
+          message.content.content.trim() !== ''
+        ) {
+          textForEmbedding = message.content.content;
+        } else if (message.content?.parts && message.content.parts.length > 0) {
+          // Extract text from all text parts, concatenate
+          const joined = message.content.parts
+            .filter((part: { type: string }) => part.type === 'text')
+            .map((part: { type: string; text?: string }) => (part as { type: string; text: string }).text)
+            .join(' ')
+            .trim();
+          if (joined) textForEmbedding = joined;
+        }
+
+        if (!textForEmbedding) return;
+
+        const result = await this.embedMessageContent(textForEmbedding);
+        dimension = result.dimension;
+
+        embeddingData.push({
+          embeddings: result.embeddings,
+          metadata: result.chunks.map(() => ({
+            message_id: message.id,
+            thread_id: message.threadId,
+            resource_id: message.resourceId,
+          })),
+        });
+      }),
+    );
+
+    // Batch all vectors into a single upsert call
+    if (embeddingData.length > 0 && dimension !== undefined) {
+      const { indexName } = await this.createEmbeddingIndex(dimension, config);
+
+      // Flatten all embeddings and metadata into single arrays
+      const allVectors: number[][] = [];
+      const allMetadata: Array<{
+        message_id: string;
+        thread_id: string | undefined;
+        resource_id: string | undefined;
+      }> = [];
+
+      for (const data of embeddingData) {
+        allVectors.push(...data.embeddings);
+        allMetadata.push(...data.metadata);
+      }
+
+      await this.vector.upsert({
+        indexName,
+        vectors: allVectors,
+        metadata: allMetadata,
+      });
+    }
+  }
+
+  /**
+   * Get the clone metadata from a thread if it was cloned from another thread.
+   *
+   * @param thread - The thread to check
+   * @returns The clone metadata if the thread is a clone, null otherwise
+   *
+   * @example
+   * ```typescript
+   * const thread = await memory.getThreadById({ threadId: 'thread-123' });
+   * const cloneInfo = memory.getCloneMetadata(thread);
+   * if (cloneInfo) {
+   *   console.log(`This thread was cloned from ${cloneInfo.sourceThreadId}`);
+   * }
+   * ```
+   */
+  public getCloneMetadata(thread: StorageThreadType | null): ThreadCloneMetadata | null {
+    if (!thread?.metadata?.clone) {
+      return null;
+    }
+    return thread.metadata.clone as ThreadCloneMetadata;
+  }
+
+  /**
+   * Check if a thread is a clone of another thread.
+   *
+   * @param thread - The thread to check
+   * @returns True if the thread is a clone, false otherwise
+   *
+   * @example
+   * ```typescript
+   * const thread = await memory.getThreadById({ threadId: 'thread-123' });
+   * if (memory.isClone(thread)) {
+   *   console.log('This is a cloned thread');
+   * }
+   * ```
+   */
+  public isClone(thread: StorageThreadType | null): boolean {
+    return this.getCloneMetadata(thread) !== null;
+  }
+
+  /**
+   * Get the source thread that a cloned thread was created from.
+   *
+   * @param threadId - ID of the cloned thread
+   * @returns The source thread if found, null if the thread is not a clone or source doesn't exist
+   *
+   * @example
+   * ```typescript
+   * const sourceThread = await memory.getSourceThread('cloned-thread-123');
+   * if (sourceThread) {
+   *   console.log(`Original thread: ${sourceThread.title}`);
+   * }
+   * ```
+   */
+  public async getSourceThread(threadId: string): Promise<StorageThreadType | null> {
+    const thread = await this.getThreadById({ threadId });
+    const cloneMetadata = this.getCloneMetadata(thread);
+
+    if (!cloneMetadata) {
+      return null;
+    }
+
+    return this.getThreadById({ threadId: cloneMetadata.sourceThreadId });
+  }
+
+  /**
+   * List all threads that were cloned from a specific source thread.
+   *
+   * @param sourceThreadId - ID of the source thread
+   * @param resourceId - Optional resource ID to filter by
+   * @returns Array of threads that are clones of the source thread
+   *
+   * @example
+   * ```typescript
+   * const clones = await memory.listClones('original-thread-123', 'user-456');
+   * console.log(`Found ${clones.length} clones of this thread`);
+   * ```
+   */
+  public async listClones(sourceThreadId: string, resourceId?: string): Promise<StorageThreadType[]> {
+    // If resourceId is provided, use it to scope the search
+    // Otherwise, get the source thread's resourceId
+    let targetResourceId = resourceId;
+
+    if (!targetResourceId) {
+      const sourceThread = await this.getThreadById({ threadId: sourceThreadId });
+      if (!sourceThread) {
+        return [];
+      }
+      targetResourceId = sourceThread.resourceId;
+    }
+
+    // List all threads for the resource and filter for clones
+    const { threads } = await this.listThreadsByResourceId({
+      resourceId: targetResourceId,
+      perPage: false, // Get all threads
+    });
+
+    return threads.filter(thread => {
+      const cloneMetadata = this.getCloneMetadata(thread);
+      return cloneMetadata?.sourceThreadId === sourceThreadId;
+    });
+  }
+
+  /**
+   * Get the clone history chain for a thread (all ancestors back to the original).
+   *
+   * @param threadId - ID of the thread to get history for
+   * @returns Array of threads from oldest ancestor to the given thread (inclusive)
+   *
+   * @example
+   * ```typescript
+   * const history = await memory.getCloneHistory('deeply-cloned-thread');
+   * // Returns: [originalThread, firstClone, secondClone, deeplyClonedThread]
+   * ```
+   */
+  public async getCloneHistory(threadId: string): Promise<StorageThreadType[]> {
+    const history: StorageThreadType[] = [];
+    let currentThreadId: string | null = threadId;
+
+    while (currentThreadId) {
+      const thread = await this.getThreadById({ threadId: currentThreadId });
+      if (!thread) {
+        break;
+      }
+
+      history.unshift(thread); // Add to beginning to maintain order from oldest to newest
+
+      const cloneMetadata = this.getCloneMetadata(thread);
+      currentThreadId = cloneMetadata?.sourceThreadId ?? null;
+    }
+
+    return history;
+  }
 }
 
 // Re-export memory processors from @mastra/core for backward compatibility
 export { SemanticRecall, WorkingMemory, MessageHistory } from '@mastra/core/processors';
+
+// Re-export clone-related types for convenience
+export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMetadata } from '@mastra/core/storage';

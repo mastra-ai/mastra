@@ -11,11 +11,11 @@ export function SidebarBadge({ type }: SidebarBadgeProps) {
   const getLabel = (type: BadgeType) => {
     switch (type) {
       case "new":
-        return "NEW";
+        return "New";
       case "advanced":
-        return "ADVANCED";
+        return "Advanced";
       case "beta":
-        return "BETA";
+        return "Beta";
       default:
         return "";
     }

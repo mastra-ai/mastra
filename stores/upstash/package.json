@@ -1,6 +1,6 @@
 {
   "name": "@mastra/upstash",
-  "version": "1.0.0-beta.7",
+  "version": "1.0.0-beta.9",
   "description": "Upstash provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -23,12 +23,13 @@
     "test": "vitest run",
     "posttest": "docker compose down",
     "lint": "eslint .",
-    "build": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts stores/upstash",
     "build:watch": "tsup --watch --silent --config tsup.config.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@upstash/redis": "^1.35.6",
+    "@upstash/redis": "^1.36.0",
     "@upstash/vector": "^1.2.2"
   },
   "devDependencies": {
@@ -42,7 +43,7 @@
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

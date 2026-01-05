@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraAuthWorkos Class | Auth"
 description: "API reference for the MastraAuthWorkos class, which authenticates Mastra applications using WorkOS authentication."
+packages:
+  - "@mastra/auth-workos"
+  - "@mastra/core"
 ---
 
 # MastraAuthWorkos Class
@@ -14,7 +17,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthWorkos } from "@mastra/auth-workos";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthWorkos({
       apiKey: process.env.WORKOS_API_KEY,

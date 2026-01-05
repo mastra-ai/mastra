@@ -1,6 +1,10 @@
 ---
 title: "Agent Networks | Agents"
 description: Learn how to coordinate multiple agents, workflows, and tools using agent networks for complex, non-deterministic task execution.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Agent Networks
@@ -78,7 +82,6 @@ export const researchAgent = new Agent({
   description: `This agent gathers concise research insights in bullet-point form.
     It's designed to extract key facts without generating full
     responses or narrative content.`,
-  // ...
 });
 ```
 
@@ -89,7 +92,6 @@ export const writingAgent = new Agent({
   description: `This agent turns researched material into well-structured
     written content. It produces full-paragraph reports with no bullet points,
     suitable for use in articles, summaries, or blog posts.`,
-  // ...
 });
 ```
 
@@ -110,7 +112,6 @@ export const cityWorkflow = createWorkflow({
   outputSchema: z.object({
     text: z.string(),
   }),
-  //...
 });
 ```
 
@@ -131,7 +132,6 @@ export const weatherTool = createTool({
   outputSchema: z.object({
     weather: z.string(),
   }),
-  // ...
 });
 ```
 

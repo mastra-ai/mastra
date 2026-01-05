@@ -97,6 +97,35 @@ To migrate, if you were relying on the previous defaults, explicitly set these v
   });
 ```
 
+### `memory.readOnly` moved to `memory.options.readOnly`
+
+The `readOnly` property has been moved from the top-level of the memory option to inside `options`. This change aligns `readOnly` with other memory configuration options like `lastMessages` and `semanticRecall`.
+
+To migrate, move `readOnly` from the top level to inside `options`.
+
+```diff
+  agent.stream('Hello', {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+-     readOnly: true,
++     options: {
++       readOnly: true,
++     },
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-readonly-to-options .
+```
+
+:::
+
 ### `Memory.query()` renamed to `Memory.recall()`
 
 The `Memory.query()` method has been renamed to `Memory.recall()`. The new method returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change better describes the action of retrieving messages from memory and simplifies the API.
@@ -252,18 +281,26 @@ To migrate, use `MastraDBMessage` for storage or AI SDK v5 message formats direc
 
 The `processors` config option in the Memory constructor has been deprecated and now throws an error. Processors should be configured at the Agent level instead. This change provides clearer configuration boundaries and better encapsulation.
 
-To migrate, move processor configuration from Memory to Agent.
+To migrate, move processor configuration from Memory to Agent using `inputProcessors` and/or `outputProcessors`.
 
 ```diff
++ import { TokenLimiter } from '@mastra/core/processors';
++
   const memory = new Memory({
     storage,
     vector,
     embedder,
 -   processors: [/* ... */],
   });
-  
+
   const agent = new Agent({
     memory,
-+   processors: [/* ... */],
++   inputProcessors: [
++     new TokenLimiter({ limit: 4000 }), // Limits historical messages to fit context window
++   ],
   });
 ```
+
+Additionally, the `@mastra/memory/processors` import path has been removed. Import processors from `@mastra/core/processors` instead. See the [processors migration guide](/guides/v1/migrations/upgrade-to-v1/processors#memory-processor-exports-moved-to-core) for details.
+
+For more information on using processors with agents, see the [Processors docs](/docs/v1/agents/processors). For a complete example with memory, see the [TokenLimiter reference](/reference/v1/processors/token-limiter-processor#extended-usage-example).

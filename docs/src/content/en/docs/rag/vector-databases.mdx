@@ -1,6 +1,21 @@
 ---
 title: "Storing Embeddings in A Vector Database | RAG"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
+packages:
+  - "@mastra/astra"
+  - "@mastra/chroma"
+  - "@mastra/core"
+  - "@mastra/couchbase"
+  - "@mastra/elasticsearch"
+  - "@mastra/lance"
+  - "@mastra/mongodb"
+  - "@mastra/opensearch"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+  - "@mastra/qdrant"
+  - "@mastra/s3vectors"
+  - "@mastra/upstash"
+  - "@mastra/vectorize"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -170,7 +185,7 @@ await store.upsert({
 
   </TabItem>
 
-  <TabItem value="libsql" label="LibSQL">
+  <TabItem value="libsql" label="libSQL">
 
 ```ts title="vector-store.ts"
 import { LibSQLVector } from "@mastra/core/vector/libsql";
@@ -445,7 +460,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my_collection_123` is valid
     - Example: `my-collection` is not valid (contains hyphen)
   </TabItem>
-  <TabItem value="libsql" label="LibSQL">
+  <TabItem value="libsql" label="libSQL">
     Index names must:
     - Start with a letter or underscore
     - Contain only letters, numbers, and underscores

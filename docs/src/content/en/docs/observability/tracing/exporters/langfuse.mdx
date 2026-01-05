@@ -1,6 +1,10 @@
 ---
 title: "Langfuse Exporter | Tracing | Observability"
 description: "Send traces to Langfuse for LLM observability and analytics"
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
 ---
 
 # Langfuse Exporter
@@ -117,7 +121,6 @@ Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
 
 ```typescript title="src/agents/support-agent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { buildTracingOptions } from "@mastra/observability";
 import { withLangfusePrompt } from "@mastra/langfuse";
 import { Langfuse } from "langfuse";
@@ -133,7 +136,7 @@ const prompt = await langfuse.getPrompt("customer-support");
 export const supportAgent = new Agent({
   name: "support-agent",
   instructions: prompt.prompt, // Use the prompt text from Langfuse
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
 ## Using Tags

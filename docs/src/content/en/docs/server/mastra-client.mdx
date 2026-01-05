@@ -1,6 +1,9 @@
 ---
 title: "Mastra Client SDK | Server"
 description: "Learn how to set up and use the Mastra Client SDK"
+packages:
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -108,7 +111,11 @@ const testAgent = async () => {
 };
 ```
 
-> See [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+:::info
+
+Visit [.generate()](/reference/v1/client-js/agents#generate-response) for more information.
+
+:::
 
 ## Streaming responses
 
@@ -141,7 +148,11 @@ const testAgent = async () => {
 };
 ```
 
-> See [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+:::info
+
+Visit [.stream()](/reference/v1/client-js/agents#stream-response) for more information.
+
+:::
 
 ## Configuration options
 
@@ -151,7 +162,6 @@ const testAgent = async () => {
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  // ...
   retries: 3,
   backoffMs: 300,
   maxBackoffMs: 5000,
@@ -161,7 +171,11 @@ export const mastraClient = new MastraClient({
 });
 ```
 
-> See [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+:::info
+
+Visit [MastraClient](/reference/v1/client-js/mastra-client) for more configuration options.
+
+:::
 
 ## Adding request cancelling
 

@@ -1,6 +1,10 @@
 ---
 title: "Reference: Agents API | Client SDK"
 description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 # Agents API
@@ -24,7 +28,6 @@ Get an instance of a specific agent by its ID:
 ```typescript title="src/mastra/agents/my-agent.ts"
 export const myAgent = new Agent({
   id: "my-agent",
-  // ...
 });
 ```
 

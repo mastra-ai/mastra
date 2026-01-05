@@ -1,6 +1,8 @@
 ---
 title: "Deployment Overview | Deployment"
 description: Learn about different deployment options for your Mastra applications
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deployment Overview
@@ -22,7 +24,7 @@ Mastra can run against any of these runtime environments:
 
 Mastra provides a [server](/docs/v1/server/mastra-server) powered by Hono that can be deployed independently. Use the `mastra build` command to build your application and deploy the output to your preferred VM, container, or PaaS platform.
 
-See the [Mastra server deployment guide](/docs/v1/deployment/mastra-server).
+Visit the [Mastra server deployment guide](/docs/v1/deployment/mastra-server).
 
 ### Monorepo
 
@@ -58,7 +60,6 @@ Learn more in the [Mastra Cloud docs](/docs/v1/mastra-cloud/overview).
 
 ## Workflow Runners
 
-Mastra supports deploying workflows to specialized workflow execution platforms that handle orchestration, monitoring, and reliability. [Inngest](https://www.inngest.com) is a developer platform for running background workflows without managing infrastructure. Mastra workflows can be deployed to Inngest, which provides step memoization, automatic retries, real-time monitoring, and suspend/resume capabilities.
+Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
 
-- [Inngest deployment guide](/guides/v1/deployment/inngest)
-- [Inngest workflow example](https://github.com/mastra-ai/mastra/tree/main/examples/inngest)
+Visit the [Workflow Runners guide](/docs/v1/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/guides/v1/deployment/inngest) for setup instructions.

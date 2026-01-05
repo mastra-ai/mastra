@@ -1,6 +1,8 @@
 ---
 title: "Custom API Routes | Server"
 description: "Expose additional HTTP endpoints from your Mastra server."
+packages:
+  - "@mastra/core"
 ---
 
 # Custom API Routes
@@ -14,7 +16,6 @@ import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     apiRoutes: [
       registerApiRoute("/my-custom-route", {
@@ -46,7 +47,6 @@ import { Mastra } from "@mastra/core";
 import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
-  // ...
   server: {
     apiRoutes: [
       registerApiRoute("/my-custom-route", {

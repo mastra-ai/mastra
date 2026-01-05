@@ -28,5 +28,5 @@ Before deploying to a cloud provider, ensure you have:
 - Basic familiarity with server setup (e.g. Nginx, environment variables)
 
 :::warning
-`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/docs/v1/memory/storage/overview) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
+`LibSQLStore` writes to the local filesystem, which is not supported in cloud environments that use ephemeral file systems. If you're deploying to platforms like AWS Lambda, Netlify, Azure App Services, or Digital Ocean App Platform, you must remove all usage of [LibSQLStore](/reference/v1/storage/libsql) with file URLs. Use in-memory storage (`:memory:`) or external storage providers like Turso, PostgreSQL, or Upstash.
 :::

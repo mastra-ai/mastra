@@ -2,8 +2,6 @@
 "@mastra/mcp": patch
 ---
 
-Add MCP Roots capability support (fixes #8660)
-
 This adds support for the MCP Roots capability, allowing clients to expose filesystem roots to MCP servers like `@modelcontextprotocol/server-filesystem`.
 
 **New Features:**

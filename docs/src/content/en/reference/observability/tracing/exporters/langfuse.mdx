@@ -1,6 +1,9 @@
 ---
 title: "Reference: LangfuseExporter | Observability"
 description: Langfuse exporter for Tracing
+packages:
+  - "@mastra/langfuse"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -137,7 +140,7 @@ const prompt = await langfuse.getPrompt("customer-support");
 const agent = new Agent({
   name: "support-agent",
   instructions: prompt.prompt,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
   },

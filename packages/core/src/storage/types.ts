@@ -1,6 +1,7 @@
+import type { z } from 'zod';
 import type { SerializedError } from '../error';
 import type { MastraDBMessage, StorageThreadType } from '../memory/types';
-import type { SpanType } from '../observability';
+import { getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
@@ -8,8 +9,10 @@ export type StoragePagination = {
   perPage: number | false;
 };
 
+export type StorageColumnType = 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
+
 export interface StorageColumn {
-  type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'float' | 'bigint' | 'boolean';
+  type: StorageColumnType;
   primaryKey?: boolean;
   nullable?: boolean;
   references?: {
@@ -38,15 +41,6 @@ export interface WorkflowRun {
   updatedAt: Date;
   resourceId?: string;
 }
-
-export type PaginationArgs = {
-  dateRange?: {
-    start?: Date;
-    end?: Date;
-  };
-  page?: number;
-  perPage?: number;
-};
 
 export type PaginationInfo = {
   total: number;
@@ -84,6 +78,18 @@ export type StorageListMessagesInput = {
     dateRange?: {
       start?: Date;
       end?: Date;
+      /**
+       * When true, excludes the start date from results (uses > instead of >=).
+       * Useful for cursor-based pagination to avoid duplicates.
+       * @default false
+       */
+      startExclusive?: boolean;
+      /**
+       * When true, excludes the end date from results (uses < instead of <=).
+       * Useful for cursor-based pagination to avoid duplicates.
+       * @default false
+       */
+      endExclusive?: boolean;
     };
   };
   orderBy?: StorageOrderBy<'createdAt'>;
@@ -132,6 +138,58 @@ export type StorageListThreadsByResourceIdOutput = PaginationInfo & {
   threads: StorageThreadType[];
 };
 
+/**
+ * Metadata stored on cloned threads to track their origin
+ */
+export type ThreadCloneMetadata = {
+  /** ID of the thread this was cloned from */
+  sourceThreadId: string;
+  /** Timestamp when the clone was created */
+  clonedAt: Date;
+  /** ID of the last message included in the clone (if messages were copied) */
+  lastMessageId?: string;
+};
+
+/**
+ * Input options for cloning a thread
+ */
+export type StorageCloneThreadInput = {
+  /** ID of the thread to clone */
+  sourceThreadId: string;
+  /** ID for the new cloned thread (if not provided, a random UUID will be generated) */
+  newThreadId?: string;
+  /** Resource ID for the new thread (defaults to source thread's resourceId) */
+  resourceId?: string;
+  /** Title for the new cloned thread */
+  title?: string;
+  /** Additional metadata to merge with clone metadata */
+  metadata?: Record<string, unknown>;
+  /** Options for filtering which messages to include */
+  options?: {
+    /** Maximum number of messages to copy (from most recent) */
+    messageLimit?: number;
+    /** Filter messages by date range or specific IDs */
+    messageFilter?: {
+      /** Only include messages created on or after this date */
+      startDate?: Date;
+      /** Only include messages created on or before this date */
+      endDate?: Date;
+      /** Only include messages with these specific IDs */
+      messageIds?: string[];
+    };
+  };
+};
+
+/**
+ * Output from cloning a thread
+ */
+export type StorageCloneThreadOutput = {
+  /** The newly created cloned thread */
+  thread: StorageThreadType;
+  /** The messages that were copied to the new thread */
+  clonedMessages: MastraDBMessage[];
+};
+
 export type StorageResourceType = {
   id: string;
   workingMemory?: string;
@@ -163,44 +221,6 @@ export interface ThreadSortOptions {
 export type ThreadOrderBy = 'createdAt' | 'updatedAt';
 
 export type ThreadSortDirection = 'ASC' | 'DESC';
-
-export interface SpanRecord {
-  traceId: string;
-  spanId: string;
-  parentSpanId: string | null;
-  name: string;
-  scope: Record<string, any> | null;
-  spanType: SpanType;
-  attributes: Record<string, any> | null;
-  metadata: Record<string, any> | null;
-  links: any;
-  startedAt: Date;
-  endedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date | null;
-  input: any;
-  output: any;
-  error: any;
-  isEvent: boolean;
-}
-
-export type CreateSpanRecord = Omit<SpanRecord, 'createdAt' | 'updatedAt'>;
-export type UpdateSpanRecord = Omit<CreateSpanRecord, 'spanId' | 'traceId'>;
-
-export interface TraceRecord {
-  traceId: string;
-  spans: SpanRecord[];
-}
-
-export interface TracesPaginatedArg {
-  filters?: {
-    name?: string;
-    spanType?: SpanType;
-    entityId?: string;
-    entityType?: 'agent' | 'workflow';
-  };
-  pagination?: PaginationArgs;
-}
 
 // Agent Storage Types
 
@@ -299,6 +319,12 @@ export interface CreateIndexOptions {
   columns: string[];
   unique?: boolean;
   concurrent?: boolean;
+  /**
+   * SQL WHERE clause for creating partial indexes.
+   * @internal Reserved for internal use only. Callers must pre-validate this value.
+   * DDL statements cannot use parameterized queries for WHERE clauses, so this value
+   * is concatenated directly into the SQL. Any user-facing usage must validate input.
+   */
   where?: string;
   method?: 'btree' | 'hash' | 'gin' | 'gist' | 'spgist' | 'brin';
   opclass?: string; // Operator class for GIN/GIST indexes
@@ -324,11 +350,163 @@ export interface StorageIndexStats extends IndexInfo {
 }
 
 // Workflow Storage Types
-
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
   result?: StepResult<any, any, any, any>;
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+}
+
+/**
+ * Get the inner type from a wrapper schema (nullable, optional, default, effects, branded).
+ * Compatible with both Zod 3 and Zod 4.
+ */
+function getInnerType(schema: z.ZodTypeAny, typeName: string): z.ZodTypeAny | undefined {
+  const schemaAny = schema as any;
+
+  // For nullable, optional, default - the inner type is at _def.innerType
+  if (typeName === 'ZodNullable' || typeName === 'ZodOptional' || typeName === 'ZodDefault') {
+    return schemaAny._zod?.def?.innerType ?? schemaAny._def?.innerType;
+  }
+
+  // For effects - the inner type is at _def.schema
+  if (typeName === 'ZodEffects') {
+    return schemaAny._zod?.def?.schema ?? schemaAny._def?.schema;
+  }
+
+  // For branded - the inner type is at _def.type
+  if (typeName === 'ZodBranded') {
+    return schemaAny._zod?.def?.type ?? schemaAny._def?.type;
+  }
+
+  return undefined;
+}
+
+function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {
+  let current = schema;
+  let nullable = false;
+
+  while (true) {
+    const typeName = getZodTypeName(current);
+
+    if (typeName === 'ZodNullable') {
+      nullable = true;
+      const inner = getInnerType(current, typeName);
+      if (inner) {
+        current = inner;
+        continue;
+      }
+    }
+
+    if (typeName === 'ZodOptional') {
+      // For DB purposes, we usually treat "optional" as "nullable"
+      nullable = true;
+      const inner = getInnerType(current, typeName);
+      if (inner) {
+        current = inner;
+        continue;
+      }
+    }
+
+    if (typeName === 'ZodDefault') {
+      const inner = getInnerType(current, typeName);
+      if (inner) {
+        current = inner;
+        continue;
+      }
+    }
+
+    if (typeName === 'ZodEffects') {
+      const inner = getInnerType(current, typeName);
+      if (inner) {
+        current = inner;
+        continue;
+      }
+    }
+
+    if (typeName === 'ZodBranded') {
+      const inner = getInnerType(current, typeName);
+      if (inner) {
+        current = inner;
+        continue;
+      }
+    }
+
+    // If you ever use ZodCatch/ZodPipeline, you can unwrap them here too.
+    break;
+  }
+
+  return { base: current, nullable };
+}
+
+/**
+ * Extract checks array from Zod schema, compatible with both Zod 3 and Zod 4.
+ * Zod 3 uses _def.checks, Zod 4 uses _zod.def.checks.
+ */
+function getZodChecks(schema: z.ZodTypeAny): Array<{ kind: string }> {
+  const schemaAny = schema as any;
+  // Zod 4 structure
+  if (schemaAny._zod?.def?.checks) {
+    return schemaAny._zod.def.checks;
+  }
+  // Zod 3 structure
+  if (schemaAny._def?.checks) {
+    return schemaAny._def.checks;
+  }
+  return [];
+}
+
+function zodToStorageType(schema: z.ZodTypeAny): StorageColumnType {
+  const typeName = getZodTypeName(schema);
+
+  if (typeName === 'ZodString') {
+    // Check for UUID validation
+    const checks = getZodChecks(schema);
+    if (checks.some(c => c.kind === 'uuid')) {
+      return 'uuid';
+    }
+    return 'text';
+  }
+  if (typeName === 'ZodNativeEnum' || typeName === 'ZodEnum') {
+    return 'text';
+  }
+  if (typeName === 'ZodNumber') {
+    // Check for integer validation
+    const checks = getZodChecks(schema);
+    return checks.some(c => c.kind === 'int') ? 'integer' : 'float';
+  }
+  if (typeName === 'ZodBigInt') {
+    return 'bigint';
+  }
+  if (typeName === 'ZodDate') {
+    return 'timestamp';
+  }
+  if (typeName === 'ZodBoolean') {
+    return 'boolean';
+  }
+  // fall back for objects/records/unknown
+  return 'jsonb';
+}
+
+/**
+ * Converts a zod schema into a database schema
+ * @param zObject A zod schema object
+ * @returns database schema record with StorageColumns
+ */
+export function buildStorageSchema<Shape extends z.ZodRawShape>(
+  zObject: z.ZodObject<Shape>,
+): Record<keyof Shape & string, StorageColumn> {
+  const shape = zObject.shape;
+  const result: Record<string, StorageColumn> = {};
+
+  for (const [key, field] of Object.entries(shape)) {
+    const { base, nullable } = unwrapSchema(field as z.ZodTypeAny);
+    result[key] = {
+      type: zodToStorageType(base),
+      nullable,
+    };
+  }
+
+  return result as Record<keyof Shape & string, StorageColumn>;
 }

@@ -64,6 +64,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     abortController: AbortController;
     format?: 'legacy' | 'vnext' | undefined;
+    perStep?: boolean;
   }): Promise<TOutput> {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
@@ -87,6 +88,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           resumeData: params.resume.resumePayload,
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          perStep: params.perStep,
         },
       });
     } else if (params.timeTravel) {
@@ -104,6 +106,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: prevResult?.payload },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          perStep: params.perStep,
         },
       });
     } else {
@@ -116,6 +119,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           prevResult: { status: 'success', output: params.input },
           requestContext: Object.fromEntries(params.requestContext.entries()),
           format: params.format,
+          perStep: params.perStep,
         },
       });
     }
@@ -142,7 +146,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
 
       pubsub.subscribe('workflows-finish', finishCb).catch(err => {
-        console.error('Failed to subscribe to workflows-finish:', err);
+        this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
         reject(err);
       });
     });
@@ -166,6 +170,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
         status: 'suspended',
         steps: resultData.stepResults,
       };
+    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+      callbackArg = {
+        status: 'paused',
+        steps: resultData.stepResults,
+      };
     } else {
       callbackArg = {
         status: resultData.prevResult.status,
@@ -174,8 +183,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
     }
 
-    // Invoke lifecycle callbacks before returning
-    await this.invokeLifecycleCallbacks(callbackArg);
+    if (callbackArg.status !== 'paused') {
+      // Invoke lifecycle callbacks before returning
+      await this.invokeLifecycleCallbacks(callbackArg);
+    }
 
     // Build the final result with any additional fields needed for the return type
     let result: TOutput;

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Convex Storage | Storage"
 description: Documentation for the Convex storage implementation in Mastra.
+packages:
+  - "@mastra/convex"
 ---
 
 # Convex Storage
@@ -32,7 +34,7 @@ import {
   mastraVectorIndexesTable,
   mastraVectorsTable,
   mastraDocumentsTable,
-} from '@mastra/convex/server';
+} from '@mastra/convex/schema';
 
 export default defineSchema({
   mastra_threads: mastraThreadsTable,

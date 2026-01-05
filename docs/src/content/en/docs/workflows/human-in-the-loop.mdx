@@ -1,6 +1,8 @@
 ---
 title: "Human-in-the-loop (HITL) | Workflows"
 description: "Human-in-the-loop workflows in Mastra allow you to pause execution for manual approvals, reviews, or user input before continuing."
+packages:
+  - "@mastra/core"
 ---
 
 # Human-in-the-loop (HITL)
@@ -117,9 +119,8 @@ const handleResume = async () => {
 
 Use `bail()` to stop workflow execution at a step without triggering an error. This can be useful when a human explicitly rejects an action. The workflow completes with a `success` status, and any logic after the call to `bail()` is skipped.
 
-```typescript {7-11}
+```typescript {6-10}
 const step1 = createStep({
-  // ...
   execute: async ({ inputData, resumeData, suspend, bail }) => {
     const { userEmail } = inputData;
     const { approved } = resumeData ?? {};

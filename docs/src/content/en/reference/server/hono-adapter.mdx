@@ -1,6 +1,8 @@
 ---
 title: "Reference: Hono Adapter | Server"
 description: "API reference for the @mastra/hono server adapter."
+packages:
+  - "@mastra/hono"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -221,7 +223,6 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use('*', async (c, next) => {
   const mastra = c.get('mastra');
-  // ...
   await next();
 });
 ```

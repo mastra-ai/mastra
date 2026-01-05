@@ -148,6 +148,7 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         } else {
           newData = inputData.memory;
         }
+
         const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
         workingMemory = JSON.stringify(mergedData);
       } else {

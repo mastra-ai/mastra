@@ -5,7 +5,7 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe, it, expect } from 'vitest';
-import { getResuableTests, StorageType } from './reusable-tests';
+import { getResuableTests, StorageType } from './shared/reusable-tests';
 
 dotenv.config({ path: '.env.test' });
 

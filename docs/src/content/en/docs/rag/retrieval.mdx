@@ -1,6 +1,20 @@
 ---
 title: "Retrieval, Semantic Search, Reranking | RAG"
 description: Guide on retrieval processes in Mastra's RAG systems, including semantic search, filtering, and re-ranking.
+packages:
+  - "@mastra/astra"
+  - "@mastra/chroma"
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/mongodb"
+  - "@mastra/opensearch"
+  - "@mastra/pg"
+  - "@mastra/pinecone"
+  - "@mastra/qdrant"
+  - "@mastra/rag"
+  - "@mastra/s3vectors"
+  - "@mastra/upstash"
+  - "@mastra/vectorize"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -68,7 +82,6 @@ Results include both the text content and a similarity score:
     score: 0.82,
     metadata: { source: "article1.txt" },
   },
-  // ... more results
 ];
 ```
 
@@ -377,7 +390,7 @@ export const ragAgent = new Agent({
 
   </TabItem>
 
-  <TabItem value="libsql" label="LibSQL">
+  <TabItem value="libsql" label="libSQL">
 
 ```ts title="vector-store.ts"
 import { LIBSQL_PROMPT } from "@mastra/libsql";

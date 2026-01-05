@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix: Don't download unsupported media
+Don't download unsupported media

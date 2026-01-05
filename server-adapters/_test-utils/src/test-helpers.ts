@@ -418,27 +418,25 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
   // Add test trace by creating a span with that traceId
   const storage = mastra.getStorage();
   if (storage) {
-    await storage.createSpan({
-      spanId: 'test-span-1',
-      traceId: 'test-trace',
-      parentSpanId: null,
-      name: 'test-span',
-      scope: null,
-      spanType: SpanType.GENERIC,
-      attributes: {},
-      metadata: null,
-      links: null,
-      startedAt: new Date(),
-      endedAt: new Date(),
-      input: null,
-      output: null,
-      error: null,
-      isEvent: false,
-    });
+    const observability = await storage.getStore('observability');
+    if (observability) {
+      await observability.createSpan({
+        span: {
+          spanId: 'test-span-1',
+          traceId: 'test-trace',
+          name: 'test-span',
+          spanType: SpanType.GENERIC,
+          startedAt: new Date(),
+          endedAt: new Date(),
+          isEvent: false,
+        },
+      });
+    }
 
     // Add test stored agent for stored agents routes
-    if (storage.supports.agents) {
-      await storage.createAgent({
+    const agents = await storage.getStore('agents');
+    if (agents) {
+      await agents.createAgent({
         agent: {
           id: 'test-stored-agent',
           name: 'Test Stored Agent',
@@ -446,6 +444,35 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
           instructions: 'Test instructions for stored agent',
           model: { provider: 'openai', name: 'gpt-4o' },
         },
+      });
+    }
+
+    // Add test thread and messages to Mastra's storage for memory routes without agentId
+    // This is needed because when agentId is not provided, the handler falls back to storage directly
+    const memoryStore = await storage.getStore('memory');
+    if (memoryStore) {
+      await memoryStore.saveThread({
+        thread: {
+          id: 'test-thread',
+          resourceId: 'test-resource',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {},
+        },
+      });
+      await memoryStore.saveMessages({
+        messages: [
+          {
+            id: 'test-message-1',
+            threadId: 'test-thread',
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test message' }],
+            },
+            createdAt: new Date(),
+          },
+        ],
       });
     }
   }

@@ -583,7 +583,7 @@ const mockModelV2 = new MockLanguageModelV2({
           },
         ],
         finishReason: 'tool-calls' as const,
-        usage: { inputTokens: 15, outputTokens: 10 },
+        usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
         warnings: [],
       };
     }
@@ -601,7 +601,7 @@ const mockModelV2 = new MockLanguageModelV2({
       return {
         content: [{ type: 'text', text: JSON.stringify(structuredData) }],
         finishReason: 'stop' as const,
-        usage: { inputTokens: 15, outputTokens: 25 },
+        usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
         warnings: [],
       };
     }
@@ -610,7 +610,7 @@ const mockModelV2 = new MockLanguageModelV2({
     return {
       content: [{ type: 'text', text: 'Mock V2 generate response' }],
       finishReason: 'stop' as const,
-      usage: { inputTokens: 15, outputTokens: 25 },
+      usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
       warnings: [],
     };
   },
@@ -643,7 +643,7 @@ const mockModelV2 = new MockLanguageModelV2({
             args: argsJson,
             input: argsJson,
           },
-          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10 } },
+          { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
         ]),
       };
     }
@@ -662,7 +662,7 @@ const mockModelV2 = new MockLanguageModelV2({
       return {
         stream: convertArrayToReadableStream([
           { type: 'text-delta', id: '1', delta: structuredOutput },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25 } },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
         ]),
       };
     }
@@ -673,7 +673,7 @@ const mockModelV2 = new MockLanguageModelV2({
         { type: 'text-delta', id: '1', delta: 'Mock ' },
         { type: 'text-delta', id: '2', delta: 'V2 stream ' },
         { type: 'text-delta', id: '3', delta: 'response' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25 } },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 } },
       ]),
     };
   },
@@ -1998,12 +1998,10 @@ describe('Tracing Integration Tests', () => {
           { type: 'text-delta', id: '1', delta: 'Test response from agent' },
           {
             type: 'finish',
-            id: '1',
             finishReason: 'stop',
-            usage: { inputTokens: 10, outputTokens: 20 },
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
           },
         ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
       }),
     });
 
@@ -2070,6 +2068,98 @@ describe('Tracing Integration Tests', () => {
     // Verify parent-child relationship
     expect(agentRunSpan?.parentSpanId).toBeDefined();
     expect(llmGenSpan?.parentSpanId).toBe(agentRunSpan?.id);
+
+    testExporter.finalExpectations();
+  });
+
+  it('should have MODEL_STEP span startTime close to MODEL_GENERATION startTime, not endTime (issue #11271)', async () => {
+    // This test verifies that MODEL_STEP spans have correct startTime.
+    // The span should start when the model API call begins, not when the response starts streaming.
+
+    const SIMULATED_MODEL_DELAY_MS = 100; // Simulate model processing time before first token
+
+    const delayedMockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        // Simulate model processing delay before first token
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_MODEL_DELAY_MS));
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'resp-1' },
+            { type: 'text-delta', id: '1', delta: 'Hello ' },
+            { type: 'text-delta', id: '2', delta: 'world' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const delayedAgent = new Agent({
+      id: 'delayed-agent',
+      name: 'Delayed Agent',
+      instructions: 'You are a test agent',
+      model: delayedMockModel,
+    });
+
+    const mastra = new Mastra({
+      ...getBaseMastraConfig(testExporter),
+      agents: { delayedAgent },
+    });
+
+    const agent = mastra.getAgent('delayedAgent');
+    const result = await agent.stream('Hello');
+
+    // Consume the stream to trigger span lifecycle
+    let fullText = '';
+    for await (const chunk of result.textStream) {
+      fullText += chunk;
+    }
+    expect(fullText).toBe('Hello world');
+
+    const llmGenerationSpans = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+    const llmStepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+
+    expect(llmGenerationSpans.length).toBe(1);
+    expect(llmStepSpans.length).toBe(1);
+
+    const generationSpan = llmGenerationSpans[0]!;
+    const stepSpan = llmStepSpans[0]!;
+
+    // Both spans should have defined times
+    expect(generationSpan.startTime).toBeDefined();
+    expect(generationSpan.endTime).toBeDefined();
+    expect(stepSpan.startTime).toBeDefined();
+    expect(stepSpan.endTime).toBeDefined();
+
+    const generationStart = generationSpan.startTime.getTime();
+    const generationEnd = generationSpan.endTime!.getTime();
+    const stepStart = stepSpan.startTime.getTime();
+
+    const generationDuration = generationEnd - generationStart;
+    const stepStartOffset = stepStart - generationStart;
+
+    // Log values for debugging (only visible in verbose mode or on failure)
+    console.log('MODEL_GENERATION span:', {
+      start: generationSpan.startTime.toISOString(),
+      end: generationSpan.endTime!.toISOString(),
+      duration: `${generationDuration}ms`,
+    });
+    console.log('MODEL_STEP span:', {
+      start: stepSpan.startTime.toISOString(),
+      end: stepSpan.endTime!.toISOString(),
+      startOffset: `${stepStartOffset}ms from generation start`,
+    });
+
+    // The step should start close to when the generation started (within 50ms tolerance)
+    expect(stepStartOffset).toBeLessThan(50);
+
+    // The step should NOT start close to when the generation ended
+    const stepStartToGenerationEnd = generationEnd - stepStart;
+    expect(stepStartToGenerationEnd).toBeGreaterThan(50);
 
     testExporter.finalExpectations();
   });

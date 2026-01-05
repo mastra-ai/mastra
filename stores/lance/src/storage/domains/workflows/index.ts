@@ -11,9 +11,19 @@ import {
   ensureDate,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
+
+/**
+ * Escapes single quotes in SQL string values to prevent SQL injection.
+ */
+function escapeSql(str: string): string {
+  return str.replace(/'/g, "''");
+}
 
 function parseWorkflowRun(row: any): WorkflowRun {
   let parsedSnapshot: WorkflowRunState | string = row.snapshot;
@@ -38,40 +48,100 @@ function parseWorkflowRun(row: any): WorkflowRun {
 
 export class StoreWorkflowsLance extends WorkflowsStorage {
   client: Connection;
-  constructor({ client }: { client: Connection }) {
+  #db: LanceDB;
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
+    this.#db = new LanceDB({ client });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async init(): Promise<void> {
+    const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema,
+      ifNotExists: ['resourceId'],
+    });
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    // Load existing snapshot
+    let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+    if (!snapshot) {
+      // Create new snapshot if none exists
+      snapshot = {
+        context: {},
+        activePaths: [],
+        timestamp: Date.now(),
+        suspendedPaths: {},
+        activeStepsPath: {},
+        resumeLabels: {},
+        serializedStepGraph: [],
+        status: 'pending',
+        value: {},
+        waitingPaths: {},
+        runId: runId,
+        requestContext: {},
+      } as WorkflowRunState;
+    }
+
+    // Merge the new step result and request context
+    snapshot.context[stepId] = result;
+    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+    // Persist updated snapshot
+    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+    return snapshot.context;
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    // Load existing snapshot
+    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+
+    if (!snapshot) {
+      return undefined;
+    }
+
+    if (!snapshot.context) {
+      throw new Error(`Snapshot not found for runId ${runId}`);
+    }
+
+    // Merge the new options with the existing snapshot
+    const updatedSnapshot = { ...snapshot, ...opts };
+
+    // Persist updated snapshot
+    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
+
+    return updatedSnapshot;
   }
 
   async persistWorkflowSnapshot({
@@ -79,25 +149,31 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       // Try to find the existing record
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table
+        .query()
+        .where(`workflow_name = '${escapeSql(workflowName)}' AND run_id = '${escapeSql(runId)}'`);
       const records = await query.toArray();
-      let createdAt: number;
-      const now = Date.now();
+      let createdAtValue: number;
+      const now = createdAt?.getTime() ?? Date.now();
 
       if (records.length > 0) {
-        createdAt = records[0].createdAt ?? now;
+        createdAtValue = records[0].createdAt ?? now;
       } else {
-        createdAt = now;
+        createdAtValue = now;
       }
 
       const { status, value, ...rest } = snapshot;
@@ -107,8 +183,8 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         run_id: runId,
         resourceId,
         snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
-        createdAt,
-        updatedAt: now,
+        createdAt: createdAtValue,
+        updatedAt: updatedAt ?? now,
       };
 
       await table
@@ -137,7 +213,9 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }): Promise<WorkflowRunState | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table
+        .query()
+        .where(`workflow_name = '${escapeSql(workflowName)}' AND run_id = '${escapeSql(runId)}'`);
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
     } catch (error: any) {
@@ -162,9 +240,9 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   } | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      let whereClause = `run_id = '${args.runId}'`;
+      let whereClause = `run_id = '${escapeSql(args.runId)}'`;
       if (args.workflowName) {
-        whereClause += ` AND workflow_name = '${args.workflowName}'`;
+        whereClause += ` AND workflow_name = '${escapeSql(args.workflowName)}'`;
       }
       const query = table.query().where(whereClause);
       const records = await query.toArray();
@@ -187,7 +265,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const whereClause = `run_id = '${runId.replace(/'/g, "''")}' AND workflow_name = '${workflowName.replace(/'/g, "''")}'`;
+      const whereClause = `run_id = '${escapeSql(runId)}' AND workflow_name = '${escapeSql(workflowName)}'`;
       await table.delete(whereClause);
     } catch (error: any) {
       throw new MastraError(
@@ -211,10 +289,11 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const conditions: string[] = [];
 
       if (args?.workflowName) {
-        conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+        conditions.push(`workflow_name = '${escapeSql(args.workflowName)}'`);
       }
 
       if (args?.status) {
+        // Escape for LIKE pattern: backslashes, single quotes, and LIKE wildcards
         const escapedStatus = args.status
           .replace(/\\/g, '\\\\')
           .replace(/'/g, "''")
@@ -226,7 +305,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       }
 
       if (args?.resourceId) {
-        conditions.push(`\`resourceId\` = '${args.resourceId}'`);
+        conditions.push(`\`resourceId\` = '${escapeSql(args.resourceId)}'`);
       }
 
       if (args?.fromDate instanceof Date) {

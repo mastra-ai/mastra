@@ -93,7 +93,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
 
   return (
     <div className="px-5 text-xs py-2 pb-4">
-      <section className="space-y-7">
+      <section className="space-y-7 @container">
         <Entry label="Chat Method">
           <RadioGroup
             orientation="horizontal"
@@ -109,7 +109,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 },
               })
             }
-            className="flex flex-row gap-4"
+            className="flex flex-col gap-4 @xs:flex-row"
           >
             {!isSupportedModel && (
               <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           />
         </Entry>
 
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 @xs:grid-cols-2 gap-8">
           <Entry label="Temperature">
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider

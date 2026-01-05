@@ -1,6 +1,8 @@
 ---
 title: "Streaming Overview | Streaming"
 description: "Streaming in Mastra enables real-time, incremental responses from both agents and workflows, providing immediate feedback as AI-generated content is produced."
+packages:
+  - "@mastra/ai-sdk"
 ---
 
 # Streaming Overview
@@ -34,7 +36,11 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-> See [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ### Output from `Agent.stream()`
 
@@ -102,7 +108,11 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](/reference/v1/agents/network) for more information.
+:::info
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+:::
 
 #### Network stream properties
 
@@ -150,14 +160,17 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Run.stream()](/reference/v1/streaming/workflows/stream) method documentation for more information.
+:::info
+
+Visit [Run.stream()](/reference/v1/streaming/workflows/stream) for more information.
+
+:::
 
 ### Output from `Run.stream()`
 
 The event structure includes `runId` and `from` at the top level, making it easier to identify and track workflow runs without digging into the payload.
 
 ```typescript
-// ...
 {
   type: 'workflow-start',
   runId: '1eeaf01a-d2bf-4e3f-8d1b-027795ccd3df',

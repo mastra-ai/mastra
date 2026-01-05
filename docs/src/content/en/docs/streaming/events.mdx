@@ -1,6 +1,8 @@
 ---
 title: "Streaming Events | Streaming"
 description: "Learn about the different types of streaming events in Mastra, including text deltas, tool calls, step events, and how to handle them in your applications."
+packages:
+  - "@mastra/core"
 ---
 
 # Streaming Events
@@ -44,7 +46,7 @@ When using `agent.network()` for multi-agent collaboration, additional event typ
 
 Iterate over the `stream` with a `for await` loop to inspect all emitted event chunks.
 
-```typescript {3,7}
+```typescript
 const testAgent = mastra.getAgent("testAgent");
 
 const stream = await testAgent.stream([
@@ -56,7 +58,11 @@ for await (const chunk of stream) {
 }
 ```
 
-> See [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+:::info
+
+Visit [Agent.stream()](/reference/v1/streaming/agents/stream) for more information.
+
+:::
 
 ### Example agent output
 
@@ -148,7 +154,11 @@ for await (const chunk of networkStream) {
 }
 ```
 
-> See [Agent.network()](/reference/v1/agents/network) for more information.
+:::info
+
+Visit [Agent.network()](/reference/v1/agents/network) for more information.
+
+:::
 
 ### Example network output
 
@@ -195,7 +205,6 @@ Network streams emit events that track the orchestration flow. Each iteration be
     }
   }
 }
-// ...more events
 ```
 
 ### Filtering network events

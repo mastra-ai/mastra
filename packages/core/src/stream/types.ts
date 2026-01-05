@@ -12,6 +12,7 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type z from 'zod';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -484,6 +485,7 @@ interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
+  resumeSchema: z.ZodType<any>;
 }
 
 interface ToolCallSuspendedPayload {
@@ -491,6 +493,7 @@ interface ToolCallSuspendedPayload {
   toolName: string;
   suspendPayload: any;
   args: Record<string, any>;
+  resumeSchema: z.ZodType<any>;
 }
 
 export type DataChunkType = {
@@ -585,6 +588,10 @@ export type WorkflowStreamEvent =
       payload: {};
     })
   | (BaseChunkType & {
+      type: 'workflow-paused';
+      payload: {};
+    })
+  | (BaseChunkType & {
       type: 'workflow-step-start';
       id: string;
       payload: {
@@ -668,13 +675,14 @@ export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: To
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
 
 export type ExecuteStreamModelManager<T> = (
-  callback: (model: MastraLanguageModel, isLastModel: boolean) => Promise<T>,
+  callback: (modelConfig: ModelManagerModelConfig, isLastModel: boolean) => Promise<T>,
 ) => Promise<T>;
 
 export type ModelManagerModelConfig = {
   model: MastraLanguageModel;
   maxRetries: number;
   id: string;
+  headers?: Record<string, string>;
 };
 
 /**
@@ -698,26 +706,28 @@ export type partialModel = {
   version?: string;
 };
 
-export type MastraOnStepFinishCallback = (
-  event: LLMStepResult & { model?: partialModel; runId?: string },
+export type MastraOnStepFinishCallback<OUTPUT extends OutputSchema = undefined> = (
+  event: LLMStepResult<OUTPUT> & { model?: partialModel; runId?: string },
 ) => Promise<void> | void;
 
-export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult & {
+export type MastraOnFinishCallbackArgs<OUTPUT extends OutputSchema = undefined> = LLMStepResult<OUTPUT> & {
   error?: Error | string | { message: string; stack: string };
   object?: InferSchemaOutput<OUTPUT>;
-  steps: LLMStepResult[];
+  steps: LLMStepResult<OUTPUT>[];
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
 };
 
-export type MastraOnFinishCallback = (event: MastraOnFinishCallbackArgs) => Promise<void> | void;
+export type MastraOnFinishCallback<OUTPUT extends OutputSchema = undefined> = (
+  event: MastraOnFinishCallbackArgs<OUTPUT>,
+) => Promise<void> | void;
 
 export type MastraModelOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   runId: string;
   toolCallStreaming?: boolean;
-  onFinish?: MastraOnFinishCallback;
-  onStepFinish?: MastraOnStepFinishCallback;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   includeRawChunks?: boolean;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];

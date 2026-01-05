@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraJwtAuth Class | Auth"
 description: "API reference for the MastraJwtAuth class, which authenticates Mastra applications using JSON Web Tokens."
+packages:
+  - "@mastra/auth"
+  - "@mastra/core"
 ---
 
 # MastraJwtAuth Class
@@ -14,7 +17,6 @@ import { Mastra } from "@mastra/core";
 import { MastraJwtAuth } from "@mastra/auth";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraJwtAuth({
       secret: "<your-secret>",

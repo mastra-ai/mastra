@@ -123,9 +123,27 @@ describe('CloudDeployer Server Runtime', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain(
-        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
-      );
+      // Default: playground disabled
+      expect(entry).toContain('playground: false');
+      expect(entry).toContain('swaggerUI: false');
+      expect(entry).toContain('tools: getToolExports(tools)');
+    });
+
+    it('should create node server with playground enabled when studio is true', () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+      // @ts-ignore - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('playground: true');
+      expect(entry).toContain('swaggerUI: false');
+    });
+
+    it('should create node server with playground disabled when studio is false', () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+      // @ts-ignore - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('playground: false');
     });
 
     it('should include readiness logging with correct metadata', () => {

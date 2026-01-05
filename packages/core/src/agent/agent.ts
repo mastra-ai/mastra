@@ -20,6 +20,7 @@ import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type {
   MastraLanguageModel,
   MastraLanguageModelV2,
@@ -32,7 +33,7 @@ import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
@@ -67,7 +68,7 @@ import type {
   DynamicAgentInstructions,
   AgentMethodType,
 } from './types';
-import { isSupportedLanguageModel, resolveThreadIdFromArgs } from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -320,8 +321,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
-    this.logger.debug('outputProcessors', outputProcessors);
-
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
@@ -416,7 +415,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
@@ -441,7 +440,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
@@ -1861,7 +1860,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               const subAgentResourceId =
                 inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
 
-              if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+              if (
+                (methodType === 'generate' || methodType === 'generateLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -1887,7 +1889,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
-              } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
+              } else if (
+                (methodType === 'stream' || methodType === 'streamLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -2054,7 +2059,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
-              const runIdToUse = suspendedToolRunId ?? runId;
+              const runIdToUse = suspendedToolRunId || runId;
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
@@ -2486,7 +2491,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    if (Object.keys(result).length === 0) {
+    // Only throw if scorers were provided but none could be resolved
+    if (Object.keys(result).length === 0 && Object.keys(overrideScorers).length > 0) {
       throw new MastraError({
         id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
         domain: ErrorDomain.AGENT,
@@ -2528,12 +2534,19 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         throw mastraError;
       }
 
+      // Extract headers from ModelRouterLanguageModel if available
+      let headers: Record<string, string> | undefined;
+      if (resolvedModel instanceof ModelRouterLanguageModel) {
+        headers = (resolvedModel as any).config?.headers;
+      }
+
       return [
         {
           id: 'main',
           model: resolvedModel,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
+          headers,
         },
       ];
     }
@@ -2573,11 +2586,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           throw mastraError;
         }
 
+        // Extract headers from ModelRouterLanguageModel if available
+        let headers: Record<string, string> | undefined;
+        if (model instanceof ModelRouterLanguageModel) {
+          headers = (model as any).config?.headers;
+        }
+
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
+          headers,
         };
       }),
     );
@@ -2678,10 +2698,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
+      entityType: EntityType.AGENT,
+      entityId: this.id,
+      entityName: this.name,
       input: options.messages,
       attributes: {
-        agentId: this.id,
-        agentName: this.name,
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
@@ -3177,7 +3198,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: 'agentic-loop',
       runId: streamOptions?.runId ?? '',
     });
@@ -3213,6 +3235,106 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     return result.result as unknown as MastraModelOutput<OUTPUT>;
+  }
+
+  /**
+   * Resumes a previously suspended generate execution.
+   * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
+   *
+   * @example
+   * ```typescript
+   * // Resume after suspension
+   * const stream = await agent.resumeGenerate(
+   *   { approved: true },
+   *   { runId: 'previous-run-id' }
+   * );
+   * ```
+   */
+  async resumeGenerate<OUTPUT extends OutputSchema | undefined = undefined>(
+    resumeData: any,
+    options?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const defaultOptions = await this.getDefaultOptions({
+      requestContext: options?.requestContext,
+    });
+
+    const mergedOptions = {
+      ...defaultOptions,
+      ...(options ?? {}),
+    };
+
+    const llm = await this.getLLM({
+      requestContext: mergedOptions.requestContext,
+    });
+
+    const modelInfo = llm.getModel();
+
+    if (!isSupportedLanguageModel(modelInfo)) {
+      const modelId = modelInfo.modelId || 'unknown';
+      const provider = modelInfo.provider || 'unknown';
+      throw new MastraError({
+        id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        details: {
+          agentName: this.name,
+          modelId,
+          provider,
+          specificationVersion: modelInfo.specificationVersion,
+        },
+      });
+    }
+
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: options?.runId ?? '',
+    });
+
+    const result = await this.#execute({
+      ...mergedOptions,
+      messages: [],
+      resumeContext: {
+        resumeData,
+        snapshot: existingSnapshot,
+      },
+      methodType: 'generate',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+    } as InnerAgentExecutionOptions<OUTPUT>);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError(
+          {
+            id: 'AGENT_GENERATE_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+          },
+          // pass original error to preserve stack trace
+          result.error,
+        );
+      }
+      throw new MastraError({
+        id: 'AGENT_GENERATE_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while generating',
+      });
+    }
+
+    const fullOutput = (await result.result.getFullOutput()) as Awaited<
+      ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
+    >;
+
+    const error = fullOutput.error;
+
+    if (fullOutput.finishReason === 'error' && error) {
+      throw error;
+    }
+
+    return fullOutput;
   }
 
   /**

@@ -1,6 +1,8 @@
 ---
 title: "Processors | Agents | Mastra Docs"
 description: "Learn how to use input and output processors to transform, validate, and control messages in Mastra agents."
+packages:
+  - "@mastra/core"
 ---
 
 # Processors
@@ -35,18 +37,17 @@ Mastra includes several processors for common use cases. You can also create cus
 
 Import and instantiate the processor, then pass it to the agent's `inputProcessors` or `outputProcessors` array:
 
-```typescript {3,9-15} title="src/mastra/agents/moderated-agent.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript {2,8-14} title="src/mastra/agents/moderated-agent.ts"
 import { Agent } from "@mastra/core/agent";
 import { ModerationProcessor } from "@mastra/core/processors";
 
 export const moderatedAgent = new Agent({
   name: "moderated-agent",
   instructions: "You are a helpful assistant",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-4o-mini",
   inputProcessors: [
     new ModerationProcessor({
-      model: openai("gpt-4.1-nano"),
+      model: "openai/gpt-4.1-nano",
       categories: ["hate", "harassment", "violence"],
       threshold: 0.7,
       strategy: "block",
@@ -77,7 +78,7 @@ When memory is enabled on an agent, memory processors are automatically added to
 ```
 [Memory Processors] → [Your inputProcessors]
 ```
-Memory loads conversation history first, then your processors run.
+Memory loads message history first, then your processors run.
 
 **Output processors:**
 ```
@@ -292,14 +293,13 @@ Mastra provides utility processors for common tasks:
 
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
 
-```typescript {9-12}
+```typescript {7-10}
 import { Agent } from "@mastra/core/agent";
 import { TokenLimiter } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "my-agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   inputProcessors: [
     // Ensure the total tokens don't exceed ~127k
     new TokenLimiter(127000),
@@ -327,14 +327,13 @@ const agent = new Agent({
 
 Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
 
-```typescript {5-14}
+```typescript {7-16}
 import { Agent } from "@mastra/core/agent";
 import { ToolCallFilter, TokenLimiter } from "@mastra/core/processors";
-import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   name: "my-agent",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-4o",
   inputProcessors: [
     // Example 1: Remove all tool calls/results
     new ToolCallFilter(),
@@ -348,7 +347,11 @@ const agent = new Agent({
 });
 ```
 
-> **Note:** The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+:::note
+
+The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/v1/memory/memory-processors#manual-control-and-deduplication) for details.
+
+:::
 
 ## Using workflows as processors
 

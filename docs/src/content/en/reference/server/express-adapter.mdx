@@ -1,6 +1,8 @@
 ---
 title: "Reference: Express Adapter | Server"
 description: "API reference for the @mastra/express server adapter."
+packages:
+  - "@mastra/express"
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -239,7 +241,6 @@ await server.init();
 // Middleware after init has access to Mastra context
 app.use((req, res, next) => {
   const mastra = res.locals.mastra;
-  // ...
   next();
 });
 ```

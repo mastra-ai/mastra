@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraAuthClerk Class | Auth"
 description: "API reference for the MastraAuthClerk class, which authenticates Mastra applications using Clerk authentication."
+packages:
+  - "@mastra/auth-clerk"
+  - "@mastra/core"
 ---
 
 # MastraAuthClerk Class
@@ -14,7 +17,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthClerk } from "@mastra/auth-clerk";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthClerk({
       jwksUri: process.env.CLERK_JWKS_URI,
