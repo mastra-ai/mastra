@@ -292,8 +292,8 @@ export interface WorkflowState {
   // Optional detailed fields (can be excluded for performance)
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: SerializedStepFlowEntry[];
-  // Step Information (processed)
-  steps: Record<
+  // Step Information (processed) - optional when using field filtering
+  steps?: Record<
     string,
     {
       status: WorkflowRunStatus;

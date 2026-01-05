@@ -5,7 +5,8 @@
 '@mastra/inngest': patch
 '@mastra/memory': patch
 '@mastra/server': minor
-'@mastra/core': patch
+'@mastra/core': minor
+'@mastra/playground-ui': patch
 ---
 
 Unified `getWorkflowRunById` and `getWorkflowRunExecutionResult` into a single API that returns `WorkflowState` with both metadata and execution state.

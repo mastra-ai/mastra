@@ -2093,12 +2093,13 @@ export class Workflow<
         includeAllFields || fieldsSet.has('serializedStepGraph') ? snapshotState.serializedStepGraph : undefined,
     };
 
-    // Clean up undefined values if field filtering is active
+    // Clean up undefined/empty values if field filtering is active
     if (fields && fields.length > 0) {
       if (result.initialState === undefined) delete result.initialState;
       if (result.result === undefined) delete result.result;
       if (result.error === undefined) delete result.error;
       if (result.payload === undefined) delete result.payload;
+      if (!fieldsSet.has('steps')) delete result.steps;
       if (result.activeStepsPath === undefined) delete result.activeStepsPath;
       if (result.serializedStepGraph === undefined) delete result.serializedStepGraph;
     }

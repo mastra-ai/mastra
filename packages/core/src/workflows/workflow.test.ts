@@ -6336,7 +6336,7 @@ describe('Workflow', () => {
       // Request only status field
       const statusOnly = await workflow.getWorkflowRunById(run.runId, { fields: ['status'] });
       expect(statusOnly?.status).toBe('success');
-      expect(statusOnly?.steps).toEqual({}); // steps not requested, should be empty
+      expect(statusOnly?.steps).toBeUndefined(); // steps not requested, should be omitted
       expect(statusOnly?.result).toBeUndefined();
       expect(statusOnly?.payload).toBeUndefined();
 
@@ -6628,7 +6628,7 @@ describe('Workflow', () => {
       // Verify status is suspended in storage
       const beforeCancel = await workflow.getWorkflowRunById(runId);
       expect(beforeCancel).not.toBeNull();
-      expect((beforeCancel!.snapshot as WorkflowRunState).status).toBe('suspended');
+      expect(beforeCancel!.status).toBe('suspended');
 
       // Cancel the suspended workflow
       await run.cancel();
@@ -6636,7 +6636,7 @@ describe('Workflow', () => {
       // Check status IMMEDIATELY after cancel() returns
       const afterCancel = await workflow.getWorkflowRunById(runId);
       expect(afterCancel).not.toBeNull();
-      expect((afterCancel!.snapshot as WorkflowRunState).status).toBe('canceled');
+      expect(afterCancel!.status).toBe('canceled');
     });
   });
 

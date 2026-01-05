@@ -253,7 +253,7 @@ export const workflowRunResultSchema = z.object({
   result: z.unknown().optional(),
   error: z.unknown().optional(),
   payload: z.unknown().optional(),
-  steps: z.record(z.string(), z.any()),
+  steps: z.record(z.string(), z.any()).optional(),
 
   // Optional detailed fields
   activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
