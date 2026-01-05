@@ -172,7 +172,7 @@ importers:
     dependencies:
       '@clerk/backend':
         specifier: ^1.34.0
-        version: 1.34.0(react-dom@19.2.0(react@19.2.3))(react@19.2.3)
+        version: 1.34.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@mastra/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -2795,14 +2795,14 @@ importers:
         specifier: ^1.281.0
         version: 1.302.2
       react:
-        specifier: ^19.1.1
+        specifier: ^19.2.3
         version: 19.2.3
       react-dom:
-        specifier: ^19.1.1
-        version: 19.2.0(react@19.2.3)
+        specifier: ^19.2.3
+        version: 19.2.3(react@19.2.3)
       react-router:
         specifier: ^7.6.3
-        version: 7.9.4(react-dom@19.2.0(react@19.2.3))(react@19.2.3)
+        version: 7.9.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       tailwind-merge:
         specifier: ^2.6.0
         version: 2.6.0
@@ -16221,6 +16221,11 @@ packages:
     peerDependencies:
       react: ^19.2.0
 
+  react-dom@19.2.3:
+    resolution: {integrity: sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg==}
+    peerDependencies:
+      react: ^19.2.3
+
   react-hook-form@7.65.0:
     resolution: {integrity: sha512-xtOzDz063WcXvGWaHgLNrNzlsdFgtUWcb32E6WFaGTd7kPZG3EeDusjdZfUsPwKCKVXy1ZlntifaHZ4l8pAsmw==}
     engines: {node: '>=18.0.0'}
@@ -20215,9 +20220,9 @@ snapshots:
       picocolors: 1.1.1
       sisteransi: 1.0.5
 
-  '@clerk/backend@1.34.0(react-dom@19.2.0(react@19.2.3))(react@19.2.3)':
+  '@clerk/backend@1.34.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
-      '@clerk/shared': 3.28.2(react-dom@19.2.0(react@19.2.3))(react@19.2.3)
+      '@clerk/shared': 3.28.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@clerk/types': 4.95.0
       cookie: 1.1.1
       snakecase-keys: 8.0.1
@@ -20226,7 +20231,7 @@ snapshots:
       - react
       - react-dom
 
-  '@clerk/shared@3.28.2(react-dom@19.2.0(react@19.2.3))(react@19.2.3)':
+  '@clerk/shared@3.28.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
       '@clerk/types': 4.95.0
       dequal: 2.0.3
@@ -20236,7 +20241,7 @@ snapshots:
       swr: 2.3.4(react@19.2.3)
     optionalDependencies:
       react: 19.2.3
-      react-dom: 19.2.0(react@19.2.3)
+      react-dom: 19.2.3(react@19.2.3)
 
   '@clerk/types@4.95.0':
     dependencies:
@@ -31225,6 +31230,11 @@ snapshots:
       react: 19.2.3
       scheduler: 0.27.0
 
+  react-dom@19.2.3(react@19.2.3):
+    dependencies:
+      react: 19.2.3
+      scheduler: 0.27.0
+
   react-hook-form@7.65.0(react@19.2.3):
     dependencies:
       react: 19.2.3
@@ -31304,13 +31314,13 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.0(react@19.2.3)
 
-  react-router@7.9.4(react-dom@19.2.0(react@19.2.3))(react@19.2.3):
+  react-router@7.9.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3):
     dependencies:
       cookie: 1.1.1
       react: 19.2.3
       set-cookie-parser: 2.7.1
     optionalDependencies:
-      react-dom: 19.2.0(react@19.2.3)
+      react-dom: 19.2.3(react@19.2.3)
 
   react-style-singleton@2.2.3(@types/react@19.2.2)(react@19.2.3):
     dependencies:
