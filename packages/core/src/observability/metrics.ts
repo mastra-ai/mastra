@@ -1,0 +1,612 @@
+/**
+ * Metrics Types and Collector Interface for Agentic Applications
+ *
+ * This module defines the metrics infrastructure for tracking agent,
+ * workflow, and tool execution metrics. It follows an adapter pattern
+ * similar to the logger, allowing custom metrics backends.
+ */
+
+// ============================================================================
+// Metric Labels
+// ============================================================================
+
+/**
+ * Common labels for metrics - used for aggregation and filtering
+ */
+export interface MetricLabels {
+  /** Agent ID */
+  agentId?: string;
+  /** Workflow ID */
+  workflowId?: string;
+  /** Model name/ID */
+  model?: string;
+  /** Provider (openai, anthropic, etc.) */
+  provider?: string;
+  /** Tool name */
+  tool?: string;
+  /** Environment (production, staging, dev) */
+  environment?: string;
+  /** Custom labels */
+  [key: string]: string | undefined;
+}
+
+// ============================================================================
+// Token & Cost Metrics
+// ============================================================================
+
+/**
+ * Token usage breakdown
+ */
+export interface TokenUsage {
+  /** Total input tokens */
+  inputTokens: number;
+  /** Total output tokens */
+  outputTokens: number;
+  /** Cached input tokens (prompt cache) */
+  cachedTokens?: number;
+  /** Reasoning/thinking tokens */
+  reasoningTokens?: number;
+  /** Cache write tokens (Anthropic) */
+  cacheWriteTokens?: number;
+}
+
+/**
+ * Cost breakdown for a single operation
+ */
+export interface CostBreakdown {
+  /** Total cost in USD */
+  totalCostUSD: number;
+  /** Model/LLM cost */
+  modelCostUSD?: number;
+  /** Tool execution cost (external APIs) */
+  toolCostUSD?: number;
+  /** Cost by model (for multi-model scenarios) */
+  costByModel?: Record<string, number>;
+}
+
+// ============================================================================
+// Agent Metrics
+// ============================================================================
+
+/**
+ * Metrics collected during a single agent run
+ */
+export interface AgentRunMetrics {
+  /** Agent ID */
+  agentId: string;
+  /** Run ID */
+  runId: string;
+  /** Total duration in milliseconds */
+  durationMs: number;
+  /** Number of model steps (LLM calls) */
+  stepCount: number;
+  /** Number of tool calls made */
+  toolCallCount: number;
+  /** Successful tool calls */
+  toolSuccessCount: number;
+  /** Failed tool calls */
+  toolFailureCount: number;
+  /** Token usage */
+  tokenUsage: TokenUsage;
+  /** Cost breakdown (if calculable) */
+  cost?: CostBreakdown;
+  /** Time to first token (streaming) */
+  timeToFirstTokenMs?: number;
+  /** Finish reason (stop, tool-calls, length, etc.) */
+  finishReason?: string;
+  /** Whether the run was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+/**
+ * Aggregated agent metrics over a time period
+ */
+export interface AgentAggregateMetrics {
+  /** Agent ID */
+  agentId: string;
+  /** Time period start */
+  periodStart: Date;
+  /** Time period end */
+  periodEnd: Date;
+  /** Total runs */
+  totalRuns: number;
+  /** Successful runs */
+  successfulRuns: number;
+  /** Failed runs */
+  failedRuns: number;
+  /** Success rate (0-1) */
+  successRate: number;
+  /** Average duration in ms */
+  avgDurationMs: number;
+  /** P50 duration */
+  p50DurationMs: number;
+  /** P95 duration */
+  p95DurationMs: number;
+  /** P99 duration */
+  p99DurationMs: number;
+  /** Total tokens used */
+  totalTokens: TokenUsage;
+  /** Total cost */
+  totalCostUSD: number;
+  /** Average cost per run */
+  avgCostPerRun: number;
+  /** Average tool calls per run */
+  avgToolCallsPerRun: number;
+  /** Tool success rate */
+  toolSuccessRate: number;
+}
+
+// ============================================================================
+// Workflow Metrics
+// ============================================================================
+
+/**
+ * Metrics collected during a single workflow run
+ */
+export interface WorkflowRunMetrics {
+  /** Workflow ID */
+  workflowId: string;
+  /** Run ID */
+  runId: string;
+  /** Total duration in milliseconds */
+  durationMs: number;
+  /** Number of steps executed */
+  stepsExecuted: number;
+  /** Number of steps that succeeded */
+  stepsSucceeded: number;
+  /** Number of steps that failed */
+  stepsFailed: number;
+  /** Number of steps that were suspended */
+  stepsSuspended: number;
+  /** Final status */
+  status: 'completed' | 'failed' | 'suspended';
+  /** Token usage (if workflow contains agents) */
+  tokenUsage?: TokenUsage;
+  /** Cost breakdown */
+  cost?: CostBreakdown;
+  /** Whether the run was successful */
+  success: boolean;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+// ============================================================================
+// Tool Metrics
+// ============================================================================
+
+/**
+ * Metrics for a single tool execution
+ */
+export interface ToolExecutionMetrics {
+  /** Tool name */
+  toolName: string;
+  /** Tool type (local, mcp, etc.) */
+  toolType?: string;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Whether execution was successful */
+  success: boolean;
+  /** Error message if failed */
+  errorMessage?: string;
+  /** Agent that called the tool */
+  agentId?: string;
+  /** Workflow that called the tool */
+  workflowId?: string;
+}
+
+// ============================================================================
+// Model Metrics
+// ============================================================================
+
+/**
+ * Metrics for a single model call
+ */
+export interface ModelCallMetrics {
+  /** Model ID */
+  model: string;
+  /** Provider */
+  provider?: string;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Time to first token (streaming) */
+  timeToFirstTokenMs?: number;
+  /** Token usage */
+  tokenUsage: TokenUsage;
+  /** Finish reason */
+  finishReason?: string;
+  /** Whether call was successful */
+  success: boolean;
+  /** Whether this was a retry */
+  isRetry: boolean;
+  /** Retry attempt number (1-based) */
+  retryAttempt?: number;
+  /** Whether a fallback model was used */
+  isFallback: boolean;
+  /** Original model if fallback was used */
+  fallbackFrom?: string;
+  /** Agent ID */
+  agentId?: string;
+}
+
+// ============================================================================
+// Metrics Collector Interface
+// ============================================================================
+
+/**
+ * Interface for collecting and reporting metrics.
+ * Implementations can send metrics to various backends (Prometheus, DataDog, etc.)
+ */
+export interface IMetricsCollector {
+  // ---- Counter Operations ----
+
+  /**
+   * Increment a counter metric
+   * @param name Metric name
+   * @param labels Labels for the metric
+   * @param value Value to increment by (default: 1)
+   */
+  incrementCounter(name: string, labels?: MetricLabels, value?: number): void;
+
+  // ---- Gauge Operations ----
+
+  /**
+   * Set a gauge metric value
+   * @param name Metric name
+   * @param labels Labels for the metric
+   * @param value Value to set
+   */
+  setGauge(name: string, labels: MetricLabels, value: number): void;
+
+  // ---- Histogram Operations ----
+
+  /**
+   * Record a value in a histogram
+   * @param name Metric name
+   * @param labels Labels for the metric
+   * @param value Value to record
+   */
+  recordHistogram(name: string, labels: MetricLabels, value: number): void;
+
+  // ---- High-Level Recording Methods ----
+
+  /**
+   * Record metrics from an agent run
+   */
+  recordAgentRun(metrics: AgentRunMetrics): void;
+
+  /**
+   * Record metrics from a workflow run
+   */
+  recordWorkflowRun(metrics: WorkflowRunMetrics): void;
+
+  /**
+   * Record metrics from a tool execution
+   */
+  recordToolExecution(metrics: ToolExecutionMetrics): void;
+
+  /**
+   * Record metrics from a model call
+   */
+  recordModelCall(metrics: ModelCallMetrics): void;
+
+  /**
+   * Record token usage
+   */
+  recordTokenUsage(usage: TokenUsage, labels?: MetricLabels): void;
+
+  /**
+   * Record cost
+   */
+  recordCost(cost: CostBreakdown, labels?: MetricLabels): void;
+
+  // ---- Lifecycle ----
+
+  /**
+   * Flush any buffered metrics
+   */
+  flush(): Promise<void>;
+
+  /**
+   * Shutdown the collector
+   */
+  shutdown(): Promise<void>;
+}
+
+// ============================================================================
+// No-Op Metrics Collector
+// ============================================================================
+
+/**
+ * No-op implementation of IMetricsCollector.
+ * Used when metrics collection is not configured.
+ */
+export class NoOpMetricsCollector implements IMetricsCollector {
+  incrementCounter(_name: string, _labels?: MetricLabels, _value?: number): void {
+    // No-op
+  }
+
+  setGauge(_name: string, _labels: MetricLabels, _value: number): void {
+    // No-op
+  }
+
+  recordHistogram(_name: string, _labels: MetricLabels, _value: number): void {
+    // No-op
+  }
+
+  recordAgentRun(_metrics: AgentRunMetrics): void {
+    // No-op
+  }
+
+  recordWorkflowRun(_metrics: WorkflowRunMetrics): void {
+    // No-op
+  }
+
+  recordToolExecution(_metrics: ToolExecutionMetrics): void {
+    // No-op
+  }
+
+  recordModelCall(_metrics: ModelCallMetrics): void {
+    // No-op
+  }
+
+  recordTokenUsage(_usage: TokenUsage, _labels?: MetricLabels): void {
+    // No-op
+  }
+
+  recordCost(_cost: CostBreakdown, _labels?: MetricLabels): void {
+    // No-op
+  }
+
+  async flush(): Promise<void> {
+    // No-op
+  }
+
+  async shutdown(): Promise<void> {
+    // No-op
+  }
+}
+
+// ============================================================================
+// In-Memory Metrics Collector
+// ============================================================================
+
+/**
+ * Simple in-memory metrics collector for development and testing.
+ * Stores metrics in memory and provides access to them.
+ */
+export class InMemoryMetricsCollector implements IMetricsCollector {
+  private counters: Map<string, number> = new Map();
+  private gauges: Map<string, number> = new Map();
+  private histograms: Map<string, number[]> = new Map();
+  private agentRuns: AgentRunMetrics[] = [];
+  private workflowRuns: WorkflowRunMetrics[] = [];
+  private toolExecutions: ToolExecutionMetrics[] = [];
+  private modelCalls: ModelCallMetrics[] = [];
+
+  private makeKey(name: string, labels?: MetricLabels): string {
+    if (!labels) return name;
+    const labelStr = Object.entries(labels)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join(',');
+    return labelStr ? `${name}{${labelStr}}` : name;
+  }
+
+  incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
+    const key = this.makeKey(name, labels);
+    this.counters.set(key, (this.counters.get(key) || 0) + value);
+  }
+
+  setGauge(name: string, labels: MetricLabels, value: number): void {
+    const key = this.makeKey(name, labels);
+    this.gauges.set(key, value);
+  }
+
+  recordHistogram(name: string, labels: MetricLabels, value: number): void {
+    const key = this.makeKey(name, labels);
+    const values = this.histograms.get(key) || [];
+    values.push(value);
+    this.histograms.set(key, values);
+  }
+
+  recordAgentRun(metrics: AgentRunMetrics): void {
+    this.agentRuns.push(metrics);
+
+    // Also update counters
+    const labels: MetricLabels = { agentId: metrics.agentId };
+    this.incrementCounter('agent_runs_total', labels);
+    if (metrics.success) {
+      this.incrementCounter('agent_runs_success_total', labels);
+    } else {
+      this.incrementCounter('agent_runs_error_total', { ...labels, errorType: metrics.errorType });
+    }
+    this.recordHistogram('agent_run_duration_ms', labels, metrics.durationMs);
+    this.incrementCounter('agent_tool_calls_total', labels, metrics.toolCallCount);
+    this.recordTokenUsage(metrics.tokenUsage, labels);
+    if (metrics.cost) {
+      this.recordCost(metrics.cost, labels);
+    }
+  }
+
+  recordWorkflowRun(metrics: WorkflowRunMetrics): void {
+    this.workflowRuns.push(metrics);
+
+    const labels: MetricLabels = { workflowId: metrics.workflowId };
+    this.incrementCounter('workflow_runs_total', labels);
+    this.incrementCounter(`workflow_runs_${metrics.status}_total`, labels);
+    this.recordHistogram('workflow_run_duration_ms', labels, metrics.durationMs);
+    this.incrementCounter('workflow_steps_executed_total', labels, metrics.stepsExecuted);
+  }
+
+  recordToolExecution(metrics: ToolExecutionMetrics): void {
+    this.toolExecutions.push(metrics);
+
+    const labels: MetricLabels = {
+      tool: metrics.toolName,
+      toolType: metrics.toolType,
+      agentId: metrics.agentId,
+    };
+    this.incrementCounter('tool_calls_total', labels);
+    if (metrics.success) {
+      this.incrementCounter('tool_calls_success_total', labels);
+    } else {
+      this.incrementCounter('tool_calls_error_total', labels);
+    }
+    this.recordHistogram('tool_call_duration_ms', labels, metrics.durationMs);
+  }
+
+  recordModelCall(metrics: ModelCallMetrics): void {
+    this.modelCalls.push(metrics);
+
+    const labels: MetricLabels = {
+      model: metrics.model,
+      provider: metrics.provider,
+      agentId: metrics.agentId,
+    };
+    this.incrementCounter('model_calls_total', labels);
+    if (metrics.success) {
+      this.incrementCounter('model_calls_success_total', labels);
+    } else {
+      this.incrementCounter('model_calls_error_total', labels);
+    }
+    if (metrics.isRetry) {
+      this.incrementCounter('model_retries_total', labels);
+    }
+    if (metrics.isFallback) {
+      this.incrementCounter('model_fallbacks_total', { ...labels, fallbackFrom: metrics.fallbackFrom });
+    }
+    this.recordHistogram('model_call_duration_ms', labels, metrics.durationMs);
+    if (metrics.timeToFirstTokenMs !== undefined) {
+      this.recordHistogram('model_time_to_first_token_ms', labels, metrics.timeToFirstTokenMs);
+    }
+    this.recordTokenUsage(metrics.tokenUsage, labels);
+  }
+
+  recordTokenUsage(usage: TokenUsage, labels: MetricLabels = {}): void {
+    this.incrementCounter('tokens_input_total', labels, usage.inputTokens);
+    this.incrementCounter('tokens_output_total', labels, usage.outputTokens);
+    this.incrementCounter('tokens_total', labels, usage.inputTokens + usage.outputTokens);
+    if (usage.cachedTokens) {
+      this.incrementCounter('tokens_cached_total', labels, usage.cachedTokens);
+    }
+    if (usage.reasoningTokens) {
+      this.incrementCounter('tokens_reasoning_total', labels, usage.reasoningTokens);
+    }
+  }
+
+  recordCost(cost: CostBreakdown, labels: MetricLabels = {}): void {
+    this.incrementCounter('cost_usd_total', labels, cost.totalCostUSD);
+    if (cost.modelCostUSD) {
+      this.incrementCounter('cost_model_usd_total', labels, cost.modelCostUSD);
+    }
+    if (cost.toolCostUSD) {
+      this.incrementCounter('cost_tool_usd_total', labels, cost.toolCostUSD);
+    }
+  }
+
+  async flush(): Promise<void> {
+    // In-memory, nothing to flush
+  }
+
+  async shutdown(): Promise<void> {
+    // In-memory, nothing to shutdown
+  }
+
+  // ---- Accessors for testing/debugging ----
+
+  getCounter(name: string, labels?: MetricLabels): number {
+    return this.counters.get(this.makeKey(name, labels)) || 0;
+  }
+
+  getGauge(name: string, labels?: MetricLabels): number | undefined {
+    return this.gauges.get(this.makeKey(name, labels));
+  }
+
+  getHistogram(name: string, labels?: MetricLabels): number[] {
+    return this.histograms.get(this.makeKey(name, labels)) || [];
+  }
+
+  getAgentRuns(): AgentRunMetrics[] {
+    return [...this.agentRuns];
+  }
+
+  getWorkflowRuns(): WorkflowRunMetrics[] {
+    return [...this.workflowRuns];
+  }
+
+  getToolExecutions(): ToolExecutionMetrics[] {
+    return [...this.toolExecutions];
+  }
+
+  getModelCalls(): ModelCallMetrics[] {
+    return [...this.modelCalls];
+  }
+
+  getAllCounters(): Map<string, number> {
+    return new Map(this.counters);
+  }
+
+  clear(): void {
+    this.counters.clear();
+    this.gauges.clear();
+    this.histograms.clear();
+    this.agentRuns = [];
+    this.workflowRuns = [];
+    this.toolExecutions = [];
+    this.modelCalls = [];
+  }
+}
+
+// ============================================================================
+// Metric Names Constants
+// ============================================================================
+
+/**
+ * Standard metric names for consistency across implementations
+ */
+export const MetricNames = {
+  // Agent metrics
+  AGENT_RUNS_TOTAL: 'agent_runs_total',
+  AGENT_RUNS_SUCCESS: 'agent_runs_success_total',
+  AGENT_RUNS_ERROR: 'agent_runs_error_total',
+  AGENT_RUN_DURATION: 'agent_run_duration_ms',
+  AGENT_TOOL_CALLS: 'agent_tool_calls_total',
+
+  // Workflow metrics
+  WORKFLOW_RUNS_TOTAL: 'workflow_runs_total',
+  WORKFLOW_RUNS_SUCCESS: 'workflow_runs_completed_total',
+  WORKFLOW_RUNS_FAILED: 'workflow_runs_failed_total',
+  WORKFLOW_RUNS_SUSPENDED: 'workflow_runs_suspended_total',
+  WORKFLOW_RUN_DURATION: 'workflow_run_duration_ms',
+  WORKFLOW_STEPS_EXECUTED: 'workflow_steps_executed_total',
+
+  // Tool metrics
+  TOOL_CALLS_TOTAL: 'tool_calls_total',
+  TOOL_CALLS_SUCCESS: 'tool_calls_success_total',
+  TOOL_CALLS_ERROR: 'tool_calls_error_total',
+  TOOL_CALL_DURATION: 'tool_call_duration_ms',
+
+  // Model metrics
+  MODEL_CALLS_TOTAL: 'model_calls_total',
+  MODEL_CALLS_SUCCESS: 'model_calls_success_total',
+  MODEL_CALLS_ERROR: 'model_calls_error_total',
+  MODEL_RETRIES: 'model_retries_total',
+  MODEL_FALLBACKS: 'model_fallbacks_total',
+  MODEL_CALL_DURATION: 'model_call_duration_ms',
+  MODEL_TIME_TO_FIRST_TOKEN: 'model_time_to_first_token_ms',
+
+  // Token metrics
+  TOKENS_INPUT: 'tokens_input_total',
+  TOKENS_OUTPUT: 'tokens_output_total',
+  TOKENS_TOTAL: 'tokens_total',
+  TOKENS_CACHED: 'tokens_cached_total',
+  TOKENS_REASONING: 'tokens_reasoning_total',
+
+  // Cost metrics
+  COST_USD: 'cost_usd_total',
+  COST_MODEL_USD: 'cost_model_usd_total',
+  COST_TOOL_USD: 'cost_tool_usd_total',
+} as const;

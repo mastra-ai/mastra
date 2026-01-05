@@ -9,4 +9,6 @@
 export * from './types';
 export * from './no-op';
 export * from './utils';
+export * from './metrics';
+export * from './instrumentation';
 export { wrapMastra } from './context';
