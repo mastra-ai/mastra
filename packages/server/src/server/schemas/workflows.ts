@@ -190,25 +190,17 @@ export const workflowExecutionResultQuerySchema = z.object({
     .refine(
       value => {
         if (!value) return true;
-        const validFields = new Set([
-          'status',
-          'result',
-          'error',
-          'payload',
-          'steps',
-          'activeStepsPath',
-          'serializedStepGraph',
-        ]);
+        const validFields = new Set(['result', 'error', 'payload', 'steps', 'activeStepsPath', 'serializedStepGraph']);
         const requestedFields = value.split(',').map(f => f.trim());
         return requestedFields.every(field => validFields.has(field));
       },
       {
         message:
-          'Invalid field name. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph',
+          'Invalid field name. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph',
       },
     )
     .describe(
-      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. If not provided, returns all fields.',
+      'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
     ),
   withNestedWorkflows: z
     .enum(['true', 'false'])
@@ -243,25 +235,17 @@ export const workflowRunResultQuerySchema = z.object({
     .refine(
       value => {
         if (!value) return true;
-        const validFields = new Set([
-          'status',
-          'result',
-          'error',
-          'payload',
-          'steps',
-          'activeStepsPath',
-          'serializedStepGraph',
-        ]);
+        const validFields = new Set(['result', 'error', 'payload', 'steps', 'activeStepsPath', 'serializedStepGraph']);
         const requestedFields = value.split(',').map(f => f.trim());
         return requestedFields.every(field => validFields.has(field));
       },
       {
         message:
-          'Invalid field name. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph',
+          'Invalid field name. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph',
       },
     )
     .describe(
-      'Comma-separated list of fields to return. Available fields: status, result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.',
+      'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
     ),
   withNestedWorkflows: z
     .enum(['true', 'false'])

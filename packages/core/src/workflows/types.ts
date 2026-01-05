@@ -315,16 +315,9 @@ export interface WorkflowState {
 /**
  * Valid field names for filtering WorkflowState responses.
  * Use with getWorkflowRunById to reduce payload size.
- * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) are always included.
+ * Note: Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
  */
-export type WorkflowStateField =
-  | 'status'
-  | 'result'
-  | 'error'
-  | 'payload'
-  | 'steps'
-  | 'activeStepsPath'
-  | 'serializedStepGraph';
+export type WorkflowStateField = 'result' | 'error' | 'payload' | 'steps' | 'activeStepsPath' | 'serializedStepGraph';
 
 export interface WorkflowRunState {
   // Core state info
