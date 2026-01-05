@@ -4,6 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@vitest/coverage-v8':
+      specifier: 4.0.12
+      version: 4.0.12
+    '@vitest/ui':
+      specifier: 4.0.12
+      version: 4.0.12
+    vitest:
+      specifier: 4.0.12
+      version: 4.0.12
+
 overrides:
   typescript: ^5.8.3
   '@types/node': 22.13.17
@@ -881,6 +893,9 @@ importers:
 
   explorations/workspace:
     dependencies:
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       uuid:
         specifier: ^9.0.1
         version: 9.0.1
@@ -902,7 +917,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^1.0.0
-        version: 1.6.1(@types/node@22.13.17)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)
+        version: 1.6.1(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.12))(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)
 
   observability/_test-utils:
     devDependencies:
@@ -34342,7 +34357,7 @@ snapshots:
       picocolors: 1.1.1
       postcss-load-config: 6.0.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(yaml@2.8.1)
       resolve-from: 5.0.0
-      rollup: 4.53.5
+      rollup: 4.50.2
       source-map: 0.7.6
       sucrase: 3.35.0
       tinyexec: 0.3.2
@@ -34838,7 +34853,7 @@ snapshots:
     dependencies:
       esbuild: 0.21.5
       postcss: 8.5.6
-      rollup: 4.53.5
+      rollup: 4.50.2
     optionalDependencies:
       '@types/node': 22.13.17
       fsevents: 2.3.3
@@ -34913,7 +34928,7 @@ snapshots:
       tsx: 4.21.0
       yaml: 2.8.1
 
-  vitest@1.6.1(@types/node@22.13.17)(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1):
+  vitest@1.6.1(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.12))(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1):
     dependencies:
       '@vitest/expect': 1.6.1
       '@vitest/runner': 1.6.1
@@ -34937,6 +34952,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.13.17
+      '@vitest/ui': 4.0.12(vitest@4.0.12)
       jsdom: 26.1.0
     transitivePeerDependencies:
       - less
