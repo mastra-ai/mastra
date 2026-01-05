@@ -170,12 +170,14 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       workflowId,
       runId,
       inputData,
+      initialState,
       requestContext: playgroundRequestContext,
       perStep,
     }: {
       workflowId: string;
       runId: string;
       inputData: Record<string, unknown>;
+      initialState?: Record<string, unknown>;
       requestContext: Record<string, unknown>;
       perStep?: boolean;
     }) => {
@@ -196,6 +198,7 @@ export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
       const run = await workflow.createRun({ runId });
       const stream = await run.stream({
         inputData,
+        initialState,
         requestContext,
         closeOnSuspend: true,
         tracingOptions: settings?.tracingOptions,
