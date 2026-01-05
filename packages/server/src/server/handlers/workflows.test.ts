@@ -571,12 +571,12 @@ describe('vNext Workflow Handlers', () => {
     it('should reject invalid field names in query schema', () => {
       const { queryParamSchema } = GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE;
 
-      // Valid fields should pass
-      expect(() => queryParamSchema?.parse({ fields: 'status,result' })).not.toThrow();
+      // Valid fields should pass (status is always included, so not in the filterable fields list)
+      expect(() => queryParamSchema?.parse({ fields: 'result,steps' })).not.toThrow();
 
       // Invalid field should fail
       expect(() => queryParamSchema?.parse({ fields: 'invalidField' })).toThrow();
-      expect(() => queryParamSchema?.parse({ fields: 'status,invalidField' })).toThrow();
+      expect(() => queryParamSchema?.parse({ fields: 'result,invalidField' })).toThrow();
 
       // Empty/undefined should pass
       expect(() => queryParamSchema?.parse({})).not.toThrow();
