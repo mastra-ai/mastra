@@ -2081,6 +2081,7 @@ export class Workflow<
 
       // Execution state
       status: snapshotState.status,
+      initialState: Object.keys(snapshotState.value).length > 0 ? snapshotState.value : undefined,
       result: includeAllFields || fieldsSet.has('result') ? snapshotState.result : undefined,
       error: includeAllFields || fieldsSet.has('error') ? snapshotState.error : undefined,
       payload: includeAllFields || fieldsSet.has('payload') ? snapshotState.context?.input : undefined,
@@ -2094,6 +2095,7 @@ export class Workflow<
 
     // Clean up undefined values if field filtering is active
     if (fields && fields.length > 0) {
+      if (result.initialState === undefined) delete result.initialState;
       if (result.result === undefined) delete result.result;
       if (result.error === undefined) delete result.error;
       if (result.payload === undefined) delete result.payload;
