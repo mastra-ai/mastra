@@ -2011,11 +2011,11 @@ export class MessageList {
   static isMastraDBMessage(msg: MessageInput): msg is MastraDBMessage {
     return Boolean(
       `content` in msg &&
-        msg.content &&
-        !Array.isArray(msg.content) &&
-        typeof msg.content !== `string` &&
-        `format` in msg.content &&
-        msg.content.format === 2,
+      msg.content &&
+      !Array.isArray(msg.content) &&
+      typeof msg.content !== `string` &&
+      `format` in msg.content &&
+      msg.content.format === 2,
     );
   }
 
