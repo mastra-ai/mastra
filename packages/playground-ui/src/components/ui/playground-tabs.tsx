@@ -33,7 +33,7 @@ export const PlaygroundTabs = <T extends string>({
   };
 
   return (
-    <Tabs value={currentTab} onValueChange={handleTabChange} className={cn('h-full', className)}>
+    <Tabs value={currentTab} onValueChange={handleTabChange} className={cn('h-full overflow-x-auto', className)}>
       {children}
     </Tabs>
   );

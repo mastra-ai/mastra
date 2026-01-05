@@ -52,7 +52,7 @@ export function WorkflowStepDetailContent() {
         {stepDetail.type === 'map-config' && stepDetail.mapConfig && <CodeDialogContent data={stepDetail.mapConfig} />}
         {stepDetail.type === 'nested-graph' && stepDetail.nestedGraph && (
           <div className="h-full min-h-[400px]">
-            <ReactFlowProvider>
+            <ReactFlowProvider key={stepDetail.nestedGraph.fullStep}>
               <WorkflowNestedGraph
                 stepGraph={stepDetail.nestedGraph.stepGraph}
                 open={true}

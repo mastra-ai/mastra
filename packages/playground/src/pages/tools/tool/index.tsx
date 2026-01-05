@@ -30,7 +30,7 @@ const Tool = () => {
         </Breadcrumb>
 
         <HeaderGroup>
-          <div className="w-[240px]">
+          <div className="w-48">
             <ToolCombobox value={toolId} />
           </div>
         </HeaderGroup>

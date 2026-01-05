@@ -1,25 +1,6 @@
 import { serializeDate, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_SCORERS } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 
-export function ensureDate(value: any): Date | null {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value === 'string') return new Date(value);
-  if (typeof value === 'number') return new Date(value);
-  return null;
-}
-
-export function parseJSON(value: any): any {
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return value;
-    }
-  }
-  return value;
-}
-
 export function getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
   const keyParts = Object.entries(keys)
     .filter(([_, value]) => value !== undefined)

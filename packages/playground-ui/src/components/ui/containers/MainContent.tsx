@@ -40,27 +40,44 @@ export function MainContentContent({
   hasLeftServiceColumn?: boolean;
 }) {
   const devStyleRequested = devUIStyleRequested('MainContentContent');
+  const contentClassName = getMainContentContentClassName({ isCentered, isDivided, hasLeftServiceColumn, className });
 
   return (
     <div
-      className={cn(
-        `grid overflow-y-auto h-full `,
-        `overflow-x-auto min-w-[min-content]`,
-        {
-          'items-start content-start': !isCentered && !isDivided && !hasLeftServiceColumn,
-          'grid place-items-center': isCentered,
-          'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
-          'grid-cols-[12rem_1fr_1fr]': isDivided && hasLeftServiceColumn,
-          'grid-cols-[auto_1fr]': !isDivided && hasLeftServiceColumn,
-        },
-        className,
-      )}
+      className={contentClassName}
       style={{ ...style, ...(devStyleRequested ? { border: '3px dotted orange' } : {}) }}
     >
       {children}
     </div>
   );
 }
+
+export type GetMainContentContentClassNameArgs = {
+  isCentered: boolean;
+  isDivided: boolean;
+  hasLeftServiceColumn: boolean;
+  className?: string;
+};
+
+export const getMainContentContentClassName = ({
+  isCentered,
+  isDivided,
+  hasLeftServiceColumn,
+  className,
+}: GetMainContentContentClassNameArgs) => {
+  return cn(
+    `grid overflow-y-auto h-full `,
+    `overflow-x-auto min-w-[min-content]`,
+    {
+      'items-start content-start': !isCentered && !isDivided && !hasLeftServiceColumn,
+      'grid place-items-center': isCentered,
+      'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
+      'grid-cols-[12rem_1fr_1fr]': isDivided && hasLeftServiceColumn,
+      'grid-cols-[auto_1fr]': !isDivided && hasLeftServiceColumn,
+    },
+    className,
+  );
+};
 
 function devUIStyleRequested(name: string) {
   try {

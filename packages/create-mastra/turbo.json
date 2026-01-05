@@ -12,7 +12,7 @@
         "@mastra/loggers#build",
         "@mastra/evals#build"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/docs/**"]
     }
   }
 }

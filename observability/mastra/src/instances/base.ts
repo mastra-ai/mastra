@@ -53,6 +53,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
       requestContextKeys: config.requestContextKeys ?? [],
+      serializationOptions: config.serializationOptions,
     };
 
     // Initialize bridge if present

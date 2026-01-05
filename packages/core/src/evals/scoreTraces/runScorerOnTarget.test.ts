@@ -56,10 +56,20 @@ class TestContext {
   }
 
   reset() {
-    this.mockStorage = {
+    const mockObservabilityStore = {
       getTrace: vi.fn(),
-      saveScore: vi.fn(),
       updateSpan: vi.fn(),
+    };
+    const mockScoresStore = {
+      saveScore: vi.fn(),
+    };
+    this.mockStorage = {
+      getStore: vi.fn().mockImplementation((domain: string) => {
+        if (domain === 'observability') return Promise.resolve(mockObservabilityStore);
+        if (domain === 'scores') return Promise.resolve(mockScoresStore);
+        return Promise.resolve(undefined);
+      }),
+      // Keep references for test assertions
     } as unknown as MastraStorage;
 
     this.mockLogger = {
@@ -83,7 +93,7 @@ class TestContext {
     } as TracingContext;
   }
 
-  setupSuccessfulScenario(target: { traceId: string; spanId?: string } = { traceId: 'trace-1' }) {
+  async setupSuccessfulScenario(target: { traceId: string; spanId?: string } = { traceId: 'trace-1' }) {
     const mockTrace: TraceRecord = {
       traceId: target.traceId,
       spans: target.spanId
@@ -93,6 +103,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: null,
               name: 'root-span',
+              entityId: 'root-span',
               spanType: SpanType.AGENT_RUN,
             }),
             createMockSpanRecord({
@@ -100,6 +111,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: 'span-1',
               name: 'child-span',
+              entityId: 'child-span',
               spanType: SpanType.MODEL_GENERATION,
             }),
           ]
@@ -109,6 +121,7 @@ class TestContext {
               traceId: target.traceId,
               parentSpanId: null,
               name: 'root-span',
+              entityId: 'root-span',
               spanType: SpanType.AGENT_RUN,
             }),
           ],
@@ -127,21 +140,25 @@ class TestContext {
       createdAt: new Date(),
     };
 
-    (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
+    const mockObservabilityStore = await this.mockStorage.getStore('observability');
+    const mockScoresStore = await this.mockStorage.getStore('scores');
+
+    (mockObservabilityStore?.getTrace as any).mockResolvedValue(mockTrace);
     (this.mockScorer.run as any).mockResolvedValue(mockScorerResult);
-    (this.mockStorage.saveScore as any).mockResolvedValue({ score: mockSavedScore });
-    (this.mockStorage.updateSpan as any).mockResolvedValue(undefined);
+    (mockScoresStore?.saveScore as any).mockResolvedValue({ score: mockSavedScore });
+    (mockObservabilityStore?.updateSpan as any).mockResolvedValue(undefined);
 
     return this;
   }
 
-  setupErrorScenario(
+  async setupErrorScenario(
     scenarioType: 'trace-not-found' | 'span-not-found' | 'no-root-span' | 'scorer-failure' | 'storage-failure',
     errorDetails?: any,
   ) {
+    const mockObservabilityStore = await this.mockStorage.getStore('observability');
     switch (scenarioType) {
       case 'trace-not-found':
-        (this.mockStorage.getTrace as any).mockResolvedValue(null);
+        (mockObservabilityStore?.getTrace as any).mockResolvedValue(null);
         break;
 
       case 'span-not-found':
@@ -157,7 +174,7 @@ class TestContext {
             }),
           ],
         };
-        (this.mockStorage.getTrace as any).mockResolvedValue(mockTrace);
+        (mockObservabilityStore?.getTrace as any).mockResolvedValue(mockTrace);
         break;
 
       case 'no-root-span':
@@ -173,16 +190,16 @@ class TestContext {
             }),
           ],
         };
-        (this.mockStorage.getTrace as any).mockResolvedValue(mockTraceNoRoot);
+        (mockObservabilityStore?.getTrace as any).mockResolvedValue(mockTraceNoRoot);
         break;
 
       case 'scorer-failure':
-        this.setupSuccessfulScenario(errorDetails?.target || { traceId: 'trace-1' });
+        await this.setupSuccessfulScenario(errorDetails?.target || { traceId: 'trace-1' });
         (this.mockScorer.run as any).mockRejectedValue(errorDetails?.error || new Error('Scorer execution failed'));
         break;
 
       case 'storage-failure':
-        (this.mockStorage.getTrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
+        (mockObservabilityStore?.getTrace as any).mockRejectedValue(errorDetails?.error || new Error('Storage error'));
         break;
     }
     return this;
@@ -213,13 +230,15 @@ describe('runScorerOnTarget Function', () => {
   describe('Successful execution', () => {
     it('should run scorer successfully with valid trace and span (no spanId)', async () => {
       const target = { traceId: 'trace-1' };
-      testContext.setupSuccessfulScenario(target);
+      await testContext.setupSuccessfulScenario(target);
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.getTrace).toHaveBeenCalledWith('trace-1');
+      const mockObservabilityStore = await testContext.mockStorage.getStore('observability');
+      expect(mockObservabilityStore?.getTrace).toHaveBeenCalledWith({ traceId: 'trace-1' });
       expect(testContext.mockScorer.run).toHaveBeenCalled();
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
+      const mockScoresStore = await testContext.mockStorage.getStore('scores');
+      expect(mockScoresStore?.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-123',
           scorerId: 'test-scorer',
@@ -229,7 +248,7 @@ describe('runScorerOnTarget Function', () => {
           traceId: 'trace-1',
         }),
       );
-      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
+      expect(mockObservabilityStore?.updateSpan).toHaveBeenCalled();
     });
   });
 
@@ -237,19 +256,19 @@ describe('runScorerOnTarget Function', () => {
     describe('Data not found scenarios', () => {
       it('should handle trace not found scenario', async () => {
         const target = { traceId: 'nonexistent-trace' };
-        testContext.setupErrorScenario('trace-not-found');
+        await testContext.setupErrorScenario('trace-not-found');
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
 
       it('should handle span not found scenario (with spanId)', async () => {
         const target = { traceId: 'trace-1', spanId: 'nonexistent-span' };
-        testContext.setupErrorScenario('span-not-found', { traceId: 'trace-1' });
+        await testContext.setupErrorScenario('span-not-found', { traceId: 'trace-1' });
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
 
       it('should handle span not found scenario (no spanId, no root span)', async () => {
         const target = { traceId: 'trace-1' };
-        testContext.setupErrorScenario('no-root-span', { traceId: 'trace-1' });
+        await testContext.setupErrorScenario('no-root-span', { traceId: 'trace-1' });
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
     });
@@ -258,14 +277,14 @@ describe('runScorerOnTarget Function', () => {
       it('should handle scorer execution failures', async () => {
         const target = { traceId: 'trace-1' };
         const scorerError = new Error('Scorer execution failed');
-        testContext.setupErrorScenario('scorer-failure', { target, error: scorerError });
+        await testContext.setupErrorScenario('scorer-failure', { target, error: scorerError });
         await expect(testContext.runTarget(target)).rejects.toThrow();
       });
 
       it('should throw if fetching the trace fails', async () => {
         const target = { traceId: 'trace-1' };
         const storageError = new Error('Storage error');
-        testContext.setupErrorScenario('storage-failure', { error: storageError });
+        await testContext.setupErrorScenario('storage-failure', { error: storageError });
         await expect(testContext.runTarget(target)).rejects.toThrow('Storage error');
       });
     });
@@ -274,25 +293,29 @@ describe('runScorerOnTarget Function', () => {
   describe('Span selection logic', () => {
     it('should select root span when no spanId provided', async () => {
       const target = { traceId: 'trace-1' };
-      testContext.setupSuccessfulScenario(target);
+      await testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
+      const mockScoresStore = await testContext.mockStorage.getStore('scores');
+      expect(mockScoresStore?.saveScore).toHaveBeenCalled();
+      const mockObservabilityStore = await testContext.mockStorage.getStore('observability');
+      expect(mockObservabilityStore?.updateSpan).toHaveBeenCalled();
     });
 
     it('should select specific span when spanId provided', async () => {
       const target = { traceId: 'trace-1', spanId: 'span-2' };
-      testContext.setupSuccessfulScenario(target);
+      await testContext.setupSuccessfulScenario(target);
       await testContext.runTarget(target);
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalled();
-      expect(testContext.mockStorage.updateSpan).toHaveBeenCalled();
+      const mockScoresStore = await testContext.mockStorage.getStore('scores');
+      expect(mockScoresStore?.saveScore).toHaveBeenCalled();
+      const mockObservabilityStore = await testContext.mockStorage.getStore('observability');
+      expect(mockObservabilityStore?.updateSpan).toHaveBeenCalled();
     });
   });
 
   describe('Score result formatting', () => {
     it('should format scorer result correctly for trace without spanId', async () => {
       const target = { traceId: 'trace-1' };
-      testContext.setupSuccessfulScenario(target);
+      await testContext.setupSuccessfulScenario(target);
 
       const mockScorerResult = createMockScorerResult({
         runId: 'run-123',
@@ -303,7 +326,8 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
+      const mockScoresStore = await testContext.mockStorage.getStore('scores');
+      expect(mockScoresStore?.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-123',
           input: { test: 'input' },
@@ -325,7 +349,7 @@ describe('runScorerOnTarget Function', () => {
 
     it('should format scorer result correctly for trace with spanId', async () => {
       const target = { traceId: 'trace-1', spanId: 'span-2' };
-      testContext.setupSuccessfulScenario(target);
+      await testContext.setupSuccessfulScenario(target);
 
       const mockScorerResult = createMockScorerResult({
         runId: 'run-456',
@@ -336,7 +360,8 @@ describe('runScorerOnTarget Function', () => {
 
       await testContext.runTarget(target);
 
-      expect(testContext.mockStorage.saveScore).toHaveBeenCalledWith(
+      const mockScoresStore = await testContext.mockStorage.getStore('scores');
+      expect(mockScoresStore?.saveScore).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: 'run-456',
           input: { test: 'input2' },

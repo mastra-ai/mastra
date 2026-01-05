@@ -1,6 +1,6 @@
 import {
   AgentChat,
-  MainContentContent,
+  AgentLayout,
   AgentSettingsProvider,
   WorkingMemoryProvider,
   ThreadInputProvider,
@@ -77,8 +77,6 @@ function Agent() {
     return null;
   }
 
-  const withSidebar = Boolean(memory?.result);
-
   const handleRefreshThreadList = () => {
     searchParams.delete('new');
     setSearchParams(searchParams);
@@ -91,33 +89,33 @@ function Agent() {
         <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
           <WorkingMemoryProvider agentId={agentId!} threadId={threadId!} resourceId={agentId!}>
             <ThreadInputProvider>
-              <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
-                {withSidebar && (
-                  <AgentSidebar
-                    agentId={agentId!}
-                    threadId={threadId!}
-                    threads={threads || []}
-                    isLoading={isThreadsLoading}
-                  />
-                )}
-
-                <div className="grid overflow-y-auto relative bg-surface1 py-4">
-                  <AgentChat
-                    key={threadId}
-                    agentId={agentId!}
-                    agentName={agent?.name}
-                    modelVersion={agent?.modelVersion}
-                    threadId={threadId}
-                    memory={memory?.result}
-                    refreshThreadList={handleRefreshThreadList}
-                    modelList={agent?.modelList}
-                    messageId={messageId}
-                    isNewThread={isNewThread}
-                  />
-                </div>
-
-                <AgentInformation agentId={agentId!} threadId={threadId!} />
-              </MainContentContent>
+              <AgentLayout
+                agentId={agentId!}
+                leftSlot={
+                  Boolean(memory?.result) && (
+                    <AgentSidebar
+                      agentId={agentId!}
+                      threadId={threadId!}
+                      threads={threads || []}
+                      isLoading={isThreadsLoading}
+                    />
+                  )
+                }
+                rightSlot={<AgentInformation agentId={agentId!} threadId={threadId!} />}
+              >
+                <AgentChat
+                  key={threadId}
+                  agentId={agentId!}
+                  agentName={agent?.name}
+                  modelVersion={agent?.modelVersion}
+                  threadId={threadId}
+                  memory={memory?.result}
+                  refreshThreadList={handleRefreshThreadList}
+                  modelList={agent?.modelList}
+                  messageId={messageId}
+                  isNewThread={isNewThread}
+                />
+              </AgentLayout>
             </ThreadInputProvider>
           </WorkingMemoryProvider>
         </AgentSettingsProvider>

@@ -18,11 +18,7 @@
 '@mastra/pg': major
 ---
 
-# Major Changes
-
-## Storage Layer
-
-### BREAKING: Removed `storage.getMessages()`
+**Removed `storage.getMessages()`**
 
 The `getMessages()` method has been removed from all storage implementations. Use `listMessages()` instead, which provides pagination support.
 
@@ -43,7 +39,7 @@ console.log(result.total);        // Total count
 console.log(result.hasMore);      // Whether more pages exist
 ```
 
-### Message ordering default
+**Message ordering default**
 
 `listMessages()` defaults to ASC (oldest first) ordering by `createdAt`, matching the previous `getMessages()` behavior.
 
@@ -55,9 +51,7 @@ const result = await storage.listMessages({
 });
 ```
 
-## Client SDK
-
-### BREAKING: Renamed `client.getThreadMessages()` → `client.listThreadMessages()`
+**Renamed `client.getThreadMessages()` → `client.listThreadMessages()`**
 
 **Migration:**
 
@@ -71,9 +65,7 @@ const response = await client.listThreadMessages(threadId, { agentId });
 
 The response format remains the same.
 
-## Type Changes
-
-### BREAKING: Removed `StorageGetMessagesArg` type
+**Removed `StorageGetMessagesArg` type**
 
 Use `StorageListMessagesInput` instead:
 

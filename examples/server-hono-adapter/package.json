@@ -14,7 +14,7 @@
     "@mastra/core": "latest",
     "@mastra/hono": "latest",
     "@hono/node-server": "^1.14.3",
-    "hono": "^4.10.4",
+    "hono": "^4.11.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {

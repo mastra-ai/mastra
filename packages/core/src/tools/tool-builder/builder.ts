@@ -12,10 +12,11 @@ import {
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
+import { isZodObject } from '../../utils/zod-utils';
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
@@ -62,9 +63,9 @@ export class CoreToolBuilder extends MastraBase {
       if (!schema) {
         schema = z.object({});
       }
-      if (schema instanceof z.ZodObject) {
+      if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional(),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').optional().default(''),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -263,8 +264,9 @@ export class CoreToolBuilder extends MastraBase {
         type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
         input: args,
+        entityType: EntityType.TOOL,
+        entityName: options.name,
         attributes: {
-          toolId: options.name,
           toolDescription: options.description,
           toolType: logType || 'tool',
         },
@@ -599,10 +601,28 @@ export class CoreToolBuilder extends MastraBase {
       });
     }
 
+    // Map AI SDK's needsApproval to our requireApproval
+    // needsApproval can be boolean or a function that takes input and returns boolean
+    let requireApproval = this.options.requireApproval;
+    let needsApprovalFn: ((input: any) => boolean | Promise<boolean>) | undefined;
+
+    if (isVercelTool(this.originalTool) && 'needsApproval' in this.originalTool) {
+      const needsApproval = (this.originalTool as any).needsApproval;
+      if (typeof needsApproval === 'boolean') {
+        requireApproval = needsApproval;
+      } else if (typeof needsApproval === 'function') {
+        // Store the function to evaluate it per-call
+        needsApprovalFn = needsApproval;
+        // Set requireApproval to true so the tool-call-step knows to check the function
+        requireApproval = true;
+      }
+    }
+
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
-      requireApproval: this.options.requireApproval,
+      requireApproval,
+      needsApprovalFn,
       hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(

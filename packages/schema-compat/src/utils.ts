@@ -56,10 +56,11 @@ export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targ
  */
 export function isZodType(value: unknown): value is ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
+  // _def is used in Zod v3, _zod is used in Zod v4
   return (
     typeof value === 'object' &&
     value !== null &&
-    '_def' in value &&
+    ('_def' in value || '_zod' in value) &&
     'parse' in value &&
     typeof (value as any).parse === 'function' &&
     'safeParse' in value &&

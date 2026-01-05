@@ -1,5 +1,98 @@
 # @mastra/ai-sdk
 
+## 1.0.0-beta.12
+
+### Patch Changes
+
+- Fix data chunk property filtering to only include type, data, and id properties ([#11477](https://github.com/mastra-ai/mastra/pull/11477))
+
+  Previously, when `isDataChunkType` checks were performed, the entire chunk object was returned, potentially letting extra properties like `from`, `runId`, `metadata`, etc go through. This could cause issues with `useChat` and other UI components.
+
+  Now, all locations that handle `DataChunkType` properly destructure and return only the allowed properties:
+  - `type` (required): The chunk type identifier starting with "data-"
+  - `data` (required): The actual data payload
+  - `id` (optional): An optional identifier for the chunk
+
+- Updated dependencies [[`e54953e`](https://github.com/mastra-ai/mastra/commit/e54953ed8ce1b28c0d62a19950163039af7834b4), [`7d56d92`](https://github.com/mastra-ai/mastra/commit/7d56d9213886e8353956d7d40df10045fd12b299), [`fdac646`](https://github.com/mastra-ai/mastra/commit/fdac646033a0930a1a4e00d13aa64c40bb7f1e02), [`d07b568`](https://github.com/mastra-ai/mastra/commit/d07b5687819ea8cb1dffa776d0c1765faf4aa1ae), [`68ec97d`](https://github.com/mastra-ai/mastra/commit/68ec97d4c07c6393fcf95c2481fc5d73da99f8c8), [`4aa55b3`](https://github.com/mastra-ai/mastra/commit/4aa55b383cf06043943359ea316572fd969861a7)]:
+  - @mastra/core@1.0.0-beta.19
+
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Refactor storage architecture to use domain-specific stores via `getStore()` pattern ([#11361](https://github.com/mastra-ai/mastra/pull/11361))
+
+  ### Summary
+
+  This release introduces a new storage architecture that replaces passthrough methods on `MastraStorage` with domain-specific storage interfaces accessed via `getStore()`. This change reduces code duplication across storage adapters and provides a cleaner, more modular API.
+
+  ### Migration Guide
+
+  All direct method calls on storage instances should be updated to use `getStore()`:
+
+  ```typescript
+  // Before
+  const thread = await storage.getThreadById({ threadId });
+  await storage.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+  await storage.createSpan(span);
+
+  // After
+  const memory = await storage.getStore('memory');
+  const thread = await memory?.getThreadById({ threadId });
+
+  const workflows = await storage.getStore('workflows');
+  await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+
+  const observability = await storage.getStore('observability');
+  await observability?.createSpan(span);
+  ```
+
+  ### Available Domains
+  - **`memory`**: Thread and message operations (`getThreadById`, `saveThread`, `saveMessages`, etc.)
+  - **`workflows`**: Workflow state persistence (`persistWorkflowSnapshot`, `loadWorkflowSnapshot`, `getWorkflowRunById`, etc.)
+  - **`scores`**: Evaluation scores (`saveScore`, `listScoresByScorerId`, etc.)
+  - **`observability`**: Tracing and spans (`createSpan`, `updateSpan`, `getTrace`, etc.)
+  - **`agents`**: Stored agent configurations (`createAgent`, `getAgentById`, `listAgents`, etc.)
+
+  ### Breaking Changes
+  - Passthrough methods have been removed from `MastraStorage` base class
+  - All storage adapters now require accessing domains via `getStore()`
+  - The `stores` property on storage instances is now the canonical way to access domain storage
+
+  ### Internal Changes
+  - Each storage adapter now initializes domain-specific stores in its constructor
+  - Domain stores share database connections and handle their own table initialization
+
+- Updated dependencies [[`33a4d2e`](https://github.com/mastra-ai/mastra/commit/33a4d2e4ed8af51f69256232f00c34d6b6b51d48), [`4aaa844`](https://github.com/mastra-ai/mastra/commit/4aaa844a4f19d054490f43638a990cc57bda8d2f), [`4a1a6cb`](https://github.com/mastra-ai/mastra/commit/4a1a6cb3facad54b2bb6780b00ce91d6de1edc08), [`31d13d5`](https://github.com/mastra-ai/mastra/commit/31d13d5fdc2e2380e2e3ee3ec9fb29d2a00f265d), [`4c62166`](https://github.com/mastra-ai/mastra/commit/4c621669f4a29b1f443eca3ba70b814afa286266), [`7bcbf10`](https://github.com/mastra-ai/mastra/commit/7bcbf10133516e03df964b941f9a34e9e4ab4177), [`4353600`](https://github.com/mastra-ai/mastra/commit/43536005a65988a8eede236f69122e7f5a284ba2), [`6986fb0`](https://github.com/mastra-ai/mastra/commit/6986fb064f5db6ecc24aa655e1d26529087b43b3), [`053e979`](https://github.com/mastra-ai/mastra/commit/053e9793b28e970086b0507f7f3b76ea32c1e838), [`e26dc9c`](https://github.com/mastra-ai/mastra/commit/e26dc9c3ccfec54ae3dc3e2b2589f741f9ae60a6), [`55edf73`](https://github.com/mastra-ai/mastra/commit/55edf7302149d6c964fbb7908b43babfc2b52145), [`27c0009`](https://github.com/mastra-ai/mastra/commit/27c0009777a6073d7631b0eb7b481d94e165b5ca), [`dee388d`](https://github.com/mastra-ai/mastra/commit/dee388dde02f2e63c53385ae69252a47ab6825cc), [`3f3fc30`](https://github.com/mastra-ai/mastra/commit/3f3fc3096f24c4a26cffeecfe73085928f72aa63), [`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`10c2735`](https://github.com/mastra-ai/mastra/commit/10c27355edfdad1ee2b826b897df74125eb81fb8), [`1924cf0`](https://github.com/mastra-ai/mastra/commit/1924cf06816e5e4d4d5333065ec0f4bb02a97799), [`b339816`](https://github.com/mastra-ai/mastra/commit/b339816df0984d0243d944ac2655d6ba5f809cde)]:
+  - @mastra/core@1.0.0-beta.15
+
+## 1.0.0-beta.10
+
+### Patch Changes
+
+- Add support for AI SDK v6 (LanguageModelV3) ([#11191](https://github.com/mastra-ai/mastra/pull/11191))
+
+  Agents can now use `LanguageModelV3` models from AI SDK v6 beta providers like `@ai-sdk/openai@^3.0.0-beta`.
+
+  **New features:**
+  - Usage normalization: V3's nested usage format is normalized to Mastra's flat format with `reasoningTokens`, `cachedInputTokens`, and raw data preserved in a `raw` field
+
+  **Backward compatible:** All existing V1 and V2 models continue to work unchanged.
+
+- Fix requestContext not being forwarded from middleware in chatRoute and networkRoute ([`b7b0930`](https://github.com/mastra-ai/mastra/commit/b7b0930dbe72eade8d3882992f2f2db53220e4eb))
+
+  Previously, when using middleware to set values in requestContext (e.g., extracting agentId and organizationId from the request body), those values were not properly forwarded to agents, tools, and workflows when using chatRoute and networkRoute from the AI SDK.
+
+  This fix ensures that requestContext set by middleware is correctly prioritized and forwarded with the following precedence:
+  1. Context from middleware (highest priority)
+  2. Context from defaultOptions
+  3. Context from request body (lowest priority)
+
+  Resolves #11192
+
+- Updated dependencies [[`4f94ed8`](https://github.com/mastra-ai/mastra/commit/4f94ed8177abfde3ec536e3574883e075423350c), [`ac3cc23`](https://github.com/mastra-ai/mastra/commit/ac3cc2397d1966bc0fc2736a223abc449d3c7719), [`a86f4df`](https://github.com/mastra-ai/mastra/commit/a86f4df0407311e0d2ea49b9a541f0938810d6a9), [`029540c`](https://github.com/mastra-ai/mastra/commit/029540ca1e582fc2dd8d288ecd4a9b0f31a954ef), [`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`01b20fe`](https://github.com/mastra-ai/mastra/commit/01b20fefb7c67c2b7d79417598ef4e60256d1225), [`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/core@1.0.0-beta.14
+
 ## 1.0.0-beta.9
 
 ### Patch Changes

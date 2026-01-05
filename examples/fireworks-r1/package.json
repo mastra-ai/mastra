@@ -19,7 +19,7 @@
     "@types/tinycolor2": "^1.4.6",
     "chalk": "^5.4.1",
     "gradient-string": "^3.0.0",
-    "ora": "^8.2.0",
+    "ora": "^9.0.0",
     "tinycolor2": "^1.6.0",
     "zod": "^3.25.76"
   },

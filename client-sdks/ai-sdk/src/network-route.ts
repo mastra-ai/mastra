@@ -8,10 +8,7 @@ import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<
-  OUTPUT,
-  'mastra'
-> & {
+export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
   messages: MessageListInput;
 };
 
@@ -19,7 +16,7 @@ export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined>
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'>;
+  defaultOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
 /**
@@ -73,8 +70,8 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
 }
 
 export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT, 'mastra'> };
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
+  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.

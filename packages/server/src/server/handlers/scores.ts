@@ -178,13 +178,14 @@ export const LIST_SCORES_BY_RUN_ID_ROUTE = createRoute({
         page: page ?? 0,
         perPage: perPage ?? 10,
       };
-      const scoreResults = (await mastra.getStorage()?.listScoresByRunId?.({
+      const scores = await mastra.getStorage()?.getStore('scores');
+      const scoreResults = (await scores?.listScoresByRunId?.({
         runId,
         pagination,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
       return {
         pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
       return handleError(error, 'Error getting scores by run id');
@@ -206,14 +207,15 @@ export const LIST_SCORES_BY_SCORER_ID_ROUTE = createRoute({
     try {
       const { page, perPage, entityId, entityType } = params;
       const filters = Object.fromEntries(Object.entries({ entityId, entityType }).filter(([_, v]) => v !== undefined));
-      const scoreResults = (await mastra.getStorage()?.listScoresByScorerId?.({
+      const scores = await mastra.getStorage()?.getStore('scores');
+      const scoreResults = (await scores?.listScoresByScorerId?.({
         scorerId,
         pagination: { page: page ?? 0, perPage: perPage ?? 10 },
         ...filters,
       })) || { pagination: { total: 0, page: 0, perPage: 0, hasMore: false }, scores: [] };
       return {
         pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
       return handleError(error, 'Error getting scores by scorer id');
@@ -249,7 +251,8 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
         perPage: perPage ?? 10,
       };
 
-      const scoreResults = (await mastra.getStorage()?.listScoresByEntityId?.({
+      const scoresStore = await mastra.getStorage()?.getStore('scores');
+      const scoreResults = (await scoresStore?.listScoresByEntityId?.({
         entityId: entityIdToUse,
         entityType,
         pagination,
@@ -257,7 +260,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
 
       return {
         pagination: scoreResults.pagination,
-        scores: scoreResults.scores.map(score => ({ ...score, ...getTraceDetails(score.traceId) })),
+        scores: scoreResults.scores.map((score: ScoreRowData) => ({ ...score, ...getTraceDetails(score.traceId) })),
       };
     } catch (error) {
       return handleError(error, 'Error getting scores by entity id');
@@ -277,7 +280,8 @@ export const SAVE_SCORE_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     try {
       const { score } = params as { score: ScoreRowData };
-      const result = await mastra.getStorage()?.saveScore?.(score);
+      const scoresStore = await mastra.getStorage()?.getStore('scores');
+      const result = await scoresStore?.saveScore?.(score);
       if (!result) {
         throw new HTTPException(500, { message: 'Storage not configured' });
       }

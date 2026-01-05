@@ -1,11 +1,13 @@
+import type { StepResult } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MessageList } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
+import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
-import { SpanType } from '../observability';
+import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
@@ -40,8 +42,9 @@ export class ProcessorState<OUTPUT extends OutputSchema = undefined> {
     this.span = parentSpan?.createChildSpan({
       type: SpanType.PROCESSOR_RUN,
       name: `output processor: ${processorName}`,
+      entityType: EntityType.OUTPUT_PROCESSOR,
+      entityName: processorName,
       attributes: {
-        processorName: processorName,
         processorType: 'output',
         processorIndex: processorIndex ?? 0,
       },
@@ -184,8 +187,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `output processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.OUTPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'output',
             processorIndex: index,
           },
@@ -235,8 +240,10 @@ export class ProcessorRunner {
       const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `output processor: ${processor.id}`,
+        entityType: EntityType.OUTPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'output',
           processorIndex: index,
         },
@@ -542,8 +549,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `input processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.INPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'input',
             processorIndex: index,
           },
@@ -595,8 +604,10 @@ export class ProcessorRunner {
       const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input processor: ${processor.id}`,
+        entityType: EntityType.INPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'input',
           processorIndex: index,
         },
@@ -776,8 +787,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `input step processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.INPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'input',
             processorIndex: index,
           },
@@ -848,8 +861,10 @@ export class ProcessorRunner {
       const processorSpan = currentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `input step processor: ${processor.id}`,
+        entityType: EntityType.INPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'input',
           processorIndex: index,
         },
@@ -963,6 +978,7 @@ export class ProcessorRunner {
    * @returns The processed MessageList
    */
   async runProcessOutputStep(args: {
+    steps: Array<StepResult<any>>;
     messages: MastraDBMessage[];
     messageList: MessageList;
     stepNumber: number;
@@ -974,6 +990,7 @@ export class ProcessorRunner {
     retryCount?: number;
   }): Promise<MessageList> {
     const {
+      steps,
       messageList,
       stepNumber,
       finishReason,
@@ -997,8 +1014,10 @@ export class ProcessorRunner {
         const processorSpan = parentSpan?.createChildSpan({
           type: SpanType.PROCESSOR_RUN,
           name: `output step processor workflow: ${processorOrWorkflow.id}`,
+          entityType: EntityType.OUTPUT_PROCESSOR,
+          entityId: processorOrWorkflow.id,
+          entityName: processorOrWorkflow.name,
           attributes: {
-            processorName: processorOrWorkflow.id,
             processorType: 'output',
             processorIndex: index,
           },
@@ -1018,6 +1037,7 @@ export class ProcessorRunner {
               toolCalls,
               text,
               systemMessages: currentSystemMessages,
+              steps,
               retryCount,
             },
             tracingContext,
@@ -1053,8 +1073,10 @@ export class ProcessorRunner {
       const processorSpan = parentSpan?.createChildSpan({
         type: SpanType.PROCESSOR_RUN,
         name: `output step processor: ${processor.id}`,
+        entityType: EntityType.OUTPUT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
         attributes: {
-          processorName: processor.name ?? processor.id,
           processorType: 'output',
           processorIndex: index,
         },
@@ -1076,6 +1098,7 @@ export class ProcessorRunner {
           toolCalls,
           text,
           systemMessages: currentSystemMessages,
+          steps,
           abort,
           tracingContext: { currentSpan: processorSpan },
           requestContext,
@@ -1222,12 +1245,13 @@ export class ProcessorRunner {
       const { model: _model, ...rest } = result;
       if (result.model) {
         const resolvedModel = await resolveModelConfig(result.model);
-        if (resolvedModel.specificationVersion === 'v1') {
+        const isSupported = isSupportedLanguageModel(resolvedModel);
+        if (!isSupported) {
           throw new MastraError({
             category: 'USER',
             domain: 'AGENT',
-            id: 'PROCESSOR_RETURNED_V1_MODEL',
-            text: `Processor ${processor.id} returned a v1 model in step ${stepNumber}. v1 models are not supported in processInputStep.`,
+            id: 'PROCESSOR_RETURNED_UNSUPPORTED_MODEL',
+            text: `Processor ${processor.id} returned an unsupported model version ${resolvedModel.specificationVersion} in step ${stepNumber}. Only ${supportedLanguageModelSpecifications.join(', ')} models are supported in processInputStep.`,
           });
         }
 

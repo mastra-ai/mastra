@@ -866,6 +866,72 @@ describe('Agent - network - finalResult token efficiency', () => {
   });
 });
 
+describe('Agent - network - text streaming', () => {
+  it('should emit text events when routing agent handles request without delegation', async () => {
+    const memory = new MockMemory();
+
+    const selfHandleResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'I am a helpful assistant. I can help you with your questions directly.',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: selfHandleResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: selfHandleResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'self-handle-network-agent',
+      name: 'Self Handle Network Agent',
+      instructions: 'You are a helpful assistant that can answer questions directly.',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Who are you?', {
+      memory: {
+        thread: 'test-thread-text-streaming',
+        resource: 'test-resource-text-streaming',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const textStartEvents = chunks.filter(c => c.type === 'routing-agent-text-start');
+    const textDeltaEvents = chunks.filter(c => c.type === 'routing-agent-text-delta');
+    const routingAgentEndEvents = chunks.filter(c => c.type === 'routing-agent-end');
+
+    expect(routingAgentEndEvents.length).toBeGreaterThan(0);
+    const endEvent = routingAgentEndEvents[0];
+    expect(endEvent.payload.primitiveType).toBe('none');
+    expect(endEvent.payload.primitiveId).toBe('none');
+
+    expect(textStartEvents.length).toBeGreaterThan(0);
+    expect(textDeltaEvents.length).toBeGreaterThan(0);
+
+    const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
+    expect(textContent).toContain('I am a helpful assistant');
+  });
+});
+
 describe('Agent - network - tool context validation', () => {
   it('should pass toolCallId, threadId, and resourceId in context.agent when network executes a tool', async () => {
     const mockExecute = vi.fn(async (_inputData, _context) => {

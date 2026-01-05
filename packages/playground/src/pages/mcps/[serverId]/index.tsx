@@ -35,7 +35,7 @@ export const McpServerPage = () => {
         </Breadcrumb>
 
         <HeaderGroup>
-          <div className="w-[240px]">
+          <div className="w-48">
             <MCPServerCombobox value={serverId} />
           </div>
         </HeaderGroup>

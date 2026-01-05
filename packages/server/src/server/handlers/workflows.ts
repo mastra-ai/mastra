@@ -15,6 +15,7 @@ import {
   startAsyncWorkflowBodySchema,
   streamWorkflowBodySchema,
   workflowControlResponseSchema,
+  workflowExecutionResultQuerySchema,
   workflowExecutionResultSchema,
   workflowIdPathParams,
   workflowInfoSchema,
@@ -341,19 +342,6 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
   },
 });
 
-export const STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
-  method: 'POST',
-  path: '/api/workflows/:workflowId/streamVNext',
-  responseType: 'stream',
-  pathParamSchema: workflowIdPathParams,
-  queryParamSchema: runIdSchema,
-  bodySchema: streamWorkflowBodySchema,
-  summary: 'Stream workflow execution (v2)',
-  description: 'Executes a workflow using the v2 streaming API and streams the results in real-time',
-  tags: ['Workflows'],
-  handler: STREAM_WORKFLOW_ROUTE.handler,
-});
-
 export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/resume-stream',
@@ -415,11 +403,13 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
   path: '/api/workflows/:workflowId/runs/:runId/execution-result',
   responseType: 'json',
   pathParamSchema: workflowRunPathParams,
+  queryParamSchema: workflowExecutionResultQuerySchema,
   responseSchema: workflowExecutionResultSchema,
   summary: 'Get workflow execution result',
-  description: 'Returns the final execution result of a completed workflow run',
+  description:
+    'Returns the final execution result of a completed workflow run. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result)',
   tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId }) => {
+  handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
     try {
       if (!workflowId) {
         throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -435,7 +425,13 @@ export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      const executionResult = await workflow.getWorkflowRunExecutionResult(runId);
+      // Parse fields parameter (comma-separated string)
+      const fieldList = fields ? fields.split(',').map((f: string) => f.trim()) : undefined;
+
+      const executionResult = await workflow.getWorkflowRunExecutionResult(runId, {
+        withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
+        fields: fieldList,
+      });
 
       if (!executionResult) {
         throw new HTTPException(404, { message: 'Workflow run execution result not found' });
@@ -613,19 +609,6 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       return handleError(error, 'Error observing workflow stream');
     }
   },
-});
-
-export const OBSERVE_STREAM_VNEXT_WORKFLOW_ROUTE = createRoute({
-  method: 'POST',
-  path: '/api/workflows/:workflowId/observe-streamVNext',
-  responseType: 'stream',
-  pathParamSchema: workflowIdPathParams,
-  queryParamSchema: runIdSchema,
-  responseSchema: streamResponseSchema,
-  summary: 'Observe workflow stream (v2)',
-  description: 'Observes and streams updates from an already running workflow execution using v2 streaming API',
-  tags: ['Workflows'],
-  handler: OBSERVE_STREAM_WORKFLOW_ROUTE.handler,
 });
 
 export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({

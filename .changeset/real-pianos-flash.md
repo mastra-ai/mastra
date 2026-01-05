@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-fix(core): use agent description when converting agent to tool
+Use agent description when converting agent to tool

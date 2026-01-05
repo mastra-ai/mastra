@@ -88,7 +88,7 @@ export const useExecuteWorkflow = () => {
 
 type WorkflowStreamResult = CoreWorkflowStreamResult<any, any, any, any>;
 
-export const useStreamWorkflow = () => {
+export const useStreamWorkflow = ({ debugMode }: { debugMode: boolean }) => {
   const client = useMastraClient();
   const { settings } = useTracingSettings();
   const [streamResult, setStreamResult] = useState<WorkflowStreamResult>({} as WorkflowStreamResult);
@@ -153,6 +153,10 @@ export const useStreamWorkflow = () => {
     if (value.type === 'workflow-finish') {
       const streamStatus = value.payload?.workflowStatus;
       const metadata = value.payload?.metadata;
+      setStreamResult(prev => ({
+        ...prev,
+        status: streamStatus,
+      }));
       if (streamStatus === 'failed') {
         throw new Error(metadata?.errorMessage || 'Workflow execution failed');
       }
@@ -166,12 +170,16 @@ export const useStreamWorkflow = () => {
       workflowId,
       runId,
       inputData,
+      initialState,
       requestContext: playgroundRequestContext,
+      perStep,
     }: {
       workflowId: string;
       runId: string;
       inputData: Record<string, unknown>;
+      initialState?: Record<string, unknown>;
       requestContext: Record<string, unknown>;
+      perStep?: boolean;
     }) => {
       // Clean up any existing reader before starting new stream
       if (readerRef.current) {
@@ -188,11 +196,13 @@ export const useStreamWorkflow = () => {
       });
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      const stream = await run.streamVNext({
+      const stream = await run.stream({
         inputData,
+        initialState,
         requestContext,
         closeOnSuspend: true,
         tracingOptions: settings?.tracingOptions,
+        perStep: perStep ?? debugMode,
       });
 
       if (!stream) {
@@ -270,7 +280,7 @@ export const useStreamWorkflow = () => {
       }
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
-      const stream = await run.observeStreamVNext();
+      const stream = await run.observeStream();
 
       if (!stream) {
         return handleStreamError(new Error('No stream returned'), 'No stream returned', setIsStreaming);
@@ -328,12 +338,14 @@ export const useStreamWorkflow = () => {
       step,
       resumeData,
       requestContext: playgroundRequestContext,
+      perStep,
     }: {
       workflowId: string;
       step: string | string[];
       runId: string;
       resumeData: Record<string, unknown>;
       requestContext: Record<string, unknown>;
+      perStep?: boolean;
     }) => {
       // Clean up any existing reader before starting new stream
       if (resumeStreamRef.current) {
@@ -349,11 +361,12 @@ export const useStreamWorkflow = () => {
         requestContext.set(key as keyof RequestContext, value);
       });
       const run = await workflow.createRun({ runId });
-      const stream = await run.resumeStreamVNext({
+      const stream = await run.resumeStream({
         step,
         resumeData,
         requestContext,
         tracingOptions: settings?.tracingOptions,
+        perStep: perStep ?? debugMode,
       });
 
       if (!stream) {
@@ -410,9 +423,10 @@ export const useStreamWorkflow = () => {
       workflowId,
       requestContext: playgroundRequestContext,
       runId,
+      perStep,
       ...params
     }: {
-      runId: string;
+      runId?: string;
       workflowId: string;
       requestContext: Record<string, unknown>;
     } & Omit<TimeTravelParams, 'requestContext'>) => {
@@ -432,6 +446,7 @@ export const useStreamWorkflow = () => {
       const run = await workflow.createRun({ runId });
       const stream = await run.timeTravelStream({
         ...params,
+        perStep: perStep ?? debugMode,
         requestContext,
         tracingOptions: settings?.tracingOptions,
       });

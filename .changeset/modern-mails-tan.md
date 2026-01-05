@@ -2,5 +2,4 @@
 "@mastra/voice-openai": patch
 ---
 
-feat(voice): Add configurable options support for OpenAI.
-
+Add configurable options support for OpenAI.

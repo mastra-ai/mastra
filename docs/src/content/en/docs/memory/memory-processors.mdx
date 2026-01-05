@@ -1,13 +1,19 @@
 ---
 title: "Memory Processors | Memory"
 description: "Learn how to use memory processors in Mastra to filter, trim, and transform messages before they're sent to the language model to manage context window limits."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/openai"
+  - "@mastra/pinecone"
 ---
 
 # Memory Processors
 
 Memory processors transform and filter messages as they pass through an agent with memory enabled. They manage context window limits, remove unnecessary content, and optimize the information sent to the language model.
 
-When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve conversation history, working memory, and semantically relevant messages, then persist new messages after the model responds.
+When memory is enabled on an agent, Mastra adds memory processors to the agent's processor pipeline. These processors retrieve message history, working memory, and semantically relevant messages, then persist new messages after the model responds.
 
 Memory processors are [processors](/docs/v1/agents/processors) that operate specifically on memory-related messages and state.
 
@@ -17,7 +23,7 @@ Mastra automatically adds these processors when memory is enabled:
 
 ### MessageHistory
 
-Retrieves conversation history and persists new messages.
+Retrieves message history and persists new messages.
 
 **When you configure:**
 
@@ -211,7 +217,7 @@ Understanding the execution order is important when combining guardrails with me
 1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
 2. **Your input processors run AFTER**: guardrails, filters, validators
 
-This means memory loads conversation history before your processors can validate or filter the input.
+This means memory loads message history before your processors can validate or filter the input.
 
 ### Output Processors
 

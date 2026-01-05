@@ -20,7 +20,7 @@
     "@mastra/core": "beta",
     "@mastra/libsql": "beta",
     "@mastra/memory": "beta",
-    "@slack/web-api": "^7.9.2",
+    "@slack/web-api": "^7.13.0",
     "supports-color": "^10.2.2",
     "zod": "^3.25.76"
   },

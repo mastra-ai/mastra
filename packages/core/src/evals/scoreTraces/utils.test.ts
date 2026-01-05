@@ -114,8 +114,10 @@ class TransformerTestBuilder {
       startedAt: config.startedAt || '2025-01-01T00:02:00Z',
       input: config.input || { query: 'test' },
       output: config.output || { result: 'success' },
+      // Use entityName and entityId to match the actual span record schema
+      entityName: config.toolId || 'test-tool',
+      entityId: config.toolId,
       attributes: {
-        toolId: config.toolId || 'test-tool',
         toolDescription: 'Test tool description',
         toolType: 'function',
       },

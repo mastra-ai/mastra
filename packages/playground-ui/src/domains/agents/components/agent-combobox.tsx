@@ -14,8 +14,6 @@ export interface AgentComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  contentClassName?: string;
 }
 
 export function AgentCombobox({
@@ -26,8 +24,6 @@ export function AgentCombobox({
   emptyText = 'No agents found.',
   className,
   disabled = false,
-  buttonClassName = 'h-8',
-  contentClassName,
 }: AgentComboboxProps) {
   const { data: agents = {}, isLoading, isError, error } = useAgents();
   const { navigate, paths } = useLinkComponent();
@@ -62,8 +58,7 @@ export function AgentCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      buttonClassName={buttonClassName}
-      contentClassName={contentClassName}
+      variant="ghost"
     />
   );
 }

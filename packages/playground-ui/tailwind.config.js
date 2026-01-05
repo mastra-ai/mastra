@@ -59,5 +59,9 @@ module.exports = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate'), require('@assistant-ui/react-ui/tailwindcss')],
+  plugins: [
+    require('tailwindcss-animate'),
+    require('@assistant-ui/react-ui/tailwindcss'),
+    require('@tailwindcss/container-queries'),
+  ],
 };

@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   calculatePagination,
@@ -11,7 +11,8 @@ import {
 } from '@mastra/core/storage';
 import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
 import { processRecord } from '../utils';
 
 /**
@@ -24,17 +25,22 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 
 export class ScoresUpstash extends ScoresStorage {
   private client: Redis;
-  private operations: StoreOperationsUpstash;
+  #db: UpstashDB;
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
+  constructor(config: UpstashDomainConfig) {
     super();
+    const client = resolveUpstashConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new UpstashDB({ client });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const data = await this.operations.load<ScoreRowData>({
+      const data = await this.#db.get<ScoreRowData>({
         tableName: TABLE_SCORERS,
         keys: { id },
       });
@@ -72,7 +78,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -122,7 +128,7 @@ export class ScoresUpstash extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let validatedScore: ValidatedSaveScorePayload;
+    let validatedScore: SaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -132,7 +138,7 @@ export class ScoresUpstash extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',
@@ -183,7 +189,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -238,7 +244,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {
@@ -298,7 +304,7 @@ export class ScoresUpstash extends ScoresStorage {
     pagination: PaginationInfo;
   }> {
     const pattern = `${TABLE_SCORERS}:*`;
-    const keys = await this.operations.scanKeys(pattern);
+    const keys = await this.#db.scanKeys(pattern);
     const { page, perPage: perPageInput } = pagination;
     if (keys.length === 0) {
       return {

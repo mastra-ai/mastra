@@ -33,12 +33,14 @@ type WorkflowRunContextType = {
     params: {
       workflowId: string;
       requestContext: Record<string, unknown>;
-      runId: string;
+      runId?: string;
     } & Omit<TimeTravelParams, 'requestContext'>,
   ) => Promise<void>;
   runSnapshot?: WorkflowRunState;
   isLoadingRunExecutionResult?: boolean;
   withoutTimeTravel?: boolean;
+  debugMode: boolean;
+  setDebugMode: Dispatch<SetStateAction<boolean>>;
 } & Omit<WorkflowTriggerProps, 'paramsRunId' | 'setRunId' | 'observeWorkflowStream'>;
 
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
@@ -62,6 +64,7 @@ export function WorkflowRunProvider({
   const [payload, setPayload] = useState<any>(() => snapshot?.context?.input ?? null);
   const [runId, setRunId] = useState<string>(() => initialRunId ?? '');
   const [isRunning, setIsRunning] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
 
   const refetchExecResultInterval = isRunning
     ? undefined
@@ -87,6 +90,7 @@ export function WorkflowRunProvider({
           error: runExecutionResult?.error,
           runId: initialRunId,
           serializedStepGraph: runExecutionResult?.serializedStepGraph,
+          value: runExecutionResult?.initialState,
         } as WorkflowRunState)
       : undefined;
   }, [runExecutionResult, initialRunId]);
@@ -102,7 +106,7 @@ export function WorkflowRunProvider({
     closeStreamsAndReset,
     resumeWorkflowStream,
     timeTravelWorkflowStream,
-  } = useStreamWorkflow();
+  } = useStreamWorkflow({ debugMode });
   const { mutateAsync: cancelWorkflowRun, isPending: isCancellingWorkflowRun } = useCancelWorkflowRun();
 
   const clearData = () => {
@@ -117,7 +121,14 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (runSnapshot?.runId) {
       setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
-      setPayload(runSnapshot.context?.input);
+      if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
+        setPayload({
+          initialState: runSnapshot.value,
+          inputData: runSnapshot.context?.input,
+        });
+      } else {
+        setPayload(runSnapshot.context?.input);
+      }
       setRunId(runSnapshot.runId);
     }
   }, [runSnapshot]);
@@ -162,6 +173,8 @@ export function WorkflowRunProvider({
         runSnapshot,
         isLoadingRunExecutionResult,
         withoutTimeTravel,
+        debugMode,
+        setDebugMode,
       }}
     >
       <WorkflowStepDetailProvider>{children}</WorkflowStepDetailProvider>

@@ -1,6 +1,8 @@
 ---
 title: "Reference: Configuration | Observability"
 description: Tracing configuration types and registry functions
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -51,6 +53,7 @@ interface ObservabilityInstanceConfig {
   spanOutputProcessors?: SpanOutputProcessor[];
   includeInternalSpans?: boolean;
   requestContextKeys?: string[];
+  serializationOptions?: SerializationOptions;
 }
 ```
 
@@ -96,6 +99,54 @@ interface ObservabilityInstanceConfig {
       name: "requestContextKeys",
       type: "string[]",
       description: "RequestContext keys to extract as metadata (supports dot notation)",
+      required: false,
+    },
+    {
+      name: "serializationOptions",
+      type: "SerializationOptions",
+      description: "Options for controlling serialization of span data (input/output/attributes)",
+      required: false,
+    },
+  ]}
+/>
+
+## SerializationOptions
+
+Options for controlling how span data is serialized before export. Use these to customize truncation limits for large payloads.
+
+```typescript
+interface SerializationOptions {
+  maxStringLength?: number;
+  maxDepth?: number;
+  maxArrayLength?: number;
+  maxObjectKeys?: number;
+}
+```
+
+<PropertiesTable
+  props={[
+    {
+      name: "maxStringLength",
+      type: "number",
+      description: "Maximum length for string values (default: 1024)",
+      required: false,
+    },
+    {
+      name: "maxDepth",
+      type: "number",
+      description: "Maximum depth for nested objects (default: 6)",
+      required: false,
+    },
+    {
+      name: "maxArrayLength",
+      type: "number",
+      description: "Maximum number of items in arrays (default: 50)",
+      required: false,
+    },
+    {
+      name: "maxObjectKeys",
+      type: "number",
+      description: "Maximum number of keys in objects (default: 50)",
       required: false,
     },
   ]}

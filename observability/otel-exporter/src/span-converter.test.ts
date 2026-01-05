@@ -81,6 +81,7 @@ describe('SpanConverter', () => {
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
+        entityId: 'get_weather',
         attributes: {
           toolId: 'get_weather',
           toolDescription: 'Gets weather data',
@@ -101,6 +102,7 @@ describe('SpanConverter', () => {
         endTime: new Date(),
         isEvent: false,
         isRootSpan: true,
+        entityId: 'support-agent',
         attributes: {
           agentId: 'support-agent',
           maxSteps: 10,
@@ -121,6 +123,7 @@ describe('SpanConverter', () => {
         endTime: new Date(),
         isEvent: false,
         isRootSpan: true,
+        entityId: 'data-processing',
         attributes: {
           workflowId: 'data-processing',
           status: 'success',
@@ -158,6 +161,7 @@ describe('SpanConverter', () => {
         isEvent: false,
         isRootSpan: false,
         parentSpanId: 'parent',
+        entityId: 'calculator',
         attributes: {
           toolId: 'calculator',
         } as ToolCallAttributes,
@@ -381,9 +385,9 @@ describe('SpanConverter', () => {
         isEvent: false,
         isRootSpan: false,
         parentSpanId: 'agent-span',
+        entityId: 'my-support-agent',
+        entityName: 'Customer Support Agent',
         attributes: {
-          agentId: 'my-support-agent',
-          agentName: 'Customer Support Agent',
           model: 'gpt-4',
           provider: 'openai',
           usage: {
@@ -445,6 +449,7 @@ describe('SpanConverter', () => {
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
+        entityId: 'calculator',
         attributes: {
           toolId: 'calculator',
           toolDescription: 'Performs calculations',
@@ -474,6 +479,7 @@ describe('SpanConverter', () => {
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
+        entityId: 'database_query',
         attributes: {
           toolId: 'database_query',
           mcpServer: 'postgres-server',
@@ -499,10 +505,10 @@ describe('SpanConverter', () => {
         endTime: new Date(),
         isEvent: false,
         isRootSpan: false,
+        entityId: 'test',
         attributes: {
-          agentId: 'test',
           availableTools: ['tool1', 'tool2'],
-        },
+        } as AgentRunAttributes,
       };
 
       const result = await converter.convertSpan(span);
@@ -1034,6 +1040,7 @@ describe('SpanConverter', () => {
           traceId: 'trace-1',
           name: 'agent-run',
           type: SpanType.AGENT_RUN,
+          entityId: 'customer-support',
           startTime: baseTime,
           endTime: new Date(baseTime.getTime() + 10000),
           isEvent: false,
@@ -1064,6 +1071,7 @@ describe('SpanConverter', () => {
           traceId: 'trace-1',
           name: 'search-kb',
           type: SpanType.TOOL_CALL,
+          entityId: 'knowledge_base_search',
           startTime: new Date(baseTime.getTime() + 1200),
           endTime: new Date(baseTime.getTime() + 2200),
           isEvent: false,

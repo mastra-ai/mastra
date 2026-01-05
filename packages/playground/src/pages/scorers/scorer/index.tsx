@@ -168,7 +168,7 @@ export default function Scorer() {
           </Breadcrumb>
 
           <HeaderGroup>
-            <div className="w-[240px]">
+            <div className="w-48">
               <ScorerCombobox value={scorerId} />
             </div>
           </HeaderGroup>

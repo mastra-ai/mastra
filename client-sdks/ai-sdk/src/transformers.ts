@@ -139,6 +139,7 @@ export function AgentNetworkToAISDKTransformer() {
       })[];
       usage: LanguageModelV2Usage | null;
       output: unknown | null;
+      hasEmittedText: boolean;
     }
   >();
 
@@ -164,7 +165,15 @@ export function AgentNetworkToAISDKTransformer() {
     },
     transform(chunk, controller) {
       const transformed = transformNetwork(chunk, bufferedNetworks);
-      if (transformed) controller.enqueue(transformed);
+      if (transformed) {
+        if (Array.isArray(transformed)) {
+          for (const item of transformed) {
+            controller.enqueue(item);
+          }
+        } else {
+          controller.enqueue(transformed);
+        }
+      }
     },
   });
 }
@@ -527,7 +536,8 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(output)}`,
           );
         }
-        return output;
+        const { type, data, id } = output;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }
@@ -539,12 +549,20 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        return payload;
+        const { type, data, id } = payload;
+
+        return {
+          type,
+          data,
+          ...(id !== undefined && { id }),
+        };
       }
       return null;
     }
   }
 }
+
+type TransformNetworkResult = InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType;
 
 export function transformNetwork(
   payload: NetworkChunkType,
@@ -561,10 +579,11 @@ export function transformNetwork(
       })[];
       usage: LanguageModelV2Usage | null;
       output: unknown | null;
+      hasEmittedText?: boolean;
     }
   >,
   isNested?: boolean,
-): InferUIMessageChunk<UIMessage> | NetworkDataPart | DataChunkType | null {
+): TransformNetworkResult | TransformNetworkResult[] | null {
   switch (payload.type) {
     case 'routing-agent-start': {
       if (!bufferedNetworks.has(payload.runId)) {
@@ -573,6 +592,7 @@ export function transformNetwork(
           steps: [],
           usage: null,
           output: null,
+          hasEmittedText: false,
         });
       }
 
@@ -609,6 +629,7 @@ export function transformNetwork(
     case 'routing-agent-text-start': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
+      current.hasEmittedText = true;
       return {
         type: 'text-start',
         id: payload.runId!,
@@ -617,6 +638,7 @@ export function transformNetwork(
     case 'routing-agent-text-delta': {
       const current = bufferedNetworks.get(payload.runId!);
       if (!current) return null;
+      current.hasEmittedText = true;
       return {
         type: 'text-delta',
         id: payload.runId!,
@@ -812,15 +834,29 @@ export function transformNetwork(
     case 'network-execution-event-step-finish': {
       const current = bufferedNetworks.get(payload.runId);
       if (!current) return null;
-      return {
+
+      const resultText = payload.payload?.result;
+      const dataNetworkChunk = {
         type: isNested ? 'data-tool-network' : 'data-network',
         id: payload.runId,
         data: {
           ...current,
           status: 'finished',
-          output: payload.payload?.result ?? current.output,
+          output: resultText ?? current.output,
         },
       } as const;
+
+      // Fallback: emit text events from result if core didn't send routing-agent-text-* events
+      if (!current.hasEmittedText && resultText && typeof resultText === 'string' && resultText.length > 0) {
+        current.hasEmittedText = true;
+        return [
+          { type: 'text-start', id: payload.runId } as const,
+          { type: 'text-delta', id: payload.runId, delta: resultText } as const,
+          dataNetworkChunk,
+        ];
+      }
+
+      return dataNetworkChunk;
     }
     case 'network-execution-event-finish': {
       const current = bufferedNetworks.get(payload.runId!);
@@ -845,8 +881,8 @@ export function transformNetwork(
           );
         }
 
-        const { type, data } = payload.payload;
-        return { type, data };
+        const { type, data, id } = payload.payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       if (isWorkflowExecutionDataChunkType(payload)) {
         if (!('data' in payload.payload)) {
@@ -854,8 +890,8 @@ export function transformNetwork(
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(payload)}`,
           );
         }
-        const { type, data } = payload.payload;
-        return { type, data };
+        const { type, data, id } = payload.payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
@@ -926,8 +962,8 @@ export function transformNetwork(
           );
         }
 
-        const { type, data } = payload;
-        return { type, data };
+        const { type, data, id } = payload;
+        return { type, data, ...(id !== undefined && { id }) };
       }
       return null;
     }

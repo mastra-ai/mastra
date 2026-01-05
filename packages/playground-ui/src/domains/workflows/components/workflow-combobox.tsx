@@ -14,8 +14,6 @@ export interface WorkflowComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  contentClassName?: string;
 }
 
 export function WorkflowCombobox({
@@ -26,8 +24,6 @@ export function WorkflowCombobox({
   emptyText = 'No workflows found.',
   className,
   disabled = false,
-  buttonClassName = 'h-8',
-  contentClassName,
 }: WorkflowComboboxProps) {
   const { data: workflows = {}, isLoading, isError, error } = useWorkflows();
   const { navigate, paths } = useLinkComponent();
@@ -62,8 +58,7 @@ export function WorkflowCombobox({
       emptyText={emptyText}
       className={className}
       disabled={disabled || isLoading || isError}
-      buttonClassName={buttonClassName}
-      contentClassName={contentClassName}
+      variant="ghost"
     />
   );
 }

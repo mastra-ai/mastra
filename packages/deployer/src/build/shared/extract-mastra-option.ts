@@ -5,22 +5,18 @@ import commonjs from '@rollup/plugin-commonjs';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import { recursiveRemoveNonReferencedNodes } from '../plugins/remove-unused-references';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import { removeAllOptionsFromMastraExcept } from '../babel/remove-all-options-except';
 import json from '@rollup/plugin-json';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { pathToFileURL } from 'node:url';
+import { removeAllOptionsFromMastraExceptPlugin } from '../plugins/remove-all-except';
 
-type Transformer = (
-  result: { hasCustomConfig: boolean },
-  logger?: IMastraLogger,
-) => ReturnType<typeof removeAllOptionsFromMastraExcept>;
+import type { Config as MastraConfig } from '@mastra/core/mastra';
 
 export function extractMastraOptionBundler(
-  name: string,
+  name: keyof MastraConfig,
   entryFile: string,
-  transformer: Transformer,
   result: {
-    hasCustomConfig: false;
+    hasCustomConfig: boolean;
   },
   logger?: IMastraLogger,
 ) {
@@ -44,36 +40,7 @@ export function extractMastraOptionBundler(
         ignoreTryCatch: false,
       }),
       json(),
-      {
-        name: `extract-${name}-config`,
-        transform(code, id) {
-          if (id !== entryFile) {
-            return;
-          }
-
-          return new Promise((resolve, reject) => {
-            babel.transform(
-              code,
-              {
-                babelrc: false,
-                configFile: false,
-                filename: id,
-                plugins: [transformer(result, logger)],
-              },
-              (err, result) => {
-                if (err) {
-                  return reject(err);
-                }
-
-                resolve({
-                  code: result!.code!,
-                  map: result!.map!,
-                });
-              },
-            );
-          });
-        },
-      },
+      removeAllOptionsFromMastraExceptPlugin(entryFile, name, result, { logger }),
       // let esbuild remove all unused imports
       esbuild(),
       {
@@ -92,20 +59,20 @@ export function extractMastraOptionBundler(
   });
 }
 
-export async function extractMastraOption<T>(
-  name: string,
+export async function extractMastraOption<T extends keyof MastraConfig>(
+  name: T,
   entryFile: string,
-  transformer: Transformer,
   outputDir: string,
   logger?: IMastraLogger,
 ): Promise<{
   bundleOutput: RollupOutput;
-  getConfig: () => Promise<T>;
+  getConfig: () => Promise<MastraConfig[T]>;
 } | null> {
   const result = {
     hasCustomConfig: false,
-  } as const;
-  const bundler = await extractMastraOptionBundler(name, entryFile, transformer, result, logger);
+  };
+
+  const bundler = await extractMastraOptionBundler(name, entryFile, result, logger);
 
   const output = await bundler.write({
     dir: outputDir,
@@ -118,7 +85,7 @@ export async function extractMastraOption<T>(
 
     return {
       bundleOutput: output,
-      getConfig: () => import(pathToFileURL(configPath).href).then(m => m[name] as T),
+      getConfig: () => import(pathToFileURL(configPath).href).then(m => m[name] as MastraConfig[T]),
     };
   }
 

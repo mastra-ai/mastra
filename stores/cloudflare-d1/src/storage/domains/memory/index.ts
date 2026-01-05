@@ -10,6 +10,7 @@ import {
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
+  TABLE_SCHEMAS,
   normalizePerPage,
   calculatePagination,
 } from '@mastra/core/storage';
@@ -20,19 +21,39 @@ import type {
   StorageListThreadsByResourceIdInput,
   StorageListThreadsByResourceIdOutput,
 } from '@mastra/core/storage';
+import { D1DB, resolveD1Config } from '../../db';
+import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
-import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
 export class MemoryStorageD1 extends MemoryStorage {
-  private operations: StoreOperationsD1;
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+  #db: D1DB;
+
+  constructor(config: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new D1DB(resolveD1Config(config));
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const resource = await this.operations.load<StorageResourceType>({
+    const resource = await this.#db.load<StorageResourceType>({
       tableName: TABLE_RESOURCES,
       keys: { id: resourceId },
     });
@@ -67,7 +88,7 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    const fullTableName = this.operations.getTableName(TABLE_RESOURCES);
+    const fullTableName = this.#db.getTableName(TABLE_RESOURCES);
 
     // Prepare the record for SQL insertion
     const resourceToSave = {
@@ -79,7 +100,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     };
 
     // Process record for SQL insertion
-    const processedRecord = await this.operations.processRecord(resourceToSave);
+    const processedRecord = await this.#db.processRecord(resourceToSave);
 
     const columns = Object.keys(processedRecord);
     const values = Object.values(processedRecord);
@@ -98,7 +119,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
       return resource;
     } catch (error) {
       throw new MastraError(
@@ -148,7 +169,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       updatedAt,
     };
 
-    const fullTableName = this.operations.getTableName(TABLE_RESOURCES);
+    const fullTableName = this.#db.getTableName(TABLE_RESOURCES);
 
     const columns = ['workingMemory', 'metadata', 'updatedAt'];
     const values = [updatedResource.workingMemory, JSON.stringify(updatedResource.metadata), updatedAt.toISOString()];
@@ -158,7 +179,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
       return updatedResource;
     } catch (error) {
       throw new MastraError(
@@ -175,7 +196,7 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const thread = await this.operations.load<StorageThreadType>({
+    const thread = await this.#db.load<StorageThreadType>({
       tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
@@ -229,7 +250,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
       ...(row as StorageThreadType),
@@ -243,7 +264,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     try {
       const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
-      const countResult = (await this.operations.executeQuery(countQuery.build())) as {
+      const countResult = (await this.#db.executeQuery(countQuery.build())) as {
         count: number;
       }[];
       const total = Number(countResult?.[0]?.count ?? 0);
@@ -257,7 +278,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         .limit(limitValue)
         .offset(offset);
 
-      const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
+      const results = (await this.#db.executeQuery(selectQuery.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
 
       return {
@@ -293,7 +314,7 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     // Prepare the record for SQL insertion
     const threadToSave = {
@@ -306,7 +327,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     };
 
     // Process record for SQL insertion
-    const processedRecord = await this.operations.processRecord(threadToSave);
+    const processedRecord = await this.#db.processRecord(threadToSave);
 
     const columns = Object.keys(processedRecord);
     const values = Object.values(processedRecord);
@@ -326,7 +347,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
       return thread;
     } catch (error) {
       throw new MastraError(
@@ -356,7 +377,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (!thread) {
         throw new Error(`Thread ${id} not found`);
       }
-      const fullTableName = this.operations.getTableName(TABLE_THREADS);
+      const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
       const mergedMetadata = {
         ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
@@ -371,7 +392,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const { sql, params } = query.build();
 
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
 
       return {
         ...thread,
@@ -397,21 +418,21 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     try {
       // Delete the thread
       const deleteThreadQuery = createSqlBuilder().delete(fullTableName).where('id = ?', threadId);
 
       const { sql: threadSql, params: threadParams } = deleteThreadQuery.build();
-      await this.operations.executeQuery({ sql: threadSql, params: threadParams });
+      await this.#db.executeQuery({ sql: threadSql, params: threadParams });
 
       // Also delete associated messages
-      const messagesTableName = this.operations.getTableName(TABLE_MESSAGES);
+      const messagesTableName = this.#db.getTableName(TABLE_MESSAGES);
       const deleteMessagesQuery = createSqlBuilder().delete(messagesTableName).where('thread_id = ?', threadId);
 
       const { sql: messagesSql, params: messagesParams } = deleteMessagesQuery.build();
-      await this.operations.executeQuery({ sql: messagesSql, params: messagesParams });
+      await this.#db.executeQuery({ sql: messagesSql, params: messagesParams });
     } catch (error) {
       throw new MastraError(
         {
@@ -471,13 +492,13 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Insert messages and update thread's updatedAt in parallel
       await Promise.all([
-        this.operations.batchUpsert({
+        this.#db.batchUpsert({
           tableName: TABLE_MESSAGES,
           records: messagesToInsert,
         }),
         // Update thread's updatedAt timestamp
-        this.operations.executeQuery({
-          sql: `UPDATE ${this.operations.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
+        this.#db.executeQuery({
+          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
           params: [now.toISOString(), threadId],
         }),
       ]);
@@ -504,7 +525,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
-    const tableName = this.operations.getTableName(TABLE_MESSAGES);
+    const tableName = this.#db.getTableName(TABLE_MESSAGES);
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
@@ -549,7 +570,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
 
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
-    const messages = await this.operations.executeQuery({ sql: finalQuery, params });
+    const messages = await this.#db.executeQuery({ sql: finalQuery, params });
 
     if (!Array.isArray(messages)) {
       return [];
@@ -572,7 +593,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+    const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
     const messages: any[] = [];
 
     try {
@@ -585,7 +606,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const { sql, params } = query.build();
 
-      const result = await this.operations.executeQuery({ sql, params });
+      const result = await this.#db.executeQuery({ sql, params });
 
       if (Array.isArray(result)) messages.push(...result);
 
@@ -654,7 +675,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+      const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       let query = `
@@ -673,14 +694,16 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (dateRange?.start) {
         const startDate =
           dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
-        query += ` AND createdAt >= ?`;
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        query += ` AND createdAt ${startOp} ?`;
         queryParams.push(startDate);
       }
 
       if (dateRange?.end) {
         const endDate =
           dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
-        query += ` AND createdAt <= ?`;
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        query += ` AND createdAt ${endOp} ?`;
         queryParams.push(endDate);
       }
 
@@ -694,7 +717,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(perPage, offset);
       }
 
-      const results = await this.operations.executeQuery({ sql: query, params: queryParams });
+      const results = await this.#db.executeQuery({ sql: query, params: queryParams });
 
       // Parse message content
       const paginatedMessages = (isArrayOfRecords(results) ? results : []).map((message: Record<string, any>) => {
@@ -720,18 +743,20 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (dateRange?.start) {
         const startDate =
           dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
-        countQuery += ` AND createdAt >= ?`;
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} ?`;
         countParams.push(startDate);
       }
 
       if (dateRange?.end) {
         const endDate =
           dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
-        countQuery += ` AND createdAt <= ?`;
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
       }
 
-      const countResult = (await this.operations.executeQuery({ sql: countQuery, params: countParams })) as {
+      const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
         count: number;
       }[];
       const total = Number(countResult[0]?.count ?? 0);
@@ -852,14 +877,14 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
 
     const messageIds = messages.map(m => m.id);
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
-    const threadsTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
+    const threadsTableName = this.#db.getTableName(TABLE_THREADS);
 
     try {
       // Get existing messages
       const placeholders = messageIds.map(() => '?').join(',');
       const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const existingMessages = (await this.operations.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
 
       if (existingMessages.length === 0) {
         return [];
@@ -940,7 +965,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Execute all updates
       for (const query of updateQueries) {
-        await this.operations.executeQuery(query);
+        await this.#db.executeQuery(query);
       }
 
       // Update thread timestamps
@@ -950,11 +975,11 @@ export class MemoryStorageD1 extends MemoryStorage {
           .join(',');
         const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})`;
         const threadUpdateParams = [new Date().toISOString(), ...Array.from(threadIdsToUpdate)];
-        await this.operations.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
+        await this.#db.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
       }
 
       // Re-fetch updated messages
-      const updatedMessages = (await this.operations.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const updatedMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
 
       // Parse content back to objects
       return updatedMessages.map(message => {
@@ -974,6 +999,46 @@ export class MemoryStorageD1 extends MemoryStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
+    const threadsTableName = this.#db.getTableName(TABLE_THREADS);
+
+    try {
+      // Get unique thread IDs from messages before deleting
+      const placeholders = messageIds.map(() => '?').join(',');
+      const selectQuery = `SELECT DISTINCT thread_id FROM ${fullTableName} WHERE id IN (${placeholders})`;
+      const threadResults = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const threadIds = threadResults.map((r: any) => r.thread_id).filter(Boolean);
+
+      // Delete the messages
+      const deleteQuery = createSqlBuilder()
+        .delete(fullTableName)
+        .where(`id IN (${placeholders})`, ...messageIds);
+      const { sql, params } = deleteQuery.build();
+      await this.#db.executeQuery({ sql, params });
+
+      // Update thread timestamps for affected threads
+      if (threadIds.length > 0) {
+        const threadPlaceholders = threadIds.map(() => '?').join(',');
+        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})`;
+        const threadUpdateParams = [new Date().toISOString(), ...threadIds];
+        await this.#db.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );

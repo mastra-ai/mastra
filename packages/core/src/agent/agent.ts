@@ -19,16 +19,21 @@ import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
 import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
-import { isV2Model } from '../llm/model/is-v2-model';
 import { MastraLLMVNext } from '../llm/model/model.loop';
-import type { MastraLanguageModel, MastraLanguageModelV2, MastraModelConfig } from '../llm/model/shared.types';
+import { ModelRouterLanguageModel } from '../llm/model/router';
+import type {
+  MastraLanguageModel,
+  MastraLanguageModelV2,
+  MastraLegacyLanguageModel,
+  MastraModelConfig,
+} from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig } from '../memory/types';
 import type { TracingContext, TracingProperties } from '../observability';
-import { SpanType, getOrCreateSpan } from '../observability';
+import { EntityType, SpanType, getOrCreateSpan } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorWorkflow } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
 import { ProcessorRunner } from '../processors/runner';
@@ -63,7 +68,7 @@ import type {
   DynamicAgentInstructions,
   AgentMethodType,
 } from './types';
-import { resolveThreadIdFromArgs } from './utils';
+import { isSupportedLanguageModel, resolveThreadIdFromArgs, supportedLanguageModelSpecifications } from './utils';
 import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
@@ -316,8 +321,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const outputProcessors = outputProcessorOverrides ?? (await this.listResolvedOutputProcessors(requestContext));
 
-    this.logger.debug('outputProcessors', outputProcessors);
-
     return new ProcessorRunner({
       inputProcessors,
       outputProcessors,
@@ -412,7 +415,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run last (to persist messages after other processing)
@@ -437,7 +440,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
 
     // Combine all processors into a single workflow
     // Memory processors should run first (to fetch history, semantic recall, working memory)
@@ -965,7 +968,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     return resolveMaybePromise(modelToUse, resolvedModel => {
       let llm: MastraLLM | Promise<MastraLLM>;
-      if (resolvedModel.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(resolvedModel)) {
         const modelsPromise =
           Array.isArray(this.model) && !model
             ? this.prepareModels(requestContext)
@@ -1009,7 +1012,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   private async resolveModelConfig(
     modelConfig: DynamicArgument<MastraModelConfig>,
     requestContext: RequestContext,
-  ): Promise<MastraLanguageModel> {
+  ): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     try {
       return await resolveModelConfig(modelConfig, requestContext, this.#mastra);
     } catch (error) {
@@ -1047,7 +1050,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     modelConfig = this.model,
   }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
     | MastraLanguageModel
-    | Promise<MastraLanguageModel> {
+    | MastraLegacyLanguageModel
+    | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     if (!Array.isArray(modelConfig)) return this.resolveModelConfig(modelConfig, requestContext);
 
     if (modelConfig.length === 0 || !modelConfig[0]) {
@@ -1292,7 +1296,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     let text = '';
 
-    if (llm.getModel().specificationVersion === 'v2') {
+    if (isSupportedLanguageModel(llm.getModel())) {
       const messageList = new MessageList()
         .add(
           [
@@ -1856,7 +1860,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
               const subAgentResourceId =
                 inputData.resourceId || context?.mastra?.generateId() || `${slugify.default(this.id)}-${agentName}`;
 
-              if ((methodType === 'generate' || methodType === 'generateLegacy') && modelVersion === 'v2') {
+              if (
+                (methodType === 'generate' || methodType === 'generateLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -1882,7 +1889,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
                   tracingContext: context?.tracingContext,
                 });
                 result = { text: generateResult.text };
-              } else if ((methodType === 'stream' || methodType === 'streamLegacy') && modelVersion === 'v2') {
+              } else if (
+                (methodType === 'stream' || methodType === 'streamLegacy') &&
+                supportedLanguageModelSpecifications.includes(modelVersion)
+              ) {
                 if (!agent.hasOwnMemory() && this.#memory) {
                   agent.__setMemory(this.#memory);
                 }
@@ -2049,7 +2059,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           execute: async (inputData, context) => {
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
-              const runIdToUse = suspendedToolRunId ?? runId;
+              const runIdToUse = suspendedToolRunId || runId;
               this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
                 name: workflowName,
                 description: workflow.description,
@@ -2481,7 +2491,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     }
 
-    if (Object.keys(result).length === 0) {
+    // Only throw if scorers were provided but none could be resolved
+    if (Object.keys(result).length === 0 && Object.keys(overrideScorers).length > 0) {
       throw new MastraError({
         id: 'AGENT_GENEREATE_SCORER_NOT_FOUND',
         domain: ErrorDomain.AGENT,
@@ -2503,10 +2514,12 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   ): Promise<Array<AgentModelManagerConfig>> {
     if (model || !Array.isArray(this.model)) {
       const modelToUse = model ?? this.model;
-      const resolvedModel =
-        typeof modelToUse === 'function' ? await modelToUse({ requestContext, mastra: this.#mastra }) : modelToUse;
+      const resolvedModel = await this.resolveModelConfig(
+        modelToUse as DynamicArgument<MastraModelConfig>,
+        requestContext,
+      );
 
-      if ((resolvedModel as MastraLanguageModel)?.specificationVersion !== 'v2') {
+      if (!isSupportedLanguageModel(resolvedModel)) {
         const mastraError = new MastraError({
           id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
           domain: ErrorDomain.AGENT,
@@ -2514,20 +2527,26 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           details: {
             agentName: this.name,
           },
-          text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+          text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
         });
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
         throw mastraError;
       }
 
+      // Extract headers from ModelRouterLanguageModel if available
+      let headers: Record<string, string> | undefined;
+      if (resolvedModel instanceof ModelRouterLanguageModel) {
+        headers = (resolvedModel as any).config?.headers;
+      }
+
       return [
         {
           id: 'main',
-          // TODO fix type check
-          model: resolvedModel as MastraLanguageModelV2,
+          model: resolvedModel,
           maxRetries: this.maxRetries ?? 0,
           enabled: true,
+          headers,
         },
       ];
     }
@@ -2536,7 +2555,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       this.model.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
 
-        if (!isV2Model(model)) {
+        if (!isSupportedLanguageModel(model)) {
           const mastraError = new MastraError({
             id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
             domain: ErrorDomain.AGENT,
@@ -2544,7 +2563,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
             details: {
               agentName: this.name,
             },
-            text: `[Agent:${this.name}] - Only v2 models are allowed when an array of models is provided`,
+            text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
@@ -2567,11 +2586,18 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
           throw mastraError;
         }
 
+        // Extract headers from ModelRouterLanguageModel if available
+        let headers: Record<string, string> | undefined;
+        if (model instanceof ModelRouterLanguageModel) {
+          headers = (model as any).config?.headers;
+        }
+
         return {
           id: modelId,
           model: model,
           maxRetries: modelConfig.maxRetries ?? 0,
           enabled: modelConfig.enabled ?? true,
+          headers,
         };
       }),
     );
@@ -2583,10 +2609,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * Executes the agent call, handling tools, memory, and streaming.
    * @internal
    */
-  async #execute<
-    OUTPUT extends OutputSchema | undefined = undefined,
-    FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-  >({ methodType, resumeContext, ...options }: InnerAgentExecutionOptions<OUTPUT, FORMAT>) {
+  async #execute<OUTPUT extends OutputSchema | undefined = undefined>({
+    methodType,
+    resumeContext,
+    ...options
+  }: InnerAgentExecutionOptions<OUTPUT>) {
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -2671,10 +2698,11 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
       name: `agent run: '${this.id}'`,
+      entityType: EntityType.AGENT,
+      entityId: this.id,
+      entityName: this.name,
       input: options.messages,
       attributes: {
-        agentId: this.id,
-        agentName: this.name,
         conversationId: threadFromArgs?.id,
         instructions: this.#convertInstructionsToString(instructions),
       },
@@ -3001,7 +3029,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const modelInfo = llm.getModel();
 
-    if (modelInfo.specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
@@ -3009,7 +3037,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5 models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
         details: {
           agentName: this.name,
           modelId,
@@ -3080,7 +3108,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
 
     const modelInfo = llm.getModel();
 
-    if (modelInfo.specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(modelInfo)) {
       const modelId = modelInfo.modelId || 'unknown';
       const provider = modelInfo.provider || 'unknown';
 
@@ -3088,7 +3116,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5 models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with stream(). Please use AI SDK v5+ models or call the streamLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
         details: {
           agentName: this.name,
           modelId,
@@ -3161,7 +3189,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       requestContext: mergedStreamOptions.requestContext,
     });
 
-    if (llm.getModel().specificationVersion !== 'v2') {
+    if (!isSupportedLanguageModel(llm.getModel())) {
       throw new MastraError({
         id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
         domain: ErrorDomain.AGENT,
@@ -3170,7 +3198,8 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       });
     }
 
-    const existingSnapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: 'agentic-loop',
       runId: streamOptions?.runId ?? '',
     });
@@ -3206,6 +3235,106 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     return result.result as unknown as MastraModelOutput<OUTPUT>;
+  }
+
+  /**
+   * Resumes a previously suspended generate execution.
+   * Used to continue execution after a suspension point (e.g., tool approval, workflow suspend).
+   *
+   * @example
+   * ```typescript
+   * // Resume after suspension
+   * const stream = await agent.resumeGenerate(
+   *   { approved: true },
+   *   { runId: 'previous-run-id' }
+   * );
+   * ```
+   */
+  async resumeGenerate<OUTPUT extends OutputSchema | undefined = undefined>(
+    resumeData: any,
+    options?: AgentExecutionOptions<OUTPUT> & { toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const defaultOptions = await this.getDefaultOptions({
+      requestContext: options?.requestContext,
+    });
+
+    const mergedOptions = {
+      ...defaultOptions,
+      ...(options ?? {}),
+    };
+
+    const llm = await this.getLLM({
+      requestContext: mergedOptions.requestContext,
+    });
+
+    const modelInfo = llm.getModel();
+
+    if (!isSupportedLanguageModel(modelInfo)) {
+      const modelId = modelInfo.modelId || 'unknown';
+      const provider = modelInfo.provider || 'unknown';
+      throw new MastraError({
+        id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent \"${this.name}\" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`,
+        details: {
+          agentName: this.name,
+          modelId,
+          provider,
+          specificationVersion: modelInfo.specificationVersion,
+        },
+      });
+    }
+
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const existingSnapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: options?.runId ?? '',
+    });
+
+    const result = await this.#execute({
+      ...mergedOptions,
+      messages: [],
+      resumeContext: {
+        resumeData,
+        snapshot: existingSnapshot,
+      },
+      methodType: 'generate',
+      // Use agent's maxProcessorRetries as default, allow options to override
+      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+    } as InnerAgentExecutionOptions<OUTPUT>);
+
+    if (result.status !== 'success') {
+      if (result.status === 'failed') {
+        throw new MastraError(
+          {
+            id: 'AGENT_GENERATE_FAILED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+          },
+          // pass original error to preserve stack trace
+          result.error,
+        );
+      }
+      throw new MastraError({
+        id: 'AGENT_GENERATE_UNKNOWN_ERROR',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'An unknown error occurred while generating',
+      });
+    }
+
+    const fullOutput = (await result.result.getFullOutput()) as Awaited<
+      ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
+    >;
+
+    const error = fullOutput.error;
+
+    if (fullOutput.finishReason === 'error' && error) {
+      throw error;
+    }
+
+    return fullOutput;
   }
 
   /**

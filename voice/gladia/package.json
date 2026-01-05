@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts voice/gladia",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

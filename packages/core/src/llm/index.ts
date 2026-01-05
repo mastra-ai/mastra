@@ -148,7 +148,7 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
 
-export type { ProviderConfig } from './model/gateways/base';
+export type { ProviderConfig, GatewayLanguageModel } from './model/gateways/base';
 export { MastraModelGateway, NetlifyGateway, ModelsDevGateway, AzureOpenAIGateway } from './model/gateways';
 export type { AzureOpenAIGatewayConfig } from './model/gateways';
 

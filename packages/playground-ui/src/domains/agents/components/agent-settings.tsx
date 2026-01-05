@@ -77,10 +77,11 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
   const hasMemory = Boolean(memory?.result);
   const hasSubAgents = Boolean(Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent.modelVersion;
+  const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
 
   let radioValue;
 
-  if (modelVersion === 'v2') {
+  if (isSupportedModel) {
     if (settings?.modelSettings?.chatWithNetwork) {
       radioValue = 'network';
     } else {
@@ -92,7 +93,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
 
   return (
     <div className="px-5 text-xs py-2 pb-4">
-      <section className="space-y-7">
+      <section className="space-y-7 @container">
         <Entry label="Chat Method">
           <RadioGroup
             orientation="horizontal"
@@ -108,9 +109,9 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 },
               })
             }
-            className="flex flex-row gap-4"
+            className="flex flex-col gap-4 @xs:flex-row"
           >
-            {modelVersion !== 'v2' && (
+            {!isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generateLegacy" id="generateLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generateLegacy">
@@ -118,7 +119,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {modelVersion === 'v2' && (
+            {isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generate" id="generate" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="generate">
@@ -126,7 +127,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {modelVersion !== 'v2' && (
+            {!isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="streamLegacy" id="streamLegacy" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="streamLegacy">
@@ -134,7 +135,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {modelVersion === 'v2' && (
+            {isSupportedModel && (
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="stream" id="stream" className="text-icon6" />
                 <Label className="text-icon6 text-ui-md" htmlFor="stream">
@@ -142,7 +143,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
                 </Label>
               </div>
             )}
-            {modelVersion === 'v2' && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
+            {isSupportedModel && <NetworkCheckbox hasMemory={hasMemory} hasSubAgents={hasSubAgents} />}
           </RadioGroup>
         </Entry>
         <Entry label="Require Tool Approval">
@@ -157,7 +158,7 @@ export const AgentSettings = ({ agentId }: AgentSettingsProps) => {
           />
         </Entry>
 
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 @xs:grid-cols-2 gap-8">
           <Entry label="Temperature">
             <div className="flex flex-row justify-between items-center gap-2">
               <Slider

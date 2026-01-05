@@ -21,7 +21,7 @@ type LegacyTokenUsage = {
   totalTokens: number;
 };
 
-type TokenUsage = V5TokenUsage | LegacyTokenUsage;
+export type TokenUsage = V5TokenUsage | LegacyTokenUsage;
 
 type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
 type UsageValue = number | TokenDetailsObject | undefined;
@@ -62,15 +62,16 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
   const generationSpans = traceSpans.filter(span => span.spanType === 'model_generation');
 
   // Determine if we're using v5 format (inputTokens/outputTokens) or legacy format (promptTokens/completionTokens)
-  const hasV5Format = generationSpans.some(
-    span => span.attributes?.usage?.inputTokens !== undefined || span.attributes?.usage?.outputTokens !== undefined,
-  );
+  const hasV5Format = generationSpans.some(span => {
+    const usage = span.attributes?.usage as TokenUsage | undefined;
+    return usage && 'inputTokens' in usage;
+  });
 
   const tokensByProvider = generationSpans.reduce(
     (acc: Record<string, TokenUsage>, span: SpanRecord) => {
-      const spanUsage = span.attributes?.usage || {};
-      const model = span?.attributes?.model || '';
-      const provider = span?.attributes?.provider || '';
+      const spanUsage = (span.attributes?.usage || {}) as Partial<V5TokenUsage & LegacyTokenUsage>;
+      const model = (span?.attributes?.model as string) || '';
+      const provider = (span?.attributes?.provider as string) || '';
       const spanModelProvider = `${provider}${provider && model ? ' / ' : ''}${model}`;
 
       if (!acc?.[spanModelProvider]) {
@@ -93,11 +94,11 @@ export function TraceSpanUsage({ traceUsage, traceSpans = [], spanUsage, classNa
         const outputTokens = spanUsage.outputTokens ?? 0;
         const reasoningTokens = spanUsage.reasoningTokens ?? 0;
         const cachedInputTokens = spanUsage.cachedInputTokens ?? 0;
-        const v5Acc = acc[spanModelProvider];
+        const v5Acc = acc[spanModelProvider] as V5TokenUsage;
         v5Acc.inputTokens += inputTokens;
         v5Acc.outputTokens += outputTokens;
-        v5Acc.reasoningTokens += reasoningTokens;
-        v5Acc.cachedInputTokens += cachedInputTokens;
+        v5Acc.reasoningTokens = (v5Acc.reasoningTokens ?? 0) + reasoningTokens;
+        v5Acc.cachedInputTokens = (v5Acc.cachedInputTokens ?? 0) + cachedInputTokens;
         v5Acc.totalTokens += spanUsage.totalTokens || inputTokens + outputTokens;
       } else if ('promptTokens' in acc[spanModelProvider] && !hasV5Format) {
         const promptTokens = spanUsage.promptTokens ?? 0;

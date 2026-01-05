@@ -2,8 +2,14 @@ import { SelectField, DateTimePicker } from '@/components/ui/elements';
 import { Button } from '@/components/ui/elements/buttons';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
+import { EntityType } from '@mastra/core/observability';
 
-export type EntityOptions = { value: string; label: string; type: 'agent' | 'workflow' | 'all' };
+// UI-specific entity options that map to API EntityType values
+// Using the enum values (lowercase strings) for the type field
+export type EntityOptions =
+  | { value: string; label: string; type: EntityType.AGENT }
+  | { value: string; label: string; type: EntityType.WORKFLOW_RUN }
+  | { value: string; label: string; type: 'all' };
 
 type TracesToolsProps = {
   selectedEntity?: EntityOptions;

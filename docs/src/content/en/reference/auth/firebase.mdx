@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraAuthFirebase Class | Auth"
 description: "API reference for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+packages:
+  - "@mastra/auth-firebase"
+  - "@mastra/core"
 ---
 
 # MastraAuthFirebase Class
@@ -17,7 +20,6 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -31,7 +33,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account-key.json",

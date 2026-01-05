@@ -25,12 +25,6 @@ const docsTabs = [
     basePath: "/models/v1",
   },
   {
-    id: "Examples",
-    label: "Examples",
-    href: "/examples/v1",
-    basePath: "/examples/v1",
-  },
-  {
     id: "Guides",
     label: "Guides & Migrations",
     href: "/guides/v1",

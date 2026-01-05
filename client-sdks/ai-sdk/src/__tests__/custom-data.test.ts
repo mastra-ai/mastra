@@ -460,4 +460,178 @@ describe('Custom Data Handling', () => {
       `);
     });
   });
+
+  describe('data chunk property filtering', () => {
+    it('should only include type, data, and id properties in data chunks', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'data-filtered-event',
+                data: { foo: 'bar' },
+                id: 'chunk-id-123',
+                // These extra properties should be filtered out
+                extraProp: 'should not appear',
+                anotherProp: 123,
+                nested: { obj: 'value' },
+              },
+              toolCallId: 'call_test',
+              toolName: 'workflow-test',
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-filtered-event');
+
+      expect(customDataChunk).toBeDefined();
+      expect(customDataChunk.type).toBe('data-filtered-event');
+      expect(customDataChunk.data).toEqual({ foo: 'bar' });
+      expect(customDataChunk.id).toBe('chunk-id-123');
+
+      // Verify that extra properties are NOT present
+      expect(customDataChunk).not.toHaveProperty('extraProp');
+      expect(customDataChunk).not.toHaveProperty('anotherProp');
+      expect(customDataChunk).not.toHaveProperty('nested');
+      expect(customDataChunk).not.toHaveProperty('from');
+      expect(customDataChunk).not.toHaveProperty('runId');
+
+      // Verify that only the expected properties exist
+      const keys = Object.keys(customDataChunk);
+      expect(keys.sort()).toEqual(['data', 'id', 'type'].sort());
+    });
+
+    it('should omit id property when not present in original chunk', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tool-output',
+            runId: 'test-run-id',
+            from: 'USER',
+            payload: {
+              output: {
+                type: 'data-no-id-event',
+                data: { message: 'no id here' },
+                // No id property
+                extraProp: 'should not appear',
+              },
+              toolCallId: 'call_test',
+              toolName: 'workflow-test',
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, { from: 'agent' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-no-id-event');
+
+      expect(customDataChunk).toBeDefined();
+      expect(customDataChunk.type).toBe('data-no-id-event');
+      expect(customDataChunk.data).toEqual({ message: 'no id here' });
+
+      // Verify that id property is NOT present
+      expect(customDataChunk).not.toHaveProperty('id');
+      expect(customDataChunk).not.toHaveProperty('extraProp');
+
+      // Verify that only type and data exist
+      const keys = Object.keys(customDataChunk);
+      expect(keys.sort()).toEqual(['data', 'type'].sort());
+    });
+
+    it('should filter properties in workflow-step-output data chunks', async () => {
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'workflow-start',
+            runId: 'test-run-id',
+            payload: { workflowId: 'test-workflow' },
+          });
+
+          controller.enqueue({
+            type: 'workflow-step-output',
+            runId: 'test-run-id',
+            payload: {
+              output: {
+                type: 'data-workflow-custom',
+                data: { status: 'processing' },
+                id: 'workflow-chunk-1',
+                // Extra properties that should be filtered
+                from: 'USER',
+                runId: 'test-run-id',
+                metadata: { extra: 'data' },
+              },
+            },
+          });
+
+          controller.enqueue({
+            type: 'workflow-finish',
+            runId: 'test-run-id',
+            payload: {
+              workflowStatus: 'success',
+              output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+              metadata: {},
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as any, { from: 'workflow' });
+
+      const chunks: any[] = [];
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+      }
+
+      const customDataChunk = chunks.find(chunk => chunk.type === 'data-workflow-custom');
+
+      expect(customDataChunk).toBeDefined();
+      expect(customDataChunk.type).toBe('data-workflow-custom');
+      expect(customDataChunk.data).toEqual({ status: 'processing' });
+      expect(customDataChunk.id).toBe('workflow-chunk-1');
+
+      // Verify extra properties are filtered
+      expect(customDataChunk).not.toHaveProperty('from');
+      expect(customDataChunk).not.toHaveProperty('runId');
+      expect(customDataChunk).not.toHaveProperty('metadata');
+
+      // Verify only expected properties exist
+      const keys = Object.keys(customDataChunk);
+      expect(keys.sort()).toEqual(['data', 'id', 'type'].sort());
+    });
+  });
 });

@@ -1,6 +1,8 @@
 ---
 title: "Workflow streaming | Streaming"
 description: "Learn how to use workflow streaming in Mastra, including handling workflow execution events, step streaming, and workflow integration with agents and tools."
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow streaming
@@ -24,13 +26,12 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,8,15}
+```typescript {5,7,14}
 import { createStep } from "@mastra/core/workflows";
 
 export const testStep = createStep({
-  // ...
   execute: async ({ inputData, writer }) => {
-     const { value } = inputData;
+    const { value } = inputData;
 
     await writer?.write({
       type: "custom-event",
@@ -39,7 +40,7 @@ export const testStep = createStep({
 
     const response = await fetch(...);
 
-   await writer?.write({
+    await writer?.write({
       type: "custom-event",
       status: "success"
     });
@@ -103,7 +104,6 @@ import { createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 export const testStep = createStep({
-  // ...
   execute: async ({ inputData, mastra, writer }) => {
     const { city } = inputData;
 

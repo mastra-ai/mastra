@@ -1,6 +1,10 @@
 ---
 title: "MastraAuthFirebase Class | Auth"
 description: "Documentation for the MastraAuthFirebase class, which authenticates Mastra applications using Firebase Authentication."
+packages:
+  - "@mastra/auth-firebase"
+  - "@mastra/client-js"
+  - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -48,7 +52,6 @@ import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase(),
   },
@@ -57,12 +60,11 @@ export const mastra = new Mastra({
 
 ### Custom configuration
 
-```typescript {2,7-10} title="src/mastra/index.ts"
+```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { MastraAuthFirebase } from "@mastra/auth-firebase";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthFirebase({
       serviceAccount: "/path/to/service-account.json",
@@ -106,7 +108,11 @@ const firebaseAuth = new MastraAuthFirebase({
 });
 ```
 
-> See the [MastraAuthFirebase](/reference/v1/auth/firebase) API reference for all available configuration options.
+:::info
+
+Visit [MastraAuthFirebase](/reference/v1/auth/firebase) for all available configuration options.
+
+:::
 
 ## Client-side setup
 
@@ -190,7 +196,11 @@ export const createMastraClient = (idToken: string) => {
 
 > **Note:** The ID token must be prefixed with `Bearer` in the Authorization header.
 
-> See [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+:::info
+
+Visit [Mastra Client SDK](/docs/v1/server/mastra-client) for more configuration options.
+
+:::
 
 ### Making authenticated requests
 

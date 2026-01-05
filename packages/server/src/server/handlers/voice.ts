@@ -146,13 +146,13 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   summary: 'Transcribe speech',
   description: 'Transcribes speech audio to text using the agent voice configuration',
   tags: ['Agents', 'Voice'],
-  handler: async ({ mastra, agentId, audioData, options, requestContext }) => {
+  handler: async ({ mastra, agentId, audio, options, requestContext }) => {
     try {
       if (!agentId) {
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
 
-      if (!audioData) {
+      if (!audio) {
         throw new HTTPException(400, { message: 'Audio data is required' });
       }
 
@@ -169,7 +169,7 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
       }
 
       const audioStream = new Readable();
-      audioStream.push(audioData);
+      audioStream.push(audio);
       audioStream.push(null);
 
       const text = await voice.listen(audioStream, options);

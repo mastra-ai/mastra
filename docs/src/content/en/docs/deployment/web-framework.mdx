@@ -1,6 +1,8 @@
 ---
 title: "Deploy with a Web Framework | Deployment"
 description: "Learn how Mastra can be deployed when integrated with a Web Framework"
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deploy with a Web Framework
@@ -8,7 +10,7 @@ description: "Learn how Mastra can be deployed when integrated with a Web Framew
 When Mastra is integrated with a web framework, it deploys alongside your application using the framework's standard deployment process. Follow the instructions below to ensure your Mastra integration deploys correctly.
 
 :::warning
-If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/docs/v1/memory/storage/overview) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
+If you're deploying to a cloud provider, remove any usage of [LibSQLStore](/reference/v1/storage/libsql) from your Mastra configuration. LibSQLStore requires filesystem access and is not compatible with serverless platforms.
 :::
 
 Integration guides:
@@ -34,12 +36,11 @@ export default nextConfig;
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Vercel, add the Vercel adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs"
+```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import vercel from "@astrojs/vercel";
 
 export default defineConfig({
-  // ...
   adapter: vercel(),
   output: "server",
 });
@@ -49,12 +50,11 @@ export default defineConfig({
 
 If you've integrated Mastra with Astro [by following our guide](/guides/v1/getting-started/astro) and plan to deploy to Netlify, add the Netlify adapter and server output to your `astro.config.mjs`:
 
-```javascript {2,6,7} title="astro.config.mjs"
+```javascript {2,5-6} title="astro.config.mjs"
 import { defineConfig } from "astro/config";
 import netlify from "@astrojs/netlify";
 
 export default defineConfig({
-  // ...
   adapter: netlify(),
   output: "server",
 });

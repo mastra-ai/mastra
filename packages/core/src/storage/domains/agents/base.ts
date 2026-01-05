@@ -1,4 +1,3 @@
-import { MastraBase } from '../../../base';
 import type {
   StorageAgentType,
   StorageCreateAgentInput,
@@ -9,8 +8,9 @@ import type {
   ThreadOrderBy,
   ThreadSortDirection,
 } from '../../types';
+import { StorageDomain } from '../base';
 
-export abstract class AgentsStorage extends MastraBase {
+export abstract class AgentsStorage extends StorageDomain {
   constructor() {
     super({
       component: 'STORAGE',

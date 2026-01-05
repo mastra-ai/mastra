@@ -149,6 +149,36 @@ describe('BraintrustExporter', () => {
       });
     });
 
+    it('should handle logger initialization failure', async () => {
+      const error = new Error('Init failed');
+      mockInitLogger.mockRejectedValue(error);
+
+      // Spy on the internal logger to verify error logging
+      const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
+
+      const rootSpan = createMockSpan({
+        id: 'root-span-error',
+        name: 'root-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      expect(mockInitLogger).toHaveBeenCalled();
+      expect(loggerErrorSpy).toHaveBeenCalledWith('Braintrust exporter: Failed to initialize logger', {
+        error,
+        traceId: rootSpan.traceId,
+      });
+
+      // Should be disabled after failure
+      expect((exporter as any).isDisabled).toBe(true);
+    });
+
     it('should not create logger for child spans', async () => {
       // First create root span
       const rootSpan = createMockSpan({

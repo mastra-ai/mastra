@@ -18,6 +18,7 @@ export async function processWorkflowParallel(
     resumeData,
     parentWorkflow,
     requestContext,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -31,29 +32,35 @@ export async function processWorkflowParallel(
     const nestedStep = step.steps[i];
     if (nestedStep?.type === 'step') {
       activeSteps[nestedStep.step.id] = true;
+      if (perStep) {
+        break;
+      }
     }
   }
 
   await Promise.all(
-    step.steps.map(async (_step, idx) => {
-      return pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          workflowId,
+    step.steps
+      ?.filter(step => activeSteps[step.step.id])
+      .map(async (_step, idx) => {
+        return pubsub.publish('workflows', {
+          type: 'workflow.step.run',
           runId,
-          executionPath: executionPath.concat([idx]),
-          resumeSteps,
-          stepResults,
-          prevResult,
-          resumeData,
-          timeTravel,
-          parentWorkflow,
-          activeSteps,
-          requestContext,
-        },
-      });
-    }),
+          data: {
+            workflowId,
+            runId,
+            executionPath: executionPath.concat([idx]),
+            resumeSteps,
+            stepResults,
+            prevResult,
+            resumeData,
+            timeTravel,
+            parentWorkflow,
+            activeSteps,
+            requestContext,
+            perStep,
+          },
+        });
+      }),
   );
 }
 
@@ -70,6 +77,7 @@ export async function processWorkflowConditional(
     resumeData,
     parentWorkflow,
     requestContext,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -99,47 +107,79 @@ export async function processWorkflowConditional(
     truthyIdxs[idxs[i]!] = true;
   }
 
-  await Promise.all(
-    step.steps.map(async (step, idx) => {
-      if (truthyIdxs[idx]) {
-        if (step?.type === 'step') {
-          activeSteps[step.step.id] = true;
+  let onlyStepToRun: Extract<StepFlowEntry, { type: 'step' }> | undefined;
+
+  if (perStep) {
+    const stepsToRun = step.steps.filter((_, idx) => truthyIdxs[idx]);
+    onlyStepToRun = stepsToRun[0];
+  }
+
+  if (onlyStepToRun) {
+    activeSteps[onlyStepToRun.step.id] = true;
+    const stepIndex = step.steps.findIndex(step => step.step.id === onlyStepToRun.step.id);
+    await pubsub.publish('workflows', {
+      type: 'workflow.step.run',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        executionPath: executionPath.concat([stepIndex]),
+        resumeSteps,
+        stepResults,
+        timeTravel,
+        prevResult,
+        resumeData,
+        parentWorkflow,
+        activeSteps,
+        requestContext,
+        perStep,
+      },
+    });
+  } else {
+    await Promise.all(
+      step.steps.map(async (step, idx) => {
+        if (truthyIdxs[idx]) {
+          if (step?.type === 'step') {
+            activeSteps[step.step.id] = true;
+          }
+          return pubsub.publish('workflows', {
+            type: 'workflow.step.run',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resumeSteps,
+              stepResults,
+              timeTravel,
+              prevResult,
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+              requestContext,
+              perStep,
+            },
+          });
+        } else {
+          return pubsub.publish('workflows', {
+            type: 'workflow.step.end',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath: executionPath.concat([idx]),
+              resumeSteps,
+              stepResults,
+              prevResult: { status: 'skipped' },
+              resumeData,
+              parentWorkflow,
+              activeSteps,
+              requestContext,
+              perStep,
+            },
+          });
         }
-        return pubsub.publish('workflows', {
-          type: 'workflow.step.run',
-          runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: executionPath.concat([idx]),
-            resumeSteps,
-            stepResults,
-            timeTravel,
-            prevResult,
-            resumeData,
-            parentWorkflow,
-            activeSteps,
-            requestContext,
-          },
-        });
-      } else {
-        return pubsub.publish('workflows', {
-          type: 'workflow.step.end',
-          runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: executionPath.concat([idx]),
-            resumeSteps,
-            stepResults,
-            prevResult: { status: 'skipped' },
-            resumeData,
-            parentWorkflow,
-            activeSteps,
-            requestContext,
-          },
-        });
-      }
-    }),
-  );
+      }),
+    );
+  }
 }

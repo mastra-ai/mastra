@@ -27,7 +27,7 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
       </Breadcrumb>
 
       <HeaderGroup>
-        <div className="w-[240px]">
+        <div className="w-48">
           <AgentCombobox value={agentId} />
         </div>
 

@@ -172,6 +172,18 @@ Run-related methods cannot be called directly on workflow instance. You need to 
 + const stream = await run.stream({ inputData: { ... } });
 ```
 
+### `streamVNext`, `resumeStreamVNext`, and `observeStreamVNext` methods
+
+The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext()` methods have been removed. These methods are now the standard implementation with updated event structures and return types.
+
+To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods instead.
+
+```diff
++ const run = await workflow.createRun({ runId: '123' });
+- const stream = await run.streamVNext({ inputData: { ... } });
++ const stream = await run.stream({ inputData: { ... } });
+```
+
 ### Deprecated stream endpoints
 
 Some stream endpoints are deprecated and will be removed. The `/api/agents/:agentId/stream/vnext` endpoint returns 410 Gone, and `/api/agents/:agentId/stream/ui` is deprecated. This change consolidates on standard streaming endpoints.

@@ -238,8 +238,9 @@ export const createTimeTravelExecutionParams = (params: {
   snapshot: WorkflowRunState;
   initialState?: any;
   graph: ExecutionGraph;
+  perStep?: boolean;
 }) => {
-  const { steps, inputData, resumeData, context, nestedStepsContext, snapshot, initialState, graph } = params;
+  const { steps, inputData, resumeData, context, nestedStepsContext, snapshot, initialState, graph, perStep } = params;
   const firstStepId = steps[0]!;
 
   let executionPath: number[] = [];
@@ -252,16 +253,12 @@ export const createTimeTravelExecutionParams = (params: {
     if (currentExecPathLength > 0 && !resumeData) {
       break;
     }
-    // let stepFound = false;
-    // let stepInParallel = false;
     const stepIds = getStepIds(entry);
     if (stepIds.includes(firstStepId)) {
       const innerExecutionPath = stepIds?.length > 1 ? [stepIds?.findIndex(s => s === firstStepId)] : [];
       //parallel and loop steps will have more than one step id,
       // and if the step is one of those, we need the index for the execution path
       executionPath = [index, ...innerExecutionPath];
-      // stepFound = true;
-      // stepInParallel = stepIds?.length > 1;
     }
 
     const prevStep = graph.steps[index - 1]!;
@@ -334,14 +331,19 @@ export const createTimeTravelExecutionParams = (params: {
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
       };
+      const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (
-        currentExecPathLength > 0 &&
+        execPathLengthToUse > 0 &&
+        !steps?.includes(stepId) &&
+        !context?.[stepId] &&
         (!snapshotContext[stepId] || (snapshotContext[stepId] && snapshotContext[stepId].status !== 'suspended'))
       ) {
         // if the step is after the timeTravelled step in the graph
         // and it doesn't exist in the snapshot,
         // OR it exists in snapshot and is not suspended,
         // we don't need to set stepResult for it
+        // if perStep is true, and the step is a parallel step,
+        // we want to construct result for only the timetraveled step and any step context is passed for
         result = undefined;
       }
       if (result) {

@@ -49,6 +49,7 @@ export default defineConfig({
     'src/*/index.ts',
     'src/tools/is-vercel-tool.ts',
     'src/workflows/constants.ts',
+    'src/storage/constants.ts',
     'src/workflows/evented/index.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',

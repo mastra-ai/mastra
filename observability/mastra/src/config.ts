@@ -12,6 +12,7 @@ import type {
   ObservabilityBridge,
   SpanOutputProcessor,
   ConfigSelector,
+  SerializationOptions,
 } from '@mastra/core/observability';
 import { z } from 'zod';
 
@@ -74,6 +75,11 @@ export interface ObservabilityInstanceConfig {
    * Supports dot notation for nested values.
    */
   requestContextKeys?: string[];
+  /**
+   * Options for controlling serialization of span data (input/output/attributes).
+   * Use these to customize truncation limits for large payloads.
+   */
+  serializationOptions?: SerializationOptions;
 }
 
 /**
@@ -115,6 +121,18 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
 ]);
 
 /**
+ * Zod schema for SerializationOptions
+ */
+export const serializationOptionsSchema = z
+  .object({
+    maxStringLength: z.number().int().positive().optional(),
+    maxDepth: z.number().int().positive().optional(),
+    maxArrayLength: z.number().int().positive().optional(),
+    maxObjectKeys: z.number().int().positive().optional(),
+  })
+  .optional();
+
+/**
  * Zod schema for ObservabilityInstanceConfig
  * Note: exporters, spanOutputProcessors, bridge, and configSelector are validated as any
  * since they're complex runtime objects
@@ -129,6 +147,7 @@ export const observabilityInstanceConfigSchema = z
     spanOutputProcessors: z.array(z.any()).optional(),
     includeInternalSpans: z.boolean().optional(),
     requestContextKeys: z.array(z.string()).optional(),
+    serializationOptions: serializationOptionsSchema,
   })
   .refine(
     data => {
@@ -155,6 +174,7 @@ export const observabilityConfigValueSchema = z
     spanOutputProcessors: z.array(z.any()).optional(),
     includeInternalSpans: z.boolean().optional(),
     requestContextKeys: z.array(z.string()).optional(),
+    serializationOptions: serializationOptionsSchema,
   })
   .refine(
     data => {

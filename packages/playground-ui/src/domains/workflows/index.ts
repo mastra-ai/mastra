@@ -9,3 +9,4 @@ export * from './components/workflow-information';
 export * from './components/workflow-combobox';
 export * from './utils';
 export * from './hooks';
+export * from './components/workflow-layout';

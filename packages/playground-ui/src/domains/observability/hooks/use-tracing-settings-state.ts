@@ -38,5 +38,6 @@ export function useTracingSettingsState({ entityId, entityType }: TracingSetting
     settings,
     setSettings,
     resetAll,
+    entityType,
   };
 }

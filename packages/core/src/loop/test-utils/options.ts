@@ -2977,11 +2977,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           },
           messageList,
           stopWhen: [
-            ({ steps }) => {
+            ({ steps }: { steps: any }) => {
               stopConditionCalls.push({ number: 0, steps });
               return false;
             },
-            ({ steps }) => {
+            ({ steps }: { steps: any }) => {
               stopConditionCalls.push({ number: 1, steps });
               return true;
             },

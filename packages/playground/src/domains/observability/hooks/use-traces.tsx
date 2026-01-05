@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { TracesPaginatedArg } from '@mastra/core/storage';
+import { ListTracesArgs } from '@mastra/core/storage';
 import { useInView, useInfiniteQuery } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
@@ -7,7 +7,6 @@ const fetchTracesFn = async ({
   client,
   page,
   perPage,
-  dateRange,
   filters,
 }: TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
@@ -18,7 +17,6 @@ const fetchTracesFn = async ({
     pagination: {
       page,
       perPage,
-      dateRange,
     },
     filters,
   });
@@ -27,25 +25,20 @@ const fetchTracesFn = async ({
 };
 
 export interface TracesFilters {
-  filters?: TracesPaginatedArg['filters'];
-  dateRange?: {
-    start?: Date;
-    end?: Date;
-  };
+  filters?: ListTracesArgs['filters'];
 }
 
-export const useTraces = ({ filters, dateRange }: TracesFilters) => {
+export const useTraces = ({ filters }: TracesFilters) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
   const query = useInfiniteQuery({
-    queryKey: ['traces', filters, dateRange],
+    queryKey: ['traces', filters],
     queryFn: ({ pageParam }) =>
       fetchTracesFn({
         client,
         page: pageParam,
         perPage: 25,
-        dateRange,
         filters,
       }),
     initialPageParam: 0,

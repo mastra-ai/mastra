@@ -101,3 +101,26 @@ export const useMemorySearch = ({
     },
   });
 };
+
+export const useCloneThread = () => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useMutation({
+    mutationFn: async ({ threadId, agentId, title }: { threadId: string; agentId: string; title?: string }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.clone({ title, requestContext });
+    },
+    onSuccess: (_, variables) => {
+      const { agentId } = variables;
+      if (agentId) {
+        queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+      }
+      toast.success('Thread cloned successfully');
+    },
+    onError: () => {
+      toast.error('Failed to clone thread');
+    },
+  });
+};

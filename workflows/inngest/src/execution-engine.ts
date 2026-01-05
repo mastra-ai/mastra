@@ -13,7 +13,6 @@ import type {
   TimeTravelExecutionParams,
   WorkflowResult,
 } from '@mastra/core/workflows';
-import { RetryAfterError } from 'inngest';
 import type { Inngest, BaseContext } from 'inngest';
 import { InngestWorkflow } from './workflow';
 
@@ -85,43 +84,52 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       runId: string;
     },
   ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
-    try {
-      // Pass retry config to wrapDurableOperation so RetryAfterError is thrown INSIDE step.run()
-      const result = await this.wrapDurableOperation(stepId, runStep, { delay: params.delay });
-      return { ok: true, result };
-    } catch (e) {
-      // After step-level retries exhausted, extract failure from error cause
-      const cause = (e as any)?.cause;
-      if (cause?.status === 'failed') {
-        params.stepSpan?.error({
-          error: e,
-          attributes: { status: 'failed' },
-        });
-        // Ensure cause.error is an Error instance
-        if (cause.error && !(cause.error instanceof Error)) {
-          cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
-        }
-        return { ok: false, error: cause };
+    for (let i = 0; i < params.retries + 1; i++) {
+      if (i > 0 && params.delay) {
+        await new Promise(resolve => setTimeout(resolve, params.delay));
       }
+      try {
+        //removed retry config with RetryAfterError from wrapDurableOperation, since we're manually handling retries here
+        const result = await this.wrapDurableOperation(stepId, runStep);
+        return { ok: true, result };
+      } catch (e) {
+        if (i === params.retries) {
+          // After step-level retries exhausted, extract failure from error cause
+          const cause = (e as any)?.cause;
+          if (cause?.status === 'failed') {
+            params.stepSpan?.error({
+              error: e,
+              attributes: { status: 'failed' },
+            });
+            // Ensure cause.error is an Error instance
+            if (cause.error && !(cause.error instanceof Error)) {
+              cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
+            }
+            return { ok: false, error: cause };
+          }
 
-      // Fallback for other errors - preserve the original error instance
-      const errorInstance = getErrorFromUnknown(e, {
-        serializeStack: false,
-        fallbackMessage: 'Unknown step execution error',
-      });
-      params.stepSpan?.error({
-        error: errorInstance,
-        attributes: { status: 'failed' },
-      });
-      return {
-        ok: false,
-        error: {
-          status: 'failed',
-          error: errorInstance,
-          endedAt: Date.now(),
-        },
-      };
+          // Fallback for other errors - preserve the original error instance
+          const errorInstance = getErrorFromUnknown(e, {
+            serializeStack: false,
+            fallbackMessage: 'Unknown step execution error',
+          });
+          params.stepSpan?.error({
+            error: errorInstance,
+            attributes: { status: 'failed' },
+          });
+          return {
+            ok: false,
+            error: {
+              status: 'failed',
+              error: errorInstance,
+              endedAt: Date.now(),
+            },
+          };
+        }
+      }
     }
+    // Should never reach here, but TypeScript needs it
+    return { ok: false, error: { status: 'failed', error: new Error('Unknown error'), endedAt: Date.now() } };
   }
 
   /**
@@ -143,31 +151,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * If retryConfig is provided, throws RetryAfterError INSIDE step.run() to trigger
    * Inngest's step-level retry mechanism (not function-level retry).
    */
-  async wrapDurableOperation<T>(
-    operationId: string,
-    operationFn: () => Promise<T>,
-    retryConfig?: { delay: number },
-  ): Promise<T> {
+  async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
     return this.inngestStep.run(operationId, async () => {
       try {
         return await operationFn();
       } catch (e) {
-        if (retryConfig) {
-          // Throw RetryAfterError INSIDE step.run() to trigger step-level retry
-          // Preserve the original error instance with all its properties
-          const errorInstance = getErrorFromUnknown(e, {
-            serializeStack: false,
-            fallbackMessage: 'Unknown step execution error',
-          });
-          throw new RetryAfterError(errorInstance.message, retryConfig.delay, {
-            cause: {
-              status: 'failed',
-              error: errorInstance,
-              endedAt: Date.now(),
-            },
-          });
-        }
-        throw e; // Re-throw if no retry config
+        throw e;
       }
     }) as Promise<T>;
   }
@@ -224,14 +213,25 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inputData: any;
     pubsub: PubSub;
     startedAt: number;
+    perStep?: boolean;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
       return null;
     }
 
-    const { step, stepResults, executionContext, resume, timeTravel, prevOutput, inputData, pubsub, startedAt } =
-      params;
+    const {
+      step,
+      stepResults,
+      executionContext,
+      resume,
+      timeTravel,
+      prevOutput,
+      inputData,
+      pubsub,
+      startedAt,
+      perStep,
+    } = params;
 
     const isResume = !!resume?.steps?.length;
     let result: WorkflowResult<any, any, any, any>;
@@ -242,7 +242,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     try {
       if (isResume) {
         runId = stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? randomUUID();
-        const snapshot: any = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+        const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: runId,
         });
@@ -261,13 +262,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
             },
             outputOptions: { includeState: true },
+            perStep,
           },
         })) as any;
         result = invokeResp.result;
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else if (isTimeTravel) {
-        const snapshot: any = (await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+        const workflowsStoreForTimeTravel = await this.mastra?.getStorage()?.getStore('workflows');
+        const snapshot: any = (await workflowsStoreForTimeTravel?.loadWorkflowSnapshot({
           workflowName: step.id,
           runId: executionContext.runId,
         })) ?? { context: {} };
@@ -287,6 +290,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             runId: executionContext.runId,
             outputOptions: { includeState: true },
+            perStep,
           },
         })) as any;
         result = invokeResp.result;
@@ -299,6 +303,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
+            perStep,
           },
         })) as any;
         result = invokeResp.result;
@@ -345,7 +350,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          return { executionContext, result: { status: 'failed', error: result?.error } };
+          return { executionContext, result: { status: 'failed', error: result?.error, endedAt: Date.now() } };
         } else if (result.status === 'suspended') {
           const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
             const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -372,6 +377,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               executionContext,
               result: {
                 status: 'suspended',
+                suspendedAt: Date.now(),
                 payload: stepResult.payload,
                 suspendPayload: {
                   ...(stepResult as any)?.suspendPayload,
@@ -385,6 +391,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             executionContext,
             result: {
               status: 'suspended',
+              suspendedAt: Date.now(),
               payload: {},
             },
           };
@@ -408,8 +415,34 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             result: {
               status: 'tripwire',
               tripwire: result?.tripwire,
+              endedAt: Date.now(),
             },
           };
+        } else if (perStep || result.status === 'paused') {
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-result',
+              payload: {
+                id: step.id,
+                status: 'paused',
+              },
+            },
+          });
+
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-finish',
+              payload: {
+                id: step.id,
+                metadata: {},
+              },
+            },
+          });
+          return { executionContext, result: { status: 'paused' } };
         }
 
         await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
@@ -437,7 +470,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         });
 
-        return { executionContext, result: { status: 'success', output: result?.result } };
+        return { executionContext, result: { status: 'success', output: result?.result, endedAt: Date.now() } };
       },
     );
 
@@ -445,7 +478,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     return {
       ...res.result,
       startedAt,
-      endedAt: Date.now(),
       payload: inputData,
       resumedAt: resume?.steps[0] === step.id ? startedAt : undefined,
       resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,

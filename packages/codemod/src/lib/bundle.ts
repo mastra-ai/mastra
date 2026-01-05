@@ -30,6 +30,7 @@ export const BUNDLE = [
   'v1/memory-query-to-recall',
   'v1/memory-vector-search-param',
   'v1/memory-message-v2-type',
+  'v1/memory-readonly-to-options',
   'v1/storage-get-threads-by-resource',
   'v1/storage-list-messages-by-id',
   'v1/storage-postgres-schema-name',

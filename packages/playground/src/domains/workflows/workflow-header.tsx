@@ -38,7 +38,7 @@ export function WorkflowHeader({
         </Breadcrumb>
 
         <HeaderGroup>
-          <div className="w-[240px]">
+          <div className="w-48">
             <WorkflowCombobox value={workflowId} />
           </div>
 

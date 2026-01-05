@@ -30,9 +30,14 @@ export type DefaultNode = Node<
 
 export interface WorkflowDefaultNodeProps {
   parentWorkflowName?: string;
+  stepsFlow: Record<string, string[]>;
 }
 
-export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
+export function WorkflowDefaultNode({
+  data,
+  parentWorkflowName,
+  stepsFlow,
+}: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
   const { steps } = useCurrentRun();
   const {
     label,
@@ -164,6 +169,7 @@ export function WorkflowDefaultNode({ data, parentWorkflowName }: NodeProps<Defa
           mapConfig={mapConfig}
           status={displayStatus as any}
           stepKey={stepKey}
+          stepsFlow={stepsFlow}
         />
       </div>
 

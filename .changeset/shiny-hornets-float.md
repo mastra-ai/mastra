@@ -4,8 +4,6 @@
 '@mastra/arize': patch
 ---
 
-feat(observability): Add tags support to OtelExporter, OtelBridge, and ArizeExporter
-
 This change adds support for the `tracingOptions.tags` feature to the OpenTelemetry-based exporters and bridge. Tags are now included as span attributes when present on root spans, following the same pattern as Braintrust and Langfuse exporters.
 
 **Changes:**

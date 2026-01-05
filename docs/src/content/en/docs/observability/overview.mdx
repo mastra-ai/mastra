@@ -1,6 +1,11 @@
 ---
 title: "Observability Overview | Observability"
 description: Monitor and debug applications with Mastra's Observability features.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/loggers"
+  - "@mastra/observability"
 ---
 
 # Observability Overview
@@ -29,7 +34,6 @@ import { LibSqlStorage } from "@mastra/libsql";
 import { Observability } from "@mastra/observability";
 
 export const mastra = new Mastra({
-  // ... other config
   logger: new PinoLogger(),
   storage: new LibSQLStore({
     id: 'mastra-storage',

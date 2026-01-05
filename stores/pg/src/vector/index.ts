@@ -111,8 +111,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       } else if (isCloudSqlConfig(config)) {
         poolConfig = {
           ...config,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          max: config.pgPoolOptions?.max ?? 20,
+          idleTimeoutMillis: config.pgPoolOptions?.idleTimeoutMillis ?? 30000,
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         } as pg.PoolConfig;

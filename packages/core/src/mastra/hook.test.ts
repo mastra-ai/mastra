@@ -2,11 +2,18 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { validateAndSaveScore, createOnScorerHook } from './hooks';
 
 describe('validateAndSaveScore', () => {
+  let mockScoresStore: any;
   let mockStorage: any;
 
   beforeEach(() => {
-    mockStorage = {
+    mockScoresStore = {
       saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }),
+    };
+    mockStorage = {
+      getStore: vi.fn((domain: string) => {
+        if (domain === 'scores') return Promise.resolve(mockScoresStore);
+        return Promise.resolve(undefined);
+      }),
     };
   });
 
@@ -26,8 +33,8 @@ describe('validateAndSaveScore', () => {
     await validateAndSaveScore(mockStorage, sampleScore);
 
     // Verify saveScore was called
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
-    expect(mockStorage.saveScore).toHaveBeenCalledWith(
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
       expect.objectContaining({
         runId: 'test-run-id',
         scorerId: 'test-scorer-id',
@@ -46,7 +53,7 @@ describe('validateAndSaveScore', () => {
     await expect(validateAndSaveScore(mockStorage, invalidScore)).rejects.toThrow();
 
     // Verify saveScore was not called
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should filter out invalid fields', async () => {
@@ -78,19 +85,26 @@ describe('validateAndSaveScore', () => {
       // invalidField should be removed
     };
 
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
-    expect(mockStorage.saveScore).toHaveBeenCalledWith(expectedScore);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(expectedScore);
   });
 });
 
 describe('createOnScorerHook', () => {
+  let mockScoresStore: any;
   let mockStorage: any;
   let mockMastra: any;
   let hook: (hookData: any) => Promise<void>;
 
   beforeEach(() => {
-    mockStorage = {
+    mockScoresStore = {
       saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }),
+    };
+    mockStorage = {
+      getStore: vi.fn((domain: string) => {
+        if (domain === 'scores') return Promise.resolve(mockScoresStore);
+        return Promise.resolve(undefined);
+      }),
     };
 
     mockMastra = {
@@ -129,7 +143,7 @@ describe('createOnScorerHook', () => {
     });
 
     // Should not call any storage methods
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should save score', async () => {
@@ -159,8 +173,8 @@ describe('createOnScorerHook', () => {
     await hook(hookData);
 
     // Verify saveScore was called
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
-    expect(mockStorage.saveScore).toHaveBeenCalledWith(
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
       expect.objectContaining({
         score: 0.8,
         entityId: 'test-entity',
@@ -190,7 +204,7 @@ describe('createOnScorerHook', () => {
     await expect(hook(hookData)).resolves.not.toThrow();
 
     // Should not call saveScore
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should handle scorer run failure without throwing', async () => {
@@ -217,7 +231,7 @@ describe('createOnScorerHook', () => {
     await expect(hook(hookData)).resolves.not.toThrow();
 
     // Should not call saveScore
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should handle validation errors without throwing', async () => {
@@ -247,7 +261,7 @@ describe('createOnScorerHook', () => {
     await expect(hook(hookData)).resolves.not.toThrow();
 
     // Should not call saveScore due to validation failure
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should call addScoreToTrace on exporters with expected arguments', async () => {
@@ -451,6 +465,6 @@ describe('createOnScorerHook', () => {
     });
 
     // Storage should still be called despite exporter failure
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
   });
 });

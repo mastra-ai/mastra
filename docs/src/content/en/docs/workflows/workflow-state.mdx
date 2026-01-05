@@ -1,6 +1,8 @@
 ---
 title: "Workflow state | Workflows"
 description: "Share values across workflow steps using global state that persists through the entire workflow run."
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow State
@@ -42,7 +44,6 @@ Define a `stateSchema` on both the workflow and individual steps. The workflow's
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   stateSchema: z.object({
     processedItems: z.array(z.string()),
   }),
@@ -61,7 +62,6 @@ const step1 = createStep({
 });
 
 const step2 = createStep({
-  // ...
   stateSchema: z.object({
     metadata: z.object({
       processedBy: z.string(),
@@ -78,7 +78,6 @@ const step2 = createStep({
 });
 
 export const testWorkflow = createWorkflow({
-  // ...
   stateSchema: z.object({
     processedItems: z.array(z.string()),
     metadata: z.object({

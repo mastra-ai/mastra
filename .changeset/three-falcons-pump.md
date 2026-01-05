@@ -11,7 +11,7 @@ Support new Workflow tripwire run status. Tripwires that are thrown from within 
 
 When a workflow contains an agent step that triggers a tripwire, the workflow returns with `status: 'tripwire'` and includes tripwire details:
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 const result = await run.start({ inputData: { message: 'Hello' } });
 

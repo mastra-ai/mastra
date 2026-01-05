@@ -1537,6 +1537,7 @@ describe('ProcessorRunner', () => {
       messageList.add([createMessage('assistant response', 'assistant')], 'response');
 
       await runner.runProcessOutputStep({
+        steps: [],
         messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
@@ -1579,6 +1580,7 @@ describe('ProcessorRunner', () => {
       const toolCalls = [{ toolName: 'search', toolCallId: 'call-1', args: { query: 'test' } }];
 
       await runner.runProcessOutputStep({
+        steps: [],
         messages: messageList.get.all.db(),
         messageList,
         stepNumber: 2,
@@ -1631,6 +1633,7 @@ describe('ProcessorRunner', () => {
 
       try {
         await runner.runProcessOutputStep({
+          steps: [],
           messages: messageList.get.all.db(),
           messageList,
           stepNumber: 0,
@@ -1676,6 +1679,7 @@ describe('ProcessorRunner', () => {
 
       // Should pass when retryCount is 3 or higher
       const result = await runner.runProcessOutputStep({
+        steps: [],
         messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
@@ -1718,6 +1722,7 @@ describe('ProcessorRunner', () => {
 
       try {
         await runner.runProcessOutputStep({
+          steps: [],
           messages: messageList.get.all.db(),
           messageList,
           stepNumber: 0,
@@ -1762,6 +1767,7 @@ describe('ProcessorRunner', () => {
       messageList.add([createMessage('user message', 'user')], 'user');
 
       await runner.runProcessOutputStep({
+        steps: [],
         messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,
@@ -1793,6 +1799,7 @@ describe('ProcessorRunner', () => {
       messageList.add([createMessage('user message', 'user')], 'user');
 
       const result = await runner.runProcessOutputStep({
+        steps: [],
         messages: messageList.get.all.db(),
         messageList,
         stepNumber: 0,

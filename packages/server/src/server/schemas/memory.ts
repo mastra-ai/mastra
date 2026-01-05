@@ -7,10 +7,18 @@ export const threadIdPathParams = z.object({
 });
 
 /**
- * Common query parameter: optional agent ID
+ * Common query parameter: required agent ID
  */
 export const agentIdQuerySchema = z.object({
   agentId: z.string(),
+});
+
+/**
+ * Common query parameter: optional agent ID
+ * Used for read operations that can fall back to storage when agentId is not provided
+ */
+export const optionalAgentIdQuerySchema = z.object({
+  agentId: z.string().optional(),
 });
 
 /**
@@ -135,23 +143,26 @@ export const getMemoryConfigQuerySchema = agentIdQuerySchema;
 
 /**
  * GET /api/memory/threads
+ * agentId is optional - can use storage fallback when not provided
  */
 export const listThreadsQuerySchema = createPagePaginationSchema(100).extend({
-  agentId: z.string(),
+  agentId: z.string().optional(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
 });
 
 /**
  * GET /api/memory/threads/:threadId
+ * agentId is optional - can use storage fallback when not provided
  */
-export const getThreadByIdQuerySchema = agentIdQuerySchema;
+export const getThreadByIdQuerySchema = optionalAgentIdQuerySchema;
 
 /**
  * GET /api/memory/threads/:threadId/messages
+ * agentId is optional - can use storage fallback when not provided
  */
 export const listMessagesQuerySchema = createPagePaginationSchema(40).extend({
-  agentId: z.string(),
+  agentId: z.string().optional(),
   resourceId: z.string().optional(),
   orderBy: messageOrderBySchema.optional(),
   include: includeSchema,
@@ -178,23 +189,26 @@ export const getMemoryStatusNetworkQuerySchema = agentIdQuerySchema;
 
 /**
  * GET /api/memory/network/threads
+ * agentId is optional - can use storage fallback when not provided
  */
 export const listThreadsNetworkQuerySchema = createPagePaginationSchema(100).extend({
-  agentId: z.string(),
+  agentId: z.string().optional(),
   resourceId: z.string(),
   orderBy: storageOrderBySchema.optional(),
 });
 
 /**
  * GET /api/memory/network/threads/:threadId
+ * agentId is optional - can use storage fallback when not provided
  */
-export const getThreadByIdNetworkQuerySchema = agentIdQuerySchema;
+export const getThreadByIdNetworkQuerySchema = optionalAgentIdQuerySchema;
 
 /**
  * GET /api/memory/network/threads/:threadId/messages
+ * agentId is optional - can use storage fallback when not provided
  */
 export const listMessagesNetworkQuerySchema = createPagePaginationSchema(40).extend({
-  agentId: z.string(),
+  agentId: z.string().optional(),
   resourceId: z.string().optional(),
   orderBy: messageOrderBySchema.optional(),
   include: includeSchema,
@@ -366,4 +380,34 @@ export const searchMemoryResponseSchema = z.object({
   query: z.string(),
   searchScope: z.string().optional(),
   searchType: z.string().optional(),
+});
+
+/**
+ * Body schema for POST /api/memory/threads/:threadId/clone
+ */
+export const cloneThreadBodySchema = z.object({
+  newThreadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  title: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  options: z
+    .object({
+      messageLimit: z.number().optional(),
+      messageFilter: z
+        .object({
+          startDate: z.coerce.date().optional(),
+          endDate: z.coerce.date().optional(),
+          messageIds: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Response schema for POST /api/memory/threads/:threadId/clone
+ */
+export const cloneThreadResponseSchema = z.object({
+  thread: threadSchema,
+  clonedMessages: z.array(messageSchema),
 });

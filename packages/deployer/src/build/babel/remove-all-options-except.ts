@@ -38,9 +38,9 @@ export function removeAllOptionsFromMastraExcept(
           mastraArgs = path.node.arguments[0];
         }
 
+        // Find the config property, skipping SpreadElement nodes
         let configProperty = mastraArgs.properties.find(
-          // @ts-ignore
-          prop => prop.key.name === option,
+          prop => t.isObjectProperty(prop) && t.isIdentifier(prop.key) && prop.key.name === option,
         );
         let configValue: types.Expression = t.objectExpression([]);
 

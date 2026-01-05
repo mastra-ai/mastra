@@ -4,6 +4,7 @@
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 
 export interface ProviderConfig {
   url?: string;
@@ -14,6 +15,12 @@ export interface ProviderConfig {
   docUrl?: string; // Optional documentation URL
   gateway: string;
 }
+
+/**
+ * Union type for language models that can be returned by gateways.
+ * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
+ */
+export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3;
 
 export abstract class MastraModelGateway {
   /**
@@ -51,10 +58,14 @@ export abstract class MastraModelGateway {
 
   abstract getApiKey(modelId: string): Promise<string>;
 
+  /**
+   * Resolve a language model from the gateway.
+   * Supports returning either LanguageModelV2 (AI SDK v5) or LanguageModelV3 (AI SDK v6).
+   */
   abstract resolveLanguageModel(args: {
     modelId: string;
     providerId: string;
     apiKey: string;
     headers?: Record<string, string>;
-  }): Promise<LanguageModelV2> | LanguageModelV2;
+  }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
 }

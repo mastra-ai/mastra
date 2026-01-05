@@ -253,7 +253,16 @@ export class MCPServer extends MCPServerBase {
       capabilities.prompts = { listChanged: true };
     }
 
-    this.server = new Server({ name: this.name, version: this.version }, { capabilities });
+    this.server = new Server(
+      {
+        name: this.name,
+        version: this.version,
+      },
+      {
+        capabilities,
+        ...(this.instructions ? { instructions: this.instructions } : {}),
+      },
+    );
 
     this.logger.info(
       `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')} and resources. Capabilities: ${JSON.stringify(capabilities)}`,
@@ -378,7 +387,16 @@ export class MCPServer extends MCPServerBase {
       capabilities.prompts = { listChanged: true };
     }
 
-    const serverInstance = new Server({ name: this.name, version: this.version }, { capabilities });
+    const serverInstance = new Server(
+      {
+        name: this.name,
+        version: this.version,
+      },
+      {
+        capabilities,
+        ...(this.instructions ? { instructions: this.instructions } : {}),
+      },
+    );
 
     // Register all handlers on the new server instance
     this.registerHandlersOnServer(serverInstance);

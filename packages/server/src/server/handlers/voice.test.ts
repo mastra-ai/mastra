@@ -210,17 +210,17 @@ describe('Voice Handlers', () => {
         TRANSCRIBE_SPEECH_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           agentId: undefined as any,
-          audioData: Buffer.from('test'),
+          audio: Buffer.from('test'),
         }),
       ).rejects.toThrow('Agent ID is required');
     });
 
-    it('should throw error when audioData is not provided', async () => {
+    it('should throw error when audio is not provided', async () => {
       await expect(
         TRANSCRIBE_SPEECH_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          audioData: undefined as any,
+          audio: undefined as any,
         }),
       ).rejects.toThrow('Audio data is required');
     });
@@ -230,7 +230,7 @@ describe('Voice Handlers', () => {
         TRANSCRIBE_SPEECH_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           agentId: 'non-existent',
-          audioData: Buffer.from('test'),
+          audio: Buffer.from('test'),
         }),
       ).rejects.toThrow('Agent with id non-existent not found');
     });
@@ -244,7 +244,7 @@ describe('Voice Handlers', () => {
             mastra: new Mastra({ logger: false, agents: { 'test-agent': agentWithoutVoice } }),
           }),
           agentId: 'test-agent',
-          audioData: Buffer.from('test'),
+          audio: Buffer.from('test'),
         }),
       ).rejects.toThrow('No voice provider configured');
     });
@@ -260,7 +260,7 @@ describe('Voice Handlers', () => {
       const result = await TRANSCRIBE_SPEECH_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         agentId: 'test-agent',
-        audioData: Buffer.from('test'),
+        audio: Buffer.from('test'),
         options: { language: 'en' },
       });
 

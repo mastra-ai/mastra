@@ -5,7 +5,7 @@
 
 Fixed OpenAI schema compatibility when using `agent.generate()` or `agent.stream()` with `structuredOutput`.
 
-## Changes
+**Changes**
 
 - **Automatic transformation**: Zod schemas are now automatically transformed for OpenAI strict mode compatibility when using OpenAI models (including reasoning models like o1, o3, o4)
 - **Optional field handling**: `.optional()` fields are converted to `.nullable()` with a transform that converts `null` → `undefined`, preserving optional semantics while satisfying OpenAI's strict mode requirements
@@ -13,7 +13,7 @@ Fixed OpenAI schema compatibility when using `agent.generate()` or `agent.stream
 - **Deep transformation**: Handles `.optional()` fields at any nesting level (objects, arrays, unions, etc.)
 - **JSON Schema objects**: Not transformed, only Zod schemas
 
-## Example
+**Example**
 
 ```typescript
 const agent = new Agent({

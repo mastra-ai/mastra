@@ -278,8 +278,8 @@ export const AgentMetadataModelSwitcher = ({
   };
 
   return (
-    <>
-      <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2 w-full">
+    <div className="@container">
+      <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
         <Popover
           open={showProviderSuggestions}
           onOpenChange={open => {
@@ -291,7 +291,7 @@ export const AgentMetadataModelSwitcher = ({
           }}
         >
           <PopoverTrigger asChild>
-            <div className="relative w-full xl:w-2/5">
+            <div className="relative w-full @xs:w-2/5">
               {!isSearchingProvider && currentModelProvider && (
                 <>
                   <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none z-10">
@@ -489,7 +489,7 @@ export const AgentMetadataModelSwitcher = ({
               aria-label="Search models"
               spellCheck="false"
               ref={modelInputRef}
-              className="w-full xl:w-3/5"
+              className="w-full @xs:w-3/5"
               type="text"
               value={modelSearch || selectedModel}
               onChange={e => {
@@ -700,6 +700,6 @@ export const AgentMetadataModelSwitcher = ({
           <Info /> {infoMsg}
         </div>
       )}
-    </>
+    </div>
   );
 };

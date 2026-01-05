@@ -279,6 +279,15 @@ describe('AISDKV5InputStream', () => {
             inputTokens: 3,
             outputTokens: 10,
             totalTokens: 13,
+            reasoningTokens: undefined,
+            cachedInputTokens: undefined,
+            raw: {
+              inputTokens: 3,
+              outputTokens: 10,
+              totalTokens: 13,
+              reasoningTokens: undefined,
+              cachedInputTokens: undefined,
+            },
           },
         },
         metadata: {

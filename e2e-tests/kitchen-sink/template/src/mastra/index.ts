@@ -1,15 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
-import {
-  TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_RESOURCES,
-  TABLE_SCORERS,
-  TABLE_TRACES,
-  TABLE_SPANS,
-  TABLE_AGENTS,
-} from '@mastra/core/storage';
 import { storage } from './storage';
 
 import { weatherAgent } from './agents';
@@ -33,16 +23,34 @@ export const mastra = new Mastra({
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',
         handler: async c => {
-          await Promise.all([
-            storage.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT }),
-            storage.clearTable({ tableName: TABLE_MESSAGES }),
-            storage.clearTable({ tableName: TABLE_THREADS }),
-            storage.clearTable({ tableName: TABLE_RESOURCES }),
-            storage.clearTable({ tableName: TABLE_SCORERS }),
-            storage.clearTable({ tableName: TABLE_TRACES }),
-            storage.supports.observabilityInstance && storage.clearTable({ tableName: TABLE_SPANS }),
-            storage.supports.agents && storage.clearTable({ tableName: TABLE_AGENTS }),
-          ]);
+          const clearTasks: Promise<void>[] = [];
+
+          const workflowStore = await storage.getStore('workflows');
+          if (workflowStore) {
+            clearTasks.push(workflowStore.dangerouslyClearAll());
+          }
+
+          const memoryStore = await storage.getStore('memory');
+          if (memoryStore) {
+            clearTasks.push(memoryStore.dangerouslyClearAll());
+          }
+
+          const scoresStore = await storage.getStore('scores');
+          if (scoresStore) {
+            clearTasks.push(scoresStore.dangerouslyClearAll());
+          }
+
+          const observabilityStore = await storage.getStore('observability');
+          if (observabilityStore) {
+            clearTasks.push(observabilityStore.dangerouslyClearAll());
+          }
+
+          const agentsStore = await storage.getStore('agents');
+          if (agentsStore) {
+            clearTasks.push(agentsStore.dangerouslyClearAll());
+          }
+
+          await Promise.all(clearTasks);
 
           return c.json({ message: 'Custom route' }, 201);
         },

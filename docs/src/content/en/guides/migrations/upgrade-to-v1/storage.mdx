@@ -7,6 +7,33 @@ description: "Learn how to migrate storage-related changes when upgrading to v1.
 
 Storage APIs have been standardized with consistent pagination and naming patterns across all methods.
 
+## Added
+
+### Storage composition in MastraStorage
+
+`MastraStorage` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
+
+```typescript
+import { MastraStorage } from "@mastra/core/storage";
+import { MemoryPG, WorkflowsPG, ScoresPG } from "@mastra/pg";
+import { MemoryLibSQL } from "@mastra/libsql";
+import { Mastra } from "@mastra/core";
+
+// Compose domains from different stores
+const mastra = new Mastra({
+  storage: new MastraStorage({
+    id: "composite",
+    domains: {
+      memory: new MemoryLibSQL({ url: "file:./local.db" }),
+      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+    },
+  }),
+});
+```
+
+See the [Storage Composition reference](/reference/v1/storage/composite) for more details.
+
 ## Changed
 
 ### Required `id` property for storage instances
@@ -36,7 +63,7 @@ All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`
 To migrate, update all pagination parameters from `offset/limit` to `page/perPage`. Note that `page` is 0-indexed.
 
 ```diff
-  storage.listMessages({
+  memoryStore.listMessages({
     threadId: 'thread-123',
 -   offset: 0,
 -   limit: 20,
@@ -52,18 +79,20 @@ The `getMessagesPaginated()` method has been replaced with `listMessages()`. The
 To migrate, rename the method and update pagination parameters. You can now use `perPage: false` to fetch all records.
 
 ```diff
++ const memoryStore = await storage.getStore('memory');
++
   // Paginated
 - const result = await storage.getMessagesPaginated({
-+ const result = await storage.listMessages({
++ const result = await memoryStore?.listMessages({
     threadId: 'thread-123',
 -   offset: 0,
 -   limit: 20,
 +   page: 0,
 +   perPage: 20,
   });
-  
+
   // Fetch all records (no pagination limit)
-+ const allMessages = await storage.listMessages({
++ const allMessages = await memoryStore?.listMessages({
 +   threadId: 'thread-123',
 +   page: 0,
 +   perPage: false,
@@ -80,15 +109,57 @@ npx @mastra/codemod@beta v1/storage-get-messages-paginated .
 
 :::
 
+### Domain-specific storage access via `getStore()`
+
+Storage operations are now accessed through domain-specific stores instead of directly on the storage instance. 
+
+Domains include:
+- **`memory`** - Threads, messages, and resources
+- **`workflows`** - Workflow snapshots
+- **`scores`** - Evaluation scores
+- **`observability`** - Traces and spans
+- **`agents`** - Stored agent data
+
+To migrate, call `getStore()` with the domain name, then call methods on the returned store.
+
+```diff
+  const storage = mastra.getStorage();
+
+  // Memory operations (threads, messages, resources)
+- const thread = await storage.getThread({ threadId: '123' });
+- await storage.saveThread({ thread });
++ const memoryStore = await storage.getStore('memory');
++ const thread = await memoryStore?.getThreadById({ threadId: '123' });
++ await memoryStore?.saveThread({ thread });
+
+  // Workflow operations (snapshots)
+- const snapshot = await storage.loadWorkflowSnapshot({ runId, workflowName });
+- await storage.persistWorkflowSnapshot({ runId, workflowName, snapshot });
++ const workflowStore = await storage.getStore('workflows');
++ const snapshot = await workflowStore?.loadWorkflowSnapshot({ runId, workflowName });
++ await workflowStore?.persistWorkflowSnapshot({ runId, workflowName, snapshot });
+
+  // Observability operations (traces, spans)
+- const traces = await storage.listTraces({ page: 0, perPage: 20 });
++ const observabilityStore = await storage.getStore('observability');
++ const traces = await observabilityStore?.listTraces({ page: 0, perPage: 20 });
+
+  // Score operations (evaluations)
+- const scores = await storage.listScoresByScorerId({ scorerId: 'helpfulness' });
++ const scoresStore = await storage.getStore('scores');
++ const scores = await scoresStore?.listScoresByScorerId({ scorerId: 'helpfulness' });
+```
+
 ### `getThreadsByResourceId` to `listThreadsByResourceId`
 
 The `getThreadsByResourceId()` method has been renamed to `listThreadsByResourceId()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call and update pagination parameters.
+To migrate, use the memory store and rename the method call with pagination parameters.
 
 ```diff
 - const threads = await storage.getThreadsByResourceId({
-+ const threads = await storage.listThreadsByResourceId({
++ const memoryStore = await storage.getStore('memory');
++ const threads = await memoryStore?.listThreadsByResourceId({
     resourceId: 'res-123',
 +   page: 0,
 +   perPage: 20,
@@ -109,11 +180,12 @@ npx @mastra/codemod@beta v1/storage-get-threads-by-resource .
 
 The `getWorkflowRuns()` method has been renamed to `listWorkflowRuns()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call and update pagination parameters.
+To migrate, use the workflows stores, rename the method call and update pagination parameters.
 
 ```diff
 - const runs = await storage.getWorkflowRuns({
-+ const runs = await storage.listWorkflowRuns({
++ const workflowStore = await storage.getStore('workflows');
++ const runs = await workflowStore?.listWorkflowRuns({
     fromDate,
     toDate,
 +   page: 0,
@@ -135,11 +207,12 @@ npx @mastra/codemod@beta v1/storage-list-workflow-runs .
 
 The `getMessagesById()` method has been renamed to `listMessagesById()`. This change aligns with the convention that `list*` methods return collections.
 
-To migrate, rename the method call.
+To migrate, use the memory store and rename the method call.
 
 ```diff
++ const memoryStore = await storage.getStore('memory');
 - const result = await storage.getMessagesById({
-+ const result = await storage.listMessagesById({
++ const result = await memoryStore?.listMessagesById({
     messageIds: ['msg-1', 'msg-2'],
   });
 ```
@@ -158,20 +231,22 @@ npx @mastra/codemod@beta v1/storage-list-messages-by-id .
 
 The `getMessages()` and `saveMessages()` methods have changed signatures and return types. Format overloads have been removed, and the methods now always work with `MastraDBMessage`. This change simplifies the API by removing format variations.
 
-To migrate, remove format parameters and update code to work with the consistent return type.
+To migrate, use the memory store, remove format parameters, and update code to work with the consistent return type.
 
 ```diff
++ const memoryStore = await storage.getStore('memory');
++
   // Always returns { messages: MastraDBMessage[] }
 - const v1Messages = await storage.getMessages({ threadId, format: 'v1' });
 - const v2Messages = await storage.getMessages({ threadId, format: 'v2' });
-+ const result = await storage.getMessages({ threadId });
-+ const messages = result.messages; // MastraDBMessage[]
-  
++ const result = await memoryStore?.getMessages({ threadId });
++ const messages = result?.messages; // MastraDBMessage[]
+
   // SaveMessages always uses MastraDBMessage
 - await storage.saveMessages({ messages: v1Messages, format: 'v1' });
 - await storage.saveMessages({ messages: v2Messages, format: 'v2' });
-+ const result = await storage.saveMessages({ messages: mastraDBMessages });
-+ const saved = result.messages; // MastraDBMessage[]
++ const saveResult = await memoryStore?.saveMessages({ messages: mastraDBMessages });
++ const saved = saveResult?.messages; // MastraDBMessage[]
 ```
 
 ### Vector store API from positional to named arguments
@@ -298,16 +373,17 @@ To migrate, update method names from `getScores` to `listScoresByScorerId` and r
 
 Non-paginated storage functions have been removed in favor of paginated versions. All list operations now use pagination, though you can fetch all records with `perPage: false`. This change provides consistency across the API and prevents accidental loading of large datasets.
 
-To migrate, use paginated methods. For fetching all records, use `perPage: false`.
+To migrate, use paginated methods via domain stores. For fetching all records, use `perPage: false`.
 
 ```diff
 - // Non-paginated direct access
 - const messages = await storage.getMessages({ threadId });
 
-+ // Use paginated methods
-+ const result = await storage.listMessages({ threadId, page: 0, perPage: 20 });
++ // Use paginated methods via domain stores
++ const memoryStore = await storage.getStore('memory');
++ const result = await memoryStore?.listMessages({ threadId, page: 0, perPage: 20 });
 + // Or fetch all
-+ const allMessages = await storage.listMessages({
++ const allMessages = await memoryStore?.listMessages({
 +   threadId,
 +   page: 0,
 +   perPage: false,

@@ -1,10 +1,4 @@
-import {
-  TABLE_MESSAGES,
-  TABLE_THREADS,
-  TABLE_RESOURCES,
-  TABLE_SCORERS,
-  type MastraStorage,
-} from '@mastra/core/storage';
+import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { createListMessagesTest } from './messages-paginated';
 import { createThreadsTest } from './threads';
 import { createMessagesUpdateTest } from './messages-update';
@@ -14,17 +8,20 @@ import { beforeAll } from 'vitest';
 import { createMessagesListTest } from './messages-list';
 
 export function createMemoryTest({ storage }: { storage: MastraStorage }) {
+  let memoryStorage: MemoryStorage;
+
   beforeAll(async () => {
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory storage not found');
+    }
+    memoryStorage = store;
+
     const start = Date.now();
-    console.log('Clearing tables before each test');
-    await Promise.all([
-      storage.clearTable({ tableName: TABLE_MESSAGES }),
-      storage.clearTable({ tableName: TABLE_THREADS }),
-      storage.clearTable({ tableName: TABLE_RESOURCES }),
-      storage.clearTable({ tableName: TABLE_SCORERS }),
-    ]);
+    console.log('Clearing memory domain data before tests');
+    await memoryStorage.dangerouslyClearAll();
     const end = Date.now();
-    console.log(`Tables cleared in ${end - start}ms`);
+    console.log(`Memory domain cleared in ${end - start}ms`);
   });
 
   createThreadsTest({ storage });

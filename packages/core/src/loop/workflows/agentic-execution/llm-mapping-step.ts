@@ -1,5 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
+import { supportedLanguageModelSpecifications } from '../../../agent/utils';
 import type { MastraDBMessage } from '../../../memory';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -174,7 +175,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT ext
 
           await processAndEnqueueChunk(chunk);
 
-          if (initialResult?.metadata?.modelVersion === 'v2') {
+          if (supportedLanguageModelSpecifications.includes(initialResult?.metadata?.modelVersion)) {
             await rest.options?.onChunk?.({
               chunk: convertMastraChunkToAISDKv5({
                 chunk,

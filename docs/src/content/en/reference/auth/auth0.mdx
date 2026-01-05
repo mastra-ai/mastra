@@ -1,6 +1,9 @@
 ---
 title: "Reference: MastraAuthAuth0 Class | Auth"
 description: "API reference for the MastraAuthAuth0 class, which authenticates Mastra applications using Auth0 authentication."
+packages:
+  - "@mastra/auth-auth0"
+  - "@mastra/core"
 ---
 
 # MastraAuthAuth0 Class
@@ -14,7 +17,6 @@ import { Mastra } from "@mastra/core";
 import { MastraAuthAuth0 } from "@mastra/auth-auth0";
 
 export const mastra = new Mastra({
-  // ..
   server: {
     auth: new MastraAuthAuth0({
       domain: process.env.AUTH0_DOMAIN,

@@ -1,5 +1,7 @@
 ---
 title: "Custom Scorers | Evals"
+packages:
+  - "@mastra/core"
 ---
 
 # Custom scorers
@@ -65,7 +67,6 @@ For type safety and compatibility with both live agent scoring and trace scoring
 
 ```typescript
 const myScorer = createScorer({
-  // ...
   type: "agent", // Automatically handles agent input/output types
 }).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
@@ -241,7 +242,11 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 
 Together, these components allow you to define custom evaluation logic using LLMs as judges.
 
-> See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+:::info
+
+Visit [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+
+:::
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from "@mastra/core/evals";

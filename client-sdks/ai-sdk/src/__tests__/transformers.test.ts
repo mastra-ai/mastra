@@ -747,3 +747,178 @@ describe('AgentNetworkToAISDKTransformer', () => {
     expect(workflowStep?.task.name).toBe('test-workflow'); // From transformWorkflow
   });
 });
+
+describe('Network stream - core fix (text events from core)', () => {
+  it('should transform routing-agent-text-* events to text-start and text-delta', async () => {
+    // This tests the flow when core emits text events (the fix)
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'routing-agent',
+            runId: 'step-run-1',
+            inputData: {
+              task: 'Who are you?',
+              primitiveId: '',
+              primitiveType: 'none',
+              iteration: 0,
+              threadResourceId: 'Test Resource',
+              threadId: 'network-run-1',
+              isOneOff: false,
+            },
+          },
+        });
+        // Core now emits text events when routing agent handles request without delegation
+        controller.enqueue({
+          type: 'routing-agent-text-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: { runId: 'step-run-1' },
+        });
+        controller.enqueue({
+          type: 'routing-agent-text-delta',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: { runId: 'step-run-1', text: 'I am a helpful assistant.' },
+        });
+        controller.enqueue({
+          type: 'routing-agent-end',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            prompt: '',
+            isComplete: true,
+            selectionReason: 'I am a helpful assistant.',
+            iteration: 0,
+            runId: 'step-run-1',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-step-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            isComplete: true,
+            iteration: 0,
+            runId: 'step-run-1',
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const transformedStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    const textStartChunks = chunks.filter(c => c.type === 'text-start');
+    const textDeltaChunks = chunks.filter(c => c.type === 'text-delta');
+
+    expect(textStartChunks.length).toBeGreaterThan(0);
+    expect(textDeltaChunks.length).toBeGreaterThan(0);
+
+    const textContent = textDeltaChunks.map(c => c.delta || '').join('');
+    expect(textContent).toContain('I am a helpful assistant');
+  });
+});
+
+describe('Network stream - fallback (no text events from core)', () => {
+  it('should emit text events via fallback when core does not send text events', async () => {
+    // This tests the fallback: no routing-agent-text-* events, text should come from step-finish result
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({
+          type: 'routing-agent-start',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            networkId: 'test-network',
+            agentId: 'routing-agent',
+            runId: 'step-run-1',
+            inputData: {
+              task: 'Who are you?',
+              primitiveId: '',
+              primitiveType: 'none',
+              iteration: 0,
+              threadResourceId: 'Test Resource',
+              threadId: 'network-run-1',
+              isOneOff: false,
+            },
+          },
+        });
+        // NO routing-agent-text-start or routing-agent-text-delta events
+        controller.enqueue({
+          type: 'routing-agent-end',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: '',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            prompt: '',
+            isComplete: true,
+            selectionReason: 'I am a helpful assistant.',
+            iteration: 0,
+            runId: 'step-run-1',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        });
+        controller.enqueue({
+          type: 'network-execution-event-step-finish',
+          runId: 'network-run-1',
+          from: 'NETWORK',
+          payload: {
+            task: 'Who are you?',
+            result: 'I am a helpful assistant.',
+            primitiveId: 'none',
+            primitiveType: 'none',
+            isComplete: true,
+            iteration: 0,
+            runId: 'step-run-1',
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const transformedStream = toAISdkV5Stream(mockStream as unknown as MastraAgentNetworkStream, { from: 'network' });
+
+    const chunks: any[] = [];
+    for await (const chunk of transformedStream) {
+      chunks.push(chunk);
+    }
+
+    const textStartChunks = chunks.filter(c => c.type === 'text-start');
+    const textDeltaChunks = chunks.filter(c => c.type === 'text-delta');
+    const dataNetworkChunks = chunks.filter(c => c.type === 'data-network');
+
+    expect(dataNetworkChunks.length).toBeGreaterThan(0);
+
+    const lastNetworkChunk = dataNetworkChunks[dataNetworkChunks.length - 1];
+    expect(lastNetworkChunk.data.output).toBe('I am a helpful assistant.');
+
+    // Fallback should emit text events
+    expect(textStartChunks.length).toBeGreaterThan(0);
+    expect(textDeltaChunks.length).toBeGreaterThan(0);
+
+    const textContent = textDeltaChunks.map(c => c.delta || '').join('');
+    expect(textContent).toContain('I am a helpful assistant');
+  });
+});

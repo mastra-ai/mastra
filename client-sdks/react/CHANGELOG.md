@@ -1,5 +1,109 @@
 # @mastra/react-hooks
 
+## 0.1.0-beta.19
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.19
+
+## 0.1.0-beta.18
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.18
+
+## 0.1.0-beta.17
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/client-js@1.0.0-beta.17
+
+## 0.1.0-beta.16
+
+### Patch Changes
+
+- Updated dependencies [[`6cbb549`](https://github.com/mastra-ai/mastra/commit/6cbb549475201a2fbf158f0fd7323f6495f46d08)]:
+  - @mastra/client-js@1.0.0-beta.16
+
+## 0.1.0-beta.15
+
+### Minor Changes
+
+- Unified observability schema with entity-based span identification ([#11132](https://github.com/mastra-ai/mastra/pull/11132))
+
+  ## What changed
+
+  Spans now use a unified identification model with `entityId`, `entityType`, and `entityName` instead of separate `agentId`, `toolId`, `workflowId` fields.
+
+  **Before:**
+
+  ```typescript
+  // Old span structure
+  span.agentId; // 'my-agent'
+  span.toolId; // undefined
+  span.workflowId; // undefined
+  ```
+
+  **After:**
+
+  ```typescript
+  // New span structure
+  span.entityType; // EntityType.AGENT
+  span.entityId; // 'my-agent'
+  span.entityName; // 'My Agent'
+  ```
+
+  ## New `listTraces()` API
+
+  Query traces with filtering, pagination, and sorting:
+
+  ```typescript
+  const { spans, pagination } = await storage.listTraces({
+    filters: {
+      entityType: EntityType.AGENT,
+      entityId: 'my-agent',
+      userId: 'user-123',
+      environment: 'production',
+      status: TraceStatus.SUCCESS,
+      startedAt: { start: new Date('2024-01-01'), end: new Date('2024-01-31') },
+    },
+    pagination: { page: 0, perPage: 50 },
+    orderBy: { field: 'startedAt', direction: 'DESC' },
+  });
+  ```
+
+  **Available filters:** date ranges (`startedAt`, `endedAt`), entity (`entityType`, `entityId`, `entityName`), identity (`userId`, `organizationId`), correlation IDs (`runId`, `sessionId`, `threadId`), deployment (`environment`, `source`, `serviceName`), `tags`, `metadata`, and `status`.
+
+  ## New retrieval methods
+  - `getSpan({ traceId, spanId })` - Get a single span
+  - `getRootSpan({ traceId })` - Get the root span of a trace
+  - `getTrace({ traceId })` - Get all spans for a trace
+
+  ## Backward compatibility
+
+  The legacy `getTraces()` method continues to work. When you pass `name: "agent run: my-agent"`, it automatically transforms to `entityId: "my-agent", entityType: AGENT`.
+
+  ## Migration
+
+  **Automatic:** SQL-based stores (PostgreSQL, LibSQL, MSSQL) automatically add new columns to existing `spans` tables on initialization. Existing data is preserved with new columns set to `NULL`.
+
+  **No action required:** Your existing code continues to work. Adopt the new fields and `listTraces()` API at your convenience.
+
+### Patch Changes
+
+- Updated dependencies [[`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`632fdb8`](https://github.com/mastra-ai/mastra/commit/632fdb8b3cd9ff6f90399256d526db439fc1758b), [`184f01d`](https://github.com/mastra-ai/mastra/commit/184f01d1f534ec0be9703d3996f2e088b4a560eb)]:
+  - @mastra/client-js@1.0.0-beta.15
+
+## 0.1.0-beta.14
+
+### Patch Changes
+
+- Updated dependencies [[`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/client-js@1.0.0-beta.14
+
 ## 0.1.0-beta.13
 
 ### Patch Changes

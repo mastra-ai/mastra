@@ -1,6 +1,9 @@
 ---
 title: "Reference: VercelDeployer | Deployer"
 description: "Documentation for the VercelDeployer class, which deploys Mastra applications to Vercel."
+packages:
+  - "@mastra/core"
+  - "@mastra/deployer-vercel"
 ---
 
 # VercelDeployer
@@ -14,7 +17,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer(),
 });
 ```
@@ -36,7 +38,6 @@ import { Mastra } from "@mastra/core";
 import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
-  // ...
   deployer: new VercelDeployer({
     maxDuration: 600,
     memory: 1536,

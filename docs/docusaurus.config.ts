@@ -104,16 +104,6 @@ const config: Config = {
     [
       "@docusaurus/plugin-content-docs",
       {
-        id: "examples",
-        path: "src/content/en/examples",
-        routeBasePath: "examples/v1",
-        sidebarPath: "./src/content/en/examples/sidebars.js",
-        editUrl: "https://github.com/mastra-ai/mastra/tree/main/docs",
-      },
-    ],
-    [
-      "@docusaurus/plugin-content-docs",
-      {
         id: "reference",
         path: "src/content/en/reference",
         routeBasePath: "reference/v1",

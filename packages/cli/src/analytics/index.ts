@@ -123,6 +123,10 @@ export class PosthogAnalytics {
       machine_id: os.hostname(),
     };
   }
+  private getDurationMs(startTime: [number, number]): number {
+    const [seconds, nanoseconds] = process.hrtime(startTime);
+    return seconds * 1000 + nanoseconds / 1_000_000;
+  }
 
   private captureSessionStart(): void {
     if (!this.client) {
@@ -217,9 +221,7 @@ export class PosthogAnalytics {
 
     try {
       const result = await execution();
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      const durationMs = seconds * 1000 + nanoseconds / 1000000;
-
+      const durationMs = this.getDurationMs(startTime);
       this.trackCommand({
         command,
         args,
@@ -230,9 +232,7 @@ export class PosthogAnalytics {
 
       return result;
     } catch (error) {
-      const [seconds, nanoseconds] = process.hrtime(startTime);
-      const durationMs = seconds * 1000 + nanoseconds / 1000000;
-
+      const durationMs = this.getDurationMs(startTime);
       this.trackCommand({
         command,
         args,

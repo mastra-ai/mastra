@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run.restart() | Workflows"
 description: Documentation for the `Run.restart()` method in workflows, which restarts an active workflow run that lost connection to the server.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.restart()
@@ -13,8 +15,6 @@ The `.restart()` method restarts an active workflow run that lost connection to 
 const run = await workflow.createRun();
 
 const result = await run.start({ inputData: { value: "initial data" } });
-
-//.. server connection lost,
 
 const restartedResult = await run.restart();
 ```

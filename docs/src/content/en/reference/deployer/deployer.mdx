@@ -2,6 +2,8 @@
 title: "Reference: Deployer | Deployer"
 description: Documentation for the Deployer abstract class, which handles packaging and deployment of Mastra applications.
 asIndexPage: true
+packages:
+  - "@mastra/deployer"
 ---
 
 # Deployer
@@ -28,7 +30,6 @@ class CustomDeployer extends Deployer {
     await this._bundle("server.ts", "mastra.ts", outputDirectory);
 
     // Custom deployment logic
-    // ...
   }
 }
 ```

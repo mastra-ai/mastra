@@ -18,9 +18,11 @@ import {
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { StoreOperationsClickhouse } from '../operations';
-import { transformRow, transformRows } from '../utils';
+import { ClickhouseDB, resolveClickhouseConfig } from '../../db';
+import type { ClickhouseDomainConfig } from '../../db';
+import { transformRow, transformRows } from '../../db/utils';
 
 /**
  * Serialize metadata object to JSON string for storage in ClickHouse.
@@ -54,11 +56,71 @@ function parseMetadata(metadata: unknown): Record<string, unknown> {
 
 export class MemoryStorageClickhouse extends MemoryStorage {
   protected client: ClickHouseClient;
-  protected operations: StoreOperationsClickhouse;
-  constructor({ client, operations }: { client: ClickHouseClient; operations: StoreOperationsClickhouse }) {
+  #db: ClickhouseDB;
+  constructor(config: ClickhouseDomainConfig) {
     super();
+    const { client, ttl } = resolveClickhouseConfig(config);
     this.client = client;
-    this.operations = operations;
+    this.#db = new ClickhouseDB({ client, ttl });
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) return;
+
+    try {
+      // Get affected thread IDs before deleting
+      const result = await this.client.query({
+        query: `SELECT DISTINCT thread_id FROM ${TABLE_MESSAGES} WHERE id IN {messageIds:Array(String)}`,
+        query_params: { messageIds },
+        format: 'JSONEachRow',
+      });
+      const rows = (await result.json()) as Array<{ thread_id: string }>;
+      const threadIds = rows.map(r => r.thread_id);
+
+      // Delete messages
+      await this.client.command({
+        query: `DELETE FROM ${TABLE_MESSAGES} WHERE id IN {messageIds:Array(String)}`,
+        query_params: { messageIds },
+      });
+
+      // Update thread timestamps
+      if (threadIds.length > 0) {
+        // Remove 'Z' suffix as ClickHouse DateTime64 expects format without timezone suffix
+        const now = new Date().toISOString().replace('Z', '');
+        await this.client.command({
+          query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)} WHERE id IN {threadIds:Array(String)}`,
+          query_params: { now, threadIds },
+        });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
@@ -193,7 +255,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        dataQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        dataQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         dataParams.fromDate = startDate;
       }
 
@@ -202,7 +265,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        dataQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        dataQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         dataParams.toDate = endDate;
       }
 
@@ -251,7 +315,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.start instanceof Date
             ? filter.dateRange.start.toISOString()
             : new Date(filter.dateRange.start).toISOString();
-        countQuery += ` AND createdAt >= parseDateTime64BestEffort({fromDate:String}, 3)`;
+        const startOp = filter.dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} parseDateTime64BestEffort({fromDate:String}, 3)`;
         countParams.fromDate = startDate;
       }
 
@@ -260,7 +325,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           filter.dateRange.end instanceof Date
             ? filter.dateRange.end.toISOString()
             : new Date(filter.dateRange.end).toISOString();
-        countQuery += ` AND createdAt <= parseDateTime64BestEffort({toDate:String}, 3)`;
+        const endOp = filter.dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
       }
 

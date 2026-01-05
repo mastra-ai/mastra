@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { createTool } from './tool';
+import { validateToolInput } from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -1060,5 +1061,134 @@ describe('Tool Output Validation Tests', () => {
     } else {
       throw new Error('Result is not a validation error');
     }
+  });
+});
+
+describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11457
+  // When schemas are processed through OpenAI compat layers, .optional() is converted
+  // to .nullable() for strict mode compliance. This means the schema expects null,
+  // not undefined. The validateToolInput function now converts undefined → null
+  // before validation so that omitted fields work correctly.
+
+  it('should convert undefined to null in nested objects', () => {
+    // Create a schema that expects nullable fields (like after OpenAI compat processing)
+    const schema = z.object({
+      name: z.string(),
+      age: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+      nested: z.object({
+        city: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+        country: z.string(),
+      }),
+    });
+
+    // Input with undefined values (as if fields were omitted)
+    const input = {
+      name: 'John',
+      age: undefined,
+      nested: {
+        city: undefined,
+        country: 'USA',
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'John',
+      age: undefined, // null was transformed to undefined
+      nested: {
+        city: undefined, // null was transformed to undefined
+        country: 'USA',
+      },
+    });
+  });
+
+  it('should handle partial nested objects with undefined fields', () => {
+    // This mimics the exact schema from GitHub issue #11457
+    // After OpenAI compat processing, .partial() fields become nullable
+    const schema = z.object({
+      eventId: z.string(),
+      request: z.object({
+        City: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+        Name: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+        Slug: z
+          .string()
+          .nullable()
+          .transform((val: string | null) => (val === null ? undefined : val)),
+      }),
+      eventImageFile: z
+        .any()
+        .nullable()
+        .transform((val: any) => (val === null ? undefined : val)),
+    });
+
+    // Input with some fields omitted (undefined)
+    const input = {
+      eventId: '123',
+      request: {
+        Name: 'Test',
+        City: undefined,
+        Slug: undefined,
+      },
+      eventImageFile: undefined,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      eventId: '123',
+      request: {
+        Name: 'Test',
+        City: undefined,
+        Slug: undefined,
+      },
+      eventImageFile: undefined,
+    });
+  });
+
+  it('should convert undefined to null in arrays', () => {
+    const schema = z.object({
+      items: z.array(
+        z.object({
+          id: z.string(),
+          value: z
+            .string()
+            .nullable()
+            .transform((val: string | null) => (val === null ? undefined : val)),
+        }),
+      ),
+    });
+
+    const input = {
+      items: [
+        { id: '1', value: 'test' },
+        { id: '2', value: undefined },
+      ],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: [
+        { id: '1', value: 'test' },
+        { id: '2', value: undefined },
+      ],
+    });
   });
 });

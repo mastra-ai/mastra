@@ -9,6 +9,9 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
+  server: {
+    port: 3000,
+  },
   bundler: {
     external: ['nodemailer'],
   },

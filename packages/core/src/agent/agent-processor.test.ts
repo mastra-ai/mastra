@@ -3193,4 +3193,291 @@ describe('Workflow as Processor', () => {
       expect(result.text).toContain('[SUFFIX]');
     });
   });
+
+  describe('TripWire in processInputStep', () => {
+    it('should emit tripwire chunk when processor aborts in processInputStep', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const processInputStepProcessor = {
+        id: 'input-step-tripwire-processor',
+        processInputStep: async ({ abort }: { abort: (reason?: string, options?: any) => never }) => {
+          abort('Blocked by processInputStep', {
+            metadata: { toxicityScore: 0.9, category: 'harmful' },
+          });
+          return {};
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'process-input-step-tripwire-test-agent',
+        name: 'ProcessInputStep Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        inputProcessors: [processInputStepProcessor],
+      });
+
+      const stream = await agent.stream('Hello');
+      const chunks: any[] = [];
+
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Blocked by processInputStep');
+      expect(tripwireChunk.payload.metadata).toEqual({ toxicityScore: 0.9, category: 'harmful' });
+      expect(tripwireChunk.payload.processorId).toBe('input-step-tripwire-processor');
+    });
+
+    it('should emit tripwire chunk with retry option when processor aborts in processInputStep', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const processInputStepProcessor = {
+        id: 'input-step-retry-processor',
+        processInputStep: async ({ abort }: { abort: (reason?: string, options?: any) => never }) => {
+          abort('Please try again', { retry: true });
+          return {};
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'process-input-step-retry-tripwire-test-agent',
+        name: 'ProcessInputStep Retry Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        inputProcessors: [processInputStepProcessor],
+      });
+
+      const stream = await agent.stream('Hello');
+      const chunks: any[] = [];
+
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Please try again');
+      expect(tripwireChunk.payload.retry).toBe(true);
+    });
+  });
+
+  describe('TripWire in processOutputStep', () => {
+    it('should emit tripwire chunk when processor aborts in processOutputStep', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const processOutputStepProcessor = {
+        id: 'output-step-tripwire-processor',
+        processOutputStep: async ({ abort }: { abort: (reason?: string, options?: any) => never }) => {
+          abort('Blocked by processOutputStep', {
+            metadata: { toxicityScore: 0.8, category: 'inappropriate' },
+          });
+          return [];
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'process-output-step-tripwire-test-agent',
+        name: 'ProcessOutputStep Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        outputProcessors: [processOutputStepProcessor],
+      });
+
+      const stream = await agent.stream('Hello');
+      const chunks: any[] = [];
+
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      // processOutputStep tripwire is reported via step-finish with tripwire data
+      const stepFinishChunk = chunks.find(c => c.type === 'step-finish');
+      expect(stepFinishChunk).toBeDefined();
+      expect(stepFinishChunk.payload.stepResult.reason).toBe('tripwire');
+    });
+
+    it('should emit tripwire chunk with metadata when processor aborts in processOutputStep', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'harmful content' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'harmful content' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const processOutputStepProcessor = {
+        id: 'output-step-metadata-processor',
+        processOutputStep: async ({
+          text,
+          abort,
+        }: {
+          text?: string;
+          abort: (reason?: string, options?: any) => never;
+        }) => {
+          if (text?.includes('harmful')) {
+            abort('Content policy violation', {
+              metadata: { category: 'harmful_content', confidence: 0.95 },
+            });
+          }
+          return [];
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'process-output-step-metadata-tripwire-test-agent',
+        name: 'ProcessOutputStep Metadata Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        outputProcessors: [processOutputStepProcessor],
+      });
+
+      const result = await agent.generate('Hello');
+
+      // The tripwire should be set on the result
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Content policy violation');
+      expect(result.tripwire?.metadata).toEqual({ category: 'harmful_content', confidence: 0.95 });
+      expect(result.tripwire?.processorId).toBe('output-step-metadata-processor');
+    });
+  });
+
+  describe('TripWire in prepareStep option', () => {
+    it('should emit tripwire chunk when prepareStep calls abort', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'prepare-step-tripwire-test-agent',
+        name: 'PrepareStep Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+
+      const stream = await agent.stream('Hello', {
+        prepareStep: ({ abort }) => {
+          abort('Blocked by prepareStep', {
+            metadata: { reason: 'content_moderation', score: 0.85 },
+          });
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Blocked by prepareStep');
+      expect(tripwireChunk.payload.metadata).toEqual({ reason: 'content_moderation', score: 0.85 });
+      expect(tripwireChunk.payload.processorId).toBe('prepare-step');
+    });
+
+    it('should emit tripwire chunk with retry option when prepareStep calls abort with retry', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'test response' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'prepare-step-retry-tripwire-test-agent',
+        name: 'PrepareStep Retry Tripwire Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+      });
+
+      const stream = await agent.stream('Hello', {
+        prepareStep: ({ abort }) => {
+          abort('Please rephrase your question', { retry: true });
+        },
+      });
+
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Please rephrase your question');
+      expect(tripwireChunk.payload.retry).toBe(true);
+    });
+  });
 });

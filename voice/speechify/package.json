@@ -24,6 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
+    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts voice/speechify",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "lint": "eslint .",
     "test": "vitest run"

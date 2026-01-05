@@ -1,5 +1,60 @@
 # mastra
 
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- Add Antigravity IDE support to create-mastra CLI. Users can now select Antigravity during project initialization and automatically configure the global Mastra MCP server for the IDE, reducing manual setup and enabling immediate use of Mastra agents. ([#11374](https://github.com/mastra-ai/mastra/pull/11374))
+
+- Add --studio flag to bundle playground UI with mastra build ([#11327](https://github.com/mastra-ai/mastra/pull/11327))
+
+  Enables bundling the studio/playground UI into the build output so it can be served from the deployed server.
+
+  ```bash
+  mastra build --studio
+  ```
+
+- Added CLI options to configure Mastra Studio runtime settings, allowing you to customize the server connection details, and protocol. ([#11265](https://github.com/mastra-ai/mastra/pull/11265))
+
+  You can now override the default studio configuration using command-line arguments:
+
+  ```bash
+  mastra studio \
+    --server-host api.example.com \
+    --server-port 8080 \
+    --server-protocol https
+  ```
+
+  These options configure the `window.MASTRA_*` environment variables that the Studio frontend uses to connect to your API server.
+
+### Patch Changes
+
+- Extract getDurationMs helper method to simplify command execution timing in CLI analytics. Replaces repeated process.hrtime logic with a reusable private helper method, improving code maintainability and reducing duplication. ([#11316](https://github.com/mastra-ai/mastra/pull/11316))
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
+- Detect installed Mastra packages during dev and pass version information to the playground server via `MASTRA_PACKAGES_FILE` env var ([#11211](https://github.com/mastra-ai/mastra/pull/11211))
+
+- Updated dependencies [[`403c643`](https://github.com/mastra-ai/mastra/commit/403c643ea02862f3177d4b92e85b09f83aed3eb3), [`33a4d2e`](https://github.com/mastra-ai/mastra/commit/33a4d2e4ed8af51f69256232f00c34d6b6b51d48), [`4aaa844`](https://github.com/mastra-ai/mastra/commit/4aaa844a4f19d054490f43638a990cc57bda8d2f), [`4a1a6cb`](https://github.com/mastra-ai/mastra/commit/4a1a6cb3facad54b2bb6780b00ce91d6de1edc08), [`31d13d5`](https://github.com/mastra-ai/mastra/commit/31d13d5fdc2e2380e2e3ee3ec9fb29d2a00f265d), [`2fe69cb`](https://github.com/mastra-ai/mastra/commit/2fe69cbfda1025a7cf440308eed26c77ec553e1a), [`4c62166`](https://github.com/mastra-ai/mastra/commit/4c621669f4a29b1f443eca3ba70b814afa286266), [`7bcbf10`](https://github.com/mastra-ai/mastra/commit/7bcbf10133516e03df964b941f9a34e9e4ab4177), [`4353600`](https://github.com/mastra-ai/mastra/commit/43536005a65988a8eede236f69122e7f5a284ba2), [`6986fb0`](https://github.com/mastra-ai/mastra/commit/6986fb064f5db6ecc24aa655e1d26529087b43b3), [`4da09a4`](https://github.com/mastra-ai/mastra/commit/4da09a4b95262be57c912821d6d8108868ae59db), [`053e979`](https://github.com/mastra-ai/mastra/commit/053e9793b28e970086b0507f7f3b76ea32c1e838), [`e26dc9c`](https://github.com/mastra-ai/mastra/commit/e26dc9c3ccfec54ae3dc3e2b2589f741f9ae60a6), [`55edf73`](https://github.com/mastra-ai/mastra/commit/55edf7302149d6c964fbb7908b43babfc2b52145), [`27c0009`](https://github.com/mastra-ai/mastra/commit/27c0009777a6073d7631b0eb7b481d94e165b5ca), [`dee388d`](https://github.com/mastra-ai/mastra/commit/dee388dde02f2e63c53385ae69252a47ab6825cc), [`3f3fc30`](https://github.com/mastra-ai/mastra/commit/3f3fc3096f24c4a26cffeecfe73085928f72aa63), [`d90ea65`](https://github.com/mastra-ai/mastra/commit/d90ea6536f7aa51c6545a4e9215b55858e98e16d), [`d171e55`](https://github.com/mastra-ai/mastra/commit/d171e559ead9f52ec728d424844c8f7b164c4510), [`10c2735`](https://github.com/mastra-ai/mastra/commit/10c27355edfdad1ee2b826b897df74125eb81fb8), [`1924cf0`](https://github.com/mastra-ai/mastra/commit/1924cf06816e5e4d4d5333065ec0f4bb02a97799), [`b339816`](https://github.com/mastra-ai/mastra/commit/b339816df0984d0243d944ac2655d6ba5f809cde)]:
+  - @mastra/deployer@1.0.0-beta.15
+  - @mastra/core@1.0.0-beta.15
+
+## 1.0.0-beta.11
+
+### Patch Changes
+
+- Set `externals: true` as the default for `mastra build` and cloud-deployer to reduce bundle issues with native dependencies. ([`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119))
+
+  **Note:** If you previously relied on the default bundling behavior (all dependencies bundled), you can explicitly set `externals: false` in your bundler configuration.
+
+- Two smaller quality of life improvements: ([#11232](https://github.com/mastra-ai/mastra/pull/11232))
+  - The default `create-mastra` project no longer defines a LibSQLStore storage for the weather agent memory. It uses the root level `storage` option now (which is memory). This way no `mastra.db` files are created outside of the project
+  - When running `mastra init` inside a project that already has git initialized, the prompt to initialize git is skipped
+
+- Updated dependencies [[`4f94ed8`](https://github.com/mastra-ai/mastra/commit/4f94ed8177abfde3ec536e3574883e075423350c), [`ac3cc23`](https://github.com/mastra-ai/mastra/commit/ac3cc2397d1966bc0fc2736a223abc449d3c7719), [`a86f4df`](https://github.com/mastra-ai/mastra/commit/a86f4df0407311e0d2ea49b9a541f0938810d6a9), [`029540c`](https://github.com/mastra-ai/mastra/commit/029540ca1e582fc2dd8d288ecd4a9b0f31a954ef), [`66741d1`](https://github.com/mastra-ai/mastra/commit/66741d1a99c4f42cf23a16109939e8348ac6852e), [`01b20fe`](https://github.com/mastra-ai/mastra/commit/01b20fefb7c67c2b7d79417598ef4e60256d1225), [`0dbf199`](https://github.com/mastra-ai/mastra/commit/0dbf199110f22192ce5c95b1c8148d4872b4d119), [`a7ce182`](https://github.com/mastra-ai/mastra/commit/a7ce1822a8785ce45d62dd5c911af465e144f7d7)]:
+  - @mastra/core@1.0.0-beta.14
+  - @mastra/deployer@1.0.0-beta.14
+
 ## 1.0.0-beta.10
 
 ### Patch Changes

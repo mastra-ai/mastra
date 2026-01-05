@@ -1,6 +1,9 @@
 ---
 title: "Reference: MSSQL Storage | Storage"
 description: Documentation for the MSSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/mssql"
 ---
 
 # MSSQL Storage
@@ -124,14 +127,16 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
+  id: 'mssql-storage',
   connectionString: process.env.DATABASE_URL,
 });
 
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning

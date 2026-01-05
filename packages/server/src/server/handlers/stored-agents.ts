@@ -35,14 +35,15 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const result = await storage.listAgents({
+      const result = await agentsStore.listAgents({
         page,
         perPage,
         orderBy,
@@ -72,14 +73,15 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
-      const agent = await storage.getAgentById({ id: storedAgentId });
+      const agent = await agentsStore.getAgentById({ id: storedAgentId });
 
       if (!agent) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
@@ -125,15 +127,16 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       // Check if agent with this ID already exists
-      const existing = await storage.getAgentById({ id });
+      const existing = await agentsStore.getAgentById({ id });
       if (existing) {
         throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
       }
@@ -141,7 +144,7 @@ export const CREATE_STORED_AGENT_ROUTE = createRoute({
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
 
-      const agent = await storage.createAgent({
+      const agent = await agentsStore.createAgent({
         agent: {
           id,
           name,
@@ -201,15 +204,16 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       // Check if agent exists
-      const existing = await storage.getAgentById({ id: storedAgentId });
+      const existing = await agentsStore.getAgentById({ id: storedAgentId });
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
@@ -217,7 +221,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
       // Only include tools if it's actually an array from the body (not {} from adapter)
       const toolsFromBody = Array.isArray(tools) ? tools : undefined;
 
-      const agent = await storage.updateAgent({
+      const agent = await agentsStore.updateAgent({
         id: storedAgentId,
         name,
         description,
@@ -258,20 +262,21 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(400, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured' });
       }
 
-      if (!storage.supports.agents) {
-        throw new HTTPException(400, { message: 'Storage does not support agents' });
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
       // Check if agent exists
-      const existing = await storage.getAgentById({ id: storedAgentId });
+      const existing = await agentsStore.getAgentById({ id: storedAgentId });
       if (!existing) {
         throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
       }
 
-      await storage.deleteAgent({ id: storedAgentId });
+      await agentsStore.deleteAgent({ id: storedAgentId });
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

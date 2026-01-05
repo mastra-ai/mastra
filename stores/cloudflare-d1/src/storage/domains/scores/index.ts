@@ -1,24 +1,19 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import type { SaveScorePayload, ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
   createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
+  TABLE_SCHEMAS,
   calculatePagination,
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
-import type Cloudflare from 'cloudflare';
+import type { StoragePagination } from '@mastra/core/storage';
+import { D1DB, resolveD1Config } from '../../db';
+import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
-import type { StoreOperationsD1 } from '../operations';
-
-export type D1QueryResult = Awaited<ReturnType<Cloudflare['d1']['database']['query']>>['result'];
-
-export interface D1Client {
-  query(args: { sql: string; params: string[] }): Promise<{ result: D1QueryResult }>;
-}
 
 /**
  * Cloudflare D1-specific score row transformation.
@@ -34,20 +29,28 @@ function transformScoreRow(row: Record<string, any>): ScoreRowData {
 }
 
 export class ScoresStorageD1 extends ScoresStorage {
-  private operations: StoreOperationsD1;
+  #db: D1DB;
 
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+  constructor(config: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new D1DB(resolveD1Config(config));
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
       const query = createSqlBuilder().select('*').from(fullTableName).where('id = ?', id);
       const { sql, params } = query.build();
 
-      const result = await this.operations.executeQuery({ sql, params, first: true });
+      const result = await this.#db.executeQuery({ sql, params, first: true });
 
       if (!result) {
         return null;
@@ -67,7 +70,7 @@ export class ScoresStorageD1 extends ScoresStorage {
   }
 
   async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
@@ -77,7 +80,7 @@ export class ScoresStorageD1 extends ScoresStorage {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer?.id ?? 'unknown',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
             entityId: score.entityId ?? 'unknown',
             entityType: score.entityType ?? 'unknown',
             traceId: score.traceId ?? '',
@@ -91,7 +94,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     const id = crypto.randomUUID();
 
     try {
-      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
 
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
@@ -118,7 +121,7 @@ export class ScoresStorageD1 extends ScoresStorage {
       const query = createSqlBuilder().insert(fullTableName, columns, values);
       const { sql, params } = query.build();
 
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
 
       return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
@@ -146,13 +149,13 @@ export class ScoresStorageD1 extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
 
       // Get total count
       const countQuery = createSqlBuilder().count().from(fullTableName).where('scorerId = ?', scorerId);
@@ -165,7 +168,7 @@ export class ScoresStorageD1 extends ScoresStorage {
       if (source) {
         countQuery.andWhere('source = ?', source);
       }
-      const countResult = await this.operations.executeQuery(countQuery.build());
+      const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
       if (total === 0) {
@@ -198,7 +201,7 @@ export class ScoresStorageD1 extends ScoresStorage {
       selectQuery.limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
-      const results = await this.operations.executeQuery({ sql, params });
+      const results = await this.#db.executeQuery({ sql, params });
 
       const scores = Array.isArray(results) ? results.map(transformScoreRow) : [];
 
@@ -229,17 +232,17 @@ export class ScoresStorageD1 extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
 
       // Get total count
       const countQuery = createSqlBuilder().count().from(fullTableName).where('runId = ?', runId);
-      const countResult = await this.operations.executeQuery(countQuery.build());
+      const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
       if (total === 0) {
@@ -266,7 +269,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .offset(start);
 
       const { sql, params } = selectQuery.build();
-      const results = await this.operations.executeQuery({ sql, params });
+      const results = await this.#db.executeQuery({ sql, params });
 
       const scores = Array.isArray(results) ? results.map(transformScoreRow) : [];
 
@@ -299,13 +302,13 @@ export class ScoresStorageD1 extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
 
       // Get total count
       const countQuery = createSqlBuilder()
@@ -313,7 +316,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .from(fullTableName)
         .where('entityId = ?', entityId)
         .andWhere('entityType = ?', entityType);
-      const countResult = await this.operations.executeQuery(countQuery.build());
+      const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
       if (total === 0) {
@@ -341,7 +344,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .offset(start);
 
       const { sql, params } = selectQuery.build();
-      const results = await this.operations.executeQuery({ sql, params });
+      const results = await this.#db.executeQuery({ sql, params });
 
       const scores = Array.isArray(results) ? results.map(transformScoreRow) : [];
 
@@ -374,13 +377,13 @@ export class ScoresStorageD1 extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const fullTableName = this.operations.getTableName(TABLE_SCORERS);
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
 
       // Get total count
       const countQuery = createSqlBuilder()
@@ -388,7 +391,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .from(fullTableName)
         .where('traceId = ?', traceId)
         .andWhere('spanId = ?', spanId);
-      const countResult = await this.operations.executeQuery(countQuery.build());
+      const countResult = await this.#db.executeQuery(countQuery.build());
       const total = Array.isArray(countResult) ? Number(countResult?.[0]?.count ?? 0) : Number(countResult?.count ?? 0);
 
       if (total === 0) {
@@ -417,7 +420,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .offset(start);
 
       const { sql, params } = selectQuery.build();
-      const results = await this.operations.executeQuery({ sql, params });
+      const results = await this.#db.executeQuery({ sql, params });
       const scores = Array.isArray(results) ? results.map(transformScoreRow) : [];
 
       return {

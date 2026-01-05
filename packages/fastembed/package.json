@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -45,6 +45,7 @@
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/ai-v6": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/node": "22.13.17",

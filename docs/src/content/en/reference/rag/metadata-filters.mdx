@@ -1,6 +1,8 @@
 ---
 title: "Reference: Metadata Filters | RAG"
 description: Documentation for metadata filtering capabilities in Mastra, which allow for precise querying of vector search results across different vector stores.
+packages:
+  - "@mastra/pg"
 ---
 
 # Metadata Filters
@@ -98,7 +100,7 @@ const results = await store.query({
       name: "$elemMatch",
       description: "Matches array elements meeting criteria",
       example: "{ scores: { $elemMatch: { $gt: 80 } } }",
-      supportedBy: ["LibSQL", "PgVector", "MongoDB"],
+      supportedBy: ["libSQL", "PgVector", "MongoDB"],
     },
   ]}
 />
@@ -127,7 +129,7 @@ const results = await store.query({
         "Qdrant",
         "Upstash",
         "PgVector",
-        "LibSQL",
+        "libSQL",
         "MongoDB",
       ],
     },
@@ -135,7 +137,7 @@ const results = await store.query({
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "libSQL", "MongoDB"],
     },
   ]}
 />
@@ -159,7 +161,7 @@ const results = await store.query({
       name: "$contains",
       description: "Text contains substring",
       example: '{ description: { $contains: "sale" } }',
-      supportedBy: ["Upstash", "LibSQL", "PgVector"],
+      supportedBy: ["Upstash", "libSQL", "PgVector"],
     },
     {
       name: "$regex",
@@ -171,7 +173,7 @@ const results = await store.query({
       name: "$size",
       description: "Array length check",
       example: "{ tags: { $size: { $gt: 2 } } }",
-      supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"],
+      supportedBy: ["Astra", "libSQL", "PgVector", "MongoDB"],
     },
     {
       name: "$geo",
@@ -263,7 +265,7 @@ const results = await store.query({
 - Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
 - Range queries may have reduced accuracy with very large datasets (~10M+ vectors)
 
-### LibSQL
+### libSQL
 
 - Supports nested object queries with dot notation
 - Array fields are validated to ensure they contain valid JSON arrays
@@ -338,7 +340,7 @@ const results = await store.query({
 - [Astra](/reference/v1/vectors/astra)
 - [Chroma](/reference/v1/vectors/chroma)
 - [Cloudflare Vectorize](/reference/v1/vectors/vectorize)
-- [LibSQL](/reference/v1/vectors/libsql)
+- [libSQL](/reference/v1/vectors/libsql)
 - [MongoDB](/reference/v1/vectors/mongodb)
 - [PgStore](/reference/v1/vectors/pg)
 - [Pinecone](/reference/v1/vectors/pinecone)
