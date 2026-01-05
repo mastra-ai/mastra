@@ -86,14 +86,15 @@ describe('DevBundler', () => {
       // Arrange
       process.env.NODE_ENV = 'test-env';
       const devBundler = new DevBundler();
-      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+      const { getWatcherInputOptions, getEsbuildPlatform } = await import('@mastra/deployer/build');
 
       const tmpDir = '.test-tmp';
       try {
         // Act
         await devBundler.watch('test-entry.js', tmpDir, []);
 
-        // Assert
+        // Assert - verify platform detection was called during module initialization
+        expect(getEsbuildPlatform).toHaveBeenCalled();
         expect(getWatcherInputOptions).toHaveBeenCalledWith(
           'test-entry.js',
           'node',
