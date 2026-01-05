@@ -83,8 +83,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/deployer",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/deployer",
     "build:watch": "pnpm build --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
