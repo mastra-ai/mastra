@@ -11,4 +11,5 @@ export * from './no-op';
 export * from './utils';
 export * from './metrics';
 export * from './instrumentation';
+export * from './cost';
 export { wrapMastra } from './context';

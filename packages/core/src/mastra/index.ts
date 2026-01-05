@@ -15,8 +15,8 @@ import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
-import type { ObservabilityEntrypoint } from '../observability';
-import { NoOpObservability } from '../observability';
+import type { ObservabilityEntrypoint, IMetricsCollector } from '../observability';
+import { NoOpObservability, NoOpMetricsCollector, setGlobalMetricsCollector } from '../observability';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { Middleware, ServerConfig } from '../server/types';
@@ -156,6 +156,21 @@ export interface Config<
   observability?: ObservabilityEntrypoint;
 
   /**
+   * Metrics collector for tracking agent, workflow, and tool execution metrics.
+   * Enables tracking of token usage, costs, latency, and error rates.
+   *
+   * @example
+   * ```typescript
+   * import { InMemoryMetricsCollector } from '@mastra/core/observability';
+   *
+   * new Mastra({
+   *   metrics: new InMemoryMetricsCollector()
+   * })
+   * ```
+   */
+  metrics?: IMetricsCollector;
+
+  /**
    * Custom ID generator function for creating unique identifiers.
    * @default `crypto.randomUUID()`
    */
@@ -282,6 +297,7 @@ export class Mastra<
   #logger: TLogger;
   #workflows: TWorkflows;
   #observability: ObservabilityEntrypoint;
+  #metrics: IMetricsCollector;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -479,6 +495,15 @@ export class Mastra<
       }
     } else {
       this.#observability = new NoOpObservability();
+    }
+
+    // Initialize metrics collector
+    if (config?.metrics) {
+      this.#metrics = config.metrics;
+      // Set as global default for instrumentation helpers
+      setGlobalMetricsCollector(config.metrics);
+    } else {
+      this.#metrics = new NoOpMetricsCollector();
     }
 
     this.#storage = storage;
@@ -2370,6 +2395,27 @@ export class Mastra<
    */
   public getLogger() {
     return this.#logger;
+  }
+
+  /**
+   * Gets the currently configured metrics collector.
+   *
+   * The metrics collector tracks agent, workflow, and tool execution metrics
+   * including token usage, costs, latency, and error rates.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   metrics: new InMemoryMetricsCollector()
+   * });
+   *
+   * const metrics = mastra.getMetrics();
+   * // Record custom metrics
+   * metrics.incrementCounter('custom_events_total', { eventType: 'user_action' });
+   * ```
+   */
+  public getMetrics(): IMetricsCollector {
+    return this.#metrics;
   }
 
   /**
