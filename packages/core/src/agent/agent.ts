@@ -2671,6 +2671,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     resumeContext,
     ...options
   }: InnerAgentExecutionOptions<OUTPUT>) {
+    // Validate requestContext if schema is defined
+    this.#validateRequestContext(options.requestContext);
+
     const existingSnapshot = resumeContext?.snapshot;
     let snapshotMemoryInfo;
     if (existingSnapshot) {
@@ -3072,9 +3075,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     options?: AgentExecutionOptions<OUTPUT>,
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
-    // Validate requestContext if schema is defined
-    this.#validateRequestContext(options?.requestContext);
-
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: options?.requestContext,
     });
@@ -3154,9 +3154,6 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Validate requestContext if schema is defined
-    this.#validateRequestContext(streamOptions?.requestContext);
-
     const defaultOptions = await this.getDefaultOptions<OUTPUT>({
       requestContext: streamOptions?.requestContext,
     });
