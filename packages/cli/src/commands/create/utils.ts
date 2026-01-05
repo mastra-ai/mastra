@@ -272,6 +272,22 @@ export const createMastraProject = async ({
     p.outro('Project created successfully');
     console.info('');
 
+    // Show Bun-specific tips if running under Bun
+    if (pm === 'bun') {
+      console.info('🥟 Bun detected! Your project is ready to use with Bun.');
+      console.info('');
+      console.info('For faster builds, you can optionally add the Bun bundler:');
+      console.info('  bun add @mastra/bundler-bun');
+      console.info('');
+      console.info('Then configure it in src/mastra/index.ts:');
+      console.info('  import { createBunEngine } from "@mastra/bundler-bun";');
+      console.info('  export const mastra = new Mastra({');
+      console.info('    bundler: { engine: createBunEngine() },');
+      console.info('    // ... other config');
+      console.info('  });');
+      console.info('');
+    }
+
     return { projectName, result };
   } catch (error) {
     s.stop();

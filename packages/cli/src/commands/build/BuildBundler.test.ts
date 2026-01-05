@@ -81,7 +81,8 @@ describe('BuildBundler', () => {
       const entry = (bundler as any).getEntry();
 
       expect(entry).toContain('playground: true');
-      expect(entry).toContain('createNodeServer');
+      // createServer auto-detects runtime (Bun vs Node.js)
+      expect(entry).toContain('createServer');
       expect(entry).toContain('getToolExports');
     });
 
@@ -92,7 +93,8 @@ describe('BuildBundler', () => {
       const entry = (bundler as any).getEntry();
 
       expect(entry).toContain('playground: false');
-      expect(entry).toContain('createNodeServer');
+      // createServer auto-detects runtime (Bun vs Node.js)
+      expect(entry).toContain('createServer');
       expect(entry).toContain('getToolExports');
     });
   });

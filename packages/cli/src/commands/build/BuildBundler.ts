@@ -78,10 +78,11 @@ export class BuildBundler extends Bundler {
     // @ts-ignore
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
     import { mastra } from '#mastra';
-    import { createNodeServer, getToolExports } from '#server';
+    import { createServer, getToolExports } from '#server';
     import { tools } from '#tools';
     // @ts-ignore
-    await createNodeServer(mastra, { tools: getToolExports(tools), playground: ${this.studio} });
+    // createServer auto-detects the runtime (Bun vs Node.js) and uses the appropriate server
+    await createServer(mastra, { tools: getToolExports(tools), playground: ${this.studio} });
 
     if (mastra.getStorage()) {
       // start storage init in the background

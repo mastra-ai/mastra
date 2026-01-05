@@ -8,6 +8,7 @@ on:
       - 'packages/cli/**'
       - 'packages/core/**'
       - 'packages/deployer/**'
+      - 'e2e-tests/create-mastra/**'
       - '.github/workflows/test-bun.yml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'packages/cli/**'
       - 'packages/core/**'
       - 'packages/deployer/**'
+      - 'e2e-tests/create-mastra/**'
 
 jobs:
   test-bun-bundler:

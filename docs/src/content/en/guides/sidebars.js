@@ -91,6 +91,11 @@ const sidebars = {
       items: [
         {
           type: "doc",
+          id: "deployment/custom-bundler",
+          label: "Bun Integration",
+        },
+        {
+          type: "doc",
           id: "deployment/amazon-ec2",
           label: "Amazon EC2",
         },
