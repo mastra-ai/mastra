@@ -1226,7 +1226,7 @@ export function getAgentMemoryTests({
       expect(assistantMessages.length).toBeGreaterThanOrEqual(1);
     });
 
-    it.only('should NOT save messages when input guardrail aborts (before LLM call)', async () => {
+    it('should NOT save messages when input guardrail aborts (before LLM call)', async () => {
       const inputGuardrailStorage = new MockStore();
       const inputGuardrailMemory = new Memory({
         storage: inputGuardrailStorage,

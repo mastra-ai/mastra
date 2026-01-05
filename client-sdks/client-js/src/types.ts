@@ -164,6 +164,7 @@ export interface GetToolResponse {
   description: string;
   inputSchema: string;
   outputSchema: string;
+  requestContextSchema: string;
 }
 
 export interface ListWorkflowRunsParams {

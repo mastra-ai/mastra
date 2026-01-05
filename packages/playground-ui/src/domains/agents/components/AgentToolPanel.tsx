@@ -19,7 +19,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const [requestContextFormData, setRequestContextFormData] = useState<Record<string, any>>({});
 
-  const tool: any = Object.values(agent?.tools ?? {}).find((tool: any) => tool.id === toolId);
+  const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
 
   const { mutateAsync: executeTool, isPending: isExecutingTool, data: result } = useExecuteAgentTool();
   const { requestContext: playgroundRequestContext } = usePlaygroundStore();
