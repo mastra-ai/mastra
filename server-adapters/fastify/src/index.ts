@@ -90,8 +90,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   async stream(route: ServerRoute, reply: FastifyReply, result: { fullStream: ReadableStream }): Promise<void> {
-    reply.header('Content-Type', 'text/plain');
-    reply.header('Transfer-Encoding', 'chunked');
+    // Hijack the reply to take control of the response
+    // This is required when writing directly to reply.raw
+    reply.hijack();
+
+    // Write headers directly to the raw response
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/plain',
+      'Transfer-Encoding': 'chunked',
+    });
 
     const streamFormat = route.streamFormat || 'stream';
 
