@@ -628,7 +628,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return allMessages.filter(msg => {
       if (!msg.createdAt) return true; // Include messages without timestamps
       const msgDate = new Date(msg.createdAt);
-      return msgDate >= lastObservedAt;
+      // Use > (exclusive) because lastObservedAt is the timestamp of the last observed message
+      return msgDate > lastObservedAt;
     });
   }
 
