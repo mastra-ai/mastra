@@ -13,7 +13,7 @@
   "dependencies": {
     "@hono/node-server": "^1.15.1",
     "@hono/otel": "^1.0.1",
-    "@hono/swagger-ui": "^0.5.2",
+    "@hono/swagger-ui": "^0.5.3",
     "@mastra/core": "latest",
     "@mastra/hono": "latest",
     "@mastra/hono-multi-instrumentation": "workspace:*",
