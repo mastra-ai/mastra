@@ -23,9 +23,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/mcp",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/mcp",
+    "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",
     "test:integration": "cd integration-tests && pnpm test:mcp",
@@ -63,7 +63,7 @@
     "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"

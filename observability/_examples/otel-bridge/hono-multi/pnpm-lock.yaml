@@ -32,7 +32,7 @@ importers:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@20.19.25)(typescript@5.9.3)
       typescript:
-        specifier: ^5.9.2
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
         specifier: ^2.0.0
@@ -111,7 +111,7 @@ importers:
         specifier: ^3.6.2
         version: 3.6.2
       typescript:
-        specifier: ^5.9.2
+        specifier: ^5.9.3
         version: 5.9.3
 
   service-mastra:
@@ -172,7 +172,7 @@ importers:
         specifier: ^4.19.2
         version: 4.20.6
       typescript:
-        specifier: ^5.9.2
+        specifier: ^5.9.3
         version: 5.9.3
 
   service-one:
@@ -206,7 +206,7 @@ importers:
         specifier: ^4.19.2
         version: 4.20.6
       typescript:
-        specifier: ^5.9.2
+        specifier: ^5.9.3
         version: 5.9.3
 
   service-two:
@@ -240,7 +240,7 @@ importers:
         specifier: ^4.19.2
         version: 4.20.6
       typescript:
-        specifier: ^5.9.2
+        specifier: ^5.9.3
         version: 5.9.3
 
 packages:
