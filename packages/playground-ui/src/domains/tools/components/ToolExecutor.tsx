@@ -113,4 +113,4 @@ const ToolExecutor = ({
   );
 };
 
-export default ToolExecutor;
+export { ToolExecutor };

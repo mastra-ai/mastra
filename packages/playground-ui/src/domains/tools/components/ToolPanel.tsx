@@ -6,7 +6,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { parse } from 'superjson';
 import { z, ZodType } from 'zod';
 import { Txt } from '@/ds/components/Txt';
-import ToolExecutor from './ToolExecutor';
+import { ToolExecutor } from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect, useRef } from 'react';
 import { toast } from '@/lib/toast';
