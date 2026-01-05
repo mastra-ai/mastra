@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FileService } from '@mastra/deployer/build';
+import { FileService, getEsbuildPlatform } from '@mastra/deployer/build';
 import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
 import type { Config } from '@mastra/core/mastra';
 import { copy } from 'fs-extra';
@@ -13,6 +13,7 @@ export class BuildBundler extends Bundler {
   constructor({ studio }: { studio?: boolean } = {}) {
     super('Build');
     this.studio = studio ?? false;
+    this.platform = getEsbuildPlatform();
   }
 
   protected async getUserBundlerOptions(

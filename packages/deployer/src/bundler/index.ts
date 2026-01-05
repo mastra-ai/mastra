@@ -14,21 +14,20 @@ import { createBundler as createBundlerUtil, getInputOptions } from '../build/bu
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { getPackageRootPath } from '../build/package-info';
 import type { BundlerOptions } from '../build/types';
-import { getPackageName, slash, getEsbuildPlatform } from '../build/utils';
+import { getPackageName, slash, type BundlerPlatform } from '../build/utils';
 import { DepsService } from '../services/deps';
 import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
 
 export type { BundlerOptions } from '../build/types';
-
-// Detect runtime platform once at module load
-const BUNDLER_PLATFORM = getEsbuildPlatform();
+export type { BundlerPlatform } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
 
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
+  protected platform: BundlerPlatform = 'node';
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
@@ -124,7 +123,7 @@ export abstract class Bundler extends MastraBundler {
       {
         outputDir: join(outputDirectory, this.analyzeOutputDir),
         projectRoot: outputDirectory,
-        platform: BUNDLER_PLATFORM,
+        platform: this.platform,
       },
       this.logger,
     );
@@ -181,7 +180,7 @@ export abstract class Bundler extends MastraBundler {
     const inputOptions: InputOptions = await getInputOptions(
       mastraEntryFile,
       analyzedBundleInfo,
-      BUNDLER_PLATFORM,
+      this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify('production'),
       },
@@ -299,7 +298,7 @@ export abstract class Bundler extends MastraBundler {
         {
           outputDir: analyzeDir,
           projectRoot,
-          platform: BUNDLER_PLATFORM,
+          platform: this.platform,
           bundlerOptions: internalBundlerOptions,
         },
         this.logger,

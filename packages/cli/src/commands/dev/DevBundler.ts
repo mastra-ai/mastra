@@ -10,15 +10,13 @@ import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 import { devLogger } from '../../utils/dev-logger.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
 
-// Detect runtime platform once at module load
-const BUNDLER_PLATFORM = getEsbuildPlatform();
-
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
 
   constructor(customEnvFile?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    this.platform = getEsbuildPlatform();
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -70,7 +68,7 @@ export class DevBundler extends Bundler {
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
-      BUNDLER_PLATFORM,
+      this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
