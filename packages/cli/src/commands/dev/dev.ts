@@ -95,6 +95,7 @@ const startServer = async (
 
     // Write mastra packages to a file and pass the file path via env var
     const packagesFilePath = join(dotMastraPath, '..', 'mastra-packages.json');
+    await mkdir(dotMastraPath, { recursive: true });
     if (startOptions.mastraPackages) {
       await writeFile(packagesFilePath, JSON.stringify(startOptions.mastraPackages), 'utf-8');
     }
