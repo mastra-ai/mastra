@@ -2,6 +2,12 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import {
+  emitGoalState,
+  analyzeGoalState,
+  recordAgentRunCompletion,
+  type AgenticInstrumentationContext,
+} from '../../observability/agentic-instrumentation';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';
@@ -175,6 +181,108 @@ export function workflowLoopStream<
       }
 
       await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+
+      // Emit agentic metrics for the completed run
+      const result = executionResult.result;
+      const finishReason = result.stepResult?.reason;
+      const hasError = finishReason === 'error';
+      const wasSuspended = false; // Not suspended since we got to this point
+      const endTimestamp = Date.now();
+      const durationMs = endTimestamp - startTimestamp;
+
+      const instrumentationContext: AgenticInstrumentationContext = {
+        agentId: agentId || 'unknown',
+        runId,
+        threadId: _internal?.threadId,
+        resourceId: _internal?.resourceId,
+      };
+
+      // Emit goal state event
+      const goalState = analyzeGoalState(finishReason, hasError, wasSuspended);
+      const stepCount = result.output?.steps?.length || 0;
+
+      emitGoalState({
+        context: instrumentationContext,
+        analysis: {
+          state: goalState,
+          finishReason,
+          stepsCompleted: stepCount,
+          totalDurationMs: durationMs,
+          reason: finishReason === 'tripwire' ? 'Guardrail triggered' : undefined,
+        },
+        logger: rest.logger,
+      });
+
+      // Calculate aggregated metrics from steps
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      let toolCallCount = 0;
+      let toolSuccessCount = 0;
+      let toolFailureCount = 0;
+      let thinkingStepCount = 0;
+      let actionStepCount = 0;
+
+      if (result.output?.steps) {
+        for (const step of result.output.steps) {
+          if (step.usage) {
+            totalInputTokens += step.usage.inputTokens || 0;
+            totalOutputTokens += step.usage.outputTokens || 0;
+          }
+          // Count tool calls in each step
+          const stepToolCalls = step.toolCalls?.length || 0;
+          toolCallCount += stepToolCalls;
+
+          // Determine step type based on tool calls
+          if (stepToolCalls > 0) {
+            actionStepCount++;
+            // Count tool results for success/failure
+            if (step.toolResults) {
+              for (const toolResult of step.toolResults) {
+                if (toolResult.result !== undefined && !('error' in toolResult)) {
+                  toolSuccessCount++;
+                } else {
+                  toolFailureCount++;
+                }
+              }
+            }
+          } else {
+            thinkingStepCount++;
+          }
+        }
+      }
+
+      // Use final usage if available (more accurate)
+      if (result.output?.usage) {
+        totalInputTokens = result.output.usage.inputTokens || totalInputTokens;
+        totalOutputTokens = result.output.usage.outputTokens || totalOutputTokens;
+      }
+
+      // Record comprehensive run completion
+      recordAgentRunCompletion({
+        completion: {
+          context: instrumentationContext,
+          durationMs,
+          stepCount,
+          toolCallCount,
+          toolSuccessCount,
+          toolFailureCount,
+          tokenUsage: {
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+          },
+          finishReason,
+          success: !hasError && goalState === 'completed',
+          errorType: hasError ? 'AgentError' : undefined,
+          goalCompleted: goalState === 'completed',
+          guardrailTriggerCount: 0, // Would need to track through state
+          humanInterventionCount: 0, // Would need to track through state
+          backtrackCount: 0, // Would need to track through state
+          thinkingStepCount,
+          actionStepCount,
+          timeToFirstActionMs: undefined, // Would need to track through state
+        },
+        logger: rest.logger,
+      });
 
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved

@@ -9,6 +9,7 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
+import { emitGuardrailTriggered, type AgenticInstrumentationContext } from '../observability/agentic-instrumentation';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -85,22 +86,57 @@ export class ProcessorRunner {
   public readonly outputProcessors: ProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  private readonly agentId?: string;
+  private readonly runId?: string;
 
   constructor({
     inputProcessors,
     outputProcessors,
     logger,
     agentName,
+    agentId,
+    runId,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
+    agentId?: string;
+    runId?: string;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.agentId = agentId;
+    this.runId = runId;
+  }
+
+  /**
+   * Emit guardrail triggered event when a TripWire is caught
+   */
+  private emitGuardrailEvent(error: TripWire, processorId: string, processorName?: string): void {
+    if (!this.agentId || !this.runId) {
+      return;
+    }
+
+    const context: AgenticInstrumentationContext = {
+      agentId: this.agentId,
+      runId: this.runId,
+    };
+
+    const action = error.options?.retry ? 'retry' : 'blocked';
+
+    emitGuardrailTriggered({
+      context,
+      processorId,
+      processorName,
+      action,
+      reason: error.message,
+      willRetry: error.options?.retry,
+      metadata: error.options?.metadata as Record<string, unknown> | undefined,
+      logger: this.logger,
+    });
   }
 
   /**
@@ -126,8 +162,7 @@ export class ProcessorRunner {
       const tripwireData = (
         result as { tripwire?: { reason?: string; retry?: boolean; metadata?: unknown; processorId?: string } }
       ).tripwire;
-      // Re-throw as TripWire so the agent handles it properly
-      throw new TripWire(
+      const tripwireError = new TripWire(
         tripwireData?.reason || `Tripwire triggered in workflow ${workflow.id}`,
         {
           retry: tripwireData?.retry,
@@ -135,6 +170,10 @@ export class ProcessorRunner {
         },
         tripwireData?.processorId || workflow.id,
       );
+      // Emit guardrail event before rethrowing
+      this.emitGuardrailEvent(tripwireError, tripwireData?.processorId || workflow.id, workflow.name);
+      // Re-throw as TripWire so the agent handles it properly
+      throw tripwireError;
     }
 
     // Check for execution failure
@@ -213,6 +252,7 @@ export class ProcessorRunner {
           processorSpan?.end({ output: processableMessages });
         } catch (error) {
           if (error instanceof TripWire) {
+            // Guardrail event already emitted in executeWorkflowAsProcessor
             throw error;
           }
           processorSpan?.error({ error: error as Error, endSpan: true });
@@ -224,7 +264,9 @@ export class ProcessorRunner {
       // Handle regular processor
       const processor = processorOrWorkflow;
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        const tripwireError = new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        this.emitGuardrailEvent(tripwireError, processor.id, processor.name);
+        throw tripwireError;
       };
 
       // Use the processOutputResult method if available
@@ -408,7 +450,13 @@ export class ProcessorRunner {
               streamParts: state.streamParts as ChunkType[],
               state: state.customState,
               abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-                throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
+                const tripwireError = new TripWire(
+                  reason || `Stream part blocked by ${processor.id}`,
+                  options,
+                  processor.id,
+                );
+                this.emitGuardrailEvent(tripwireError, processor.id, processor.name);
+                throw tripwireError;
               },
               tracingContext: { currentSpan: state.span },
               requestContext,
@@ -588,7 +636,9 @@ export class ProcessorRunner {
       // Handle regular processor
       const processor = processorOrWorkflow;
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        const tripwireError = new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        this.emitGuardrailEvent(tripwireError, processor.id, processor.name);
+        throw tripwireError;
       };
 
       // Use the processInput method if available
@@ -835,7 +885,9 @@ export class ProcessorRunner {
       }
 
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        const tripwireError = new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        this.emitGuardrailEvent(tripwireError, processor.id, processor.name);
+        throw tripwireError;
       };
 
       // Get all system messages to pass to the processor
@@ -1065,7 +1117,9 @@ export class ProcessorRunner {
       }
 
       const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        const tripwireError = new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        this.emitGuardrailEvent(tripwireError, processor.id, processor.name);
+        throw tripwireError;
       };
 
       const currentSpan = tracingContext?.currentSpan;

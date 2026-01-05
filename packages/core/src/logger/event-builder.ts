@@ -466,13 +466,14 @@ export function humanApprovalResponse(
   data: HumanApprovalResponseEvent['data'],
 ): HumanApprovalResponseEvent {
   const result = data.approved ? '✓ Approved' : '✗ Denied';
+  const waitInfo = data.waitTimeMs !== undefined ? ` (waited ${data.waitTimeMs}ms)` : '';
   return {
     category: 'human',
     event: 'human.approval_response',
     level: data.approved ? LogLevel.INFO : LogLevel.WARN,
     context,
     timestamp: new Date(),
-    message: `${result}: ${data.toolName} (waited ${data.waitTimeMs}ms)`,
+    message: `${result}: ${data.toolName}${waitInfo}`,
     data,
   };
 }

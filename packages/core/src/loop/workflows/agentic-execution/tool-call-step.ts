@@ -1,6 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod';
 import type { MastraDBMessage } from '../../../memory';
+import {
+  emitHumanApprovalRequested,
+  emitHumanApprovalResponse,
+  type AgenticInstrumentationContext,
+} from '../../../observability/agentic-instrumentation';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
@@ -39,7 +44,13 @@ export function createToolCallStep<
   modelSpanTracker,
   _internal,
   logger,
+  agentId,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  // Create instrumentation context for human intervention events
+  const instrumentationContext: AgenticInstrumentationContext = {
+    agentId: agentId || 'unknown',
+    runId,
+  };
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -279,6 +290,16 @@ export function createToolCallStep<
 
         if (toolRequiresApproval) {
           if (!resumeData) {
+            // Emit human approval requested event
+            emitHumanApprovalRequested({
+              context: instrumentationContext,
+              toolName: inputData.toolName,
+              toolCallId: inputData.toolCallId,
+              args: inputData.args,
+              reason: 'Tool requires approval before execution',
+              logger,
+            });
+
             controller.enqueue({
               type: 'tool-call-approval',
               runId,
@@ -329,6 +350,16 @@ export function createToolCallStep<
               },
             );
           } else {
+            // Emit human approval response event
+            emitHumanApprovalResponse({
+              context: instrumentationContext,
+              toolName: inputData.toolName,
+              toolCallId: inputData.toolCallId,
+              approved: !!resumeData.approved,
+              reason: resumeData.approved ? undefined : 'User declined the tool execution',
+              logger,
+            });
+
             // Remove approval metadata since we're resuming (either approved or declined)
             await removeToolMetadata(inputData.toolName, 'approval');
 

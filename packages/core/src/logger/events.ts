@@ -525,7 +525,8 @@ export interface HumanApprovalRequestedEvent extends BaseLogEvent {
   data: {
     toolName: string;
     toolCallId: string;
-    args?: Record<string, unknown>;
+    args?: unknown;
+    reason?: string;
   };
 }
 
@@ -536,7 +537,8 @@ export interface HumanApprovalResponseEvent extends BaseLogEvent {
     toolName: string;
     toolCallId: string;
     approved: boolean;
-    waitTimeMs: number;
+    waitTimeMs?: number;
+    reason?: string;
   };
 }
 
@@ -561,6 +563,11 @@ export interface StepAnalysisEvent extends BaseLogEvent {
     toolTimeMs: number;
     toolCalls: string[];
     finishReason?: string;
+    tokenUsage?: {
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens?: number;
+    };
   };
 }
 
