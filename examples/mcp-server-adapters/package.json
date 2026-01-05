@@ -26,7 +26,7 @@
     "@mastra/auth-auth0": "latest",
     "@mastra/auth-workos": "latest",
     "@mastra/auth-clerk": "latest",
-    "hono": "^4.10.4",
+    "hono": "^4.11.3",
     "@hono/node-server": "^1.19.6",
     "express": "^5.1.0",
     "mastra": "latest",

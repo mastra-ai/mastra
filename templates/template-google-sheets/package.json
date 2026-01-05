@@ -26,7 +26,7 @@
     "@mastra/mcp": "beta",
     "@mastra/memory": "beta",
     "@mastra/observability": "beta",
-    "hono": "^4.10.5",
+    "hono": "^4.11.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
