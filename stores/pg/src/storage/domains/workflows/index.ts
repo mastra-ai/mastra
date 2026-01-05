@@ -311,7 +311,15 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        conditions.push(`snapshot::jsonb ->> 'status' = $${paramIndex}`);
+        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
+        // PostgreSQL's jsonb cast fails on:
+        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
+        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
+        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
+        // See: https://github.com/mastra-ai/mastra/issues/11563
+        conditions.push(
+          `regexp_replace(snapshot, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
+        );
         values.push(status);
         paramIndex++;
       }
