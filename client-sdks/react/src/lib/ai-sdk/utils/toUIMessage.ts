@@ -42,9 +42,7 @@ export const mapWorkflowStreamChunkToWatchResult = (
         ? { result: lastStep?.output }
         : finalStatus === 'failed' && lastStep?.status === 'failed'
           ? { error: lastStep?.error }
-          : finalStatus === 'tripwire' && chunk.payload.tripwire
-            ? { tripwire: chunk.payload.tripwire }
-            : {}),
+          : {}),
     };
   }
 
@@ -113,59 +111,21 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   // Always return a new array reference for React
   const result = [...conversation];
 
-  // Handle data-* chunks (custom data chunks from writer.custom())
-  if (chunk.type.startsWith('data-')) {
-    const lastMessage = result[result.length - 1];
-    if (!lastMessage || lastMessage.role !== 'assistant') {
-      // Create a new assistant message with the data part
-      const newMessage: MastraUIMessage = {
-        id: `data-${chunk.runId}-${Date.now()}`,
-        role: 'assistant',
-        parts: [
-          {
-            type: chunk.type as `data-${string}`,
-            data: 'data' in chunk ? chunk.data : undefined,
-          },
-        ],
-        metadata,
-      };
-      return [...result, newMessage];
-    }
-
-    // Add data part to existing assistant message
-    const updatedMessage: MastraUIMessage = {
-      ...lastMessage,
-      parts: [
-        ...lastMessage.parts,
-        {
-          type: chunk.type as `data-${string}`,
-          data: 'data' in chunk ? chunk.data : undefined,
-        },
-      ],
-    };
-    return [...result.slice(0, -1), updatedMessage];
-  }
-
   switch (chunk.type) {
     case 'tripwire': {
-      // Create a new assistant message with tripwire-specific metadata
+      // Create a new assistant message
       const newMessage: MastraUIMessage = {
         id: `tripwire-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [
           {
             type: 'text',
-            text: chunk.payload.reason,
+            text: chunk.payload.tripwireReason,
           },
         ],
         metadata: {
           ...metadata,
-          status: 'tripwire',
-          tripwire: {
-            retry: chunk.payload.retry,
-            tripwirePayload: chunk.payload.metadata,
-            processorId: chunk.payload.processorId,
-          },
+          status: 'warning',
         },
       };
 
@@ -174,9 +134,8 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'start': {
       // Create a new assistant message
-      // Use the server-provided messageId if available, otherwise fall back to generated ID
       const newMessage: MastraUIMessage = {
-        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
+        id: `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,
@@ -327,7 +286,6 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
-    case 'tool-error':
     case 'tool-result': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
@@ -335,36 +293,21 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part =>
-          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
-          'toolCallId' in part &&
-          part.toolCallId === chunk.payload.toolCallId,
+        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
-        if (
-          toolPart.type === 'dynamic-tool' ||
-          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
-        ) {
-          const toolName =
-            'toolName' in toolPart && typeof toolPart.toolName === 'string'
-              ? toolPart.toolName
-              : toolPart.type.startsWith('tool-')
-                ? toolPart.type.substring(5)
-                : '';
 
-          const toolCallId = (toolPart as any).toolCallId;
-
-          if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
-            const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
+        if (toolPart.type === 'dynamic-tool') {
+          if (chunk.payload.isError) {
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName,
-              toolCallId,
+              toolName: toolPart.toolName,
+              toolCallId: toolPart.toolCallId,
               state: 'output-error',
-              input: (toolPart as any).input,
-              errorText: String(error),
+              input: toolPart.input,
+              errorText: String(chunk.payload.result),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {
@@ -380,10 +323,10 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             }
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName,
-              toolCallId,
+              toolName: toolPart.toolName,
+              toolCallId: toolPart.toolCallId,
               state: 'output-available',
-              input: (toolPart as any).input,
+              input: toolPart.input,
               output,
               callProviderMetadata: chunk.payload.providerMetadata,
             };
@@ -407,34 +350,17 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part =>
-          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
-          'toolCallId' in part &&
-          part.toolCallId === chunk.payload.toolCallId,
+        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
-        // Handle dynamic-tool and tool-* part types
-        if (
-          toolPart.type === 'dynamic-tool' ||
-          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
-        ) {
-          // Extract toolName, toolCallId, input from different part structures
-          const toolName =
-            'toolName' in toolPart && typeof toolPart.toolName === 'string'
-              ? toolPart.toolName
-              : typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')
-                ? toolPart.type.substring(5)
-                : '';
-          const toolCallId = (toolPart as any).toolCallId;
-          const input = (toolPart as any).input;
-
+        if (toolPart.type === 'dynamic-tool') {
           // Handle workflow-related output chunks
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
             const existingWorkflowState =
-              ((toolPart as any).output as WorkflowStreamResult<any, any, any, any>) ||
+              (toolPart.output as WorkflowStreamResult<any, any, any, any>) ||
               ({} as WorkflowStreamResult<any, any, any, any>);
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
@@ -444,11 +370,7 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             );
 
             parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName,
-              toolCallId,
-              state: 'input-streaming',
-              input,
+              ...toolPart,
               output: updatedWorkflowState as any,
             };
           } else if (
@@ -459,15 +381,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
           } else {
             // Handle regular tool output
-            const currentOutput = ((toolPart as any).output as any) || [];
+            const currentOutput = (toolPart.output as any) || [];
             const existingOutput = Array.isArray(currentOutput) ? currentOutput : [];
 
             parts[toolPartIndex] = {
-              type: 'dynamic-tool',
-              toolName,
-              toolCallId,
-              state: 'input-streaming',
-              input,
+              ...toolPart,
               output: [...existingOutput, chunk.payload.output] as any,
             };
           }
@@ -552,80 +470,17 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       ];
     }
 
-    case 'tool-call-approval': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
-      // Find and update the corresponding tool call
-
-      const lastRequireApprovalMetadata =
-        lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.requireApprovalMetadata : {};
-
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          metadata: {
-            ...lastMessage.metadata,
-            mode: 'stream',
-            requireApprovalMetadata: {
-              ...lastRequireApprovalMetadata,
-              [chunk.payload.toolName]: {
-                toolCallId: chunk.payload.toolCallId,
-                toolName: chunk.payload.toolName,
-                args: chunk.payload.args,
-              },
-            },
-          },
-        },
-      ];
-    }
-
-    case 'tool-call-suspended': {
-      const lastMessage = result[result.length - 1];
-      if (!lastMessage || lastMessage.role !== 'assistant') return result;
-
-      // Find and update the corresponding tool call
-
-      const lastSuspendedTools = lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.suspendedTools : {};
-
-      return [
-        ...result.slice(0, -1),
-        {
-          ...lastMessage,
-          metadata: {
-            ...lastMessage.metadata,
-            mode: 'stream',
-            suspendedTools: {
-              ...lastSuspendedTools,
-              [chunk.payload.toolName]: {
-                toolCallId: chunk.payload.toolCallId,
-                toolName: chunk.payload.toolName,
-                args: chunk.payload.args,
-                suspendPayload: chunk.payload.suspendPayload,
-              },
-            },
-          },
-        },
-      ];
-    }
-
     case 'finish': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
       // Mark streaming parts as done
       const parts = lastMessage.parts.map(part => {
-        if (
-          typeof part === 'object' &&
-          part !== null &&
-          'type' in part &&
-          'state' in part &&
-          part.state === 'streaming'
-        ) {
-          if (part.type === 'text' || part.type === 'reasoning') {
-            return { ...part, state: 'done' as const };
-          }
+        if (part.type === 'text' && part.state === 'streaming') {
+          return { ...part, state: 'done' as const };
+        }
+        if (part.type === 'reasoning' && part.state === 'streaming') {
+          return { ...part, state: 'done' as const };
         }
         return part;
       });

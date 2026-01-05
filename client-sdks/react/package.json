@@ -43,9 +43,12 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
-    "@mastra/client-js": "workspace:*",
+    "@dagrejs/dagre": "^1.1.5",
     "@lukeed/uuid": "^2.0.1",
+    "@mastra/client-js": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-tooltip": "^1.2.7",
+    "@xyflow/react": "^12.9.0",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
     "shiki": "^1.29.2",
@@ -64,8 +67,8 @@
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
-    "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:",
+    "@vitest/coverage-v8": "3.2.3",
+    "@vitest/ui": "3.2.3",
     "eslint": "^9.37.0",
     "eslint-plugin-storybook": "^9.1.12",
     "react": ">=19.0.0",
@@ -76,7 +79,7 @@
     "typescript": "^5.8.3",
     "vite": "^7.1.9",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "catalog:"
+    "vitest": "^4.0.16"
   },
   "eslintConfig": {
     "extends": [
