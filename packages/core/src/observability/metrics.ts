@@ -200,6 +200,76 @@ export interface ToolExecutionMetrics {
 // Model Metrics
 // ============================================================================
 
+// ============================================================================
+// HTTP Metrics
+// ============================================================================
+
+/**
+ * Metrics for a single HTTP request
+ */
+export interface HttpRequestMetrics {
+  /** HTTP method */
+  method: string;
+  /** Request URL or path */
+  url: string;
+  /** Host/domain */
+  host?: string;
+  /** Request direction */
+  direction: 'outbound' | 'inbound';
+  /** What initiated the request */
+  source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'server' | 'integration';
+  /** Response status code */
+  statusCode: number;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Whether the request was successful */
+  success: boolean;
+  /** Request body size in bytes */
+  requestSize?: number;
+  /** Response body size in bytes */
+  responseSize?: number;
+  /** Associated agent ID */
+  agentId?: string;
+  /** Associated workflow ID */
+  workflowId?: string;
+  /** Error type if failed */
+  errorType?: string;
+}
+
+/**
+ * Aggregated HTTP metrics over a time period
+ */
+export interface HttpAggregateMetrics {
+  /** Time period start */
+  periodStart: Date;
+  /** Time period end */
+  periodEnd: Date;
+  /** Total requests */
+  totalRequests: number;
+  /** Successful requests */
+  successfulRequests: number;
+  /** Failed requests */
+  failedRequests: number;
+  /** Success rate (0-1) */
+  successRate: number;
+  /** Average duration in ms */
+  avgDurationMs: number;
+  /** P50 duration */
+  p50DurationMs: number;
+  /** P95 duration */
+  p95DurationMs: number;
+  /** P99 duration */
+  p99DurationMs: number;
+  /** Total bytes sent */
+  totalBytesSent: number;
+  /** Total bytes received */
+  totalBytesReceived: number;
+  /** Requests by status code */
+  byStatusCode: Record<number, number>;
+  /** Requests by host */
+  byHost: Record<string, number>;
+}
+
 /**
  * Metrics for a single model call
  */
@@ -292,6 +362,11 @@ export interface IMetricsCollector {
   recordModelCall(metrics: ModelCallMetrics): void;
 
   /**
+   * Record metrics from an HTTP request
+   */
+  recordHttpRequest(metrics: HttpRequestMetrics): void;
+
+  /**
    * Record token usage
    */
   recordTokenUsage(usage: TokenUsage, labels?: MetricLabels): void;
@@ -351,6 +426,10 @@ export class NoOpMetricsCollector implements IMetricsCollector {
     // No-op
   }
 
+  recordHttpRequest(_metrics: HttpRequestMetrics): void {
+    // No-op
+  }
+
   recordTokenUsage(_usage: TokenUsage, _labels?: MetricLabels): void {
     // No-op
   }
@@ -384,6 +463,7 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
   private workflowRuns: WorkflowRunMetrics[] = [];
   private toolExecutions: ToolExecutionMetrics[] = [];
   private modelCalls: ModelCallMetrics[] = [];
+  private httpRequests: HttpRequestMetrics[] = [];
 
   private makeKey(name: string, labels?: MetricLabels): string {
     if (!labels) return name;
@@ -485,6 +565,40 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
     this.recordTokenUsage(metrics.tokenUsage, labels);
   }
 
+  recordHttpRequest(metrics: HttpRequestMetrics): void {
+    this.httpRequests.push(metrics);
+
+    const labels: MetricLabels = {
+      method: metrics.method,
+      host: metrics.host,
+      direction: metrics.direction,
+      source: metrics.source,
+      agentId: metrics.agentId,
+      workflowId: metrics.workflowId,
+    };
+
+    this.incrementCounter('http_requests_total', labels);
+    if (metrics.success) {
+      this.incrementCounter('http_requests_success_total', labels);
+    } else {
+      this.incrementCounter('http_requests_error_total', { ...labels, errorType: metrics.errorType });
+    }
+
+    // Track by status code
+    this.incrementCounter('http_requests_by_status', { ...labels, statusCode: String(metrics.statusCode) });
+
+    // Record latency
+    this.recordHistogram('http_request_duration_ms', labels, metrics.durationMs);
+
+    // Record bytes if available
+    if (metrics.requestSize) {
+      this.incrementCounter('http_bytes_sent_total', labels, metrics.requestSize);
+    }
+    if (metrics.responseSize) {
+      this.incrementCounter('http_bytes_received_total', labels, metrics.responseSize);
+    }
+  }
+
   recordTokenUsage(usage: TokenUsage, labels: MetricLabels = {}): void {
     this.incrementCounter('tokens_input_total', labels, usage.inputTokens);
     this.incrementCounter('tokens_output_total', labels, usage.outputTokens);
@@ -545,6 +659,10 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
     return [...this.modelCalls];
   }
 
+  getHttpRequests(): HttpRequestMetrics[] {
+    return [...this.httpRequests];
+  }
+
   getAllCounters(): Map<string, number> {
     return new Map(this.counters);
   }
@@ -557,6 +675,7 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
     this.workflowRuns = [];
     this.toolExecutions = [];
     this.modelCalls = [];
+    this.httpRequests = [];
   }
 }
 
@@ -609,4 +728,12 @@ export const MetricNames = {
   COST_USD: 'cost_usd_total',
   COST_MODEL_USD: 'cost_model_usd_total',
   COST_TOOL_USD: 'cost_tool_usd_total',
+
+  // HTTP metrics
+  HTTP_REQUESTS_TOTAL: 'http_requests_total',
+  HTTP_REQUESTS_SUCCESS: 'http_requests_success_total',
+  HTTP_REQUESTS_ERROR: 'http_requests_error_total',
+  HTTP_REQUEST_DURATION: 'http_request_duration_ms',
+  HTTP_BYTES_SENT: 'http_bytes_sent_total',
+  HTTP_BYTES_RECEIVED: 'http_bytes_received_total',
 } as const;

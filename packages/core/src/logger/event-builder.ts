@@ -31,6 +31,9 @@ import type {
   ScoreComputedEvent,
   DecisionMadeEvent,
   GuardrailTriggeredEvent,
+  HttpRequestEvent,
+  HttpResponseEvent,
+  HttpErrorEvent,
   RateLimitEvent,
   TimeoutEvent,
 } from './events';
@@ -432,6 +435,58 @@ export function timeout(
     context,
     timestamp: new Date(),
     message: `Timeout in ${data.operation} after ${data.timeoutMs}ms`,
+    data,
+  };
+}
+
+// ============================================================================
+// HTTP Events
+// ============================================================================
+
+export function httpRequest(
+  context: LogContext,
+  data: HttpRequestEvent['data'],
+): HttpRequestEvent {
+  const arrow = data.direction === 'outbound' ? '→' : '←';
+  return {
+    category: 'http',
+    event: 'http.request',
+    level: LogLevel.DEBUG,
+    context,
+    timestamp: new Date(),
+    message: `${arrow} ${data.method} ${data.url}`,
+    data,
+  };
+}
+
+export function httpResponse(
+  context: LogContext,
+  data: HttpResponseEvent['data'],
+): HttpResponseEvent {
+  const arrow = data.direction === 'outbound' ? '←' : '→';
+  const status = data.success ? data.statusCode : `${data.statusCode} FAILED`;
+  return {
+    category: 'http',
+    event: 'http.response',
+    level: data.success ? LogLevel.DEBUG : LogLevel.WARN,
+    context,
+    timestamp: new Date(),
+    message: `${arrow} ${data.method} ${data.url} ${status} (${data.durationMs}ms)`,
+    data,
+  };
+}
+
+export function httpError(
+  context: LogContext,
+  data: HttpErrorEvent['data'],
+): HttpErrorEvent {
+  return {
+    category: 'http',
+    event: 'http.error',
+    level: LogLevel.ERROR,
+    context,
+    timestamp: new Date(),
+    message: `HTTP ${data.method} ${data.url} failed: ${data.errorMessage}`,
     data,
   };
 }

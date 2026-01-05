@@ -71,6 +71,7 @@ export type LogEventCategory =
   | 'decision' // Agent decision points
   | 'resource' // Resource consumption (tokens, cost)
   | 'quality' // Quality signals (scores, feedback)
+  | 'http' // HTTP requests and responses
   | 'error'; // Errors and failures
 
 // ============================================================================
@@ -434,6 +435,66 @@ export interface FeedbackReceivedEvent extends BaseLogEvent {
 }
 
 // ============================================================================
+// HTTP Events
+// ============================================================================
+
+export interface HttpRequestEvent extends BaseLogEvent {
+  category: 'http';
+  event: 'http.request';
+  data: {
+    method: string;
+    url: string;
+    host?: string;
+    path?: string;
+    /** Request direction: outbound (to external API) or inbound (to Mastra server) */
+    direction: 'outbound' | 'inbound';
+    /** What initiated this request */
+    source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'server' | 'integration';
+    /** Content length in bytes */
+    contentLength?: number;
+    /** Request headers (sanitized - no auth) */
+    headers?: Record<string, string>;
+  };
+}
+
+export interface HttpResponseEvent extends BaseLogEvent {
+  category: 'http';
+  event: 'http.response';
+  data: {
+    method: string;
+    url: string;
+    host?: string;
+    path?: string;
+    direction: 'outbound' | 'inbound';
+    source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'server' | 'integration';
+    statusCode: number;
+    statusText?: string;
+    durationMs: number;
+    /** Response content length in bytes */
+    contentLength?: number;
+    /** Whether the request was successful (2xx) */
+    success: boolean;
+  };
+}
+
+export interface HttpErrorEvent extends BaseLogEvent {
+  category: 'http';
+  event: 'http.error';
+  data: {
+    method: string;
+    url: string;
+    host?: string;
+    path?: string;
+    direction: 'outbound' | 'inbound';
+    source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'server' | 'integration';
+    statusCode?: number;
+    errorType: string;
+    errorMessage: string;
+    durationMs: number;
+  };
+}
+
+// ============================================================================
 // Error Events
 // ============================================================================
 
@@ -516,6 +577,11 @@ export type ResourceEvent = TokenUsageEvent | CostIncurredEvent;
 export type QualityEvent = ScoreComputedEvent | FeedbackReceivedEvent;
 
 /**
+ * All HTTP events
+ */
+export type HttpEvent = HttpRequestEvent | HttpResponseEvent | HttpErrorEvent;
+
+/**
  * All error events (beyond AgentErrorEvent)
  */
 export type ErrorEvent = AgentErrorEvent | RateLimitEvent | TimeoutEvent;
@@ -531,6 +597,7 @@ export type AgentLogEvent =
   | DecisionEvent
   | ResourceEvent
   | QualityEvent
+  | HttpEvent
   | ErrorEvent;
 
 // ============================================================================

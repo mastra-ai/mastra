@@ -15,6 +15,7 @@ import type {
   WorkflowRunMetrics,
   ToolExecutionMetrics,
   ModelCallMetrics,
+  HttpRequestMetrics,
   TokenUsage,
 } from './metrics';
 import { NoOpMetricsCollector } from './metrics';
@@ -603,6 +604,267 @@ export function logMemorySaved(
 ): void {
   const event = events.memorySaved(context, data);
   logger.logEvent?.(event);
+}
+
+// ============================================================================
+// HTTP Instrumentation
+// ============================================================================
+
+export interface HttpInstrumentationOptions {
+  logger: IMastraLogger;
+  metrics?: IMetricsCollector;
+  direction: 'outbound' | 'inbound';
+  source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'server' | 'integration';
+  agentId?: string;
+  workflowId?: string;
+  tracingContext?: TracingContext;
+}
+
+/**
+ * Tracks a single HTTP request
+ */
+export class HttpRequestTracker {
+  private startTime: number;
+  private context: LogContext;
+  private method: string;
+  private url: string;
+  private host?: string;
+  private path?: string;
+
+  constructor(
+    private options: HttpInstrumentationOptions,
+    request: { method: string; url: string },
+  ) {
+    this.startTime = Date.now();
+    this.method = request.method.toUpperCase();
+    this.url = request.url;
+
+    // Parse URL for host and path
+    try {
+      const parsed = new URL(request.url);
+      this.host = parsed.host;
+      this.path = parsed.pathname;
+    } catch {
+      // URL might be relative or invalid
+      this.path = request.url;
+    }
+
+    this.context = createLogContext({
+      agentId: options.agentId,
+      workflowId: options.workflowId,
+      tracingContext: options.tracingContext,
+    });
+  }
+
+  /**
+   * Log the outgoing request
+   */
+  logRequest(data?: { contentLength?: number; headers?: Record<string, string> }): void {
+    const event = events.httpRequest(this.context, {
+      method: this.method,
+      url: this.url,
+      host: this.host,
+      path: this.path,
+      direction: this.options.direction,
+      source: this.options.source,
+      contentLength: data?.contentLength,
+      headers: data?.headers,
+    });
+    this.options.logger.logEvent?.(event);
+  }
+
+  /**
+   * Log and record successful response
+   */
+  response(data: {
+    statusCode: number;
+    statusText?: string;
+    contentLength?: number;
+  }): HttpRequestMetrics {
+    const durationMs = Date.now() - this.startTime;
+    const success = data.statusCode >= 200 && data.statusCode < 400;
+
+    // Log response event
+    const event = events.httpResponse(this.context, {
+      method: this.method,
+      url: this.url,
+      host: this.host,
+      path: this.path,
+      direction: this.options.direction,
+      source: this.options.source,
+      statusCode: data.statusCode,
+      statusText: data.statusText,
+      durationMs,
+      contentLength: data.contentLength,
+      success,
+    });
+    this.options.logger.logEvent?.(event);
+
+    // Build and record metrics
+    const metrics: HttpRequestMetrics = {
+      method: this.method,
+      url: this.url,
+      host: this.host,
+      direction: this.options.direction,
+      source: this.options.source,
+      statusCode: data.statusCode,
+      durationMs,
+      success,
+      responseSize: data.contentLength,
+      agentId: this.options.agentId,
+      workflowId: this.options.workflowId,
+    };
+
+    this.options.metrics?.recordHttpRequest(metrics);
+
+    return metrics;
+  }
+
+  /**
+   * Log and record error
+   */
+  error(error: Error): HttpRequestMetrics {
+    const durationMs = Date.now() - this.startTime;
+
+    // Log error event
+    const event = events.httpError(this.context, {
+      method: this.method,
+      url: this.url,
+      host: this.host,
+      path: this.path,
+      direction: this.options.direction,
+      source: this.options.source,
+      errorType: error.name,
+      errorMessage: error.message,
+      durationMs,
+    });
+    this.options.logger.logEvent?.(event);
+
+    // Build and record metrics
+    const metrics: HttpRequestMetrics = {
+      method: this.method,
+      url: this.url,
+      host: this.host,
+      direction: this.options.direction,
+      source: this.options.source,
+      statusCode: 0,
+      durationMs,
+      success: false,
+      errorType: error.name,
+      agentId: this.options.agentId,
+      workflowId: this.options.workflowId,
+    };
+
+    this.options.metrics?.recordHttpRequest(metrics);
+
+    return metrics;
+  }
+}
+
+/**
+ * Create an HTTP request tracker for outbound requests (to external APIs)
+ */
+export function trackOutboundRequest(
+  logger: IMastraLogger,
+  request: { method: string; url: string },
+  options?: {
+    metrics?: IMetricsCollector;
+    source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'integration';
+    agentId?: string;
+    workflowId?: string;
+    tracingContext?: TracingContext;
+  },
+): HttpRequestTracker {
+  return new HttpRequestTracker(
+    {
+      logger,
+      metrics: options?.metrics,
+      direction: 'outbound',
+      source: options?.source,
+      agentId: options?.agentId,
+      workflowId: options?.workflowId,
+      tracingContext: options?.tracingContext,
+    },
+    request,
+  );
+}
+
+/**
+ * Create an HTTP request tracker for inbound requests (to Mastra server)
+ */
+export function trackInboundRequest(
+  logger: IMastraLogger,
+  request: { method: string; url: string },
+  options?: {
+    metrics?: IMetricsCollector;
+    agentId?: string;
+    workflowId?: string;
+  },
+): HttpRequestTracker {
+  return new HttpRequestTracker(
+    {
+      logger,
+      metrics: options?.metrics,
+      direction: 'inbound',
+      source: 'server',
+      agentId: options?.agentId,
+      workflowId: options?.workflowId,
+    },
+    request,
+  );
+}
+
+/**
+ * Simple function to log and record a completed HTTP request
+ * Use this when you don't need the tracker pattern
+ */
+export function logHttpRequest(
+  logger: IMastraLogger,
+  metrics: IMetricsCollector | undefined,
+  context: LogContext,
+  data: {
+    method: string;
+    url: string;
+    statusCode: number;
+    durationMs: number;
+    direction: 'outbound' | 'inbound';
+    source?: 'tool' | 'agent' | 'workflow' | 'mcp' | 'server' | 'integration';
+    success?: boolean;
+    requestSize?: number;
+    responseSize?: number;
+    agentId?: string;
+    workflowId?: string;
+  },
+): void {
+  const success = data.success ?? (data.statusCode >= 200 && data.statusCode < 400);
+
+  // Log response event
+  const event = events.httpResponse(context, {
+    method: data.method,
+    url: data.url,
+    direction: data.direction,
+    source: data.source,
+    statusCode: data.statusCode,
+    durationMs: data.durationMs,
+    contentLength: data.responseSize,
+    success,
+  });
+  logger.logEvent?.(event);
+
+  // Record metrics
+  metrics?.recordHttpRequest({
+    method: data.method,
+    url: data.url,
+    direction: data.direction,
+    source: data.source,
+    statusCode: data.statusCode,
+    durationMs: data.durationMs,
+    success,
+    requestSize: data.requestSize,
+    responseSize: data.responseSize,
+    agentId: data.agentId,
+    workflowId: data.workflowId,
+  });
 }
 
 // ============================================================================

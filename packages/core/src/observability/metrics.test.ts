@@ -7,6 +7,7 @@ import {
   type WorkflowRunMetrics,
   type ToolExecutionMetrics,
   type ModelCallMetrics,
+  type HttpRequestMetrics,
 } from './metrics';
 
 describe('Metrics Collector', () => {
@@ -256,6 +257,102 @@ describe('Metrics Collector', () => {
         });
 
         expect(collector.getCounter(MetricNames.MODEL_FALLBACKS, { model: 'gpt-3.5-turbo', provider: 'openai', fallbackFrom: 'gpt-4' })).toBe(1);
+      });
+    });
+
+    describe('HTTP request metrics', () => {
+      it('should record successful HTTP requests', () => {
+        const metrics = {
+          method: 'GET',
+          url: 'https://api.example.com/users',
+          host: 'api.example.com',
+          direction: 'outbound' as const,
+          source: 'tool' as const,
+          statusCode: 200,
+          durationMs: 150,
+          success: true,
+          requestSize: 100,
+          responseSize: 500,
+          agentId: 'test-agent',
+        };
+
+        collector.recordHttpRequest(metrics);
+
+        const requests = collector.getHttpRequests();
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toEqual(metrics);
+
+        expect(collector.getCounter(MetricNames.HTTP_REQUESTS_TOTAL, {
+          method: 'GET',
+          host: 'api.example.com',
+          direction: 'outbound',
+          source: 'tool',
+          agentId: 'test-agent',
+        })).toBe(1);
+        expect(collector.getCounter(MetricNames.HTTP_REQUESTS_SUCCESS, {
+          method: 'GET',
+          host: 'api.example.com',
+          direction: 'outbound',
+          source: 'tool',
+          agentId: 'test-agent',
+        })).toBe(1);
+      });
+
+      it('should record failed HTTP requests', () => {
+        collector.recordHttpRequest({
+          method: 'POST',
+          url: 'https://api.example.com/data',
+          host: 'api.example.com',
+          direction: 'outbound',
+          source: 'integration',
+          statusCode: 500,
+          durationMs: 50,
+          success: false,
+          errorType: 'InternalServerError',
+        });
+
+        expect(collector.getCounter(MetricNames.HTTP_REQUESTS_ERROR, {
+          method: 'POST',
+          host: 'api.example.com',
+          direction: 'outbound',
+          source: 'integration',
+          errorType: 'InternalServerError',
+        })).toBe(1);
+      });
+
+      it('should track bytes sent and received', () => {
+        collector.recordHttpRequest({
+          method: 'POST',
+          url: 'https://api.example.com/upload',
+          host: 'api.example.com',
+          direction: 'outbound',
+          statusCode: 201,
+          durationMs: 200,
+          success: true,
+          requestSize: 1024,
+          responseSize: 256,
+        });
+
+        expect(collector.getCounter(MetricNames.HTTP_BYTES_SENT, { method: 'POST', host: 'api.example.com', direction: 'outbound' })).toBe(1024);
+        expect(collector.getCounter(MetricNames.HTTP_BYTES_RECEIVED, { method: 'POST', host: 'api.example.com', direction: 'outbound' })).toBe(256);
+      });
+
+      it('should track inbound requests', () => {
+        collector.recordHttpRequest({
+          method: 'GET',
+          url: '/api/agents',
+          direction: 'inbound',
+          source: 'server',
+          statusCode: 200,
+          durationMs: 10,
+          success: true,
+        });
+
+        expect(collector.getCounter(MetricNames.HTTP_REQUESTS_TOTAL, {
+          method: 'GET',
+          direction: 'inbound',
+          source: 'server',
+        })).toBe(1);
       });
     });
 
