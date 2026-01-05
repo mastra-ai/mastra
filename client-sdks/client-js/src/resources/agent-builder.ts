@@ -499,7 +499,21 @@ export class AgentBuilder extends BaseResource {
       withNestedWorkflows?: boolean;
     },
   ) {
-    return this.runById(runId, options);
+    const searchParams = new URLSearchParams();
+
+    if (options?.fields && options.fields.length > 0) {
+      searchParams.set('fields', options.fields.join(','));
+    }
+
+    if (options?.withNestedWorkflows !== undefined) {
+      searchParams.set('withNestedWorkflows', String(options.withNestedWorkflows));
+    }
+
+    const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+    const url = `/api/agent-builder/${this.actionId}/runs/${runId}/execution-result${queryString}`;
+    return this.request(url, {
+      method: 'GET',
+    });
   }
 
   /**

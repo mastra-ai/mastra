@@ -150,7 +150,23 @@ export class Workflow extends BaseResource {
       withNestedWorkflows?: boolean;
     },
   ): Promise<GetWorkflowRunExecutionResultResponse> {
-    return this.runById(runId, options);
+    const searchParams = new URLSearchParams();
+
+    if (options?.fields && options.fields.length > 0) {
+      searchParams.set('fields', options.fields.join(','));
+    }
+
+    if (options?.withNestedWorkflows !== undefined) {
+      searchParams.set('withNestedWorkflows', String(options.withNestedWorkflows));
+    }
+
+    const requestContextParam = base64RequestContext(parseClientRequestContext(options?.requestContext));
+    if (requestContextParam) {
+      searchParams.set('requestContext', requestContextParam);
+    }
+
+    const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/execution-result${queryString}`);
   }
 
   /**
