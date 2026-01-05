@@ -72,7 +72,6 @@ jobs:
       - name: Run build
         run: pnpm build
 
-
       - name: Determine publish tag
         id: determine-tag
         run: |
@@ -149,7 +148,6 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-
       - name: Exit prerelease mode
         id: exit-prerelease-mode
         if: steps.check_files.outputs.files_exists == 'true'
@@ -163,7 +161,6 @@ jobs:
           echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
           pnpm build
-          pnpm turbo postbuild
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
@@ -339,7 +336,6 @@ jobs:
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
-
 
       - name: Run Changeset Pre Exit
         run: pnpm changeset-cli pre exit
