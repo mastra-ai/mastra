@@ -97,6 +97,35 @@ To migrate, if you were relying on the previous defaults, explicitly set these v
   });
 ```
 
+### `memory.readOnly` moved to `memory.options.readOnly`
+
+The `readOnly` property has been moved from the top-level of the memory option to inside `options`. This change aligns `readOnly` with other memory configuration options like `lastMessages` and `semanticRecall`.
+
+To migrate, move `readOnly` from the top level to inside `options`.
+
+```diff
+  agent.stream('Hello', {
+    memory: {
+      thread: threadId,
+      resource: resourceId,
+-     readOnly: true,
++     options: {
++       readOnly: true,
++     },
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```shell
+npx @mastra/codemod@beta v1/memory-readonly-to-options .
+```
+
+:::
+
 ### `Memory.query()` renamed to `Memory.recall()`
 
 The `Memory.query()` method has been renamed to `Memory.recall()`. The new method returns a simpler format with just `{ messages: MastraDBMessage[] }` instead of multiple format variations. This change better describes the action of retrieving messages from memory and simplifies the API.

@@ -197,6 +197,7 @@ export interface GetWorkflowResponse {
       resumeSchema: string;
       suspendSchema: string;
       requestContextSchema?: string;
+      stateSchema: string;
     };
   };
   allSteps: {
@@ -208,6 +209,7 @@ export interface GetWorkflowResponse {
       resumeSchema: string;
       suspendSchema: string;
       requestContextSchema?: string;
+      stateSchema: string;
       isWorkflow: boolean;
     };
   };
@@ -216,6 +218,7 @@ export interface GetWorkflowResponse {
   outputSchema: string;
   /** Optional schema for runtime request context validation */
   requestContextSchema?: string;
+  stateSchema: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }
@@ -279,7 +282,11 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
   resourceId: string;
-  agentId: string;
+  /**
+   * Optional agentId. When not provided and storage is configured on the server,
+   * threads will be retrieved using storage directly.
+   */
+  agentId?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
@@ -309,6 +316,27 @@ export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'thr
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
+};
+
+export interface CloneMemoryThreadParams {
+  newThreadId?: string;
+  resourceId?: string;
+  title?: string;
+  metadata?: Record<string, any>;
+  options?: {
+    messageLimit?: number;
+    messageFilter?: {
+      startDate?: Date;
+      endDate?: Date;
+      messageIds?: string[];
+    };
+  };
+  requestContext?: RequestContext | Record<string, any>;
+}
+
+export type CloneMemoryThreadResponse = {
+  thread: StorageThreadType;
+  clonedMessages: MastraDBMessage[];
 };
 
 export interface GetLogsParams {

@@ -17,6 +17,7 @@ function getSteps(steps: Record<string, StepWithComponent>, path?: string) {
       requestContextSchema: step.requestContextSchema
         ? stringify(zodToJsonSchema(step.requestContextSchema))
         : undefined,
+      stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
       isWorkflow: step.component === 'WORKFLOW',
       component: step.component,
     };
@@ -43,6 +44,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
       allSteps: {},
       inputSchema: undefined,
       outputSchema: undefined,
+      stateSchema: undefined,
     } as WorkflowInfo;
   }
 
@@ -60,6 +62,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
         requestContextSchema: step.requestContextSchema
           ? stringify(zodToJsonSchema(step.requestContextSchema))
           : undefined,
+        stateSchema: step.stateSchema ? stringify(zodToJsonSchema(step.stateSchema)) : undefined,
         component: step.component,
       };
       return acc;
@@ -71,6 +74,7 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
     requestContextSchema: workflow.requestContextSchema
       ? stringify(zodToJsonSchema(workflow.requestContextSchema))
       : undefined,
+    stateSchema: workflow.stateSchema ? stringify(zodToJsonSchema(workflow.stateSchema)) : undefined,
     options: workflow.options,
     isProcessorWorkflow: workflow.type === 'processor',
   };

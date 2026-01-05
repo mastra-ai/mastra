@@ -267,6 +267,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 
 export interface WorkflowState {
   status: WorkflowRunStatus;
+  initialState?: Record<string, any>;
   activeStepsPath: Record<string, number[]>;
   serializedStepGraph: SerializedStepFlowEntry[];
   steps: Record<
@@ -368,6 +369,7 @@ export type WorkflowInfo = {
   outputSchema: string | undefined;
   /** Optional schema for runtime request context validation */
   requestContextSchema: string | undefined;
+  stateSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
