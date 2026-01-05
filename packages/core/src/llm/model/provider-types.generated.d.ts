@@ -197,7 +197,6 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2-instruct-0905',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
-    'qwen-qwq-32b',
     'qwen/qwen3-32b',
   ];
   readonly bailing: readonly ['Ling-1T', 'Ring-1T'];

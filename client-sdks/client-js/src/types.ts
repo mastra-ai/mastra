@@ -274,7 +274,11 @@ export type CreateMemoryThreadResponse = StorageThreadType;
 
 export interface ListMemoryThreadsParams {
   resourceId: string;
-  agentId: string;
+  /**
+   * Optional agentId. When not provided and storage is configured on the server,
+   * threads will be retrieved using storage directly.
+   */
+  agentId?: string;
   page?: number;
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
