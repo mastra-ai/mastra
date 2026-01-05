@@ -948,23 +948,23 @@ export function cloneWorkflow<
 }
 
 export class Workflow<
-    TEngineType = any,
-    TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
-      string,
-      any,
-      any,
-      any,
-      any,
-      any,
-      TEngineType
-    >[],
-    TWorkflowId extends string = string,
-    TState extends z.ZodObject<any> = z.ZodObject<any>,
-    TInput extends z.ZodType<any> = z.ZodType<any>,
-    TOutput extends z.ZodType<any> = z.ZodType<any>,
-    TPrevSchema extends z.ZodType<any> = TInput,
-    TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
-  >
+  TEngineType = any,
+  TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
+    string,
+    any,
+    any,
+    any,
+    any,
+    any,
+    TEngineType
+  >[],
+  TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TPrevSchema extends z.ZodType<any> = TInput,
+  TRequestContextSchema extends z.ZodType<any> | undefined = undefined,
+>
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType, TRequestContextSchema>
 {

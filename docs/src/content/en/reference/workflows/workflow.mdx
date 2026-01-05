@@ -56,7 +56,7 @@ export const workflow = createWorkflow({
       }),
       execute: async ({ inputData, requestContext }) => {
         // Access validated request context in any step
-        const userId = requestContext.userId;
+        const userId = requestContext.get('userId');
         const orgId = requestContext.organizationId;
         console.log(`Processing for user ${userId} in org ${orgId}`);
 

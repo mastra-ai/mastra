@@ -69,8 +69,7 @@ export class Tool<
   >,
   TId extends string = string,
   TRequestContextSchema extends ZodLikeSchema | undefined = undefined,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContextSchema>
-{
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContextSchema> {
   /** Unique identifier for the tool */
   id: TId;
 
