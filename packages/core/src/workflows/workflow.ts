@@ -1996,10 +1996,12 @@ export class Workflow<
     const inMemoryRun = this.#runs.get(runId);
     if (!inMemoryRun) return null;
 
+    // Explicitly construct WorkflowState to avoid leaking internal Run properties
+    // Fields like result, payload, error are not available from in-memory runs (only from persisted snapshots)
     return {
-      ...inMemoryRun,
       runId,
       workflowName: this.id,
+      resourceId: inMemoryRun.resourceId,
       createdAt: new Date(),
       updatedAt: new Date(),
       isFromInMemory: true,
