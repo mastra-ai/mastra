@@ -186,7 +186,7 @@ export async function createHonoServer(
       // Register route using app.on() which supports dynamic method/path registration
       // Hono's H type (Handler | MiddlewareHandler) is internal, so we use Handler
       // which is compatible at runtime since both accept (context, next)
-      const allHandlers: Handler[] = [...middlewares, handler];
+      const allHandlers = [...middlewares, handler] as const;
       if (route.method === 'ALL') {
         app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
       } else {
