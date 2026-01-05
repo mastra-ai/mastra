@@ -1,0 +1,226 @@
+/**
+ * Standard Schema types for Mastra
+ *
+ * This module provides types for working with Standard Schema (https://standardschema.dev/),
+ * a universal schema interface that allows different validation libraries
+ * (Zod, Valibot, ArkType, etc.) to interoperate.
+ *
+ * There are two key interfaces:
+ *
+ * 1. **StandardSchemaV1** - For runtime validation
+ *    - Has a `validate()` method that validates unknown input
+ *    - Returns validated data or validation issues
+ *    - See: https://standardschema.dev/
+ *
+ * 2. **StandardJSONSchemaV1** - For JSON Schema generation
+ *    - Has a `jsonSchema.input()` method that generates JSON Schema
+ *    - Critical for AI tools: LLMs need JSON Schema to understand parameters
+ *    - See: https://standardschema.dev/json-schema
+ *
+ * By embracing Standard Schema, Mastra users can bring their own validation library
+ * while maintaining full compatibility with Mastra's tool system.
+ */
+
+/**
+ * Standard Schema V1 interface.
+ *
+ * This is the core interface that validation libraries implement to be
+ * Standard Schema compliant. Libraries like Zod (v3.25+), Valibot, ArkType,
+ * and others implement this interface.
+ */
+export interface StandardSchemaV1<Input = unknown, Output = Input> {
+  /** The Standard Schema properties. */
+  readonly '~standard': StandardSchemaV1.Props<Input, Output>;
+}
+
+export namespace StandardSchemaV1 {
+  /** The Standard Schema properties interface. */
+  export interface Props<Input = unknown, Output = Input> {
+    /** The version number of the standard. */
+    readonly version: 1;
+    /** The vendor name of the schema library. */
+    readonly vendor: string;
+    /** Validates unknown input values. */
+    readonly validate: (value: unknown, options?: Options | undefined) => Result<Output> | Promise<Result<Output>>;
+    /** Inferred types associated with the schema. */
+    readonly types?: Types<Input, Output> | undefined;
+  }
+
+  /** The Standard Schema types interface. */
+  export interface Types<Input = unknown, Output = Input> {
+    /** The input type of the schema. */
+    readonly input: Input;
+    /** The output type of the schema. */
+    readonly output: Output;
+  }
+
+  /** Options for validate function. */
+  export interface Options {
+    /** Explicit support for additional vendor-specific parameters, if needed. */
+    readonly libraryOptions?: Record<string, unknown> | undefined;
+  }
+
+  /** The result interface of the validate function. */
+  export type Result<Output> = SuccessResult<Output> | FailureResult;
+
+  /** The result interface if validation succeeds. */
+  export interface SuccessResult<Output> {
+    /** The typed output value. */
+    readonly value: Output;
+    /** A falsy value for `issues` indicates success. */
+    readonly issues?: undefined;
+  }
+
+  /** The result interface if validation fails. */
+  export interface FailureResult {
+    /** The issues of failed validation. */
+    readonly issues: ReadonlyArray<Issue>;
+  }
+
+  /** The issue interface of the failure output. */
+  export interface Issue {
+    /** The error message of the issue. */
+    readonly message: string;
+    /** The path of the issue, if any. */
+    readonly path?: ReadonlyArray<PropertyKey | PathSegment> | undefined;
+  }
+
+  /** The path segment interface of the issue. */
+  export interface PathSegment {
+    /** The key representing a path segment. */
+    readonly key: PropertyKey;
+  }
+
+  /** Infers the input type of a Standard Schema. */
+  export type InferInput<Schema extends StandardSchemaV1> = NonNullable<Schema['~standard']['types']>['input'];
+
+  /** Infers the output type of a Standard Schema. */
+  export type InferOutput<Schema extends StandardSchemaV1> = NonNullable<Schema['~standard']['types']>['output'];
+}
+
+/**
+ * Standard JSON Schema V1 interface.
+ *
+ * This interface provides JSON Schema generation capabilities, which is critical
+ * for AI tools since LLMs need the JSON Schema representation to understand
+ * tool parameters.
+ *
+ * Libraries that implement this interface can generate JSON Schema from their
+ * native schema format. The `jsonSchema.input()` and `jsonSchema.output()`
+ * methods accept a target version (e.g., "draft-07", "draft-2020-12").
+ *
+ * @see https://standardschema.dev/json-schema
+ */
+export interface StandardJSONSchemaV1<Input = unknown, Output = Input> {
+  /** The Standard JSON Schema properties. */
+  readonly '~standard': StandardJSONSchemaV1.Props<Input, Output>;
+}
+
+export namespace StandardJSONSchemaV1 {
+  /** The Standard JSON Schema properties interface. */
+  export interface Props<Input = unknown, Output = Input> {
+    /** The version number of the standard. */
+    readonly version: 1;
+    /** The vendor name of the schema library. */
+    readonly vendor: string;
+    /** Inferred types associated with the schema. */
+    readonly types?: Types<Input, Output> | undefined;
+    /** Methods for generating the input/output JSON Schema. */
+    readonly jsonSchema: Converter;
+  }
+
+  /** The Standard JSON Schema converter interface. */
+  export interface Converter {
+    /** Converts the input type to JSON Schema. May throw if conversion is not supported. */
+    readonly input: (options: Options) => Record<string, unknown>;
+    /** Converts the output type to JSON Schema. May throw if conversion is not supported. */
+    readonly output: (options: Options) => Record<string, unknown>;
+  }
+
+  /**
+   * The target version of the generated JSON Schema.
+   *
+   * It is *strongly recommended* that implementers support `"draft-2020-12"` and `"draft-07"`,
+   * as they are both in wide use. All other targets can be implemented on a best-effort basis.
+   */
+  export type Target = 'draft-2020-12' | 'draft-07' | 'openapi-3.0' | ({} & string);
+
+  /** The options for the input/output methods. */
+  export interface Options {
+    /** Specifies the target version of the generated JSON Schema. */
+    readonly target: Target;
+    /** Explicit support for additional vendor-specific parameters, if needed. */
+    readonly libraryOptions?: Record<string, unknown> | undefined;
+  }
+
+  /** The Standard types interface. */
+  export interface Types<Input = unknown, Output = Input> {
+    /** The input type of the schema. */
+    readonly input: Input;
+    /** The output type of the schema. */
+    readonly output: Output;
+  }
+
+  /** Infers the input type of a Standard JSON Schema. */
+  export type InferInput<Schema extends StandardJSONSchemaV1> = NonNullable<Schema['~standard']['types']>['input'];
+
+  /** Infers the output type of a Standard JSON Schema. */
+  export type InferOutput<Schema extends StandardJSONSchemaV1> = NonNullable<Schema['~standard']['types']>['output'];
+}
+
+/**
+ * Checks if a value is a Standard Schema (implements the ~standard interface).
+ *
+ * Note: Some libraries like ArkType return functions with a ~standard property,
+ * so we check for both objects and functions.
+ *
+ * @param value - The value to check
+ * @returns True if the value implements StandardSchemaV1, false otherwise
+ */
+export function isStandardSchema(value: unknown): value is StandardSchemaV1 {
+  // Check for object or function (ArkType returns functions)
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return false;
+  }
+
+  if (!('~standard' in value)) {
+    return false;
+  }
+
+  const std = (value as any)['~standard'];
+  return (
+    typeof std === 'object' &&
+    std !== null &&
+    typeof std.version === 'number' &&
+    typeof std.vendor === 'string' &&
+    typeof std.validate === 'function'
+  );
+}
+
+/**
+ * Checks if a value is a Standard JSON Schema (implements JSON Schema generation).
+ *
+ * Note: Some libraries like ArkType return functions with a ~standard property,
+ * so we check for both objects and functions.
+ *
+ * @param value - The value to check
+ * @returns True if the value implements StandardJSONSchemaV1, false otherwise
+ */
+export function isStandardJSONSchema(value: unknown): value is StandardJSONSchemaV1 {
+  // Check for object or function (ArkType returns functions)
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return false;
+  }
+
+  if (!('~standard' in value)) {
+    return false;
+  }
+
+  const std = (value as any)['~standard'];
+  return (
+    typeof std === 'object' &&
+    std !== null &&
+    typeof std.jsonSchema === 'object' &&
+    typeof std.jsonSchema?.input === 'function'
+  );
+}

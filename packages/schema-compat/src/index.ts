@@ -29,7 +29,25 @@ export { SchemaCompatLayer as SchemaCompatLayerV4 } from './schema-compatibility
 export { SchemaCompatLayer } from './schema-compatibility';
 
 // Utility functions
-export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
+export {
+  convertZodSchemaToAISDKSchema,
+  applyCompatLayer,
+  convertSchemaToZod,
+  isZodType,
+  // Standard Schema support
+  convertStandardSchemaToAISDKSchema,
+  convertAnySchemaToAISDKSchema,
+  isStandardSchema,
+  isStandardJSONSchema,
+  // Types
+  type StandardSchemaV1,
+  type StandardJSONSchemaV1,
+  type AnySchema,
+} from './utils';
+
+// NOTE: For converting Standard Schema to AI SDK Schema, use `asSchema` from '@ai-sdk/provider-utils':
+// import { asSchema } from '@ai-sdk/provider-utils';
+// const aiSchema = asSchema(yourValibotOrArkTypeSchema);
 
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
