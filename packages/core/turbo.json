@@ -3,12 +3,19 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "dependsOn": ["pre-build"],
+      "dependsOn": ["build:patch-commonjs", "build:lib", "build:docs"]
+    },
+    "build:patch-commonjs": {
+      "dependsOn": ["build:lib"],
       "outputs": ["./**/*.d.ts"]
     },
-    "pre-build": {
+    "build:docs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["dist/docs/**"]
+    },
+    "build:lib": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts", "!__integration-test__/**/*"]
     },
     "test": {

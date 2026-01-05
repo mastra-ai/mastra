@@ -49,7 +49,7 @@ importers:
         specifier: link:../../cli
         version: link:../../cli
       typescript:
-        specifier: ^5.8.3
+        specifier: ^5.9.3
         version: 5.9.3
       vitest:
         specifier: ^4.0.8

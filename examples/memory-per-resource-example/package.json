@@ -13,12 +13,12 @@
     "@mastra/libsql": "latest",
     "chalk": "^5.3.0",
     "dotenv": "^16.4.7",
-    "ora": "^8.1.1",
+    "ora": "^9.0.0",
     "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/node": "22.13.17",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "overrides": {

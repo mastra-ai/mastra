@@ -23,7 +23,7 @@
     "@opentelemetry/instrumentation": "^0.208.0",
     "@opentelemetry/semantic-conventions": "1.38.0",
     "dotenv": "^17.2.0",
-    "hono": "^4.10.1",
+    "hono": "^4.11.3",
     "zod": "^4.1.13"
   },
   "devDependencies": {
@@ -31,6 +31,6 @@
     "mastra": "latest",
     "prettier": "^3.6.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   }
 }

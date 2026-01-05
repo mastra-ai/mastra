@@ -9,8 +9,10 @@ import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow
 import { WorkflowRunState } from '@mastra/core/workflows';
 import { useContext } from 'react';
 
-export interface WorkflowRunDetailProps
-  extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId' | 'observeWorkflowStream'> {
+export interface WorkflowRunDetailProps extends Omit<
+  WorkflowTriggerProps,
+  'paramsRunId' | 'workflowId' | 'observeWorkflowStream'
+> {
   workflowId: string;
   runId?: string;
   observeWorkflowStream?: ({

@@ -19,7 +19,7 @@
     "@types/tinycolor2": "^1.4.6",
     "chalk": "^5.4.1",
     "gradient-string": "^3.0.0",
-    "ora": "^8.2.0",
+    "ora": "^9.0.0",
     "tinycolor2": "^1.6.0",
     "zod": "^3.25.76"
   },
@@ -28,7 +28,7 @@
     "dotenv": "^17.0.0",
     "mastra": "latest",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "pnpm": {
     "overrides": {

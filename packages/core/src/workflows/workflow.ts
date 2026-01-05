@@ -921,22 +921,22 @@ export function cloneWorkflow<
 }
 
 export class Workflow<
-    TEngineType = any,
-    TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
-      string,
-      any,
-      any,
-      any,
-      any,
-      any,
-      TEngineType
-    >[],
-    TWorkflowId extends string = string,
-    TState extends z.ZodObject<any> = z.ZodObject<any>,
-    TInput extends z.ZodType<any> = z.ZodType<any>,
-    TOutput extends z.ZodType<any> = z.ZodType<any>,
-    TPrevSchema extends z.ZodType<any> = TInput,
-  >
+  TEngineType = any,
+  TSteps extends Step<string, any, any, any, any, any, TEngineType>[] = Step<
+    string,
+    any,
+    any,
+    any,
+    any,
+    any,
+    TEngineType
+  >[],
+  TWorkflowId extends string = string,
+  TState extends z.ZodObject<any> = z.ZodObject<any>,
+  TInput extends z.ZodType<any> = z.ZodType<any>,
+  TOutput extends z.ZodType<any> = z.ZodType<any>,
+  TPrevSchema extends z.ZodType<any> = TInput,
+>
   extends MastraBase
   implements Step<TWorkflowId, TState, TInput, TOutput, any, any, DefaultEngineType>
 {
@@ -2049,6 +2049,7 @@ export class Workflow<
       result: snapshotState.result,
       error: snapshotState.error,
       payload: snapshotState.context?.input,
+      initialState: Object.keys(snapshotState.value).length > 0 ? snapshotState.value : undefined,
       steps: null as any, // Will be populated below
       activeStepsPath: snapshotState.activeStepsPath,
       serializedStepGraph: snapshotState.serializedStepGraph,

@@ -25,8 +25,7 @@ export interface ClientToolAction<
 export class ClientTool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
-> implements ClientToolAction<TSchemaIn, TSchemaOut>
-{
+> implements ClientToolAction<TSchemaIn, TSchemaOut> {
   id: string;
   description: string;
   inputSchema?: TSchemaIn;

@@ -67,8 +67,7 @@ export class Tool<
     TResumeSchema
   >,
   TId extends string = string,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId>
-{
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId> {
   /** Unique identifier for the tool */
   id: TId;
 
