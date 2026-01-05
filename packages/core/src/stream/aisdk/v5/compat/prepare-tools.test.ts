@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { prepareToolsAndToolChoice } from './prepare-tools';
 import { z } from 'zod';
 import { createTool } from '../../../../tools/tool';
+import { prepareToolsAndToolChoice } from './prepare-tools';
 
 describe('prepareToolsAndToolChoice', () => {
   describe('isProviderTool detection', () => {
