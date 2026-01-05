@@ -20,7 +20,7 @@
     "@types/express": "^5.0.5",
     "@types/node": "22.13.17",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   },
   "version": "0.0.1",
   "pnpm": {
