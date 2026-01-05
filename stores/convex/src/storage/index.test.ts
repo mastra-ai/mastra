@@ -165,6 +165,10 @@ createConfigValidationTests({
       config: { id: 'test-store', deploymentUrl: 'https://test.convex.cloud', adminAuthToken: 'test-token' },
     },
     {
+      description: 'deployment config with authToken (recommended for runtime)',
+      config: { id: 'test-store', deploymentUrl: 'https://test.convex.cloud', authToken: 'jwt-token' },
+    },
+    {
       description: 'deployment config with storageFunction',
       config: {
         id: 'test-store',
@@ -178,6 +182,13 @@ createConfigValidationTests({
       config: {
         id: 'test-store',
         client: new ConvexAdminClient({ deploymentUrl: 'https://test.convex.cloud', adminAuthToken: 'test-token' }),
+      },
+    },
+    {
+      description: 'pre-configured client with authToken',
+      config: {
+        id: 'test-store',
+        client: new ConvexAdminClient({ deploymentUrl: 'https://test.convex.cloud', authToken: 'jwt-token' }),
       },
     },
     {
@@ -215,7 +226,7 @@ createConfigValidationTests({
     {
       description: 'empty adminAuthToken',
       config: { id: 'test-store', deploymentUrl: 'https://test.convex.cloud', adminAuthToken: '' },
-      expectedError: /adminAuthToken is required/,
+      expectedError: /Either adminAuthToken or authToken is required/,
     },
   ],
 });

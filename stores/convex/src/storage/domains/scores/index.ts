@@ -125,27 +125,50 @@ export class ScoresConvex extends ScoresStorage {
       );
     }
 
-    const rows = await this.#db.queryTable<StoredScore>(TABLE_SCORERS, undefined);
-    const filtered = rows
-      .filter(row => (filters.scorerId ? row.scorerId === filters.scorerId : true))
-      .filter(row => (filters.entityId ? row.entityId === filters.entityId : true))
-      .filter(row => (filters.entityType ? row.entityType === filters.entityType : true))
-      .filter(row => (filters.runId ? row.runId === filters.runId : true))
-      .filter(row => (filters.source ? row.source === filters.source : true))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // Build query filters to leverage server-side indexes
+    // The server will use by_scorer, by_entity, or by_run indexes based on the filter pattern
+    const queryFilters: Array<{ field: string; value: string | number | boolean | null }> = [];
+
+    // Add indexed filters first (these will trigger index usage on server)
+    if (filters.scorerId) {
+      queryFilters.push({ field: 'scorerId', value: filters.scorerId });
+    }
+    if (filters.entityId) {
+      queryFilters.push({ field: 'entityId', value: filters.entityId });
+    }
+    if (filters.entityType) {
+      queryFilters.push({ field: 'entityType', value: filters.entityType });
+    }
+    if (filters.runId) {
+      queryFilters.push({ field: 'runId', value: filters.runId });
+    }
+
+    // Query with filters (server will use appropriate index)
+    let rows = await this.#db.queryTable<StoredScore>(
+      TABLE_SCORERS,
+      queryFilters.length > 0 ? queryFilters : undefined,
+    );
+
+    // Apply any remaining filters that aren't handled by indexes (e.g., source)
+    if (filters.source) {
+      rows = rows.filter(row => row.source === filters.source);
+    }
+
+    // Sort by createdAt descending
+    rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     const { perPage, page } = pagination;
-    const perPageValue = perPage === false ? filtered.length : perPage;
+    const perPageValue = perPage === false ? rows.length : perPage;
     const start = perPage === false ? 0 : page * perPageValue;
-    const end = perPage === false ? filtered.length : start + perPageValue;
-    const slice = filtered.slice(start, end).map(row => this.deserialize(row));
+    const end = perPage === false ? rows.length : start + perPageValue;
+    const slice = rows.slice(start, end).map(row => this.deserialize(row));
 
     return {
       pagination: {
-        total: filtered.length,
+        total: rows.length,
         page,
         perPage,
-        hasMore: perPage === false ? false : end < filtered.length,
+        hasMore: perPage === false ? false : end < rows.length,
       },
       scores: slice,
     };
