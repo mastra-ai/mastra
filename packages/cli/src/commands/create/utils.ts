@@ -239,6 +239,14 @@ export const createMastraProject = async ({
       await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
       await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
       await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+
+      // Bun workaround: Bun doesn't respect npm's deprecated flag, which can cause
+      // incorrect versions to be installed. Explicitly install @mastra/server to
+      // ensure the correct version is used.
+      // See: https://github.com/oven-sh/bun/issues/25314
+      if (pm === 'bun') {
+        await installMastraDependency(pm, '@mastra/server', versionTag, false, timeout);
+      }
     } catch (error) {
       throw new Error(
         `Failed to install Mastra dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,

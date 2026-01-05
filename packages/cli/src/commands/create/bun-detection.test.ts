@@ -135,6 +135,41 @@ describe('Bun Runtime Detection', () => {
     expect(mocks.mockExec).toHaveBeenCalledWith(expect.stringContaining('bun add zod@^4'));
   });
 
+  it('should explicitly install @mastra/server when using bun (workaround for bun issue #25314)', async () => {
+    process.env.npm_config_user_agent = 'bun/1.0.0';
+
+    const { createMastraProject } = await import('./utils');
+
+    await createMastraProject({
+      projectName: 'test-bun-server-workaround',
+      needsInteractive: false,
+    });
+
+    // Check that @mastra/server is explicitly installed for bun
+    // This is a workaround for https://github.com/oven-sh/bun/issues/25314
+    const allCalls = mocks.mockExec.mock.calls.map((c: unknown[]) => c[0]);
+    const serverCall = allCalls.find((cmd: string) => cmd && cmd.includes('@mastra/server'));
+    expect(serverCall).toBeDefined();
+    expect(serverCall).toContain('bun add @mastra/server@');
+  });
+
+  it('should NOT explicitly install @mastra/server when using npm', async () => {
+    process.env.npm_config_user_agent = 'npm/10.0.0';
+
+    const { createMastraProject } = await import('./utils');
+
+    await createMastraProject({
+      projectName: 'test-npm-no-server-workaround',
+      needsInteractive: false,
+    });
+
+    // npm should NOT have @mastra/server explicitly installed (it works correctly via transitive deps)
+    const serverCalls = mocks.mockExec.mock.calls.filter(
+      (call: string[]) => call[0] && call[0].includes('@mastra/server'),
+    );
+    expect(serverCalls.length).toBe(0);
+  });
+
   it('should use npm init when npm is detected', async () => {
     process.env.npm_config_user_agent = 'npm/10.0.0';
 

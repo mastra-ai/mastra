@@ -1,0 +1,77 @@
+name: Bun Integration Tests
+
+on:
+  pull_request:
+    branches: [main, 0.x]
+    paths:
+      - 'packages/bundler-bun/**'
+      - 'packages/cli/**'
+      - 'packages/core/**'
+      - 'packages/deployer/**'
+      - '.github/workflows/test-bun.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/bundler-bun/**'
+      - 'packages/cli/**'
+      - 'packages/core/**'
+      - 'packages/deployer/**'
+
+jobs:
+  test-bun-bundler:
+    name: Test Bun Bundler
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build core packages
+        run: pnpm turbo build --filter "@mastra/core"
+
+      - name: Build bundler-bun
+        run: pnpm turbo build --filter "@mastra/bundler-bun"
+
+      - name: Run bundler-bun tests with Bun
+        working-directory: packages/bundler-bun
+        run: bun test
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8096'
+
+  test-bun-create:
+    name: Test bun create mastra
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build CLI
+        run: pnpm turbo build --filter "mastra"
+
+      - name: Run Bun detection tests
+        run: pnpm test:cli -- --run src/commands/create/bun-detection.test.ts
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8096'

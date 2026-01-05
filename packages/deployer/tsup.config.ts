@@ -11,6 +11,7 @@ export default defineConfig({
     'src/build/analyze.ts',
     'src/validator/loader.ts',
     'src/build/bundler.ts',
+    'src/build/engines/index.ts',
     'src/validator/custom-resolver.ts',
   ],
   format: ['esm', 'cjs'],

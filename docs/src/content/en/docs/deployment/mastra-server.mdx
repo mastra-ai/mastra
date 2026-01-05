@@ -49,8 +49,12 @@ The build process follows these steps:
    - **`.build`**: Contains dependency analysis, bundled dependencies, and build configuration files.
    - **`output`**: Contains the production-ready application bundle with `index.mjs` and project-specific files.
 3. **Copies static assets**: Copies the `public/` folder contents to the `output` directory for serving static files.
-4. **Bundles code**: Uses Rollup with tree shaking and source maps for optimization.
+4. **Bundles code**: Uses the configured bundler engine (Rollup by default) with tree shaking and source maps for optimization.
 5. **Generates server**: Creates a [Hono](https://hono.dev) HTTP server ready for deployment.
+
+### Custom bundler engines
+
+Mastra uses Rollup as the default bundler. If you're running on Bun or want to use a different bundler, you can configure a custom bundler engine in your Mastra configuration. See the [Custom Bundler Engines guide](/guides/v1/deployment/custom-bundler) for details.
 
 ### Build output structure
 
