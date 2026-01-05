@@ -32,6 +32,8 @@ export interface LongMemEvalQuestion {
 
 export interface EvaluationResult {
   question_id: string;
+  question: string; // The original question asked
+  expected_answer: string; // The expected answer
   hypothesis: string;
   autoeval_label?: boolean;
   question_type?: QuestionType;

@@ -660,6 +660,8 @@ Be specific rather than generic when the user has expressed clear preferences in
 
     return {
       question_id: meta.questionId,
+      question: meta.question,
+      expected_answer: meta.answer,
       hypothesis: response.text,
       question_type: meta.questionType as QuestionType,
       is_correct: isCorrect,
@@ -939,20 +941,23 @@ Results saved to: ${runDir}`),
     );
 
     // Group by question type for easier review
-    const byType = new Map<string, string[]>();
+    const byType = new Map<string, EvaluationResult[]>();
     for (const result of uninvestigatedFailures) {
       const type = result.question_type || 'unknown';
       if (!byType.has(type)) {
         byType.set(type, []);
       }
-      byType.get(type)!.push(result.question_id);
+      byType.get(type)!.push(result);
     }
 
     // Display grouped by type
-    for (const [type, questionIds] of Array.from(byType.entries()).sort(([a], [b]) => a.localeCompare(b))) {
+    for (const [type, failures] of Array.from(byType.entries()).sort(([a], [b]) => a.localeCompare(b))) {
       console.log(chalk.cyan(`  ${type}:`));
-      for (const id of questionIds) {
-        console.log(chalk.gray(`    - ${id}`));
+      for (const result of failures) {
+        console.log(chalk.gray(`    - ${result.question_id}`));
+        console.log(chalk.gray(`      Q: "${result.question}"`));
+        console.log(chalk.gray(`      A: "${result.hypothesis}"`));
+        console.log(chalk.yellow(`      Expected: "${result.expected_answer}"`));
       }
     }
 
