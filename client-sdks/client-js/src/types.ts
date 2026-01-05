@@ -696,3 +696,244 @@ export interface MastraPackage {
 export interface GetSystemPackagesResponse {
   packages: MastraPackage[];
 }
+
+// ============================================================================
+// Knowledge Types
+// ============================================================================
+
+/**
+ * Knowledge namespace metadata
+ */
+export interface KnowledgeNamespace {
+  namespace: string;
+  description?: string;
+  artifactCount: number;
+  createdAt: string;
+  updatedAt: string;
+  hasBM25: boolean;
+  hasVector: boolean;
+}
+
+/**
+ * Response for listing knowledge namespaces
+ */
+export interface ListKnowledgeNamespacesResponse {
+  namespaces: KnowledgeNamespace[];
+}
+
+/**
+ * Parameters for creating a knowledge namespace
+ */
+export interface CreateKnowledgeNamespaceParams {
+  namespace: string;
+  description?: string;
+  enableBM25?: boolean;
+  vectorConfig?: {
+    vectorStoreName: string;
+    indexName: string;
+    embedderName?: string;
+  };
+}
+
+/**
+ * Knowledge artifact metadata
+ */
+export interface KnowledgeArtifact {
+  key: string;
+  type: 'text' | 'file' | 'image';
+  size?: number;
+  mimeType?: string;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing knowledge artifacts
+ */
+export interface ListKnowledgeArtifactsResponse {
+  artifacts: KnowledgeArtifact[];
+  namespace: string;
+}
+
+/**
+ * Parameters for listing knowledge artifacts
+ */
+export interface ListKnowledgeArtifactsParams {
+  prefix?: string;
+}
+
+/**
+ * Response for getting artifact content
+ */
+export interface GetKnowledgeArtifactResponse {
+  key: string;
+  content: string;
+  type: 'text' | 'file' | 'image';
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for adding a text artifact
+ */
+export interface AddKnowledgeArtifactParams {
+  key: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for adding an artifact
+ */
+export interface AddKnowledgeArtifactResponse {
+  success: boolean;
+  key: string;
+}
+
+/**
+ * Response for deleting an artifact
+ */
+export interface DeleteKnowledgeArtifactResponse {
+  success: boolean;
+  key: string;
+}
+
+/**
+ * Knowledge search result
+ */
+export interface KnowledgeSearchResult {
+  key: string;
+  content: string;
+  score: number;
+  metadata?: Record<string, unknown>;
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching knowledge
+ */
+export interface SearchKnowledgeParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  mode?: 'vector' | 'bm25' | 'hybrid';
+  vectorWeight?: number;
+}
+
+/**
+ * Response for searching knowledge
+ */
+export interface SearchKnowledgeResponse {
+  results: KnowledgeSearchResult[];
+  query: string;
+  mode: 'vector' | 'bm25' | 'hybrid';
+  namespace: string;
+}
+
+/**
+ * Response for deleting a namespace
+ */
+export interface DeleteKnowledgeNamespaceResponse {
+  success: boolean;
+  namespace: string;
+}
+
+// ============================================================================
+// Skills Types
+// ============================================================================
+
+/**
+ * Skill source type indicating where the skill comes from
+ */
+export type SkillSource =
+  | { type: 'external'; packagePath: string }
+  | { type: 'local'; projectPath: string }
+  | { type: 'managed'; mastraPath: string };
+
+/**
+ * Skill metadata (without instructions content)
+ */
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  allowedTools?: string[];
+}
+
+/**
+ * Full skill data including instructions and file paths
+ */
+export interface Skill extends SkillMetadata {
+  path: string;
+  instructions: string;
+  source: SkillSource;
+  references: string[];
+  scripts: string[];
+  assets: string[];
+}
+
+/**
+ * Response for listing skills
+ */
+export interface ListSkillsResponse {
+  skills: SkillMetadata[];
+  isSkillsConfigured: boolean;
+}
+
+/**
+ * Skill search result
+ */
+export interface SkillSearchResult {
+  skillName: string;
+  source: string;
+  content: string;
+  score: number;
+  lineRange?: {
+    start: number;
+    end: number;
+  };
+  scoreDetails?: {
+    vector?: number;
+    bm25?: number;
+  };
+}
+
+/**
+ * Parameters for searching skills
+ */
+export interface SearchSkillsParams {
+  query: string;
+  topK?: number;
+  minScore?: number;
+  skillNames?: string[];
+  includeReferences?: boolean;
+}
+
+/**
+ * Response for searching skills
+ */
+export interface SearchSkillsResponse {
+  results: SkillSearchResult[];
+  query: string;
+}
+
+/**
+ * Response for listing skill references
+ */
+export interface ListSkillReferencesResponse {
+  skillName: string;
+  references: string[];
+}
+
+/**
+ * Response for getting skill reference content
+ */
+export interface GetSkillReferenceResponse {
+  skillName: string;
+  referencePath: string;
+  content: string;
+}

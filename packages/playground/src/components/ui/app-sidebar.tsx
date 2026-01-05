@@ -9,6 +9,8 @@ import {
   EarthIcon,
   CloudUploadIcon,
   MessagesSquareIcon,
+  DatabaseIcon,
+  Wand2Icon,
 } from 'lucide-react';
 import { useLocation } from 'react-router';
 
@@ -55,7 +57,16 @@ const mainNavigation: NavSection[] = [
         url: '/scorers',
         icon: <GaugeIcon />,
       },
-
+      {
+        name: 'Knowledge',
+        url: '/knowledge',
+        icon: <DatabaseIcon />,
+      },
+      {
+        name: 'Skills',
+        url: '/skills',
+        icon: <Wand2Icon />,
+      },
       {
         name: 'Request Context',
         url: '/request-context',

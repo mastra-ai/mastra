@@ -49,3 +49,5 @@ export * from './domains/workflows/runs/workflow-run-list';
 export * from './domains/mcps/index';
 export * from './lib/toast';
 export * from './domains/configuration/index';
+export * from './domains/knowledge/index';
+export * from './domains/skills/index';
