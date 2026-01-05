@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface WorkflowRequestContextProps {
   workflowId: string;
@@ -18,9 +19,10 @@ export interface WorkflowRequestContextProps {
 
 export const WorkflowRequestContext = ({ workflowId }: WorkflowRequestContextProps) => {
   const { data: workflow, isLoading } = useWorkflow(workflowId);
+  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   // Use a ref to track the current value for the copy button
-  const currentValueRef = useRef<Record<string, unknown>>({});
+  const currentValueRef = useRef<Record<string, unknown>>(playgroundRequestContext || {});
 
   const { handleCopy } = useCopyToClipboard({
     text: JSON.stringify(currentValueRef.current, null, 2),
@@ -65,6 +67,7 @@ export const WorkflowRequestContext = ({ workflowId }: WorkflowRequestContextPro
       </div>
       <DynamicForm
         schema={zodRequestContextSchema}
+        defaultValues={playgroundRequestContext}
         onChange={(values: unknown) => {
           currentValueRef.current = values as Record<string, unknown>;
         }}

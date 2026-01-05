@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface AgentRequestContextProps {
   agentId: string;
@@ -18,9 +19,10 @@ export interface AgentRequestContextProps {
 
 export const AgentRequestContext = ({ agentId }: AgentRequestContextProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
+  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
 
   // Use a ref to track the current value for the copy button
-  const currentValueRef = useRef<Record<string, unknown>>({});
+  const currentValueRef = useRef<Record<string, unknown>>(playgroundRequestContext || {});
 
   const { handleCopy } = useCopyToClipboard({
     text: JSON.stringify(currentValueRef.current, null, 2),
@@ -65,6 +67,7 @@ export const AgentRequestContext = ({ agentId }: AgentRequestContextProps) => {
       </div>
       <DynamicForm
         schema={zodRequestContextSchema}
+        defaultValues={playgroundRequestContext}
         onChange={(values: unknown) => {
           currentValueRef.current = values as Record<string, unknown>;
         }}

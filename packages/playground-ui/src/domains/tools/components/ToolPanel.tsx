@@ -97,6 +97,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       isExecutingTool={isExecuting}
       zodInputSchema={zodInputSchema}
       zodRequestContextSchema={zodRequestContextSchema}
+      initialRequestContextValues={playgroundRequestContext}
       onRequestContextChange={(data: Record<string, any>) => {
         requestContextFormDataRef.current = data;
       }}

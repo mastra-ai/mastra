@@ -19,6 +19,7 @@ interface ToolExecutorProps {
   isExecutingTool: boolean;
   zodInputSchema: ZodType;
   zodRequestContextSchema?: ZodType;
+  initialRequestContextValues?: Record<string, any>;
   onRequestContextChange?: (data: Record<string, any>) => void;
   handleExecuteTool: (data: any) => void;
   executionResult: any;
@@ -32,6 +33,7 @@ const ToolExecutor = ({
   isExecutingTool,
   zodInputSchema,
   zodRequestContextSchema,
+  initialRequestContextValues,
   onRequestContextChange,
   handleExecuteTool,
   executionResult: result,
@@ -45,7 +47,7 @@ const ToolExecutor = ({
   const hasRequestContextSchema = Boolean(zodRequestContextSchema);
 
   // Use a ref to track the current request context value for the copy button
-  const requestContextValueRef = useRef<Record<string, unknown>>({});
+  const requestContextValueRef = useRef<Record<string, unknown>>(initialRequestContextValues || {});
 
   const { handleCopy: handleCopyRequestContext } = useCopyToClipboard({
     text: JSON.stringify(requestContextValueRef.current, null, 2),
@@ -90,6 +92,7 @@ const ToolExecutor = ({
                   </div>
                   <DynamicForm
                     schema={zodRequestContextSchema!}
+                    defaultValues={initialRequestContextValues}
                     onChange={(values: unknown) => {
                       requestContextValueRef.current = values as Record<string, unknown>;
                       onRequestContextChange?.(values as Record<string, any>);

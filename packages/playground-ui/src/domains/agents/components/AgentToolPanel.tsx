@@ -84,6 +84,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       isExecutingTool={isExecutingTool}
       zodInputSchema={zodInputSchema}
       zodRequestContextSchema={zodRequestContextSchema}
+      initialRequestContextValues={playgroundRequestContext}
       onRequestContextChange={handleRequestContextChange}
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
