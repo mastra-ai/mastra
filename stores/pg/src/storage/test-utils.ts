@@ -720,10 +720,21 @@ export function pgTests() {
     // PG-specific: Unicode escape sequence handling in workflow snapshots
     // See: https://github.com/mastra-ai/mastra/issues/11563
     describe('Unicode Escape Sequence Handling', () => {
+      let unicodeStore: PostgresStore;
       let workflowsStorage: any;
 
       beforeAll(async () => {
-        workflowsStorage = await store.getStore('workflows');
+        // Create a dedicated store for these tests to avoid pool lifecycle issues
+        // with other tests that close/reopen the main store
+        unicodeStore = new PostgresStore({ ...TEST_CONFIG, id: 'unicode-test-store' });
+        await unicodeStore.init();
+        workflowsStorage = await unicodeStore.getStore('workflows');
+      });
+
+      afterAll(async () => {
+        try {
+          await unicodeStore.close();
+        } catch {}
       });
 
       beforeEach(async () => {
