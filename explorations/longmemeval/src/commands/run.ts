@@ -15,6 +15,7 @@ import { LongMemEvalMetric } from '../evaluation/longmemeval-metric';
 import type { EvaluationResult, BenchmarkMetrics, QuestionType, MemoryConfigType, DatasetType } from '../data/types';
 import { getMemoryOptions, observationalMemoryConfig } from '../config';
 import { makeRetryModel } from '../retry-model';
+import { DatasetLoader } from '../data/loader';
 
 export interface RunOptions {
   dataset: DatasetType;
@@ -49,10 +50,12 @@ const retry4o = makeRetryModel(openai('gpt-4o'));
 export class RunCommand {
   private preparedDataDir: string;
   private outputDir: string;
+  private loader: DatasetLoader;
 
   constructor() {
     this.preparedDataDir = './prepared-data';
     this.outputDir = './results';
+    this.loader = new DatasetLoader();
   }
 
   async run(options: RunOptions): Promise<BenchmarkMetrics> {
@@ -80,8 +83,12 @@ export class RunCommand {
 Please run 'longmemeval prepare' first.`);
     }
 
-    // Load prepared questions
+    // Load original dataset to get correct question order
     const spinner = ora('Loading prepared data...').start();
+    const originalQuestions = await this.loader.loadDataset(options.dataset);
+    const questionIdOrder = new Map(originalQuestions.map((q, i) => [q.question_id, i]));
+
+    // Load prepared questions
     const questionDirs = await readdir(preparedDir);
     const preparedQuestions: PreparedQuestionMeta[] = [];
 
@@ -111,6 +118,13 @@ Please run 'longmemeval prepare' first.`);
         preparedQuestions.push(meta);
       }
     }
+
+    // Sort prepared questions to match original dataset order
+    preparedQuestions.sort((a, b) => {
+      const orderA = questionIdOrder.get(a.questionId) ?? Infinity;
+      const orderB = questionIdOrder.get(b.questionId) ?? Infinity;
+      return orderA - orderB;
+    });
 
     spinner.succeed(
       `Loaded ${preparedQuestions.length} prepared questions${skippedCount > 0 || failedCount > 0 ? ` (${skippedCount} incomplete, ${failedCount} failed)` : ''}`,
