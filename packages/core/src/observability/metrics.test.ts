@@ -1,0 +1,639 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  InMemoryMetricsCollector,
+  NoOpMetricsCollector,
+  MetricNames,
+  classifyGoalState,
+  type AgentRunMetrics,
+  type WorkflowRunMetrics,
+  type ToolExecutionMetrics,
+  type ModelCallMetrics,
+  type HttpRequestMetrics,
+  type GuardrailMetrics,
+  type HumanInterventionMetrics,
+} from './metrics';
+
+describe('Metrics Collector', () => {
+  describe('NoOpMetricsCollector', () => {
+    it('should not throw on any operation', () => {
+      const collector = new NoOpMetricsCollector();
+
+      expect(() => collector.incrementCounter('test')).not.toThrow();
+      expect(() => collector.setGauge('test', {}, 1)).not.toThrow();
+      expect(() => collector.recordHistogram('test', {}, 1)).not.toThrow();
+      expect(() =>
+        collector.recordAgentRun({
+          agentId: 'test',
+          runId: 'run-1',
+          durationMs: 100,
+          stepCount: 1,
+          toolCallCount: 0,
+          toolSuccessCount: 0,
+          toolFailureCount: 0,
+          tokenUsage: { inputTokens: 10, outputTokens: 20 },
+          success: true,
+        }),
+      ).not.toThrow();
+    });
+
+    it('should shutdown without error', async () => {
+      const collector = new NoOpMetricsCollector();
+      await expect(collector.shutdown()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('InMemoryMetricsCollector', () => {
+    let collector: InMemoryMetricsCollector;
+
+    beforeEach(() => {
+      collector = new InMemoryMetricsCollector();
+    });
+
+    describe('Counter operations', () => {
+      it('should increment counter with default value', () => {
+        collector.incrementCounter('test_counter');
+        expect(collector.getCounter('test_counter')).toBe(1);
+      });
+
+      it('should increment counter with custom value', () => {
+        collector.incrementCounter('test_counter', {}, 5);
+        expect(collector.getCounter('test_counter')).toBe(5);
+      });
+
+      it('should accumulate counter values', () => {
+        collector.incrementCounter('test_counter', {}, 3);
+        collector.incrementCounter('test_counter', {}, 2);
+        expect(collector.getCounter('test_counter')).toBe(5);
+      });
+
+      it('should track counters with labels separately', () => {
+        collector.incrementCounter('test_counter', { agentId: 'agent-1' });
+        collector.incrementCounter('test_counter', { agentId: 'agent-2' }, 2);
+        collector.incrementCounter('test_counter', { agentId: 'agent-1' });
+
+        expect(collector.getCounter('test_counter', { agentId: 'agent-1' })).toBe(2);
+        expect(collector.getCounter('test_counter', { agentId: 'agent-2' })).toBe(2);
+      });
+    });
+
+    describe('Gauge operations', () => {
+      it('should set gauge value', () => {
+        collector.setGauge('test_gauge', {}, 42);
+        expect(collector.getGauge('test_gauge', {})).toBe(42);
+      });
+
+      it('should overwrite previous gauge value', () => {
+        collector.setGauge('test_gauge', {}, 10);
+        collector.setGauge('test_gauge', {}, 20);
+        expect(collector.getGauge('test_gauge', {})).toBe(20);
+      });
+    });
+
+    describe('Histogram operations', () => {
+      it('should record histogram values', () => {
+        collector.recordHistogram('test_histogram', {}, 10);
+        collector.recordHistogram('test_histogram', {}, 20);
+        collector.recordHistogram('test_histogram', {}, 15);
+
+        const values = collector.getHistogram('test_histogram', {});
+        expect(values).toEqual([10, 20, 15]);
+      });
+    });
+
+    describe('Agent run metrics', () => {
+      it('should record agent run metrics', () => {
+        const metrics: AgentRunMetrics = {
+          agentId: 'test-agent',
+          runId: 'run-123',
+          durationMs: 1500,
+          stepCount: 3,
+          toolCallCount: 2,
+          toolSuccessCount: 2,
+          toolFailureCount: 0,
+          tokenUsage: {
+            inputTokens: 100,
+            outputTokens: 50,
+          },
+          success: true,
+          finishReason: 'stop',
+        };
+
+        collector.recordAgentRun(metrics);
+
+        // Check recorded runs
+        const runs = collector.getAgentRuns();
+        expect(runs).toHaveLength(1);
+        expect(runs[0]).toEqual(metrics);
+
+        // Check derived counters
+        expect(collector.getCounter(MetricNames.AGENT_RUNS_TOTAL, { agentId: 'test-agent' })).toBe(1);
+        expect(collector.getCounter(MetricNames.AGENT_RUNS_SUCCESS, { agentId: 'test-agent' })).toBe(1);
+
+        // Check token counters
+        expect(collector.getCounter(MetricNames.TOKENS_INPUT, { agentId: 'test-agent' })).toBe(100);
+        expect(collector.getCounter(MetricNames.TOKENS_OUTPUT, { agentId: 'test-agent' })).toBe(50);
+      });
+
+      it('should record failed agent runs', () => {
+        const metrics: AgentRunMetrics = {
+          agentId: 'test-agent',
+          runId: 'run-456',
+          durationMs: 500,
+          stepCount: 1,
+          toolCallCount: 0,
+          toolSuccessCount: 0,
+          toolFailureCount: 0,
+          tokenUsage: { inputTokens: 10, outputTokens: 0 },
+          success: false,
+          errorType: 'RateLimitError',
+        };
+
+        collector.recordAgentRun(metrics);
+
+        expect(
+          collector.getCounter('agent_runs_error_total', { agentId: 'test-agent', errorType: 'RateLimitError' }),
+        ).toBe(1);
+      });
+    });
+
+    describe('Workflow run metrics', () => {
+      it('should record workflow run metrics', () => {
+        const metrics: WorkflowRunMetrics = {
+          workflowId: 'test-workflow',
+          runId: 'wf-run-123',
+          durationMs: 2000,
+          stepsExecuted: 5,
+          stepsSucceeded: 4,
+          stepsFailed: 1,
+          stepsSuspended: 0,
+          status: 'completed',
+          success: true,
+        };
+
+        collector.recordWorkflowRun(metrics);
+
+        const runs = collector.getWorkflowRuns();
+        expect(runs).toHaveLength(1);
+        expect(runs[0]).toEqual(metrics);
+
+        expect(collector.getCounter(MetricNames.WORKFLOW_RUNS_TOTAL, { workflowId: 'test-workflow' })).toBe(1);
+      });
+    });
+
+    describe('Tool execution metrics', () => {
+      it('should record successful tool executions', () => {
+        const metrics: ToolExecutionMetrics = {
+          toolName: 'searchWeb',
+          toolType: 'local',
+          durationMs: 250,
+          success: true,
+          agentId: 'test-agent',
+        };
+
+        collector.recordToolExecution(metrics);
+
+        const executions = collector.getToolExecutions();
+        expect(executions).toHaveLength(1);
+
+        expect(
+          collector.getCounter(MetricNames.TOOL_CALLS_TOTAL, {
+            tool: 'searchWeb',
+            toolType: 'local',
+            agentId: 'test-agent',
+          }),
+        ).toBe(1);
+        expect(
+          collector.getCounter(MetricNames.TOOL_CALLS_SUCCESS, {
+            tool: 'searchWeb',
+            toolType: 'local',
+            agentId: 'test-agent',
+          }),
+        ).toBe(1);
+      });
+
+      it('should record failed tool executions', () => {
+        const metrics: ToolExecutionMetrics = {
+          toolName: 'searchWeb',
+          durationMs: 5000,
+          success: false,
+          errorMessage: 'Timeout',
+        };
+
+        collector.recordToolExecution(metrics);
+
+        expect(collector.getCounter('tool_calls_error_total', { tool: 'searchWeb' })).toBe(1);
+      });
+    });
+
+    describe('Model call metrics', () => {
+      it('should record model call metrics', () => {
+        const metrics: ModelCallMetrics = {
+          model: 'gpt-4',
+          provider: 'openai',
+          durationMs: 800,
+          timeToFirstTokenMs: 150,
+          tokenUsage: { inputTokens: 200, outputTokens: 100 },
+          finishReason: 'stop',
+          success: true,
+          isRetry: false,
+          isFallback: false,
+          agentId: 'test-agent',
+        };
+
+        collector.recordModelCall(metrics);
+
+        const calls = collector.getModelCalls();
+        expect(calls).toHaveLength(1);
+
+        expect(
+          collector.getCounter(MetricNames.MODEL_CALLS_TOTAL, {
+            model: 'gpt-4',
+            provider: 'openai',
+            agentId: 'test-agent',
+          }),
+        ).toBe(1);
+      });
+
+      it('should record retries and fallbacks', () => {
+        collector.recordModelCall({
+          model: 'gpt-4',
+          provider: 'openai',
+          durationMs: 100,
+          tokenUsage: { inputTokens: 10, outputTokens: 0 },
+          success: false,
+          isRetry: true,
+          retryAttempt: 2,
+          isFallback: false,
+        });
+
+        expect(collector.getCounter(MetricNames.MODEL_RETRIES, { model: 'gpt-4', provider: 'openai' })).toBe(1);
+
+        collector.recordModelCall({
+          model: 'gpt-3.5-turbo',
+          provider: 'openai',
+          durationMs: 200,
+          tokenUsage: { inputTokens: 10, outputTokens: 20 },
+          success: true,
+          isRetry: false,
+          isFallback: true,
+          fallbackFrom: 'gpt-4',
+        });
+
+        expect(
+          collector.getCounter(MetricNames.MODEL_FALLBACKS, {
+            model: 'gpt-3.5-turbo',
+            provider: 'openai',
+            fallbackFrom: 'gpt-4',
+          }),
+        ).toBe(1);
+      });
+    });
+
+    describe('HTTP request metrics', () => {
+      it('should record successful HTTP requests', () => {
+        const metrics = {
+          method: 'GET',
+          url: 'https://api.example.com/users',
+          host: 'api.example.com',
+          direction: 'outbound' as const,
+          source: 'tool' as const,
+          statusCode: 200,
+          durationMs: 150,
+          success: true,
+          requestSize: 100,
+          responseSize: 500,
+          agentId: 'test-agent',
+        };
+
+        collector.recordHttpRequest(metrics);
+
+        const requests = collector.getHttpRequests();
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toEqual(metrics);
+
+        expect(
+          collector.getCounter(MetricNames.HTTP_REQUESTS_TOTAL, {
+            method: 'GET',
+            host: 'api.example.com',
+            direction: 'outbound',
+            source: 'tool',
+            agentId: 'test-agent',
+          }),
+        ).toBe(1);
+        expect(
+          collector.getCounter(MetricNames.HTTP_REQUESTS_SUCCESS, {
+            method: 'GET',
+            host: 'api.example.com',
+            direction: 'outbound',
+            source: 'tool',
+            agentId: 'test-agent',
+          }),
+        ).toBe(1);
+      });
+
+      it('should record failed HTTP requests', () => {
+        collector.recordHttpRequest({
+          method: 'POST',
+          url: 'https://api.example.com/data',
+          host: 'api.example.com',
+          direction: 'outbound',
+          source: 'integration',
+          statusCode: 500,
+          durationMs: 50,
+          success: false,
+          errorType: 'InternalServerError',
+        });
+
+        expect(
+          collector.getCounter(MetricNames.HTTP_REQUESTS_ERROR, {
+            method: 'POST',
+            host: 'api.example.com',
+            direction: 'outbound',
+            source: 'integration',
+            errorType: 'InternalServerError',
+          }),
+        ).toBe(1);
+      });
+
+      it('should track bytes sent and received', () => {
+        collector.recordHttpRequest({
+          method: 'POST',
+          url: 'https://api.example.com/upload',
+          host: 'api.example.com',
+          direction: 'outbound',
+          statusCode: 201,
+          durationMs: 200,
+          success: true,
+          requestSize: 1024,
+          responseSize: 256,
+        });
+
+        expect(
+          collector.getCounter(MetricNames.HTTP_BYTES_SENT, {
+            method: 'POST',
+            host: 'api.example.com',
+            direction: 'outbound',
+          }),
+        ).toBe(1024);
+        expect(
+          collector.getCounter(MetricNames.HTTP_BYTES_RECEIVED, {
+            method: 'POST',
+            host: 'api.example.com',
+            direction: 'outbound',
+          }),
+        ).toBe(256);
+      });
+
+      it('should track inbound requests', () => {
+        collector.recordHttpRequest({
+          method: 'GET',
+          url: '/api/agents',
+          direction: 'inbound',
+          source: 'server',
+          statusCode: 200,
+          durationMs: 10,
+          success: true,
+        });
+
+        expect(
+          collector.getCounter(MetricNames.HTTP_REQUESTS_TOTAL, {
+            method: 'GET',
+            direction: 'inbound',
+            source: 'server',
+          }),
+        ).toBe(1);
+      });
+    });
+
+    describe('Token and cost tracking', () => {
+      it('should track token usage', () => {
+        collector.recordTokenUsage(
+          { inputTokens: 100, outputTokens: 50, cachedTokens: 20, reasoningTokens: 10 },
+          { model: 'gpt-4' },
+        );
+
+        expect(collector.getCounter(MetricNames.TOKENS_INPUT, { model: 'gpt-4' })).toBe(100);
+        expect(collector.getCounter(MetricNames.TOKENS_OUTPUT, { model: 'gpt-4' })).toBe(50);
+        expect(collector.getCounter(MetricNames.TOKENS_TOTAL, { model: 'gpt-4' })).toBe(150);
+        expect(collector.getCounter(MetricNames.TOKENS_CACHED, { model: 'gpt-4' })).toBe(20);
+        expect(collector.getCounter(MetricNames.TOKENS_REASONING, { model: 'gpt-4' })).toBe(10);
+      });
+
+      it('should track costs', () => {
+        collector.recordCost({ totalCostUSD: 0.05, modelCostUSD: 0.04, toolCostUSD: 0.01 }, { agentId: 'test-agent' });
+
+        expect(collector.getCounter(MetricNames.COST_USD, { agentId: 'test-agent' })).toBe(0.05);
+        expect(collector.getCounter(MetricNames.COST_MODEL_USD, { agentId: 'test-agent' })).toBe(0.04);
+        expect(collector.getCounter(MetricNames.COST_TOOL_USD, { agentId: 'test-agent' })).toBe(0.01);
+      });
+    });
+
+    describe('Utility methods', () => {
+      it('should clear all data', () => {
+        collector.incrementCounter('test');
+        collector.recordAgentRun({
+          agentId: 'test',
+          runId: 'run-1',
+          durationMs: 100,
+          stepCount: 1,
+          toolCallCount: 0,
+          toolSuccessCount: 0,
+          toolFailureCount: 0,
+          tokenUsage: { inputTokens: 10, outputTokens: 20 },
+          success: true,
+        });
+
+        collector.clear();
+
+        expect(collector.getAllCounters().size).toBe(0);
+        expect(collector.getAgentRuns()).toHaveLength(0);
+      });
+
+      it('should return all counters', () => {
+        collector.incrementCounter('counter1');
+        collector.incrementCounter('counter2', { label: 'value' });
+
+        const allCounters = collector.getAllCounters();
+        expect(allCounters.size).toBe(2);
+      });
+    });
+
+    describe('Agentic metrics', () => {
+      describe('Goal state classification', () => {
+        it('should classify "stop" as completed', () => {
+          expect(classifyGoalState('stop')).toBe('completed');
+        });
+
+        it('should classify "end-turn" as completed', () => {
+          expect(classifyGoalState('end-turn')).toBe('completed');
+        });
+
+        it('should classify "length" as incomplete', () => {
+          expect(classifyGoalState('length')).toBe('incomplete');
+        });
+
+        it('should classify "tripwire" as blocked', () => {
+          expect(classifyGoalState('tripwire')).toBe('blocked');
+        });
+
+        it('should classify "error" as failed', () => {
+          expect(classifyGoalState('error')).toBe('failed');
+        });
+
+        it('should classify "cancelled" as abandoned', () => {
+          expect(classifyGoalState('cancelled')).toBe('abandoned');
+        });
+
+        it('should classify unknown as unknown', () => {
+          expect(classifyGoalState('something-else')).toBe('unknown');
+          expect(classifyGoalState(undefined)).toBe('unknown');
+        });
+      });
+
+      describe('Guardrail metrics', () => {
+        it('should record guardrail triggers with retry', () => {
+          const metrics: GuardrailMetrics = {
+            agentId: 'test-agent',
+            runId: 'run-123',
+            processorId: 'content-filter',
+            reason: 'Blocked harmful content',
+            willRetry: true,
+            timestamp: new Date(),
+          };
+
+          collector.recordGuardrailTrigger(metrics);
+
+          expect(collector.getGuardrailEvents()).toHaveLength(1);
+          expect(
+            collector.getCounter(MetricNames.GUARDRAIL_TRIGGERS, {
+              agentId: 'test-agent',
+              processorId: 'content-filter',
+            }),
+          ).toBe(1);
+          expect(
+            collector.getCounter(MetricNames.GUARDRAIL_RETRIES, {
+              agentId: 'test-agent',
+              processorId: 'content-filter',
+            }),
+          ).toBe(1);
+        });
+
+        it('should record guardrail blocks', () => {
+          collector.recordGuardrailTrigger({
+            runId: 'run-123',
+            processorId: 'pii-filter',
+            reason: 'PII detected',
+            willRetry: false,
+            timestamp: new Date(),
+          });
+
+          expect(
+            collector.getCounter(MetricNames.GUARDRAIL_BLOCKS, {
+              processorId: 'pii-filter',
+            }),
+          ).toBe(1);
+        });
+      });
+
+      describe('Human intervention metrics', () => {
+        it('should record approval requests', () => {
+          collector.recordHumanIntervention({
+            agentId: 'test-agent',
+            runId: 'run-123',
+            type: 'approval_requested',
+            toolName: 'send-email',
+            toolCallId: 'tc-1',
+            timestamp: new Date(),
+          });
+
+          expect(collector.getHumanEvents()).toHaveLength(1);
+          expect(
+            collector.getCounter(MetricNames.HUMAN_APPROVALS_REQUESTED, {
+              agentId: 'test-agent',
+              type: 'approval_requested',
+              toolName: 'send-email',
+            }),
+          ).toBe(1);
+        });
+
+        it('should record approvals with wait time', () => {
+          collector.recordHumanIntervention({
+            agentId: 'test-agent',
+            runId: 'run-123',
+            type: 'approved',
+            toolName: 'send-email',
+            waitTimeMs: 5000,
+            timestamp: new Date(),
+          });
+
+          expect(
+            collector.getCounter(MetricNames.HUMAN_APPROVALS_GRANTED, {
+              agentId: 'test-agent',
+              type: 'approved',
+              toolName: 'send-email',
+            }),
+          ).toBe(1);
+        });
+
+        it('should record denials', () => {
+          collector.recordHumanIntervention({
+            runId: 'run-123',
+            type: 'declined',
+            toolName: 'delete-all',
+            timestamp: new Date(),
+          });
+
+          expect(
+            collector.getCounter(MetricNames.HUMAN_APPROVALS_DENIED, {
+              type: 'declined',
+              toolName: 'delete-all',
+            }),
+          ).toBe(1);
+        });
+
+        it('should record overrides', () => {
+          collector.recordHumanIntervention({
+            agentId: 'test-agent',
+            runId: 'run-123',
+            type: 'override',
+            timestamp: new Date(),
+          });
+
+          expect(
+            collector.getCounter(MetricNames.HUMAN_OVERRIDES, {
+              agentId: 'test-agent',
+              type: 'override',
+            }),
+          ).toBe(1);
+        });
+      });
+
+      describe('Goal state recording', () => {
+        it('should record goal completed', () => {
+          collector.recordGoalState('completed', { agentId: 'test-agent' });
+          expect(collector.getCounter(MetricNames.GOAL_COMPLETED, { agentId: 'test-agent' })).toBe(1);
+        });
+
+        it('should record goal incomplete', () => {
+          collector.recordGoalState('incomplete', { agentId: 'test-agent' });
+          expect(collector.getCounter(MetricNames.GOAL_INCOMPLETE, { agentId: 'test-agent' })).toBe(1);
+        });
+
+        it('should record goal blocked', () => {
+          collector.recordGoalState('blocked', { agentId: 'test-agent' });
+          expect(collector.getCounter(MetricNames.GOAL_BLOCKED, { agentId: 'test-agent' })).toBe(1);
+        });
+
+        it('should record goal failed', () => {
+          collector.recordGoalState('failed', { agentId: 'test-agent' });
+          expect(collector.getCounter(MetricNames.GOAL_FAILED, { agentId: 'test-agent' })).toBe(1);
+        });
+
+        it('should record goal abandoned', () => {
+          collector.recordGoalState('abandoned', { agentId: 'test-agent' });
+          expect(collector.getCounter(MetricNames.GOAL_ABANDONED, { agentId: 'test-agent' })).toBe(1);
+        });
+      });
+    });
+  });
+});

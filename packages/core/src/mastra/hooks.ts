@@ -3,6 +3,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { saveScorePayloadSchema } from '../evals';
 import type { ScoringHookInput } from '../evals/types';
 import type { Mastra } from '../mastra';
+import { createLogContext } from '../observability/instrumentation';
+import * as events from '../logger/event-builder';
 import type { MastraStorage } from '../storage';
 
 export function createOnScorerHook(mastra: Mastra) {
@@ -67,6 +69,36 @@ export function createOnScorerHook(mastra: Mastra) {
         },
       };
       await validateAndSaveScore(storage, payload);
+
+      // Log quality score event and record metrics
+      const logger = mastra.getLogger();
+      const metrics = mastra.getMetrics();
+      const logContext = createLogContext({
+        tracingContext: hookData.tracingContext,
+        agentId: entityType === 'AGENT' ? entityId : undefined,
+        workflowId: entityType === 'WORKFLOW' ? entityId : undefined,
+        runId: hookData.runId,
+        threadId: hookData.threadId,
+        resourceId: hookData.resourceId,
+      });
+
+      // Log the score event
+      const scoreEvent = events.scoreComputed(logContext, {
+        scorerName: scorerToUse.scorer.id,
+        score: runResult.score as number,
+        reason: runResult.reason as string | undefined,
+      });
+      logger?.logEvent?.(scoreEvent);
+
+      // Record quality metric
+      metrics?.incrementCounter('quality_scores_total', {
+        agentId: entityType === 'AGENT' ? entityId : undefined,
+        workflowId: entityType === 'WORKFLOW' ? entityId : undefined,
+      });
+      metrics?.recordHistogram('quality_score_value', {
+        agentId: entityType === 'AGENT' ? entityId : undefined,
+        workflowId: entityType === 'WORKFLOW' ? entityId : undefined,
+      }, runResult.score as number);
 
       if (currentSpan && spanId && traceId) {
         await pMap(
