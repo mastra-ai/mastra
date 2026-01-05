@@ -240,6 +240,7 @@ describe('createLLMMappingStep HITL behavior', () => {
         }),
       }),
     );
-    expect(bail).toHaveBeenCalled();
+    // Should NOT bail - allow the loop to continue so LLM can see the error and retry
+    expect(bail).not.toHaveBeenCalled();
   });
 });

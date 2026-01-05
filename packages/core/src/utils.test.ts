@@ -233,6 +233,7 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeDefined();
 
     if (coreTool.execute) {
+      // For v1 models (no model provided = legacy behavior), errors are returned not thrown
       const result = await coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
       expect(result).toBeInstanceOf(MastraError);
       expect(result.message).toBe('Test error');
