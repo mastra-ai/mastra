@@ -1,0 +1,205 @@
+---
+title: "Bun Integration | Deployment"
+description: "Learn how to use Bun runtime features in your Mastra applications"
+---
+
+# Bun Integration
+
+Mastra supports Bun as a runtime environment with optional native Bun components for bundling and serving. This guide covers how to leverage Bun-specific features in your Mastra applications.
+
+## Bun-Native Server
+
+When running on Bun, you can use the native `Bun.serve()` for better performance instead of `@hono/node-server`.
+
+### Automatic Detection
+
+Use `createServer()` which automatically detects the runtime:
+
+```typescript
+import { createServer } from "@mastra/deployer/server";
+import { mastra } from "./mastra";
+
+// Automatically uses Bun.serve() on Bun, @hono/node-server on Node.js
+const server = await createServer(mastra, { tools: {} });
+```
+
+### Explicit Bun Server
+
+For explicit Bun usage:
+
+```typescript
+import { createBunServer } from "@mastra/deployer/server";
+import { mastra } from "./mastra";
+
+// Throws an error if not running on Bun
+const server = await createBunServer(mastra, { tools: {} });
+```
+
+## Storage on Bun
+
+### LibSQLStore
+
+The `@mastra/libsql` storage adapter works on Bun without any additional configuration. LibSQL's client library has native Bun support:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: "my-store",
+    url: "file:./data.db", // Works on Bun
+  }),
+});
+```
+
+For in-memory databases (useful for development):
+
+```typescript
+const storage = new LibSQLStore({
+  id: "memory-store",
+  url: ":memory:",
+});
+```
+
+## Custom Bundler Engines
+
+Mastra uses Rollup as the default bundler for production builds. If you're running on Bun, you can configure the native Bun bundler for faster build times.
+
+## Using the Bun Bundler
+
+If you're running your Mastra application on Bun, you can use the native Bun bundler for faster build times.
+
+### Installation
+
+```bash
+bun add @mastra/bundler-bun@beta
+```
+
+### Usage
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createBunEngine } from "@mastra/bundler-bun";
+
+export const mastra = new Mastra({
+  bundler: {
+    engine: createBunEngine(),
+  },
+});
+```
+
+### Configuration Options
+
+The Bun bundler engine accepts these options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `minify` | `boolean` | `true` | Enable minification |
+| `sourcemap` | `"external" \| "inline" \| "none"` | `"none"` | Source map generation |
+| `target` | `"bun" \| "node" \| "browser"` | `"bun"` | Build target environment |
+
+Example with options:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createBunEngine } from "@mastra/bundler-bun";
+
+export const mastra = new Mastra({
+  bundler: {
+    engine: createBunEngine({
+      minify: false,
+      sourcemap: "external",
+      target: "bun",
+    }),
+  },
+});
+```
+
+## Using the Default Rollup Bundler
+
+The default Rollup bundler is used automatically when no custom engine is specified. You can also explicitly configure it:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { createRollupEngine } from "@mastra/deployer/engines";
+
+export const mastra = new Mastra({
+  bundler: {
+    engine: createRollupEngine(),
+  },
+});
+```
+
+## Creating a Custom Bundler Engine
+
+You can create custom bundler engines by implementing the `BundlerEngine` interface:
+
+```typescript
+import type { BundlerEngine, BundlerEngineOptions, BundlerEngineOutput } from "@mastra/core/bundler";
+
+export class CustomBundlerEngine implements BundlerEngine {
+  readonly name = "custom";
+
+  async bundle(options: BundlerEngineOptions): Promise<BundlerEngineOutput> {
+    // options.entryPoint - The main entry file path
+    // options.outputDir - Where to write the bundled output
+    // options.outputFile - The output filename (e.g., "index.mjs")
+    // options.externals - Packages to exclude from bundling
+    // options.sourcemap - Whether to generate source maps
+
+    // Implement your bundling logic here
+    // ...
+
+    return {
+      success: true,
+      outputPath: `${options.outputDir}/${options.outputFile}`,
+    };
+  }
+}
+```
+
+### BundlerEngineOptions
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `entryPoint` | `string` | Absolute path to the entry file |
+| `outputDir` | `string` | Directory for the bundled output |
+| `outputFile` | `string` | Name of the output file |
+| `externals` | `string[]` | Packages to exclude from the bundle |
+| `sourcemap` | `boolean` | Whether to generate source maps |
+
+### BundlerEngineOutput
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `success` | `boolean` | Whether the bundling succeeded |
+| `outputPath` | `string` | Path to the generated bundle |
+| `error` | `Error` (optional) | Error details if bundling failed |
+
+## Runtime Detection
+
+The Bun bundler engine requires the Bun runtime. It will throw an error if used outside of Bun:
+
+```typescript
+// This will throw if not running in Bun
+const engine = createBunEngine();
+```
+
+For projects that need to support multiple runtimes, you can conditionally use the bundler:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+
+const getBundlerConfig = async () => {
+  if (typeof globalThis.Bun !== "undefined") {
+    const { createBunEngine } = await import("@mastra/bundler-bun");
+    return { engine: createBunEngine() };
+  }
+  return {}; // Use default Rollup bundler
+};
+
+export const mastra = new Mastra({
+  bundler: await getBundlerConfig(),
+});
+```

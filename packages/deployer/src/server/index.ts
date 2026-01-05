@@ -8,6 +8,27 @@ import type { Mastra } from '@mastra/core/mastra';
 import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
+
+// Type declarations for Bun runtime
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace globalThis {
+    // eslint-disable-next-line no-var
+    var Bun:
+      | {
+          serve(options: {
+            fetch: (request: Request) => Response | Promise<Response>;
+            port?: number;
+            hostname?: string;
+            tls?: {
+              key?: string | Buffer;
+              cert?: string | Buffer;
+            };
+          }): { stop(): void };
+        }
+      | undefined;
+  }
+}
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
@@ -415,4 +436,83 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   await mastra.startEventEngine();
 
   return server;
+}
+
+/**
+ * Creates a Bun-native server for the Mastra application.
+ * Uses Bun.serve() instead of @hono/node-server for better performance on Bun runtime.
+ *
+ * @example
+ * ```typescript
+ * import { createBunServer } from '@mastra/deployer/server';
+ *
+ * const server = await createBunServer(mastra, { tools: {} });
+ * ```
+ */
+export async function createBunServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
+  // Check if we're running in Bun
+  if (typeof globalThis.Bun === 'undefined') {
+    throw new Error('createBunServer requires Bun runtime. Use createNodeServer for Node.js.');
+  }
+
+  const app = await createHonoServer(mastra, options);
+  const serverOptions = mastra.getServer();
+
+  const key =
+    serverOptions?.https?.key ??
+    (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
+  const cert =
+    serverOptions?.https?.cert ??
+    (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
+  const isHttpsEnabled = Boolean(key && cert);
+
+  const host = serverOptions?.host ?? 'localhost';
+  const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+  const protocol = isHttpsEnabled ? 'https' : 'http';
+
+  // Use Bun's native serve function
+  const server = globalThis.Bun.serve({
+    fetch: app.fetch,
+    port,
+    hostname: host,
+    ...(isHttpsEnabled
+      ? {
+          tls: {
+            key,
+            cert,
+          },
+        }
+      : {}),
+  });
+
+  const logger = mastra.getLogger();
+  logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
+  if (options?.playground) {
+    const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+    const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
+    logger.info(`👨‍💻 Studio available at ${studioUrl}`);
+  }
+
+  if (process.send) {
+    process.send({
+      type: 'server-ready',
+      port,
+      host,
+    });
+  }
+
+  await mastra.startEventEngine();
+
+  return server;
+}
+
+/**
+ * Creates a server using the appropriate runtime.
+ * Automatically detects Bun and uses Bun.serve(), otherwise uses @hono/node-server.
+ */
+export async function createServer(mastra: Mastra, options: ServerBundleOptions = { tools: {} }) {
+  if (typeof globalThis.Bun !== 'undefined') {
+    return createBunServer(mastra, options);
+  }
+  return createNodeServer(mastra, options);
 }
