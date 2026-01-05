@@ -370,14 +370,132 @@ export class BraintrustExporter extends BaseExporter {
   }
 
   /**
+   * Converts AI SDK v5 message format to OpenAI Chat Completion format for Braintrust.
+   *
+   * AI SDK v5 format:
+   *   { role: "user", content: [{ type: "text", text: "hello" }] }
+   *   { role: "assistant", content: [{ type: "text", text: "..." }, { type: "tool-call", toolCallId: "...", toolName: "...", args: {...} }] }
+   *   { role: "tool", content: [{ type: "tool-result", toolCallId: "...", output: {...} }] }
+   *
+   * OpenAI format (what Braintrust expects):
+   *   { role: "user", content: "hello" }
+   *   { role: "assistant", content: "...", tool_calls: [{ id: "...", type: "function", function: { name: "...", arguments: "..." } }] }
+   *   { role: "tool", content: "result", tool_call_id: "..." }
+   */
+  private convertAISDKV5Message(message: any): any {
+    if (!message || typeof message !== 'object') {
+      return message;
+    }
+
+    const { role, content, ...rest } = message;
+
+    // If content is already a string, return as-is (already in OpenAI format)
+    if (typeof content === 'string') {
+      return message;
+    }
+
+    // If content is an array (AI SDK v5 format), convert based on role
+    if (Array.isArray(content)) {
+      // For user/system messages, extract text from parts
+      if (role === 'user' || role === 'system') {
+        const textParts = content
+          .filter((part: any) => part?.type === 'text')
+          .map((part: any) => part.text)
+          .filter(Boolean);
+
+        if (textParts.length > 0) {
+          return { role, content: textParts.join('\n'), ...rest };
+        }
+      }
+
+      // For assistant messages, extract text AND tool calls
+      if (role === 'assistant') {
+        const textParts = content
+          .filter((part: any) => part?.type === 'text')
+          .map((part: any) => part.text)
+          .filter(Boolean);
+
+        const toolCallParts = content.filter((part: any) => part?.type === 'tool-call');
+
+        const result: any = {
+          role,
+          content: textParts.length > 0 ? textParts.join('\n') : '',
+          ...rest,
+        };
+
+        // Add tool_calls array if there are tool calls
+        if (toolCallParts.length > 0) {
+          result.tool_calls = toolCallParts.map((tc: any) => {
+            const toolCallId = tc.toolCallId;
+            const toolName = tc.toolName;
+            const args = tc.args ?? tc.input;
+
+            let argsString: string;
+            if (typeof args === 'string') {
+              argsString = args;
+            } else if (args !== undefined && args !== null) {
+              argsString = JSON.stringify(args);
+            } else {
+              argsString = '{}';
+            }
+
+            return {
+              id: toolCallId,
+              type: 'function',
+              function: {
+                name: toolName,
+                arguments: argsString,
+              },
+            };
+          });
+        }
+
+        return result;
+      }
+
+      // For tool messages, convert to OpenAI tool message format
+      if (role === 'tool') {
+        const toolResult = content.find((part: any) => part?.type === 'tool-result');
+        if (toolResult) {
+          let resultContent: string;
+          const output = toolResult.output;
+
+          // Convert output to string
+          if (typeof output === 'string') {
+            resultContent = output;
+          } else if (output && typeof output === 'object' && 'value' in output) {
+            resultContent = typeof output.value === 'string' ? output.value : JSON.stringify(output.value);
+          } else {
+            resultContent = JSON.stringify(output);
+          }
+
+          return {
+            role: 'tool',
+            content: resultContent,
+            tool_call_id: toolResult.toolCallId,
+          };
+        }
+      }
+    }
+
+    return message;
+  }
+
+  /**
    * Transforms MODEL_GENERATION input to Braintrust Thread view format.
+   * Converts AI SDK v5 messages to OpenAI Chat Completion format, which was Braintrust requires
+   * for proper rendering of threads.
    */
   private transformInput(input: any, spanType: SpanType): any {
     if (spanType === SpanType.MODEL_GENERATION) {
+      // If input is already an array of messages, convert AI SDK v5 format to OpenAI format
+      if (Array.isArray(input)) {
+        return input.map((msg: any) => this.convertAISDKV5Message(msg));
+      }
+
+      // If input has a messages array
       if (input && Array.isArray(input.messages)) {
-        return input.messages;
-      } else if (input && typeof input === 'object' && 'content' in input) {
-        return [{ role: input.role, content: input.content }];
+        return input.messages.map((msg: any) => this.convertAISDKV5Message(msg));
       }
     }
 
