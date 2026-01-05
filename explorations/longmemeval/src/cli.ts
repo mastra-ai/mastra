@@ -14,6 +14,7 @@ import { PrepareCommand } from './commands/prepare';
 import { RunCommand } from './commands/run';
 import { SyncCommand } from './commands/sync';
 import { CleanCommand } from './commands/clean';
+import { ObscureThreadIdsCommand } from './commands/obscure-thread-ids';
 
 const program = new Command();
 
@@ -465,6 +466,29 @@ program
         offset: options.offset,
         subset: options.subset,
         questionId: options.questionId,
+        dryRun: options.dryRun,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+// Obscure thread IDs command - replace thread IDs with hashed versions to prevent LLM bias
+program
+  .command('obscure-thread-ids')
+  .description('Replace thread IDs in prepared om.json files with hashed versions to prevent LLM bias')
+  .requiredOption('-d, --dataset <name>', 'Dataset name (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .option('-c, --memory-config <type>', 'Memory configuration', 'observational-memory')
+  .option('-p, --prepared-data <dir>', 'Prepared data directory', './prepared-data')
+  .option('--dry-run', 'Show what would be changed without actually modifying files')
+  .action(async options => {
+    try {
+      const obscureCommand = new ObscureThreadIdsCommand();
+      await obscureCommand.run({
+        dataset: options.dataset,
+        memoryConfig: options.memoryConfig,
+        preparedDataDir: options.preparedData,
         dryRun: options.dryRun,
       });
     } catch (error) {
