@@ -42,6 +42,22 @@ import { handleError } from './error';
 import { sanitizeBody, validateBody } from './utils';
 
 /**
+ * Serializes an agent's request context schema to a JSON string.
+ * Returns undefined if the agent has no request context schema or if serialization fails.
+ */
+function serializeAgentRequestContextSchema(agent: Agent): string | undefined {
+  const agentRequestContextSchema = agent.getRequestContextSchema();
+  if (!agentRequestContextSchema) return undefined;
+
+  try {
+    return stringify(zodToJsonSchema(agentRequestContextSchema as Parameters<typeof zodToJsonSchema>[0]));
+  } catch (error) {
+    console.error(`Error serializing agent requestContextSchema`, { agentId: agent.id, error });
+    return undefined;
+  }
+}
+
+/**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * @param providerId - The provider identifier (may include a suffix like ".chat")
@@ -304,18 +320,7 @@ async function formatAgentList({
     },
   }));
 
-  // Serialize requestContextSchema if present
-  const agentRequestContextSchema = agent.getRequestContextSchema();
-  let requestContextSchemaForReturn: string | undefined = undefined;
-  if (agentRequestContextSchema) {
-    try {
-      requestContextSchemaForReturn = stringify(
-        zodToJsonSchema(agentRequestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
-      );
-    } catch (error) {
-      console.error(`Error serializing agent requestContextSchema`, { agentId: agent.id, error });
-    }
-  }
+  const requestContextSchemaForReturn = serializeAgentRequestContextSchema(agent);
 
   return {
     id: agent.id || id,
@@ -474,18 +479,7 @@ async function formatAgent({
   const serializedInputProcessors = getSerializedProcessors(inputProcessors);
   const serializedOutputProcessors = getSerializedProcessors(outputProcessors);
 
-  // Serialize requestContextSchema if present
-  const agentRequestContextSchema = agent.getRequestContextSchema();
-  let requestContextSchemaForReturn: string | undefined = undefined;
-  if (agentRequestContextSchema) {
-    try {
-      requestContextSchemaForReturn = stringify(
-        zodToJsonSchema(agentRequestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
-      );
-    } catch (error) {
-      console.error(`Error serializing agent requestContextSchema`, { agentId: agent.id, error });
-    }
-  }
+  const requestContextSchemaForReturn = serializeAgentRequestContextSchema(agent);
 
   return {
     name: agent.name,

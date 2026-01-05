@@ -17,6 +17,19 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import { validateBody } from './utils';
 
+/**
+ * Serializes a tool's schemas (input, output, requestContext) to JSON strings.
+ * Returns a new tool object with serialized schemas.
+ */
+function serializeTool(tool: any) {
+  return {
+    ...tool,
+    inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
+    outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
+    requestContextSchema: tool.requestContextSchema ? stringify(zodToJsonSchema(tool.requestContextSchema)) : undefined,
+  };
+}
+
 // ============================================================================
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
@@ -36,14 +49,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
           const tool = _tool;
-          acc[id] = {
-            ...tool,
-            inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-            outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-            requestContextSchema: tool.requestContextSchema
-              ? stringify(zodToJsonSchema(tool.requestContextSchema))
-              : undefined,
-          };
+          acc[id] = serializeTool(tool);
           return acc;
         },
         {} as Record<string, any>,
@@ -80,16 +86,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Tool not found' });
       }
 
-      const serializedTool = {
-        ...tool,
-        inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-        outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-        requestContextSchema: tool.requestContextSchema
-          ? stringify(zodToJsonSchema(tool.requestContextSchema))
-          : undefined,
-      };
-
-      return serializedTool;
+      return serializeTool(tool);
     } catch (error) {
       return handleError(error, 'Error getting tool');
     }
@@ -188,16 +185,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Tool not found' });
       }
 
-      const serializedTool = {
-        ...tool,
-        inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-        outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-        requestContextSchema: tool.requestContextSchema
-          ? stringify(zodToJsonSchema(tool.requestContextSchema))
-          : undefined,
-      };
-
-      return serializedTool;
+      return serializeTool(tool);
     } catch (error) {
       return handleError(error, 'Error getting agent tool');
     }
