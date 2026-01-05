@@ -145,5 +145,8 @@ const StreamingComponent = () => {
 };
 
 export const Streaming: Story = {
-  render: () => <StreamingComponent />,
+  args: {
+    streaming: true,
+  },
+  render: args => <StreamingComponent {...args} />,
 };
