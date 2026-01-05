@@ -226,3 +226,192 @@ export const watchResource = queryGeneric({
       .unique();
   },
 });
+
+// ============================================================================
+// Count Queries - Efficient aggregations
+// ============================================================================
+
+/**
+ * Count messages for a thread.
+ */
+export const countMessages = queryGeneric({
+  args: {
+    threadId: v.string(),
+  },
+  handler: async (ctx, { threadId }) => {
+    const docs = await ctx.db
+      .query('mastra_messages')
+      .withIndex('by_thread', (q: any) => q.eq('thread_id', threadId))
+      .take(1001);
+
+    return {
+      count: Math.min(docs.length, 1000),
+      isEstimate: docs.length > 1000,
+    };
+  },
+});
+
+/**
+ * Count threads for a resource.
+ */
+export const countThreads = queryGeneric({
+  args: {
+    resourceId: v.optional(v.string()),
+  },
+  handler: async (ctx, { resourceId }) => {
+    let query;
+    if (resourceId) {
+      query = ctx.db.query('mastra_threads').withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+    } else {
+      query = ctx.db.query('mastra_threads');
+    }
+
+    const docs = await query.take(1001);
+
+    return {
+      count: Math.min(docs.length, 1000),
+      isEstimate: docs.length > 1000,
+    };
+  },
+});
+
+/**
+ * Count workflow runs with optional filters.
+ */
+export const countWorkflowRuns = queryGeneric({
+  args: {
+    workflowName: v.optional(v.string()),
+    resourceId: v.optional(v.string()),
+  },
+  handler: async (ctx, { workflowName, resourceId }) => {
+    let query;
+    if (workflowName) {
+      query = ctx.db
+        .query('mastra_workflow_snapshots')
+        .withIndex('by_workflow', (q: any) => q.eq('workflow_name', workflowName));
+    } else if (resourceId) {
+      query = ctx.db
+        .query('mastra_workflow_snapshots')
+        .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+    } else {
+      query = ctx.db.query('mastra_workflow_snapshots');
+    }
+
+    const docs = await query.take(1001);
+
+    return {
+      count: Math.min(docs.length, 1000),
+      isEstimate: docs.length > 1000,
+    };
+  },
+});
+
+// ============================================================================
+// Paginated Queries - Cursor-based pagination
+// ============================================================================
+
+/**
+ * Paginated messages query with cursor support.
+ */
+export const paginatedMessages = queryGeneric({
+  args: {
+    threadId: v.string(),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    order: v.optional(v.union(v.literal('asc'), v.literal('desc'))),
+  },
+  handler: async (ctx, { threadId, cursor, limit = 50, order = 'asc' }) => {
+    let query = ctx.db.query('mastra_messages').withIndex('by_thread', (q: any) => q.eq('thread_id', threadId));
+
+    // Apply cursor filter
+    if (cursor) {
+      query = query.filter((q: any) =>
+        order === 'desc' ? q.lt(q.field('createdAt'), cursor) : q.gt(q.field('createdAt'), cursor),
+      );
+    }
+
+    const docs = await query.order(order).take(Math.min(limit, 1000) + 1);
+    const hasMore = docs.length > limit;
+    const items = hasMore ? docs.slice(0, limit) : docs;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]?.createdAt : undefined;
+
+    return {
+      items,
+      nextCursor,
+      hasMore,
+    };
+  },
+});
+
+/**
+ * Paginated threads query with cursor support.
+ */
+export const paginatedThreads = queryGeneric({
+  args: {
+    resourceId: v.string(),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    order: v.optional(v.union(v.literal('asc'), v.literal('desc'))),
+  },
+  handler: async (ctx, { resourceId, cursor, limit = 50, order = 'desc' }) => {
+    let query = ctx.db.query('mastra_threads').withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+
+    if (cursor) {
+      query = query.filter((q: any) =>
+        order === 'desc' ? q.lt(q.field('createdAt'), cursor) : q.gt(q.field('createdAt'), cursor),
+      );
+    }
+
+    const docs = await query.order(order).take(Math.min(limit, 1000) + 1);
+    const hasMore = docs.length > limit;
+    const items = hasMore ? docs.slice(0, limit) : docs;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]?.createdAt : undefined;
+
+    return {
+      items,
+      nextCursor,
+      hasMore,
+    };
+  },
+});
+
+/**
+ * Paginated workflow runs query with cursor support.
+ */
+export const paginatedWorkflowRuns = queryGeneric({
+  args: {
+    workflowName: v.optional(v.string()),
+    resourceId: v.optional(v.string()),
+    cursor: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { workflowName, resourceId, cursor, limit = 50 }) => {
+    let query;
+    if (workflowName) {
+      query = ctx.db
+        .query('mastra_workflow_snapshots')
+        .withIndex('by_workflow', (q: any) => q.eq('workflow_name', workflowName));
+    } else if (resourceId) {
+      query = ctx.db
+        .query('mastra_workflow_snapshots')
+        .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+    } else {
+      query = ctx.db.query('mastra_workflow_snapshots').withIndex('by_created');
+    }
+
+    if (cursor) {
+      query = query.filter((q: any) => q.lt(q.field('createdAt'), cursor));
+    }
+
+    const docs = await query.order('desc').take(Math.min(limit, 1000) + 1);
+    const hasMore = docs.length > limit;
+    const items = hasMore ? docs.slice(0, limit) : docs;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]?.createdAt : undefined;
+
+    return {
+      items,
+      nextCursor,
+      hasMore,
+    };
+  },
+});

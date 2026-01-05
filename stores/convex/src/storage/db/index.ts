@@ -226,6 +226,54 @@ export class ConvexDB extends MastraBase {
     return this.client.callStorage<R>(request);
   }
 
+  // ============================================================================
+  // Aggregation Operations - Efficient counts
+  // ============================================================================
+
+  /**
+   * Count messages for a thread.
+   */
+  async countMessages(threadId: string): Promise<{ count: number; isEstimate: boolean }> {
+    return this.client.callStorage({
+      op: 'countMessages',
+      threadId,
+    });
+  }
+
+  /**
+   * Count threads, optionally filtered by resource.
+   */
+  async countThreads(resourceId?: string): Promise<{ count: number; isEstimate: boolean }> {
+    return this.client.callStorage({
+      op: 'countThreads',
+      resourceId,
+    });
+  }
+
+  /**
+   * Count workflow runs with optional filters.
+   */
+  async countWorkflowRuns(args?: {
+    workflowName?: string;
+    resourceId?: string;
+    status?: string;
+  }): Promise<{ count: number; isEstimate: boolean }> {
+    return this.client.callStorage({
+      op: 'countWorkflowRuns',
+      ...args,
+    });
+  }
+
+  /**
+   * Count vectors in an index.
+   */
+  async countVectors(indexName: string): Promise<{ count: number; isEstimate: boolean }> {
+    return this.client.callStorage({
+      op: 'countVectors',
+      indexName,
+    });
+  }
+
   private normalizeRecord(tableName: TABLE_NAMES, record: Record<string, any>): Record<string, any> {
     const normalized: Record<string, any> = { ...record };
 

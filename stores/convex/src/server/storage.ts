@@ -81,6 +81,16 @@ export const mastraStorage = mutationGeneric(async (ctx, request: StorageRequest
           return handleGetVectorIndexStats(ctx, request.indexName);
         case 'upsertVectors':
           return handleUpsertVectors(ctx, request);
+
+        // Aggregation operations
+        case 'countMessages':
+          return handleCountMessages(ctx, request.threadId);
+        case 'countThreads':
+          return handleCountThreads(ctx, request.resourceId);
+        case 'countWorkflowRuns':
+          return handleCountWorkflowRuns(ctx, request);
+        case 'countVectors':
+          return handleCountVectors(ctx, request.indexName);
       }
     }
 
@@ -449,6 +459,122 @@ async function handleUpsertVectors(
   }
 
   return { ok: true, result: vectors.map(v => v.id) };
+}
+
+// ============================================================================
+// Aggregation Handlers - Efficient counts
+// ============================================================================
+
+/**
+ * Count messages for a thread using the by_thread index.
+ * More efficient than loading all messages.
+ */
+async function handleCountMessages(ctx: MutationCtx<any>, threadId: string): Promise<StorageResponse> {
+  // Use index to efficiently count
+  const docs = await ctx.db
+    .query('mastra_messages')
+    .withIndex('by_thread', (q: any) => q.eq('thread_id', threadId))
+    .take(QUERY_BATCH_SIZE + 1);
+
+  const count = docs.length;
+  const isEstimate = count > QUERY_BATCH_SIZE;
+
+  return {
+    ok: true,
+    result: {
+      count: isEstimate ? QUERY_BATCH_SIZE : count,
+      isEstimate,
+    },
+  };
+}
+
+/**
+ * Count threads, optionally filtered by resource.
+ */
+async function handleCountThreads(ctx: MutationCtx<any>, resourceId?: string): Promise<StorageResponse> {
+  let query;
+  if (resourceId) {
+    query = ctx.db.query('mastra_threads').withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+  } else {
+    query = ctx.db.query('mastra_threads');
+  }
+
+  const docs = await query.take(QUERY_BATCH_SIZE + 1);
+  const count = docs.length;
+  const isEstimate = count > QUERY_BATCH_SIZE;
+
+  return {
+    ok: true,
+    result: {
+      count: isEstimate ? QUERY_BATCH_SIZE : count,
+      isEstimate,
+    },
+  };
+}
+
+/**
+ * Count workflow runs with optional filters.
+ */
+async function handleCountWorkflowRuns(
+  ctx: MutationCtx<any>,
+  request: { workflowName?: string; resourceId?: string; status?: string },
+): Promise<StorageResponse> {
+  const { workflowName, resourceId, status } = request;
+
+  let query;
+  if (workflowName) {
+    query = ctx.db
+      .query('mastra_workflow_snapshots')
+      .withIndex('by_workflow', (q: any) => q.eq('workflow_name', workflowName));
+  } else if (resourceId) {
+    query = ctx.db
+      .query('mastra_workflow_snapshots')
+      .withIndex('by_resource', (q: any) => q.eq('resourceId', resourceId));
+  } else {
+    query = ctx.db.query('mastra_workflow_snapshots');
+  }
+
+  let docs = await query.take(QUERY_BATCH_SIZE + 1);
+
+  // Apply status filter if provided
+  if (status) {
+    docs = docs.filter((doc: any) => {
+      const snapshot = typeof doc.snapshot === 'string' ? JSON.parse(doc.snapshot) : doc.snapshot;
+      return snapshot?.status === status;
+    });
+  }
+
+  const count = docs.length;
+  const isEstimate = count > QUERY_BATCH_SIZE;
+
+  return {
+    ok: true,
+    result: {
+      count: isEstimate ? QUERY_BATCH_SIZE : count,
+      isEstimate,
+    },
+  };
+}
+
+/**
+ * Count vectors in an index.
+ */
+async function handleCountVectors(ctx: MutationCtx<any>, indexName: string): Promise<StorageResponse> {
+  const docs = await ctx.db
+    .query('mastra_vectors')
+    .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
+    .take(VECTOR_BATCH_SIZE + 1);
+
+  const count = docs.length;
+  const isEstimate = count > VECTOR_BATCH_SIZE;
+
+  return {
+    ok: true,
+    result: {
+      count: isEstimate ? VECTOR_BATCH_SIZE : count,
+      isEstimate,
+    },
+  };
 }
 
 // ============================================================================

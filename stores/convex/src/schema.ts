@@ -182,6 +182,40 @@ export const COMMON_EMBEDDING_DIMENSIONS = {
   VOYAGE_02: 1024,
 } as const;
 
+/**
+ * Helper to create a vector table with native vector search.
+ *
+ * @example
+ * ```ts
+ * // In your convex/schema.ts
+ * import { defineSchema } from 'convex/server';
+ * import { createVectorTable, COMMON_EMBEDDING_DIMENSIONS } from '@mastra/convex/schema';
+ *
+ * export default defineSchema({
+ *   // Use the helper for native vector search
+ *   mastra_vectors: createVectorTable(COMMON_EMBEDDING_DIMENSIONS.OPENAI_ADA_002),
+ * });
+ * ```
+ *
+ * @param dimensions The number of dimensions for the vector embeddings
+ * @param indexName The name of the vector index (default: 'by_embedding')
+ */
+export function createVectorTable(dimensions: number, indexName = 'by_embedding') {
+  return defineTable({
+    id: v.string(),
+    indexName: v.string(),
+    embedding: v.array(v.float64()),
+    metadata: v.optional(v.any()),
+  })
+    .index('by_index_id', ['indexName', 'id'])
+    .index('by_index', ['indexName'])
+    .vectorIndex(indexName, {
+      vectorField: 'embedding',
+      dimensions,
+      filterFields: ['indexName'],
+    });
+}
+
 // ============================================================================
 // Fallback Table - For unknown/custom tables
 // ============================================================================

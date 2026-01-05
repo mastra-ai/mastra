@@ -53,7 +53,7 @@ import { mastraStorage } from '@mastra/convex/server';
 export const handle = mastraStorage;
 ```
 
-### 4. (Optional) Add live query and vector search functions
+### 4. (Optional) Add query functions
 
 In `convex/mastra/queries.ts`:
 
@@ -66,7 +66,15 @@ export {
   watchWorkflowRun,
   watchWorkflowRuns,
   watchResource,
-  // Vector similarity search (uses native vectorIndex if available)
+  // Count queries
+  countMessages,
+  countThreads,
+  countWorkflowRuns,
+  // Cursor-based pagination
+  paginatedMessages,
+  paginatedThreads,
+  paginatedWorkflowRuns,
+  // Vector similarity search
   vectorSearch,
 } from '@mastra/convex/server';
 ```
@@ -194,16 +202,71 @@ function ChatMessages({ threadId }: { threadId: string }) {
 }
 ```
 
-Available live query functions:
+Available query functions:
 
 | Function | Description |
 |----------|-------------|
+| **Live Queries** | |
 | `watchThread` | Watch a single thread by ID |
 | `watchMessages` | Watch messages for a thread |
 | `watchThreadsByResource` | Watch all threads for a resource/user |
 | `watchWorkflowRun` | Watch a specific workflow run |
 | `watchWorkflowRuns` | Watch workflow runs (by name or resource) |
 | `watchResource` | Watch a resource's working memory |
+| **Count Queries** | |
+| `countMessages` | Count messages in a thread |
+| `countThreads` | Count threads (optionally by resource) |
+| `countWorkflowRuns` | Count workflow runs (with filters) |
+| **Paginated Queries** | |
+| `paginatedMessages` | Cursor-based message pagination |
+| `paginatedThreads` | Cursor-based thread pagination |
+| `paginatedWorkflowRuns` | Cursor-based workflow run pagination |
+| **Vector Search** | |
+| `vectorSearch` | Vector similarity search |
+
+### Cursor-Based Pagination
+
+For efficient pagination through large result sets, use the paginated queries:
+
+```tsx
+import { useQuery } from 'convex/react';
+import { api } from '../convex/_generated/api';
+
+function MessageList({ threadId }: { threadId: string }) {
+  const [cursor, setCursor] = useState<string | undefined>();
+  
+  const result = useQuery(api.mastra.queries.paginatedMessages, {
+    threadId,
+    cursor,
+    limit: 20,
+    order: 'desc',
+  });
+
+  return (
+    <div>
+      {result?.items.map(msg => <Message key={msg.id} message={msg} />)}
+      {result?.hasMore && (
+        <button onClick={() => setCursor(result.nextCursor)}>
+          Load More
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+### Count Queries
+
+Get counts without loading all data:
+
+```tsx
+const { count, isEstimate } = useQuery(api.mastra.queries.countMessages, {
+  threadId: '...',
+});
+
+// isEstimate is true if count exceeds 1000
+console.log(`${count}${isEstimate ? '+' : ''} messages`);
+```
 
 ## Vector Search
 
@@ -222,20 +285,39 @@ const results = await vector.query({
 
 ### Native Vector Search (Recommended for Production)
 
-For optimal performance at scale, add a native Convex vector index to your schema:
+For optimal performance at scale, use the `createVectorTable` helper to add native vector search:
 
 ```ts
 // convex/schema.ts
 import { defineSchema } from 'convex/server';
-import { mastraVectorsTable, COMMON_EMBEDDING_DIMENSIONS } from '@mastra/convex/schema';
+import {
+  mastraThreadsTable,
+  mastraMessagesTable,
+  // ... other tables
+  createVectorTable,
+  COMMON_EMBEDDING_DIMENSIONS,
+} from '@mastra/convex/schema';
+
+export default defineSchema({
+  mastra_threads: mastraThreadsTable,
+  mastra_messages: mastraMessagesTable,
+  // ... other tables
+  
+  // Use the helper for native vector search (recommended)
+  mastra_vectors: createVectorTable(COMMON_EMBEDDING_DIMENSIONS.OPENAI_ADA_002),
+});
+```
+
+Or manually add a vector index:
+
+```ts
+import { mastraVectorsTable } from '@mastra/convex/schema';
 
 export default defineSchema({
   // ... other tables
-  
-  // Add native vector search for OpenAI embeddings
   mastra_vectors: mastraVectorsTable.vectorIndex('by_embedding', {
     vectorField: 'embedding',
-    dimensions: COMMON_EMBEDDING_DIMENSIONS.OPENAI_ADA_002, // 1536
+    dimensions: 1536,
     filterFields: ['indexName'],
   }),
 });
@@ -309,6 +391,7 @@ Beta – the adapter is functional but may have breaking changes.
 - [x] Live query functions for real-time updates
 - [x] Safe batch sizes for bandwidth limits
 - [x] Runtime auth token support (non-admin)
+- [x] Cursor-based pagination queries
+- [x] Aggregation queries (counts)
 - [ ] Convex Component packaging for isolated namespaces
-- [ ] Cursor-based pagination API exposed to users
-- [ ] Aggregation queries (counts without full scans)
+- [ ] Exact counts for large datasets (requires Convex aggregate support)

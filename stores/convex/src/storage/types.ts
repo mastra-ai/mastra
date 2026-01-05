@@ -121,13 +121,52 @@ export type VectorStorageRequest =
       }>;
     };
 
+/** Aggregation operations - efficient counts without full scans */
+export type AggregationStorageRequest =
+  | {
+      op: 'countMessages';
+      threadId: string;
+    }
+  | {
+      op: 'countThreads';
+      resourceId?: string;
+    }
+  | {
+      op: 'countWorkflowRuns';
+      workflowName?: string;
+      resourceId?: string;
+      status?: string;
+    }
+  | {
+      op: 'countVectors';
+      indexName: string;
+    };
+
 // Combined request type
 export type StorageRequest =
   | GenericStorageRequest
   | ThreadStorageRequest
   | MessageStorageRequest
   | WorkflowStorageRequest
-  | VectorStorageRequest;
+  | VectorStorageRequest
+  | AggregationStorageRequest;
+
+// ============================================================================
+// Pagination Types
+// ============================================================================
+
+/**
+ * Cursor-based pagination result.
+ * Use `cursor` for efficient pagination through large result sets.
+ */
+export type PaginatedResult<T> = {
+  /** The result items */
+  items: T[];
+  /** Cursor for the next page (undefined if no more pages) */
+  nextCursor?: string;
+  /** Whether there are more results */
+  hasMore: boolean;
+};
 
 // ============================================================================
 // Response Types
