@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, 0.x]
     paths:
-      - 'packages/bundler-bun/**'
+      - 'bundlers/bun/**'
       - 'packages/cli/**'
       - 'packages/core/**'
       - 'packages/deployer/**'
@@ -12,7 +12,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/bundler-bun/**'
+      - 'bundlers/bun/**'
       - 'packages/cli/**'
       - 'packages/core/**'
       - 'packages/deployer/**'
@@ -44,7 +44,7 @@ jobs:
         run: pnpm turbo build --filter "@mastra/bundler-bun"
 
       - name: Run bundler-bun tests with Bun
-        working-directory: packages/bundler-bun
+        working-directory: bundlers/bun
         run: bun test
         env:
           NODE_OPTIONS: '--max_old_space_size=8096'
