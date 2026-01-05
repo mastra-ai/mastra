@@ -30,7 +30,9 @@ import { ensureGeminiCompatibleMessages } from './utils/ai-v5/gemini-compatibili
 import { getToolName } from './utils/ai-v5/tool';
 
 type AIV5LanguageModelV2Message = LanguageModelV2Prompt[0];
-export type AIV5ResponseMessage = AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage;
+export type AIV5ResponseMessage = (AIV5Type.AssistantModelMessage | AIV5Type.ToolModelMessage) & {
+  id: string;
+};
 
 type LanguageModelV1Message = LanguageModelV1Prompt[0];
 
@@ -3183,19 +3185,25 @@ export class MessageList {
   private aiV5UIMessagesToAIV5ModelMessages(
     messages: AIV5Type.UIMessage[],
     filterIncompleteToolCalls = false,
-  ): AIV5Type.ModelMessage[] {
+  ): (AIV5Type.ModelMessage & { id: string })[] {
     const sanitized = this.sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
     const preprocessed = this.addStartStepPartsForAIV5(sanitized);
     const result = AIV5.convertToModelMessages(preprocessed);
 
-    // Restore message-level providerOptions from metadata.providerMetadata
-    // This preserves providerOptions through the DB → UI → Model conversion
+    // Restore message-level properties from UIMessage that convertToModelMessages strips
+    // This preserves id and providerOptions through the DB → UI → Model conversion
     // Also add input field to tool-result parts (fixes issue #11376)
     return result.map((modelMsg, index) => {
       const uiMsg = preprocessed[index];
 
+      // Start with the model message and restore id from UIMessage (fixes issue #11615)
+      // convertToModelMessages strips the id, but ResponseMessage type requires it
+      let updatedMsg: AIV5Type.ModelMessage & { id: string } = {
+        ...modelMsg,
+        id: uiMsg?.id ?? `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      };
+
       // Handle providerOptions restoration
-      let updatedMsg = modelMsg;
       if (
         uiMsg?.metadata &&
         typeof uiMsg.metadata === 'object' &&
@@ -3203,9 +3211,9 @@ export class MessageList {
         uiMsg.metadata.providerMetadata
       ) {
         updatedMsg = {
-          ...modelMsg,
+          ...updatedMsg,
           providerOptions: uiMsg.metadata.providerMetadata as AIV5Type.ProviderMetadata,
-        } satisfies AIV5Type.ModelMessage;
+        };
       }
 
       // Add input field to tool-result parts by finding the matching tool-call
@@ -3224,7 +3232,7 @@ export class MessageList {
             }
             return part;
           }),
-        } as AIV5Type.ModelMessage;
+        } as AIV5Type.ModelMessage & { id: string };
       }
 
       return updatedMsg;

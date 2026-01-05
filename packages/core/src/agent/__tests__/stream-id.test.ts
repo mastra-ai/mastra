@@ -478,6 +478,149 @@ describe('Stream ID Consistency', () => {
     expect(onFinishResult.object).toEqual({ name: 'John', age: 30 });
   }, 10000); // Increase timeout to 10 seconds
 
+  describe('onFinish callback message IDs - issue #11615', () => {
+    it('should include message IDs in onFinish callback response.messages', async () => {
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'v2-msg-onfinish-test',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+            { type: 'text-delta', id: 'text-1', delta: 'How can I help?' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-onfinish-message-ids',
+        name: 'Test onFinish Message IDs',
+        instructions: 'You are a helpful assistant.',
+        model,
+        memory,
+      });
+
+      agent.__registerMastra(mastra);
+
+      const threadId = randomUUID();
+      const resourceId = 'test-resource';
+
+      let onFinishResult: any = null;
+
+      const streamResult = await agent.stream('Hello!', {
+        threadId,
+        resourceId,
+        onFinish: async result => {
+          onFinishResult = result;
+        },
+      });
+
+      await streamResult.consumeStream();
+
+      // Wait for onFinish to be called
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify onFinish was called
+      expect(onFinishResult).toBeDefined();
+      expect(onFinishResult.response).toBeDefined();
+      expect(onFinishResult.response.messages).toBeDefined();
+      expect(Array.isArray(onFinishResult.response.messages)).toBe(true);
+      expect(onFinishResult.response.messages.length).toBeGreaterThan(0);
+
+      // This is the failing assertion - messages should have IDs
+      const firstMessage = onFinishResult.response.messages[0];
+      expect(firstMessage).toHaveProperty('id');
+      expect(typeof firstMessage.id).toBe('string');
+      expect(firstMessage.id.length).toBeGreaterThan(0);
+
+      // The ID should match what's saved in memory
+      const memoryResult = await memory.recall({ threadId });
+      const savedMessage = memoryResult.messages.find((m: MastraMessageV1) => m.role === 'assistant');
+      expect(savedMessage).toBeDefined();
+
+      // The onFinish message ID should match the saved message ID
+      expect(firstMessage.id).toBe(savedMessage!.id);
+    });
+
+    it('should include message IDs in onFinish for multi-step tool calls', async () => {
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: 'v2-msg-tool-test',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Here is your answer.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'test-onfinish-tool-ids',
+        name: 'Test onFinish Tool Message IDs',
+        instructions: 'You are a helpful assistant.',
+        model,
+        memory,
+      });
+
+      agent.__registerMastra(mastra);
+
+      const threadId = randomUUID();
+      const resourceId = 'test-resource';
+
+      let onFinishResult: any = null;
+
+      const streamResult = await agent.stream('What is the weather?', {
+        threadId,
+        resourceId,
+        onFinish: async result => {
+          onFinishResult = result;
+        },
+      });
+
+      await streamResult.consumeStream();
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(onFinishResult).toBeDefined();
+      expect(onFinishResult.response.messages).toBeDefined();
+
+      // All messages in onFinish should have IDs
+      for (const message of onFinishResult.response.messages) {
+        expect(message).toHaveProperty('id');
+        expect(typeof message.id).toBe('string');
+        expect(message.id.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
   it.skip('should have messageIds when using toUIMessageStream', async () => {
     const mockMemory = new MockMemory();
     const threadId = randomUUID();
