@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { RequestContext } from '../request-context';
 import { createTool } from './tool';
 import { validateToolInput } from './validation';
-import { RequestContext } from '../request-context';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
