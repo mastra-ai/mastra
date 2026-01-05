@@ -18,7 +18,7 @@ packages:
 catalog:
   '@vitest/coverage-v8': 4.0.12
   '@vitest/ui': 4.0.12
-  vitest: 4.0.12
+  vitest: 4.0.16
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
