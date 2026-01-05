@@ -35,9 +35,9 @@
   "license": "Apache-2.0",
   "scripts": {
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts",
+    "build:lib": "tsup --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts client-sdks/client-js",
-    "dev": "pnpm build --watch",
+    "dev": "pnpm build:lib --watch",
     "test": "vitest",
     "test:unit": "vitest run"
   },

@@ -85,7 +85,7 @@
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/deployer",
-    "build:watch": "pnpm build --watch",
+    "build:watch": "pnpm build:lib --watch",
     "pull:openapispec": "node src/server/openapi.script.js",
     "test": "vitest run",
     "lint": "eslint ."

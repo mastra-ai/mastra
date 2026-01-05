@@ -192,7 +192,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
     "build:patch-commonjs": "node ./tools/commonjs-tsc-fixer.js",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",
-    "build:watch": "pnpm build --watch",
+    "build:watch": "pnpm build:lib --watch",
     "generate:providers": "pnpx tsx scripts/generate-providers.ts",
     "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "generate:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/core",

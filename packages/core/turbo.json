@@ -15,7 +15,7 @@
     },
     "build:lib": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./tsup.config.ts", "!__integration-test__/**/*"]
     },
     "test": {

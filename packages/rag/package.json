@@ -25,7 +25,7 @@
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/rag",
-    "build:watch": "pnpm build --watch",
+    "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."

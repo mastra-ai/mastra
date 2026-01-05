@@ -55,7 +55,7 @@
     "check": "tsc --noEmit",
     "build:lib": "pnpm check && tsup --silent --config tsup.config.ts",
     "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/evals",
-    "build:watch": "pnpm build --watch",
+    "build:watch": "pnpm build:lib --watch",
     "test": "vitest",
     "lint": "eslint ."
   },
