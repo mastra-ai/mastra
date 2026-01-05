@@ -73,7 +73,7 @@ jobs:
         run: pnpm build
 
       - name: Generate embedded documentation
-        run: pnpm -r exec pnpm run postbuild --if-present
+        run: pnpm turbo postbuild
 
       - name: Determine publish tag
         id: determine-tag
@@ -152,7 +152,7 @@ jobs:
         run: pnpm build
 
       - name: Generate embedded documentation
-        run: pnpm -r exec pnpm run postbuild --if-present
+        run: pnpm turbo postbuild
 
       - name: Exit prerelease mode
         id: exit-prerelease-mode
@@ -167,7 +167,7 @@ jobs:
           echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
           pnpm build
-          pnpm -r exec pnpm run postbuild --if-present
+          pnpm turbo postbuild
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
@@ -345,7 +345,7 @@ jobs:
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
       - name: Generate embedded documentation
-        run: pnpm -r exec pnpm run postbuild --if-present
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" postbuild
 
       - name: Run Changeset Pre Exit
         run: pnpm changeset-cli pre exit
