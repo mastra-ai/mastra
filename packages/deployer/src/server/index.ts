@@ -9,7 +9,7 @@ import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context, Handler, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -183,18 +183,14 @@ export async function createHonoServer(
 
       const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
 
-      if (route.method === 'GET') {
-        app.get(route.path, ...middlewares, handler);
-      } else if (route.method === 'POST') {
-        app.post(route.path, ...middlewares, handler);
-      } else if (route.method === 'PUT') {
-        app.put(route.path, ...middlewares, handler);
-      } else if (route.method === 'DELETE') {
-        app.delete(route.path, ...middlewares, handler);
-      } else if (route.method === 'PATCH') {
-        app.patch(route.path, ...middlewares, handler);
-      } else if (route.method === 'ALL') {
-        app.all(route.path, ...middlewares, handler);
+      // Register route using app.on() which supports dynamic method/path registration
+      // Hono's H type (Handler | MiddlewareHandler) is internal, so we use Handler
+      // which is compatible at runtime since both accept (context, next)
+      const allHandlers = [...middlewares, handler] as const;
+      if (route.method === 'ALL') {
+        app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
+      } else {
+        app.on(route.method, route.path, allHandlers[0]!, ...allHandlers.slice(1));
       }
     }
   }
