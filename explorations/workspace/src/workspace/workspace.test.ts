@@ -6,7 +6,6 @@ import {
   createWorkspace,
   createLocalWorkspace,
   createMemoryWorkspace,
-  BaseWorkspace,
 } from './workspace';
 import type { Workspace } from './types';
 import { FilesystemNotAvailableError, ExecutorNotAvailableError } from './types';
@@ -46,7 +45,7 @@ describe('Workspace', () => {
     it('should list directory contents', async () => {
       await workspace.writeFile('/dir/file1.txt', 'content1');
       await workspace.writeFile('/dir/file2.txt', 'content2');
-      
+
       const entries = await workspace.readdir('/dir');
       expect(entries).toHaveLength(2);
     });
@@ -65,7 +64,7 @@ describe('Workspace', () => {
 
     it('should support state operations', async () => {
       const state = workspace.state!;
-      
+
       await state.set('myKey', { value: 42 });
       const result = await state.get<{ value: number }>('myKey');
       expect(result).toEqual({ value: 42 });
@@ -78,6 +77,15 @@ describe('Workspace', () => {
 
       await state.delete('myKey');
       expect(await state.has('myKey')).toBe(false);
+    });
+
+    it('should conform to Workspace interface', () => {
+      expect(workspace.id).toBeDefined();
+      expect(workspace.name).toBeDefined();
+      expect(workspace.scope).toBeDefined();
+      expect(workspace.owner).toBeDefined();
+      expect(workspace.status).toBeDefined();
+      expect(workspace.createdAt).toBeInstanceOf(Date);
     });
   });
 
@@ -144,7 +152,7 @@ describe('Workspace', () => {
 
     it('should write files to disk', async () => {
       await workspace.writeFile('/test.txt', 'Hello, Local!');
-      
+
       // Verify file exists on disk
       const diskContent = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(diskContent).toBe('Hello, Local!');
@@ -153,7 +161,7 @@ describe('Workspace', () => {
     it('should read files from disk', async () => {
       // Write directly to disk
       await fs.writeFile(path.join(tempDir, 'disk-file.txt'), 'From disk');
-      
+
       // Read via workspace
       const content = await workspace.readFile('/disk-file.txt', { encoding: 'utf-8' });
       expect(content).toBe('From disk');
@@ -202,7 +210,7 @@ describe('Workspace', () => {
       // Verify restoration
       const content1 = await workspace.readFile('/file1.txt', { encoding: 'utf-8' });
       expect(content1).toBe('content1');
-      
+
       const content2 = await workspace.readFile('/dir/file2.txt', { encoding: 'utf-8' });
       expect(content2).toBe('content2');
 
@@ -238,7 +246,7 @@ describe('Workspace', () => {
 
       try {
         const info = await workspace.getInfo();
-        
+
         expect(info.id).toBe('info-workspace');
         expect(info.name).toBe('Info Workspace');
         expect(info.scope).toBe('agent');
@@ -273,7 +281,7 @@ describe('Workspace', () => {
       });
 
       const initialAccess = workspace.lastAccessedAt;
-      
+
       // Wait a bit and perform an operation
       await new Promise((r) => setTimeout(r, 10));
       await workspace.writeFile('/test.txt', 'content');
@@ -283,6 +291,28 @@ describe('Workspace', () => {
       );
 
       await workspace.destroy();
+    });
+  });
+
+  describe('factory functions return interface types', () => {
+    it('createMemoryWorkspace returns Workspace interface', async () => {
+      const workspace: Workspace = await createMemoryWorkspace({ scope: 'thread' });
+      // TypeScript will fail if this doesn't match the interface
+      expect(workspace.readFile).toBeInstanceOf(Function);
+      expect(workspace.writeFile).toBeInstanceOf(Function);
+      expect(workspace.executeCode).toBeInstanceOf(Function);
+      await workspace.destroy();
+    });
+
+    it('createLocalWorkspace returns Workspace interface', async () => {
+      const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ws-'));
+      const workspace: Workspace = await createLocalWorkspace({
+        basePath: tempDir,
+        scope: 'agent',
+      });
+      expect(workspace.readFile).toBeInstanceOf(Function);
+      await workspace.destroy();
+      await fs.rm(tempDir, { recursive: true, force: true });
     });
   });
 });

@@ -245,13 +245,35 @@ Thread Created
 
 ---
 
-## Files
+## Package Structure
 
-- `src/filesystem/types.ts` - Filesystem interface and provider configs
-- `src/executor/types.ts` - Executor interface and provider configs
-- `src/workspace/types.ts` - Workspace composition and thread config
-- `src/index.ts` - Public exports
-- `examples/thread-workspaces.ts` - Usage examples
+Following interface-first patterns:
+
+```
+src/
+├── index.ts                    # Public exports (interfaces first)
+├── filesystem/
+│   ├── types.ts               # WorkspaceFilesystem interface & types
+│   ├── base.ts                # BaseFilesystem abstract class
+│   ├── factory.ts             # Factory functions returning interfaces
+│   ├── providers/
+│   │   ├── index.ts
+│   │   ├── memory.ts          # MemoryFilesystem implementation
+│   │   └── local.ts           # LocalFilesystem implementation
+│   └── *.test.ts
+├── executor/
+│   ├── types.ts               # WorkspaceExecutor interface & types
+│   ├── base.ts                # BaseExecutor abstract class
+│   ├── factory.ts             # Factory functions returning interfaces
+│   ├── providers/
+│   │   ├── index.ts
+│   │   └── local.ts           # LocalExecutor implementation
+│   └── *.test.ts
+└── workspace/
+    ├── types.ts               # Workspace interface & types
+    ├── workspace.ts           # BaseWorkspace + factory functions
+    └── *.test.ts
+```
 
 ---
 
@@ -259,52 +281,66 @@ Thread Created
 
 ### ✅ Completed
 
-1. **Core Types** - All interfaces defined
+1. **Interface-First Architecture**
+   - Factory functions return interface types
+   - Consumers depend on contracts, not implementations
+   - Base classes for provider implementers
+
+2. **Core Interfaces & Types** (`src/*/types.ts`)
    - `WorkspaceFilesystem` interface
-   - `WorkspaceExecutor` interface  
+   - `WorkspaceExecutor` interface
    - `Workspace` interface with snapshots, sync, lifecycle
-   - Provider configuration types
+   - Configuration types for all providers
    - Custom error classes
 
-2. **Memory Filesystem Provider** (`src/filesystem/memory.ts`)
+3. **Base Classes** (`src/*/base.ts`)
+   - `BaseFilesystem` - shared utilities for FS providers
+   - `BaseExecutor` - shared utilities for executor providers
+
+4. **Factory Functions** (`src/*/factory.ts`)
+   - `createFilesystem()`, `createMemoryFilesystem()`, `createLocalFilesystem()`
+   - `createExecutor()`, `createLocalExecutor()`
+   - `createWorkspace()`, `createMemoryWorkspace()`, `createLocalWorkspace()`
+
+5. **Memory Filesystem Provider** (`src/filesystem/providers/memory.ts`)
    - Full POSIX-like file operations
    - Directory operations
    - Initial file seeding
-   - 34 passing tests
+   - 35 passing tests
 
-3. **Local Filesystem Provider** (`src/filesystem/local.ts`)
+6. **Local Filesystem Provider** (`src/filesystem/providers/local.ts`)
    - Sandboxed file access
    - Path traversal protection
    - MIME type detection
-   - 15 passing tests
+   - 16 passing tests
 
-4. **Local Executor Provider** (`src/executor/local.ts`)
+7. **Local Executor Provider** (`src/executor/providers/local.ts`)
    - Multi-runtime support (Node, Python, Bash, etc.)
    - Code and command execution
    - Streaming output support
    - Timeout handling
    - Package installation
 
-5. **Workspace Implementation** (`src/workspace/workspace.ts`)
+8. **Workspace Implementation** (`src/workspace/workspace.ts`)
    - `BaseWorkspace` class combining filesystem and executor
-   - `createWorkspace()` factory function
-   - `createLocalWorkspace()` convenience function
-   - `createMemoryWorkspace()` convenience function
    - Key-value state backed by filesystem
    - Snapshot and restore
-   - 18 passing tests
+   - 21 passing tests
+
+**Total: 72 passing tests**
 
 ### 🚧 In Progress
 
-6. **Agent integration** - Add `workspace` config to AgentConfig
-7. **Auto tool injection** - Inject workspace tools when workspace is configured
-8. **Thread workspace manager** - Lifecycle management for thread workspaces
+9. **Agent integration** - Add `workspace` config to AgentConfig
+10. **Auto tool injection** - Inject workspace tools when workspace is configured
+11. **Thread workspace manager** - Lifecycle management for thread workspaces
 
 ### 📋 Planned
 
-9. **AgentFS provider** - Using `agentfs-sdk` from Turso
-10. **ComputeSDK/E2B provider** - Remote sandbox execution
-11. **Sync operations** - Sync files between filesystem and executor
-12. **Audit trail** - Track all workspace operations
-13. **Mastra integration** - WorkspaceFactory in Mastra class
+12. **AgentFS provider** - Using `agentfs-sdk` from Turso
+13. **ComputeSDK/E2B provider** - Remote sandbox execution
+14. **Docker provider** - Container-based execution
+15. **Sync operations** - Sync files between filesystem and executor
+16. **Audit trail** - Track all workspace operations
+17. **Mastra integration** - WorkspaceFactory in Mastra class
 

@@ -1,14 +1,14 @@
 /**
- * LocalFilesystem - A filesystem provider that uses the local disk.
+ * Local Filesystem Provider
  *
+ * A filesystem implementation backed by the local disk.
  * Operations are sandboxed to a base directory for security.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { existsSync, statSync } from 'node:fs';
+import { BaseFilesystem } from '../base';
 import type {
-  WorkspaceFilesystem,
   FileContent,
   FileStat,
   FileEntry,
@@ -18,7 +18,7 @@ import type {
   RemoveOptions,
   CopyOptions,
   LocalFSProviderConfig,
-} from './types';
+} from '../types';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -27,9 +27,21 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
-} from './types';
+} from '../types';
 
-export class LocalFilesystem implements WorkspaceFilesystem {
+/**
+ * Local filesystem provider configuration.
+ */
+export interface LocalFilesystemOptions {
+  id: string;
+  basePath: string;
+  sandbox?: boolean;
+}
+
+/**
+ * Local filesystem implementation.
+ */
+export class LocalFilesystem extends BaseFilesystem {
   readonly id: string;
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
@@ -37,7 +49,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   private readonly basePath: string;
   private readonly sandbox: boolean;
 
-  constructor(config: LocalFSProviderConfig) {
+  constructor(config: LocalFSProviderConfig | LocalFilesystemOptions) {
+    super();
     this.id = config.id;
     this.basePath = path.resolve(config.basePath);
     this.sandbox = config.sandbox ?? true;
@@ -49,26 +62,17 @@ export class LocalFilesystem implements WorkspaceFilesystem {
 
   /**
    * Resolve a path relative to the base path.
-   * If sandboxed, ensures the path doesn't escape the base directory.
-   *
-   * Paths like "/test.txt" are treated as relative to the base path,
-   * not as absolute system paths. This provides a virtual root.
+   * Paths like "/test.txt" are treated as relative to the base path.
    */
   private resolvePath(inputPath: string): string {
     // Remove leading slashes to treat all paths as relative to basePath
-    // This creates a "virtual root" within the basePath
     const cleanedPath = inputPath.replace(/^\/+/, '');
-
-    // Normalize the path to handle .. and .
     const normalizedInput = path.normalize(cleanedPath);
-
-    // Join with base path
     const absolutePath = path.resolve(this.basePath, normalizedInput);
 
     // Sandbox check: ensure path is within basePath
     if (this.sandbox) {
       const relative = path.relative(this.basePath, absolutePath);
-      // Check if path escapes basePath (goes up with ..) or is absolute
       if (relative.startsWith('..') || path.isAbsolute(relative)) {
         throw new PermissionError(inputPath, 'access');
       }
@@ -82,33 +86,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
    */
   private toRelativePath(absolutePath: string): string {
     return '/' + path.relative(this.basePath, absolutePath).replace(/\\/g, '/');
-  }
-
-  /**
-   * Get MIME type from file extension.
-   */
-  private getMimeType(filePath: string): string {
-    const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      '.txt': 'text/plain',
-      '.md': 'text/markdown',
-      '.json': 'application/json',
-      '.js': 'application/javascript',
-      '.ts': 'application/typescript',
-      '.py': 'text/x-python',
-      '.html': 'text/html',
-      '.css': 'text/css',
-      '.xml': 'application/xml',
-      '.yaml': 'application/x-yaml',
-      '.yml': 'application/x-yaml',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml',
-      '.pdf': 'application/pdf',
-    };
-    return mimeTypes[ext] || 'application/octet-stream';
   }
 
   // ---------------------------------------------------------------------------
@@ -140,37 +117,28 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const absolutePath = this.resolvePath(inputPath);
 
-    // Check if file exists and overwrite is false
     if (options?.overwrite === false) {
       try {
         await fs.access(absolutePath);
         throw new FileExistsError(inputPath);
       } catch (error: any) {
         if (error instanceof FileExistsError) throw error;
-        // File doesn't exist, continue
       }
     }
 
-    // Create parent directories if needed
     if (options?.recursive !== false) {
       const dir = path.dirname(absolutePath);
       await fs.mkdir(dir, { recursive: true });
     }
 
-    // Convert content to buffer if needed
-    const buffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
-    await fs.writeFile(absolutePath, buffer);
+    await fs.writeFile(absolutePath, this.toBuffer(content));
   }
 
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
     const absolutePath = this.resolvePath(inputPath);
-
-    // Create parent directories if needed
     const dir = path.dirname(absolutePath);
     await fs.mkdir(dir, { recursive: true });
-
-    const buffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
-    await fs.appendFile(absolutePath, buffer);
+    await fs.appendFile(absolutePath, this.toBuffer(content));
   }
 
   async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
@@ -204,10 +172,8 @@ export class LocalFilesystem implements WorkspaceFilesystem {
         if (!options?.recursive) {
           throw new IsDirectoryError(src);
         }
-        // Copy directory recursively
         await this.copyDirectory(srcPath, destPath, options);
       } else {
-        // Check if dest exists
         if (options?.overwrite === false) {
           try {
             await fs.access(destPath);
@@ -216,7 +182,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
             if (error instanceof FileExistsError) throw error;
           }
         }
-        // Create parent directories
         await fs.mkdir(path.dirname(destPath), { recursive: true });
         await fs.copyFile(srcPath, destPath);
       }
@@ -243,9 +208,9 @@ export class LocalFilesystem implements WorkspaceFilesystem {
         if (options?.overwrite === false) {
           try {
             await fs.access(destEntry);
-            continue; // Skip existing files
+            continue;
           } catch {
-            // File doesn't exist, continue
+            // Continue
           }
         }
         await fs.copyFile(srcEntry, destEntry);
@@ -258,7 +223,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
     const destPath = this.resolvePath(dest);
 
     try {
-      // Check if dest exists
       if (options?.overwrite === false) {
         try {
           await fs.access(destPath);
@@ -268,14 +232,11 @@ export class LocalFilesystem implements WorkspaceFilesystem {
         }
       }
 
-      // Create parent directories
       await fs.mkdir(path.dirname(destPath), { recursive: true });
 
-      // Try rename first (fast, same filesystem)
       try {
         await fs.rename(srcPath, destPath);
       } catch {
-        // Fall back to copy + delete (cross filesystem)
         await this.copyFile(src, dest, { ...options, overwrite: true });
         await fs.rm(srcPath, { recursive: true, force: true });
       }
@@ -299,12 +260,10 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       await fs.mkdir(absolutePath, { recursive: options?.recursive ?? true });
     } catch (error: any) {
       if (error.code === 'EEXIST') {
-        // Check if it's a file
         const stats = await fs.stat(absolutePath);
         if (!stats.isDirectory()) {
           throw new FileExistsError(inputPath);
         }
-        // Directory already exists, that's fine
       } else {
         throw error;
       }
@@ -356,12 +315,11 @@ export class LocalFilesystem implements WorkspaceFilesystem {
       }
 
       const entries = await fs.readdir(absolutePath, { withFileTypes: true });
-      let result: FileEntry[] = [];
+      const result: FileEntry[] = [];
 
       for (const entry of entries) {
         const entryPath = path.join(absolutePath, entry.name);
 
-        // Filter by extension if specified
         if (options?.extension) {
           const extensions = Array.isArray(options.extension)
             ? options.extension
@@ -384,13 +342,12 @@ export class LocalFilesystem implements WorkspaceFilesystem {
             const stat = await fs.stat(entryPath);
             fileEntry.size = stat.size;
           } catch {
-            // Ignore stat errors
+            // Ignore
           }
         }
 
         result.push(fileEntry);
 
-        // Recurse into directories if requested
         if (options?.recursive && entry.isDirectory()) {
           const depth = options.maxDepth ?? Infinity;
           if (depth > 0) {
@@ -398,7 +355,6 @@ export class LocalFilesystem implements WorkspaceFilesystem {
               this.toRelativePath(entryPath),
               { ...options, maxDepth: depth - 1 },
             );
-            // Prefix subentries with parent directory name
             result.push(
               ...subEntries.map((e) => ({
                 ...e,
@@ -477,20 +433,7 @@ export class LocalFilesystem implements WorkspaceFilesystem {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  async init(): Promise<void> {
-    // Ensure base directory exists
+  override async init(): Promise<void> {
     await fs.mkdir(this.basePath, { recursive: true });
   }
-
-  async destroy(): Promise<void> {
-    // Nothing to clean up for local filesystem
-    // We don't delete the base directory as that could be destructive
-  }
-}
-
-/**
- * Create a local filesystem provider.
- */
-export function createLocalFilesystem(config: LocalFSProviderConfig): LocalFilesystem {
-  return new LocalFilesystem(config);
 }

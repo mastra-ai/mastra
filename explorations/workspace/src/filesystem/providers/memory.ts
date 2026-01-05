@@ -1,12 +1,13 @@
 /**
- * MemoryFilesystem - An in-memory filesystem provider.
+ * Memory Filesystem Provider
  *
+ * An in-memory filesystem implementation.
  * Perfect for testing, ephemeral thread workspaces, and fast operations.
  * Data is lost when the process exits.
  */
 
+import { BaseFilesystem } from '../base';
 import type {
-  WorkspaceFilesystem,
   FileContent,
   FileStat,
   FileEntry,
@@ -16,7 +17,7 @@ import type {
   RemoveOptions,
   CopyOptions,
   MemoryFSProviderConfig,
-} from './types';
+} from '../types';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -24,8 +25,11 @@ import {
   IsDirectoryError,
   NotDirectoryError,
   DirectoryNotEmptyError,
-} from './types';
+} from '../types';
 
+/**
+ * Internal node representation for the in-memory tree.
+ */
 interface MemoryNode {
   type: 'file' | 'directory';
   content?: Buffer;
@@ -35,52 +39,50 @@ interface MemoryNode {
   children?: Map<string, MemoryNode>;
 }
 
-export class MemoryFilesystem implements WorkspaceFilesystem {
+/**
+ * Memory filesystem provider configuration.
+ */
+export interface MemoryFilesystemOptions {
+  id: string;
+  initialFiles?: Record<string, FileContent>;
+}
+
+/**
+ * In-memory filesystem implementation.
+ */
+export class MemoryFilesystem extends BaseFilesystem {
   readonly id: string;
   readonly name = 'MemoryFilesystem';
   readonly provider = 'memory';
 
   private root: MemoryNode;
 
-  constructor(config: MemoryFSProviderConfig) {
+  constructor(config: MemoryFSProviderConfig | MemoryFilesystemOptions) {
+    super();
     this.id = config.id;
-    this.root = {
-      type: 'directory',
-      createdAt: new Date(),
-      modifiedAt: new Date(),
-      children: new Map(),
-    };
+    this.root = this.createEmptyRoot();
 
     // Initialize with initial files if provided
-    if (config.initialFiles) {
-      for (const [path, content] of Object.entries(config.initialFiles)) {
+    const initialFiles = 'initialFiles' in config ? config.initialFiles : undefined;
+    if (initialFiles) {
+      for (const [path, content] of Object.entries(initialFiles)) {
         this.writeFileSync(path, content);
       }
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Path Utilities
-  // ---------------------------------------------------------------------------
-
-  private parsePath(inputPath: string): string[] {
-    // Normalize path
-    const normalized = inputPath.replace(/\\/g, '/').replace(/\/+/g, '/');
-    // Remove leading/trailing slashes and split
-    const parts = normalized.split('/').filter((p) => p && p !== '.');
-
-    // Handle .. by resolving the path
-    const resolved: string[] = [];
-    for (const part of parts) {
-      if (part === '..') {
-        resolved.pop();
-      } else {
-        resolved.push(part);
-      }
-    }
-
-    return resolved;
+  private createEmptyRoot(): MemoryNode {
+    return {
+      type: 'directory',
+      createdAt: new Date(),
+      modifiedAt: new Date(),
+      children: new Map(),
+    };
   }
+
+  // ---------------------------------------------------------------------------
+  // Private Helpers
+  // ---------------------------------------------------------------------------
 
   private getNode(path: string): MemoryNode | null {
     const parts = this.parsePath(path);
@@ -131,22 +133,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
     return '/' + parts.join('/');
   }
 
-  private getMimeType(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-    const mimeTypes: Record<string, string> = {
-      txt: 'text/plain',
-      md: 'text/markdown',
-      json: 'application/json',
-      js: 'application/javascript',
-      ts: 'application/typescript',
-      py: 'text/x-python',
-      html: 'text/html',
-      css: 'text/css',
-    };
-    return mimeTypes[ext] || 'application/octet-stream';
-  }
-
-  // Sync write for initialization
   private writeFileSync(path: string, content: FileContent): void {
     const parts = this.parsePath(path);
     if (parts.length === 0) return;
@@ -154,7 +140,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
     const filename = parts.pop()!;
     let current = this.root;
 
-    // Create parent directories
     for (const part of parts) {
       if (!current.children) {
         current.children = new Map();
@@ -172,16 +157,13 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
       current = next;
     }
 
-    // Create file
     if (!current.children) {
       current.children = new Map();
     }
 
-    const buffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
-
     current.children.set(filename, {
       type: 'file',
-      content: buffer,
+      content: this.toBuffer(content),
       mimeType: this.getMimeType(filename),
       createdAt: new Date(),
       modifiedAt: new Date(),
@@ -221,7 +203,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
     const filename = parts.pop()!;
     let current = this.root;
 
-    // Create parent directories if recursive (default: true)
     if (options?.recursive !== false) {
       for (const part of parts) {
         if (!current.children) {
@@ -242,7 +223,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
         current = next;
       }
     } else {
-      // Navigate to parent, fail if not exists
       for (const part of parts) {
         if (!current.children?.has(part)) {
           throw new DirectoryNotFoundError(this.pathToString(parts));
@@ -255,17 +235,15 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
       current.children = new Map();
     }
 
-    // Check if file exists and overwrite is false
     if (options?.overwrite === false && current.children.has(filename)) {
       throw new FileExistsError(path);
     }
 
-    const buffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
     const existing = current.children.get(filename);
 
     current.children.set(filename, {
       type: 'file',
-      content: buffer,
+      content: this.toBuffer(content),
       mimeType: options?.mimeType ?? this.getMimeType(filename),
       createdAt: existing?.createdAt ?? new Date(),
       modifiedAt: new Date(),
@@ -274,10 +252,9 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
 
   async appendFile(path: string, content: FileContent): Promise<void> {
     const node = this.getNode(path);
-    const newContent = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+    const newContent = this.toBuffer(content);
 
     if (!node) {
-      // Create new file
       await this.writeFile(path, content);
       return;
     }
@@ -286,7 +263,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
       throw new IsDirectoryError(path);
     }
 
-    // Append to existing content
     const existingContent = node.content ?? Buffer.alloc(0);
     node.content = Buffer.concat([existingContent, newContent]);
     node.modifiedAt = new Date();
@@ -334,12 +310,10 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
       return;
     }
 
-    // Check destination
     if (options?.overwrite === false && this.getNode(dest)) {
       throw new FileExistsError(dest);
     }
 
-    // Copy file
     await this.writeFile(dest, srcNode.content ?? Buffer.alloc(0), {
       mimeType: srcNode.mimeType,
       overwrite: options?.overwrite,
@@ -381,7 +355,7 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     const parts = this.parsePath(path);
-    if (parts.length === 0) return; // Root always exists
+    if (parts.length === 0) return;
 
     let current = this.root;
 
@@ -419,7 +393,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
 
     if (!result) {
       if (path === '/' || path === '') {
-        // Clear root
         if (options?.recursive) {
           this.root.children = new Map();
           return;
@@ -475,7 +448,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
     }
 
     for (const [name, child] of node.children) {
-      // Filter by extension if specified
       if (options?.extension && child.type === 'file') {
         const extensions = Array.isArray(options.extension)
           ? options.extension
@@ -492,7 +464,6 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
         size: child.content?.length,
       });
 
-      // Recurse if requested
       if (options?.recursive && child.type === 'directory') {
         const depth = options.maxDepth ?? Infinity;
         if (depth > 0) {
@@ -557,24 +528,7 @@ export class MemoryFilesystem implements WorkspaceFilesystem {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  async init(): Promise<void> {
-    // Nothing to initialize for memory filesystem
+  override async destroy(): Promise<void> {
+    this.root = this.createEmptyRoot();
   }
-
-  async destroy(): Promise<void> {
-    // Clear all data
-    this.root = {
-      type: 'directory',
-      createdAt: new Date(),
-      modifiedAt: new Date(),
-      children: new Map(),
-    };
-  }
-}
-
-/**
- * Create an in-memory filesystem.
- */
-export function createMemoryFilesystem(config: MemoryFSProviderConfig): MemoryFilesystem {
-  return new MemoryFilesystem(config);
 }

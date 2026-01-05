@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MemoryFilesystem, createMemoryFilesystem } from './memory';
+import { createMemoryFilesystem } from './factory';
+import type { WorkspaceFilesystem } from './types';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -10,10 +11,10 @@ import {
 } from './types';
 
 describe('MemoryFilesystem', () => {
-  let fs: MemoryFilesystem;
+  let fs: WorkspaceFilesystem;
 
   beforeEach(() => {
-    fs = createMemoryFilesystem({ id: 'test-fs', provider: 'memory' });
+    fs = createMemoryFilesystem({ id: 'test-fs' });
   });
 
   describe('writeFile and readFile', () => {
@@ -220,7 +221,7 @@ describe('MemoryFilesystem', () => {
     it('should copy a file', async () => {
       await fs.writeFile('/source.txt', 'content');
       await fs.copyFile('/source.txt', '/dest.txt');
-      
+
       const content = await fs.readFile('/dest.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
       expect(await fs.exists('/source.txt')).toBe(true);
@@ -229,7 +230,7 @@ describe('MemoryFilesystem', () => {
     it('should copy a directory recursively', async () => {
       await fs.writeFile('/src/file.txt', 'content');
       await fs.copyFile('/src', '/dest', { recursive: true });
-      
+
       const content = await fs.readFile('/dest/file.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
     });
@@ -239,7 +240,7 @@ describe('MemoryFilesystem', () => {
     it('should move a file', async () => {
       await fs.writeFile('/source.txt', 'content');
       await fs.moveFile('/source.txt', '/dest.txt');
-      
+
       const content = await fs.readFile('/dest.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
       expect(await fs.exists('/source.txt')).toBe(false);
@@ -250,7 +251,6 @@ describe('MemoryFilesystem', () => {
     it('should initialize with provided files', async () => {
       const fsWithFiles = createMemoryFilesystem({
         id: 'test-fs',
-        provider: 'memory',
         initialFiles: {
           '/hello.txt': 'Hello!',
           '/data/config.json': '{"key": "value"}',
@@ -258,7 +258,17 @@ describe('MemoryFilesystem', () => {
       });
 
       await expect(fsWithFiles.readFile('/hello.txt', { encoding: 'utf-8' })).resolves.toBe('Hello!');
-      await expect(fsWithFiles.readFile('/data/config.json', { encoding: 'utf-8' })).resolves.toBe('{"key": "value"}');
+      await expect(fsWithFiles.readFile('/data/config.json', { encoding: 'utf-8' })).resolves.toBe(
+        '{"key": "value"}',
+      );
+    });
+  });
+
+  describe('interface contract', () => {
+    it('should have required interface properties', () => {
+      expect(fs.id).toBe('test-fs');
+      expect(fs.name).toBe('MemoryFilesystem');
+      expect(fs.provider).toBe('memory');
     });
   });
 });

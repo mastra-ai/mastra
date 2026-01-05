@@ -1,22 +1,21 @@
 /**
- * LocalExecutor - An executor that runs code on the local machine.
+ * Local Executor Provider
+ *
+ * An executor that runs code on the local machine.
  *
  * ⚠️ WARNING: This executor runs code directly on the host machine.
  * It should only be used for development and testing, never in production
  * with untrusted code.
  */
 
-import { spawn, exec, execSync } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn, execSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { v4 as uuidv4 } from 'uuid';
+import { BaseExecutor } from '../base';
 import type {
-  WorkspaceExecutor,
   Runtime,
-  ExecutorStatus,
-  ExecutorInfo,
   CodeResult,
   CommandResult,
   ExecuteCodeOptions,
@@ -24,18 +23,21 @@ import type {
   InstallPackageOptions,
   StreamingExecutionResult,
   LocalExecutorConfig,
-} from './types';
-import { ExecutorNotReadyError, UnsupportedRuntimeError, TimeoutError, ExecutionError } from './types';
+} from '../types';
+import {
+  ExecutorNotReadyError,
+  UnsupportedRuntimeError,
+  ExecutionError,
+} from '../types';
 
-const execAsync = promisify(exec);
-
-// Runtime configurations
+/**
+ * Runtime configuration.
+ */
 interface RuntimeConfig {
   command: string;
   args: (file: string) => string[];
   extension: string;
   packageManager?: string;
-  installCmd?: (pkg: string) => string[];
 }
 
 const RUNTIME_CONFIGS: Record<Runtime, RuntimeConfig> = {
@@ -44,14 +46,12 @@ const RUNTIME_CONFIGS: Record<Runtime, RuntimeConfig> = {
     args: (file) => [file],
     extension: '.py',
     packageManager: 'pip',
-    installCmd: (pkg) => ['pip', 'install', pkg],
   },
   node: {
     command: 'node',
     args: (file) => [file],
     extension: '.js',
     packageManager: 'npm',
-    installCmd: (pkg) => ['npm', 'install', pkg],
   },
   bash: {
     command: 'bash',
@@ -63,21 +63,18 @@ const RUNTIME_CONFIGS: Record<Runtime, RuntimeConfig> = {
     args: (file) => [file],
     extension: '.rb',
     packageManager: 'gem',
-    installCmd: (pkg) => ['gem', 'install', pkg],
   },
   go: {
     command: 'go',
     args: (file) => ['run', file],
     extension: '.go',
     packageManager: 'go',
-    installCmd: (pkg) => ['go', 'install', pkg],
   },
   rust: {
     command: 'rustc',
     args: (file) => [file, '-o', file.replace('.rs', '')],
     extension: '.rs',
     packageManager: 'cargo',
-    installCmd: (pkg) => ['cargo', 'install', pkg],
   },
   deno: {
     command: 'deno',
@@ -91,25 +88,38 @@ const RUNTIME_CONFIGS: Record<Runtime, RuntimeConfig> = {
   },
 };
 
-export class LocalExecutor implements WorkspaceExecutor {
+/**
+ * Local executor configuration options.
+ */
+export interface LocalExecutorOptions {
+  id: string;
+  cwd?: string;
+  shell?: boolean;
+  allowedCommands?: string[];
+  timeout?: number;
+  env?: Record<string, string>;
+  defaultRuntime?: Runtime;
+}
+
+/**
+ * Local executor implementation.
+ */
+export class LocalExecutor extends BaseExecutor {
   readonly id: string;
   readonly name = 'LocalExecutor';
   readonly provider = 'local';
+  readonly supportedRuntimes: readonly Runtime[];
+  readonly defaultRuntime: Runtime;
 
-  private _status: ExecutorStatus = 'pending';
   private readonly cwd: string;
   private readonly shell: boolean;
   private readonly allowedCommands?: string[];
   private readonly defaultTimeout: number;
   private readonly env: Record<string, string>;
   private tempDir?: string;
-  private createdAt?: Date;
-  private lastUsedAt?: Date;
 
-  readonly supportedRuntimes: readonly Runtime[];
-  readonly defaultRuntime: Runtime;
-
-  constructor(config: LocalExecutorConfig) {
+  constructor(config: LocalExecutorConfig | LocalExecutorOptions) {
+    super();
     this.id = config.id;
     this.cwd = config.cwd ?? process.cwd();
     this.shell = config.shell ?? false;
@@ -117,13 +127,7 @@ export class LocalExecutor implements WorkspaceExecutor {
     this.defaultTimeout = config.timeout ?? 30000;
     this.env = config.env ?? {};
     this.defaultRuntime = config.defaultRuntime ?? 'node';
-
-    // Detect which runtimes are available
     this.supportedRuntimes = this.detectRuntimes();
-  }
-
-  get status(): ExecutorStatus {
-    return this._status;
   }
 
   /**
@@ -134,11 +138,9 @@ export class LocalExecutor implements WorkspaceExecutor {
 
     for (const [runtime, config] of Object.entries(RUNTIME_CONFIGS)) {
       try {
-        // Try to run the command with --version or similar
         if (process.platform === 'win32') {
           execSync(`where ${config.command}`, { stdio: 'ignore' });
         } else {
-          // On Unix, check if command exists and is executable
           execSync(`command -v ${config.command}`, { stdio: 'ignore', shell: '/bin/sh' });
         }
         available.push(runtime as Runtime);
@@ -167,9 +169,8 @@ export class LocalExecutor implements WorkspaceExecutor {
 
     const config = RUNTIME_CONFIGS[runtime];
     const startTime = Date.now();
-
-    // Create temp file for the code
     const tempFile = path.join(this.tempDir!, `code_${uuidv4()}${config.extension}`);
+
     await fs.writeFile(tempFile, code);
 
     try {
@@ -183,7 +184,7 @@ export class LocalExecutor implements WorkspaceExecutor {
         },
       );
 
-      this.lastUsedAt = new Date();
+      this.updateLastUsed();
 
       return {
         ...result,
@@ -191,12 +192,14 @@ export class LocalExecutor implements WorkspaceExecutor {
         duration: Date.now() - startTime,
       };
     } finally {
-      // Clean up temp file
       await fs.unlink(tempFile).catch(() => {});
     }
   }
 
-  async executeCodeStream(code: string, options?: ExecuteCodeOptions): Promise<StreamingExecutionResult> {
+  override async executeCodeStream(
+    code: string,
+    options?: ExecuteCodeOptions,
+  ): Promise<StreamingExecutionResult> {
     if (this._status !== 'running') {
       throw new ExecutorNotReadyError(this._status);
     }
@@ -208,9 +211,8 @@ export class LocalExecutor implements WorkspaceExecutor {
     }
 
     const config = RUNTIME_CONFIGS[runtime];
-
-    // Create temp file for the code
     const tempFile = path.join(this.tempDir!, `code_${uuidv4()}${config.extension}`);
+
     await fs.writeFile(tempFile, code);
 
     return this.runProcessStream(
@@ -240,7 +242,6 @@ export class LocalExecutor implements WorkspaceExecutor {
       throw new ExecutorNotReadyError(this._status);
     }
 
-    // Check allowed commands if restriction is set
     if (this.allowedCommands && !this.allowedCommands.includes(command)) {
       throw new ExecutionError(
         `Command '${command}' is not in the allowed list`,
@@ -258,7 +259,7 @@ export class LocalExecutor implements WorkspaceExecutor {
       shell: options?.shell ?? this.shell,
     });
 
-    this.lastUsedAt = new Date();
+    this.updateLastUsed();
 
     return {
       ...result,
@@ -268,7 +269,7 @@ export class LocalExecutor implements WorkspaceExecutor {
     };
   }
 
-  async executeCommandStream(
+  override async executeCommandStream(
     command: string,
     args?: string[],
     options?: ExecuteCommandOptions,
@@ -298,24 +299,21 @@ export class LocalExecutor implements WorkspaceExecutor {
   // Package Management
   // ---------------------------------------------------------------------------
 
-  async installPackage(packageName: string, options?: InstallPackageOptions): Promise<void> {
+  override async installPackage(packageName: string, options?: InstallPackageOptions): Promise<void> {
     if (this._status !== 'running') {
       throw new ExecutorNotReadyError(this._status);
     }
 
-    // Determine package manager
     let pm = options?.packageManager;
     if (!pm || pm === 'auto') {
-      // Infer from default runtime
       const config = RUNTIME_CONFIGS[this.defaultRuntime];
       pm = (config.packageManager as 'npm' | 'pip') ?? 'npm';
     }
 
-    // Build install command
+    const version = options?.version ? `${packageName}@${options.version}` : packageName;
+
     let cmd: string;
     let args: string[];
-
-    const version = options?.version ? `${packageName}@${options.version}` : packageName;
 
     switch (pm) {
       case 'npm':
@@ -341,17 +339,11 @@ export class LocalExecutor implements WorkspaceExecutor {
     await this.executeCommand(cmd, args, { timeout: options?.timeout ?? 120000 });
   }
 
-  async installPackages(packages: string[], options?: InstallPackageOptions): Promise<void> {
-    for (const pkg of packages) {
-      await this.installPackage(pkg, options);
-    }
-  }
-
   // ---------------------------------------------------------------------------
-  // File Operations (Executor's temp filesystem)
+  // File Operations
   // ---------------------------------------------------------------------------
 
-  async writeFile(filePath: string, content: string | Buffer): Promise<void> {
+  override async writeFile(filePath: string, content: string | Buffer): Promise<void> {
     if (!this.tempDir) {
       throw new ExecutorNotReadyError(this._status);
     }
@@ -364,7 +356,7 @@ export class LocalExecutor implements WorkspaceExecutor {
     await fs.writeFile(absolutePath, content);
   }
 
-  async readFile(filePath: string): Promise<string> {
+  override async readFile(filePath: string): Promise<string> {
     if (!this.tempDir) {
       throw new ExecutorNotReadyError(this._status);
     }
@@ -376,7 +368,7 @@ export class LocalExecutor implements WorkspaceExecutor {
     return fs.readFile(absolutePath, 'utf-8');
   }
 
-  async listFiles(dirPath: string): Promise<string[]> {
+  override async listFiles(dirPath: string): Promise<string[]> {
     if (!this.tempDir) {
       throw new ExecutorNotReadyError(this._status);
     }
@@ -393,55 +385,36 @@ export class LocalExecutor implements WorkspaceExecutor {
   // ---------------------------------------------------------------------------
 
   async start(): Promise<void> {
-    this._status = 'starting';
+    this.setStatus('starting');
 
     try {
-      // Create temp directory for this executor
       this.tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-executor-'));
-      this.createdAt = new Date();
-      this._status = 'running';
+      this._createdAt = new Date();
+      this.setStatus('running');
     } catch (error) {
-      this._status = 'error';
+      this.setStatus('error');
       throw error;
     }
   }
 
-  async stop(): Promise<void> {
-    this._status = 'stopping';
-    // Local executor doesn't have a stopped state; it's either running or destroyed
-    this._status = 'stopped';
+  override async stop(): Promise<void> {
+    this.setStatus('stopped');
   }
 
   async destroy(): Promise<void> {
-    this._status = 'destroying';
+    this.setStatus('destroying');
 
     try {
-      // Clean up temp directory
       if (this.tempDir) {
         await fs.rm(this.tempDir, { recursive: true, force: true });
       }
     } finally {
-      this._status = 'destroyed';
+      this.setStatus('destroyed');
     }
   }
 
   async isReady(): Promise<boolean> {
     return this._status === 'running';
-  }
-
-  async getInfo(): Promise<ExecutorInfo> {
-    return {
-      id: this.id,
-      provider: this.provider,
-      status: this._status,
-      createdAt: this.createdAt ?? new Date(),
-      lastUsedAt: this.lastUsedAt,
-      metadata: {
-        cwd: this.cwd,
-        tempDir: this.tempDir,
-        supportedRuntimes: [...this.supportedRuntimes],
-      },
-    };
   }
 
   // ---------------------------------------------------------------------------
@@ -552,7 +525,6 @@ export class LocalExecutor implements WorkspaceExecutor {
     const stdout: string[] = [];
     const stderr: string[] = [];
 
-    // Collect output for wait()
     proc.stdout?.on('data', (data) => stdout.push(data.toString('utf-8')));
     proc.stderr?.on('data', (data) => stderr.push(data.toString('utf-8')));
 
@@ -570,18 +542,11 @@ export class LocalExecutor implements WorkspaceExecutor {
           exitCode,
           stdout: stdout.join(''),
           stderr: stderr.join(''),
-          duration: 0, // Not tracked in stream mode
+          duration: 0,
           timedOut,
           killed,
         };
       },
     };
   }
-}
-
-/**
- * Create a local executor.
- */
-export function createLocalExecutor(config: LocalExecutorConfig): LocalExecutor {
-  return new LocalExecutor(config);
 }

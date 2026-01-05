@@ -2,6 +2,7 @@
  * Workspace Implementation
  *
  * Combines a filesystem and executor into a unified workspace for agents.
+ * Factory functions return the Workspace interface type.
  */
 
 import { v4 as uuidv4 } from 'uuid';
@@ -13,15 +14,12 @@ import type {
   WorkspaceInfo,
   WorkspaceConfig,
   WorkspaceAudit,
-  WorkspaceAuditEntry,
-  WorkspaceAuditOptions,
   SyncResult,
   SnapshotOptions,
   WorkspaceSnapshot,
   RestoreOptions,
 } from './types';
 import {
-  WorkspaceNotReadyError,
   FilesystemNotAvailableError,
   ExecutorNotAvailableError,
 } from './types';
@@ -42,13 +40,14 @@ import type {
   ExecuteCommandOptions,
 } from '../executor/types';
 
-// Import providers
-import { LocalFilesystem, createLocalFilesystem } from '../filesystem/local';
-import { MemoryFilesystem, createMemoryFilesystem } from '../filesystem/memory';
-import { LocalExecutor, createLocalExecutor } from '../executor/local';
+// Import factories (not concrete implementations)
+import { createFilesystem, createMemoryFilesystem, createLocalFilesystem } from '../filesystem/factory';
+import { createExecutor, createLocalExecutor } from '../executor/factory';
 
 /**
- * Default Workspace implementation.
+ * Base workspace implementation.
+ *
+ * Implements the Workspace interface by composing filesystem and executor.
  */
 export class BaseWorkspace implements Workspace {
   readonly id: string;
@@ -179,8 +178,7 @@ export class BaseWorkspace implements Workspace {
     let bytesTransferred = 0;
     const startTime = Date.now();
 
-    // Get all files to sync
-    const filesToSync = paths ?? await this.getAllFiles('/');
+    const filesToSync = paths ?? (await this.getAllFiles('/'));
 
     for (const filePath of filesToSync) {
       try {
@@ -211,8 +209,7 @@ export class BaseWorkspace implements Workspace {
     let bytesTransferred = 0;
     const startTime = Date.now();
 
-    // Get files from executor
-    const filesToSync = paths ?? await this._executor.listFiles!('/');
+    const filesToSync = paths ?? (await this._executor.listFiles!('/'));
 
     for (const filePath of filesToSync) {
       try {
@@ -244,7 +241,7 @@ export class BaseWorkspace implements Workspace {
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory') {
-        files.push(...await this.getAllFiles(fullPath));
+        files.push(...(await this.getAllFiles(fullPath)));
       }
     }
 
@@ -261,7 +258,7 @@ export class BaseWorkspace implements Workspace {
     }
 
     const files: Record<string, string | Buffer> = {};
-    const pathsToSnapshot = options?.paths ?? await this.getAllFiles('/');
+    const pathsToSnapshot = options?.paths ?? (await this.getAllFiles('/'));
 
     for (const filePath of pathsToSnapshot) {
       try {
@@ -321,12 +318,10 @@ export class BaseWorkspace implements Workspace {
     this._status = 'initializing';
 
     try {
-      // Initialize filesystem
       if (this._fs?.init) {
         await this._fs.init();
       }
 
-      // Initialize executor
       if (this._executor) {
         await this._executor.start();
       }
@@ -356,12 +351,10 @@ export class BaseWorkspace implements Workspace {
     this._status = 'destroying';
 
     try {
-      // Destroy executor first
       if (this._executor) {
         await this._executor.destroy();
       }
 
-      // Then filesystem
       if (this._fs?.destroy) {
         await this._fs.destroy();
       }
@@ -390,7 +383,6 @@ export class BaseWorkspace implements Workspace {
         provider: this._fs.provider,
       };
 
-      // Try to get file count
       try {
         const files = await this.getAllFiles('/');
         info.filesystem.totalFiles = files.length;
@@ -414,8 +406,7 @@ export class BaseWorkspace implements Workspace {
 }
 
 /**
- * Simple key-value state storage backed by the filesystem.
- * Stores JSON files in a .state directory.
+ * Key-value state storage backed by the filesystem.
  */
 class FilesystemState implements WorkspaceState {
   private readonly fs: WorkspaceFilesystem;
@@ -426,7 +417,6 @@ class FilesystemState implements WorkspaceState {
   }
 
   private keyToPath(key: string): string {
-    // Sanitize key to be filesystem-safe
     const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
     return `${this.stateDir}/${safeKey}.json`;
   }
@@ -484,17 +474,21 @@ class FilesystemState implements WorkspaceState {
     try {
       await this.fs.rmdir(this.stateDir, { recursive: true });
     } catch {
-      // Ignore if directory doesn't exist
+      // Ignore
     }
   }
 }
 
-// ---------------------------------------------------------------------------
-// Factory Functions
-// ---------------------------------------------------------------------------
+// =============================================================================
+// Factory Functions (return interface types)
+// =============================================================================
 
 /**
  * Create a workspace with the given configuration.
+ *
+ * @param config - Workspace configuration
+ * @param owner - Workspace owner information
+ * @returns Workspace interface
  */
 export async function createWorkspace(
   config: WorkspaceConfig,
@@ -503,36 +497,18 @@ export async function createWorkspace(
   let fs: WorkspaceFilesystem | undefined;
   let executor: WorkspaceExecutor | undefined;
 
-  // Create filesystem
+  // Create filesystem using factory
   if (config.filesystem) {
-    switch (config.filesystem.provider) {
-      case 'local':
-        fs = createLocalFilesystem(config.filesystem);
-        break;
-      case 'memory':
-        fs = createMemoryFilesystem(config.filesystem);
-        break;
-      // Add more providers as they're implemented
-      default:
-        throw new Error(`Unknown filesystem provider: ${(config.filesystem as any).provider}`);
-    }
+    fs = createFilesystem(config.filesystem);
   }
 
-  // Create executor
+  // Create executor using factory
   if (config.executor) {
-    switch (config.executor.provider) {
-      case 'local':
-        executor = createLocalExecutor(config.executor);
-        break;
-      // Add more providers as they're implemented
-      default:
-        throw new Error(`Unknown executor provider: ${(config.executor as any).provider}`);
-    }
+    executor = createExecutor(config.executor);
   }
 
   const workspace = new BaseWorkspace(config, owner, fs, executor);
 
-  // Auto-init if configured (default: true)
   if (config.autoInit !== false) {
     await workspace.init();
   }
@@ -541,8 +517,10 @@ export async function createWorkspace(
 }
 
 /**
- * Create a local development workspace with both filesystem and executor.
- * Uses the local filesystem and local shell for execution.
+ * Create a local development workspace.
+ *
+ * @param options - Local workspace options
+ * @returns Workspace interface
  */
 export async function createLocalWorkspace(options: {
   id?: string;
@@ -553,36 +531,42 @@ export async function createLocalWorkspace(options: {
   threadId?: string;
 }): Promise<Workspace> {
   const scope = options.scope ?? 'agent';
+  const id = options.id ?? uuidv4();
+
   const owner: WorkspaceOwner = {
     scope,
     agentId: options.agentId,
     threadId: options.threadId,
   };
 
-  return createWorkspace(
-    {
-      id: options.id,
-      name: options.name,
-      scope,
-      filesystem: {
-        provider: 'local',
-        id: `local-fs-${options.id ?? uuidv4()}`,
-        basePath: options.basePath,
-        sandbox: true,
-      },
-      executor: {
-        provider: 'local',
-        id: `local-exec-${options.id ?? uuidv4()}`,
-        cwd: options.basePath,
-      },
-    },
+  const fs = createLocalFilesystem({
+    id: `local-fs-${id}`,
+    basePath: options.basePath,
+    sandbox: true,
+  });
+
+  const executor = createLocalExecutor({
+    id: `local-exec-${id}`,
+    cwd: options.basePath,
+  });
+
+  const workspace = new BaseWorkspace(
+    { id, name: options.name, scope },
     owner,
+    fs,
+    executor,
   );
+
+  await workspace.init();
+
+  return workspace;
 }
 
 /**
- * Create an in-memory workspace (no persistence).
- * Useful for testing and ephemeral operations.
+ * Create an in-memory workspace.
+ *
+ * @param options - Memory workspace options
+ * @returns Workspace interface
  */
 export async function createMemoryWorkspace(options?: {
   id?: string;
@@ -591,31 +575,37 @@ export async function createMemoryWorkspace(options?: {
   agentId?: string;
   threadId?: string;
   withExecutor?: boolean;
+  initialFiles?: Record<string, string | Buffer>;
 }): Promise<Workspace> {
   const scope = options?.scope ?? 'thread';
+  const id = options?.id ?? uuidv4();
+
   const owner: WorkspaceOwner = {
     scope,
     agentId: options?.agentId,
     threadId: options?.threadId,
   };
 
-  const config: WorkspaceConfig = {
-    id: options?.id,
-    name: options?.name,
-    scope,
-    filesystem: {
-      provider: 'memory',
-      id: `memory-fs-${options?.id ?? uuidv4()}`,
-    },
-  };
+  const fs = createMemoryFilesystem({
+    id: `memory-fs-${id}`,
+    initialFiles: options?.initialFiles,
+  });
 
-  // Add local executor if requested
+  let executor: WorkspaceExecutor | undefined;
   if (options?.withExecutor) {
-    config.executor = {
-      provider: 'local',
-      id: `local-exec-${options?.id ?? uuidv4()}`,
-    };
+    executor = createLocalExecutor({
+      id: `local-exec-${id}`,
+    });
   }
 
-  return createWorkspace(config, owner);
+  const workspace = new BaseWorkspace(
+    { id, name: options?.name, scope },
+    owner,
+    fs,
+    executor,
+  );
+
+  await workspace.init();
+
+  return workspace;
 }

@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
-import { LocalFilesystem, createLocalFilesystem } from './local';
+import { createLocalFilesystem } from './factory';
+import type { WorkspaceFilesystem } from './types';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -11,22 +12,21 @@ import {
 } from './types';
 
 describe('LocalFilesystem', () => {
-  let localFs: LocalFilesystem;
+  let localFs: WorkspaceFilesystem;
   let tempDir: string;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'localfs-test-'));
     localFs = createLocalFilesystem({
       id: 'test-local-fs',
-      provider: 'local',
       basePath: tempDir,
       sandbox: true,
     });
-    await localFs.init();
+    await localFs.init?.();
   });
 
   afterEach(async () => {
-    await localFs.destroy();
+    await localFs.destroy?.();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -150,6 +150,14 @@ describe('LocalFilesystem', () => {
       const content = await localFs.readFile('/dest.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
       expect(await localFs.exists('/source.txt')).toBe(false);
+    });
+  });
+
+  describe('interface contract', () => {
+    it('should have required interface properties', () => {
+      expect(localFs.id).toBe('test-local-fs');
+      expect(localFs.name).toBe('LocalFilesystem');
+      expect(localFs.provider).toBe('local');
     });
   });
 });
