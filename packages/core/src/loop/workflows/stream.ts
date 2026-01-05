@@ -7,7 +7,7 @@ import {
   analyzeGoalState,
   recordAgentRunCompletion,
   type AgenticInstrumentationContext,
-} from '../../observability/agentic-instrumentation';
+} from '../../observability/instrumentation';
 import { RequestContext } from '../../request-context';
 import type { OutputSchema } from '../../stream/base/schema';
 import type { ChunkType } from '../../stream/types';

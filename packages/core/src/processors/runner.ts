@@ -9,7 +9,7 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
-import { emitGuardrailTriggered, type AgenticInstrumentationContext } from '../observability/agentic-instrumentation';
+import { emitGuardrailTriggered, type AgenticInstrumentationContext } from '../observability/instrumentation';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';

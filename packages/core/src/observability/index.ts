@@ -12,5 +12,4 @@ export * from './utils';
 export * from './metrics';
 export * from './instrumentation';
 export * from './cost';
-export * from './agentic-instrumentation';
 export { wrapMastra } from './context';

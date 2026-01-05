@@ -5,7 +5,7 @@ import {
   emitHumanApprovalRequested,
   emitHumanApprovalResponse,
   type AgenticInstrumentationContext,
-} from '../../../observability/agentic-instrumentation';
+} from '../../../observability/instrumentation';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
