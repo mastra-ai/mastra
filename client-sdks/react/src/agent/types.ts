@@ -12,4 +12,5 @@ export interface ModelSettings {
   chatWithGenerate?: boolean;
   chatWithStream?: boolean;
   chatWithNetwork?: boolean;
+  requireToolApproval?: boolean;
 }
