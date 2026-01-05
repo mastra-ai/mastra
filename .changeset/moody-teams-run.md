@@ -7,4 +7,4 @@
 'create-mastra': patch
 ---
 
-Add initial state input to worflow form in studio
+Add initial state input to workflow form in studio

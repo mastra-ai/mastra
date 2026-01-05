@@ -121,7 +121,7 @@ export function WorkflowRunProvider({
   useEffect(() => {
     if (runSnapshot?.runId) {
       setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
-      if (Object.keys(runSnapshot.value).length > 0) {
+      if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
         setPayload({
           initialState: runSnapshot.value,
           inputData: runSnapshot.context?.input,
