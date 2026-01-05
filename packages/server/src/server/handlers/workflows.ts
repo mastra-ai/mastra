@@ -406,52 +406,6 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
   },
 });
 
-export const GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE = createRoute({
-  method: 'GET',
-  path: '/api/workflows/:workflowId/runs/:runId/execution-result',
-  responseType: 'json',
-  pathParamSchema: workflowRunPathParams,
-  queryParamSchema: workflowRunResultQuerySchema,
-  responseSchema: workflowRunResultSchema,
-  summary: 'Get workflow execution result',
-  description:
-    'Returns the execution result of a workflow run including metadata and step states. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=status,result)',
-  tags: ['Workflows'],
-  handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows }) => {
-    try {
-      if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
-      }
-
-      if (!runId) {
-        throw new HTTPException(400, { message: 'Run ID is required' });
-      }
-
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-
-      if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
-      }
-
-      // Parse fields parameter (comma-separated string)
-      const fieldList = fields ? (fields.split(',').map((f: string) => f.trim()) as WorkflowStateField[]) : undefined;
-
-      const run = await workflow.getWorkflowRunById(runId, {
-        withNestedWorkflows: withNestedWorkflows !== 'false', // Default to true unless explicitly 'false'
-        fields: fieldList,
-      });
-
-      if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
-      }
-
-      return run;
-    } catch (error) {
-      return handleError(error, 'Error getting workflow run execution result');
-    }
-  },
-});
-
 export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   method: 'POST',
   path: '/api/workflows/:workflowId/start-async',

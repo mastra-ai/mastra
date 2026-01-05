@@ -182,8 +182,6 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
-export type GetWorkflowRunExecutionResultResponse = Partial<WorkflowState>;
-
 export interface GetWorkflowResponse {
   name: string;
   description?: string;

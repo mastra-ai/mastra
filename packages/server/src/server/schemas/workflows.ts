@@ -212,17 +212,6 @@ const withNestedWorkflowsField = z
   .describe('Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance.');
 
 /**
- * Schema for workflow execution result query parameters
- * Allows filtering which fields to return to reduce payload size
- */
-export const workflowExecutionResultQuerySchema = z.object({
-  fields: createFieldsValidator(
-    'Comma-separated list of fields to return. Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
-  ),
-  withNestedWorkflows: withNestedWorkflowsField,
-});
-
-/**
  * Schema for workflow execution result
  * All fields are optional since field filtering allows requesting specific fields only
  */

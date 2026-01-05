@@ -483,40 +483,6 @@ export class AgentBuilder extends BaseResource {
   }
 
   /**
-   * @deprecated Use runById instead. Both methods now return the same WorkflowState with metadata and processed execution state.
-   *
-   * Gets the execution result of an agent builder action run.
-   * This calls `/api/agent-builder/:actionId/runs/:runId/execution-result`.
-   * @param runId - The ID of the action run to retrieve the execution result for
-   * @param options - Optional configuration
-   * @param options.fields - Optional array of fields to return (e.g., ['result', 'steps']). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
-   * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
-   */
-  async runExecutionResult(
-    runId: string,
-    options?: {
-      fields?: string[];
-      withNestedWorkflows?: boolean;
-    },
-  ) {
-    const searchParams = new URLSearchParams();
-
-    if (options?.fields && options.fields.length > 0) {
-      searchParams.set('fields', options.fields.join(','));
-    }
-
-    if (options?.withNestedWorkflows !== undefined) {
-      searchParams.set('withNestedWorkflows', String(options.withNestedWorkflows));
-    }
-
-    const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    const url = `/api/agent-builder/${this.actionId}/runs/${runId}/execution-result${queryString}`;
-    return this.request(url, {
-      method: 'GET',
-    });
-  }
-
-  /**
    * Cancels an agent builder action run.
    * This calls `/api/agent-builder/:actionId/runs/:runId/cancel`.
    */

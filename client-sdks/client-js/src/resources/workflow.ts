@@ -5,7 +5,6 @@ import type {
   ListWorkflowRunsResponse,
   ListWorkflowRunsParams,
   GetWorkflowRunByIdResponse,
-  GetWorkflowRunExecutionResultResponse,
 } from '../types';
 
 import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
@@ -129,44 +128,6 @@ export class Workflow extends BaseResource {
     return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`, {
       method: 'DELETE',
     });
-  }
-
-  /**
-   * @deprecated Use runById instead. Both methods now return the same WorkflowState with metadata and processed execution state.
-   *
-   * Retrieves the execution result for a specific workflow run by its ID
-   * @param runId - The ID of the workflow run to retrieve the execution result for
-   * @param options - Optional configuration
-   * @param options.requestContext - Optional request context to pass as query parameter
-   * @param options.fields - Optional array of fields to return (e.g., ['result', 'steps']). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.
-   * @param options.withNestedWorkflows - Whether to include nested workflow data in steps. Defaults to true. Set to false for better performance when you don't need nested workflow details.
-   * @returns Promise containing the workflow run execution result
-   */
-  runExecutionResult(
-    runId: string,
-    options?: {
-      requestContext?: RequestContext | Record<string, any>;
-      fields?: string[];
-      withNestedWorkflows?: boolean;
-    },
-  ): Promise<GetWorkflowRunExecutionResultResponse> {
-    const searchParams = new URLSearchParams();
-
-    if (options?.fields && options.fields.length > 0) {
-      searchParams.set('fields', options.fields.join(','));
-    }
-
-    if (options?.withNestedWorkflows !== undefined) {
-      searchParams.set('withNestedWorkflows', String(options.withNestedWorkflows));
-    }
-
-    const requestContextParam = base64RequestContext(parseClientRequestContext(options?.requestContext));
-    if (requestContextParam) {
-      searchParams.set('requestContext', requestContextParam);
-    }
-
-    const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/execution-result${queryString}`);
   }
 
   /**

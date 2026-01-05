@@ -15,7 +15,6 @@ import {
   RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE,
   RESUME_AGENT_BUILDER_ACTION_ROUTE,
   LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE,
-  GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE,
   CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE,
   STREAM_AGENT_BUILDER_ACTION_ROUTE,
   STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE,
@@ -338,71 +337,6 @@ describe('Agent Builder Handlers', () => {
       });
 
       expect(result).toBeDefined();
-      expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
-        {
-          'merge-template': expect.anything(),
-          'workflow-builder': expect.anything(),
-        },
-        mockMastra,
-      );
-      expect(WorkflowRegistry.cleanup).toHaveBeenCalled();
-    });
-  });
-
-  describe('GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE', () => {
-    it('should throw error when actionId is not provided', async () => {
-      await expect(
-        GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          runId: 'test-run',
-          actionId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Workflow ID is required' }));
-    });
-
-    it('should throw error when runId is not provided', async () => {
-      await expect(
-        GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          actionId: 'merge-template',
-          runId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
-    });
-
-    it('should get action run execution result successfully', async () => {
-      const run = await mockWorkflow.createRun({
-        runId: 'test-run',
-      });
-      await run.start({ inputData: {} });
-
-      const result = await GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        actionId: 'merge-template',
-        runId: 'test-run',
-      });
-
-      // Now returns unified WorkflowState with metadata
-      expect(result).toMatchObject({
-        runId: 'test-run',
-        workflowName: 'merge-template',
-        status: 'success',
-        result: { result: 'success' },
-        payload: {},
-        activeStepsPath: {},
-        steps: {
-          'test-step': {
-            status: 'success',
-            output: { result: 'success' },
-            endedAt: expect.any(Number),
-            startedAt: expect.any(Number),
-            payload: {},
-          },
-        },
-        serializedStepGraph: expect.arrayContaining([expect.objectContaining({ type: 'step' })]),
-      });
-      expect(result.createdAt).toBeInstanceOf(Date);
-      expect(result.updatedAt).toBeInstanceOf(Date);
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
         {
           'merge-template': expect.anything(),

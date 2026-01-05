@@ -158,40 +158,6 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   },
 });
 
-export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
-  method: 'GET',
-  path: '/api/agent-builder/:actionId/runs/:runId/execution-result',
-  responseType: 'json',
-  pathParamSchema: actionRunPathParams,
-  responseSchema: workflowExecutionResultSchema,
-  summary: 'Get action execution result',
-  description: 'Returns the final execution result of a completed action run',
-  tags: ['Agent Builder'],
-  handler: async ctx => {
-    const { mastra, actionId, runId } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Getting agent builder action run execution result', { actionId, runId });
-
-      return await workflows.GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-      });
-    } catch (error) {
-      logger.error('Error getting execution result', { error, actionId, runId });
-      return handleError(error, 'Error getting agent builder action execution result');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
 export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/api/agent-builder/:actionId/create-run',

@@ -1,10 +1,10 @@
 ---
-'@mastra/express': patch
+'@mastra/express': minor
 '@mastra/client-js': minor
-'@mastra/hono': patch
+'@mastra/hono': minor
 '@mastra/inngest': patch
 '@mastra/memory': patch
-'@mastra/server': patch
+'@mastra/server': minor
 '@mastra/core': patch
 ---
 
@@ -16,6 +16,9 @@ Unified `getWorkflowRunById` and `getWorkflowRunExecutionResult` into a single A
 - Added optional `fields` parameter to request only specific fields for better performance
 - Added optional `withNestedWorkflows` parameter to control nested workflow step inclusion
 - Removed `getWorkflowRunExecutionResult` - use `getWorkflowRunById` instead (breaking change)
+- Removed `/execution-result` API endpoints from server (breaking change)
+- Removed `runExecutionResult()` method from client SDK (breaking change)
+- Removed `GetWorkflowRunExecutionResultResponse` type from client SDK (breaking change)
 
 **Before:**
 
