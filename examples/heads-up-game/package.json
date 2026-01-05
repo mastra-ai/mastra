@@ -18,15 +18,15 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.23",
-    "@mastra/core": "^0.23.1",
-    "@mastra/libsql": "^0.16.1",
-    "@mastra/loggers": "^0.10.18",
-    "@mastra/memory": "^0.15.9",
+    "@mastra/core": "^0.24.9",
+    "@mastra/libsql": "^0.16.4",
+    "@mastra/loggers": "^0.10.19",
+    "@mastra/memory": "^0.15.13",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "22.13.17",
-    "mastra": "^0.17.5",
+    "mastra": "^0.18.9",
     "typescript": "^5.9.2"
   },
   "pnpm": {
