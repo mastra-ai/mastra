@@ -15,7 +15,6 @@ import {
 } from '../workflows/content-moderation';
 import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
-import { RequestContext } from '@mastra/core/request-context';
 
 export const weatherInfo = createTool({
   id: 'weather-info',
@@ -30,7 +29,9 @@ export const weatherInfo = createTool({
     city: z.string(),
   }),
   execute: async (_inputData, context) => {
-    context?.requestContext?.get('userId');
+    // Access validated userId from request context
+    const userId = context?.requestContext?.get('userId');
+    console.log('[weatherInfo] Processing request for user:', userId);
     if (!context?.agent?.resumeData) {
       return context?.agent?.suspend({
         message: 'What city do you want to know the weather for?',

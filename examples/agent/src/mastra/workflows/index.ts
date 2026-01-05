@@ -63,8 +63,11 @@ const addLetterStep = createStep({
   requestContextSchema: z.object({
     userId: z.string(),
   }),
-  execute: async ({ inputData }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { text } = inputData;
+    // Access validated userId from request context
+    const userId = requestContext.userId;
+    console.log(`[addLetterAStep] Processing text for user: ${userId}`);
     await new Promise(resolve => setTimeout(resolve, 500));
     return { text: text + 'A' };
   },

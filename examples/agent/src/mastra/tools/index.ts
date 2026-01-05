@@ -11,6 +11,10 @@ export const cookingTool = createTool({
     userId: z.string(),
   }),
   execute: async (inputData, context) => {
+    // Access validated userId from request context
+    const userId = context?.requestContext?.get('userId');
+    console.log(`[cookingTool] Processing ingredient "${inputData.ingredient}" for user: ${userId}`);
+
     await new Promise(resolve => setTimeout(resolve, 5000));
     console.log('My cooking tool is running!', inputData.ingredient);
     if (context?.agent?.toolCallId) {
