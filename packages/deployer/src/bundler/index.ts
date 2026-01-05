@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
+import type { BundlerEngine, BundlerEngineOptions } from '@mastra/core/bundler';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
@@ -20,6 +21,7 @@ import { FileService } from '../services/fs';
 import { getWorkspaceInformation } from './workspaceDependencies';
 
 export type { BundlerOptions } from '../build/types';
+export type { BundlerEngine, BundlerEngineOptions } from '@mastra/core/bundler';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
 
@@ -352,8 +354,7 @@ export abstract class Bundler extends MastraBundler {
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 
-      this.logger.info('Bundling Mastra application');
-
+      // Prepare input options (needed for both custom engine and default Rollup)
       const inputOptions: InputOptions = await this.getBundlerOptions(
         serverFile,
         mastraEntryFile,
@@ -362,31 +363,61 @@ export abstract class Bundler extends MastraBundler {
         internalBundlerOptions,
       );
 
-      const bundler = await this.createBundler(
-        {
-          ...inputOptions,
-          logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
-          onwarn: warning => {
-            if (warning.code === 'CIRCULAR_DEPENDENCY') {
-              if (warning.ids?.[0]?.includes('node_modules')) {
-                return;
-              }
+      // Check if a custom bundler engine is provided
+      const customEngine = bundlerOptions.engine;
 
-              this.logger.warn(`Circular dependency found:
-\t${warning.message.replace('Circular dependency: ', '')}`);
-            }
+      if (customEngine) {
+        // Use the custom bundler engine
+        this.logger.info(`Bundling Mastra application with ${customEngine.name} engine`);
+
+        const engineOptions: BundlerEngineOptions = {
+          input: (inputOptions.input as Record<string, string>) || {},
+          outputDir: bundleLocation,
+          external: Array.from(analyzedBundleInfo.externalDependencies),
+          sourcemap: internalBundlerOptions.enableSourcemap,
+          platform: 'node',
+          define: {
+            'process.env.NODE_ENV': JSON.stringify('production'),
           },
-        },
-        {
-          dir: bundleLocation,
           manualChunks: {
             mastra: ['#mastra'],
           },
-          sourcemap: internalBundlerOptions.enableSourcemap,
-        },
-      );
+        };
 
-      await bundler.write();
+        const engineOutput = await customEngine.bundle(engineOptions);
+        await engineOutput.write();
+        await engineOutput.close();
+      } else {
+        // Use the default Rollup bundler
+        this.logger.info('Bundling Mastra application');
+
+        const bundler = await this.createBundler(
+          {
+            ...inputOptions,
+            logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
+            onwarn: warning => {
+              if (warning.code === 'CIRCULAR_DEPENDENCY') {
+                if (warning.ids?.[0]?.includes('node_modules')) {
+                  return;
+                }
+
+                this.logger.warn(`Circular dependency found:
+\t${warning.message.replace('Circular dependency: ', '')}`);
+              }
+            },
+          },
+          {
+            dir: bundleLocation,
+            manualChunks: {
+              mastra: ['#mastra'],
+            },
+            sourcemap: internalBundlerOptions.enableSourcemap,
+          },
+        );
+
+        await bundler.write();
+      }
+
       const toolImports: string[] = [];
       const toolsExports: string[] = [];
       Array.from(Object.keys(inputOptions.input || {}))

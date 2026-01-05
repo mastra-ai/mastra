@@ -60,6 +60,16 @@
         "default": "./dist/bundler/index.cjs"
       }
     },
+    "./engines": {
+      "import": {
+        "types": "./dist/build/engines/index.d.ts",
+        "default": "./dist/build/engines/index.js"
+      },
+      "require": {
+        "types": "./dist/build/engines/index.d.ts",
+        "default": "./dist/build/engines/index.cjs"
+      }
+    },
     "./analyze": {
       "import": {
         "types": "./dist/build/analyze.d.ts",
