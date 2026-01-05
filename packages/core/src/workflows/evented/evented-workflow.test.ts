@@ -12,7 +12,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createTool } from '../../tools';
-import type { StreamEvent, WorkflowRunState } from '../types';
+import type { StreamEvent } from '../types';
 import { mapVariable } from '../workflow';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from '.';
 
