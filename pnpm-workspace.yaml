@@ -19,6 +19,7 @@ catalog:
   '@vitest/coverage-v8': 4.0.12
   '@vitest/ui': 4.0.12
   vitest: 4.0.16
+  typescript: ^5.9.3
 
 patchedDependencies:
   '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
