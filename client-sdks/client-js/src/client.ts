@@ -111,7 +111,7 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({
       resourceId: params.resourceId,
       resourceid: params.resourceId,
-      agentId: params.agentId,
+      ...(params.agentId && { agentId: params.agentId }),
       ...(params.page !== undefined && { page: params.page.toString() }),
       ...(params.perPage !== undefined && { perPage: params.perPage.toString() }),
       ...(params.orderBy && { orderBy: params.orderBy }),
@@ -162,24 +162,33 @@ export class MastraClient extends BaseResource {
   /**
    * Gets a memory thread instance by ID
    * @param threadId - ID of the memory thread to retrieve
+   * @param agentId - Optional agent ID. When not provided, uses storage directly
    * @returns MemoryThread instance
    */
-  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId: string }) {
+  public getMemoryThread({ threadId, agentId }: { threadId: string; agentId?: string }) {
     return new MemoryThread(this.options, threadId, agentId);
   }
 
+  /**
+   * Lists messages for a thread.
+   * @param threadId - ID of the thread
+   * @param opts - Optional parameters including agentId, networkId, and requestContext
+   *   - When agentId is provided, uses the agent's memory
+   *   - When networkId is provided, uses the network endpoint
+   *   - When neither is provided, uses storage directly
+   * @returns Promise containing the thread messages
+   */
   public listThreadMessages(
     threadId: string,
     opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    if (!opts.agentId && !opts.networkId) {
-      throw new Error('Either agentId or networkId must be provided');
-    }
     let url = '';
-    if (opts.agentId) {
-      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else if (opts.networkId) {
+    if (opts.networkId) {
       url = `/api/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+    } else if (opts.agentId) {
+      url = `/api/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+    } else {
+      url = `/api/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
     }
     return this.request(url);
   }
