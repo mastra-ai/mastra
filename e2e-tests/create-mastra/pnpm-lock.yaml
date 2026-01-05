@@ -13,7 +13,7 @@ importers:
         version: 2.5.5
     devDependencies:
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       get-port:
         specifier: ^7.1.0
@@ -25,7 +25,7 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       verdaccio:
-        specifier: ^6.2.0
+        specifier: ^6.2.4
         version: 6.2.4(typanion@3.14.0)
       verdaccio-auth-memory:
         specifier: ^10.3.1
