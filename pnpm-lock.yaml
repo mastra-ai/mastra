@@ -3858,9 +3858,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
-      axios:
-        specifier: ^1.12.2
-        version: 1.12.2(debug@4.4.3)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
@@ -3950,9 +3947,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
-      axios:
-        specifier: ^1.12.2
-        version: 1.12.2(debug@4.4.3)
       eslint:
         specifier: ^9.37.0
         version: 9.39.2(jiti@2.6.1)
