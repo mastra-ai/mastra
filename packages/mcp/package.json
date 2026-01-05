@@ -63,7 +63,7 @@
     "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.0",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "catalog:",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"

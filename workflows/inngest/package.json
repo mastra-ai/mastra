@@ -51,7 +51,7 @@
     "hono": "^4.11.3",
     "inngest-cli": "^1.12.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "peerDependencies": {

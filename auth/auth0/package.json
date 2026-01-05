@@ -41,7 +41,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vitest": "catalog:"
   },
   "homepage": "https://mastra.ai",

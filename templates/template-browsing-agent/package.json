@@ -29,6 +29,6 @@
     "@types/node": "^24.0.4",
     "mastra": "beta",
     "dotenv": "^17.2.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }
