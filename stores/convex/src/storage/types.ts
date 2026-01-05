@@ -101,6 +101,11 @@ export type VectorStorageRequest =
       topK: number;
       filter?: Record<string, any>;
       includeVector?: boolean;
+      /**
+       * Whether to use native Convex vector search (requires vectorIndex in schema).
+       * Defaults to true. Set to false to force brute-force search.
+       */
+      useNativeSearch?: boolean;
     }
   | {
       op: 'getVectorIndexStats';

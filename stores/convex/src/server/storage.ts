@@ -262,8 +262,19 @@ async function handleListWorkflowRuns(
 
 /**
  * Perform vector similarity search.
- * Note: For full native vector search, users should define a vectorIndex in their schema.
- * This implementation uses the by_index index and performs similarity calculation server-side.
+ *
+ * This implementation:
+ * 1. First tries native Convex vector search (if vectorIndex is defined)
+ * 2. Falls back to brute-force search with server-side cosine similarity
+ *
+ * For optimal performance at scale, define a vectorIndex in your schema:
+ * ```ts
+ * mastra_vectors: mastraVectorsTable.vectorIndex('by_embedding', {
+ *   vectorField: 'embedding',
+ *   dimensions: 1536,
+ *   filterFields: ['indexName'],
+ * })
+ * ```
  */
 async function handleVectorSearch(
   ctx: MutationCtx<any>,
@@ -273,10 +284,75 @@ async function handleVectorSearch(
     topK: number;
     filter?: Record<string, any>;
     includeVector?: boolean;
+    useNativeSearch?: boolean;
   },
 ): Promise<StorageResponse> {
-  const { indexName, queryVector, topK, filter, includeVector = false } = request;
+  const { indexName, queryVector, topK, filter, includeVector = false, useNativeSearch = true } = request;
 
+  // Try native vector search first (if available)
+  if (useNativeSearch) {
+    try {
+      const nativeResults = await tryNativeVectorSearch(ctx, indexName, queryVector, topK, includeVector);
+      if (nativeResults) {
+        // Apply metadata filter if provided
+        let results = nativeResults;
+        if (filter && Object.keys(filter).length > 0) {
+          results = results.filter((doc: any) => matchesFilter(doc.metadata, filter));
+        }
+        return { ok: true, result: results.slice(0, topK) };
+      }
+    } catch {
+      // Native search not available, fall back to brute-force
+    }
+  }
+
+  // Fallback: brute-force search with server-side cosine similarity
+  return handleBruteForceVectorSearch(ctx, indexName, queryVector, topK, filter, includeVector);
+}
+
+/**
+ * Try native Convex vector search using vectorIndex.
+ * Returns null if vectorIndex is not available.
+ */
+async function tryNativeVectorSearch(
+  ctx: MutationCtx<any>,
+  indexName: string,
+  queryVector: number[],
+  topK: number,
+  includeVector: boolean,
+): Promise<any[] | null> {
+  try {
+    // Attempt to use native vector search
+    // This will throw if the vectorIndex 'by_embedding' doesn't exist
+    const results = await (ctx.db as any)
+      .query('mastra_vectors')
+      .withSearchIndex('by_embedding', (q: any) => q.vector('embedding', queryVector).eq('indexName', indexName))
+      .take(topK);
+
+    return results.map((doc: any) => ({
+      id: doc.id,
+      score: doc._score ?? 1.0, // Convex provides _score for vector search
+      metadata: doc.metadata,
+      ...(includeVector ? { vector: doc.embedding } : {}),
+    }));
+  } catch {
+    // Vector index not available
+    return null;
+  }
+}
+
+/**
+ * Brute-force vector search with server-side cosine similarity.
+ * Used as fallback when native vectorIndex is not available.
+ */
+async function handleBruteForceVectorSearch(
+  ctx: MutationCtx<any>,
+  indexName: string,
+  queryVector: number[],
+  topK: number,
+  filter: Record<string, any> | undefined,
+  includeVector: boolean,
+): Promise<StorageResponse> {
   // Use a safe batch size for vectors (embeddings are large)
   const fetchLimit = Math.min(VECTOR_BATCH_SIZE, topK * 10);
 

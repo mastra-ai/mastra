@@ -8,6 +8,7 @@ export {
   watchWorkflowRun,
   watchWorkflowRuns,
   watchResource,
+  vectorSearch,
 } from './queries';
 
 // Re-export schema definitions for backward compatibility

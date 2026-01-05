@@ -136,7 +136,26 @@ export const mastraVectorIndexesTable = defineTable({
 
 /**
  * Vectors table - stores vector embeddings
- * Uses indexName field to support multiple indexes with different dimensions
+ * Uses indexName field to support multiple indexes with different dimensions.
+ *
+ * For native vector search (recommended for production), add a vectorIndex
+ * to your schema. See `createVectorTableWithSearch` for a helper.
+ *
+ * @example
+ * ```ts
+ * // In your convex/schema.ts - add native vector search
+ * import { mastraVectorsTable } from '@mastra/convex/schema';
+ *
+ * export default defineSchema({
+ *   // ... other tables
+ *   mastra_vectors: mastraVectorsTable
+ *     .vectorIndex('by_embedding', {
+ *       vectorField: 'embedding',
+ *       dimensions: 1536, // OpenAI ada-002
+ *       filterFields: ['indexName'],
+ *     }),
+ * });
+ * ```
  */
 export const mastraVectorsTable = defineTable({
   id: v.string(), // Mastra record ID
@@ -146,6 +165,22 @@ export const mastraVectorsTable = defineTable({
 })
   .index('by_index_id', ['indexName', 'id']) // Composite for scoped lookups per index
   .index('by_index', ['indexName']);
+
+/**
+ * Common embedding dimensions for reference:
+ * - OpenAI text-embedding-ada-002: 1536
+ * - OpenAI text-embedding-3-small: 1536
+ * - OpenAI text-embedding-3-large: 3072
+ * - Cohere embed-english-v3.0: 1024
+ * - Voyage voyage-02: 1024
+ */
+export const COMMON_EMBEDDING_DIMENSIONS = {
+  OPENAI_ADA_002: 1536,
+  OPENAI_3_SMALL: 1536,
+  OPENAI_3_LARGE: 3072,
+  COHERE_V3: 1024,
+  VOYAGE_02: 1024,
+} as const;
 
 // ============================================================================
 // Fallback Table - For unknown/custom tables

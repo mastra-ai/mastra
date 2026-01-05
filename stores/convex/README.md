@@ -53,18 +53,21 @@ import { mastraStorage } from '@mastra/convex/server';
 export const handle = mastraStorage;
 ```
 
-### 4. (Optional) Add live query functions
+### 4. (Optional) Add live query and vector search functions
 
 In `convex/mastra/queries.ts`:
 
 ```ts
 export {
+  // Live query functions for real-time subscriptions
   watchThread,
   watchMessages,
   watchThreadsByResource,
   watchWorkflowRun,
   watchWorkflowRuns,
   watchResource,
+  // Vector similarity search (uses native vectorIndex if available)
+  vectorSearch,
 } from '@mastra/convex/server';
 ```
 
@@ -204,7 +207,9 @@ Available live query functions:
 
 ## Vector Search
 
-Vector search is performed server-side with cosine similarity:
+### Basic Usage
+
+Vector search is performed server-side:
 
 ```ts
 const results = await vector.query({
@@ -215,17 +220,71 @@ const results = await vector.query({
 });
 ```
 
+### Native Vector Search (Recommended for Production)
+
+For optimal performance at scale, add a native Convex vector index to your schema:
+
+```ts
+// convex/schema.ts
+import { defineSchema } from 'convex/server';
+import { mastraVectorsTable, COMMON_EMBEDDING_DIMENSIONS } from '@mastra/convex/schema';
+
+export default defineSchema({
+  // ... other tables
+  
+  // Add native vector search for OpenAI embeddings
+  mastra_vectors: mastraVectorsTable.vectorIndex('by_embedding', {
+    vectorField: 'embedding',
+    dimensions: COMMON_EMBEDDING_DIMENSIONS.OPENAI_ADA_002, // 1536
+    filterFields: ['indexName'],
+  }),
+});
+```
+
+Common embedding dimensions:
+- **OpenAI text-embedding-ada-002**: 1536
+- **OpenAI text-embedding-3-small**: 1536
+- **OpenAI text-embedding-3-large**: 3072
+- **Cohere embed-english-v3.0**: 1024
+
+The adapter automatically:
+1. Tries native vector search first (if vectorIndex is defined)
+2. Falls back to brute-force search with server-side cosine similarity
+
+### Vector Search Query (for React)
+
+For real-time vector search in React apps, use the `vectorSearch` query:
+
+```tsx
+import { useQuery } from 'convex/react';
+import { api } from '../convex/_generated/api';
+
+function SimilarDocs({ embedding }: { embedding: number[] }) {
+  const results = useQuery(api.mastra.queries.vectorSearch, {
+    indexName: 'docs',
+    queryVector: embedding,
+    topK: 5,
+  });
+
+  return (
+    <ul>
+      {results?.map(r => (
+        <li key={r.id}>Score: {r.score.toFixed(3)}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
 ### Bandwidth Considerations
 
-Vector embeddings are large (1536 dimensions = ~12KB per vector). The adapter:
+Vector embeddings are large (1536 dimensions ≈ 12KB per vector). The adapter:
 
 1. Limits vector fetches to 500 documents by default
 2. Performs similarity calculation server-side in Convex
 3. Returns only the top-K results with scores
 
-For production vector search at scale, consider:
-- Adding a Convex `vectorIndex` to your schema for native vector search
-- Using a dedicated vector database for large collections
+With native vector search, Convex handles this efficiently using HNSW indexes.
 
 ## Testing
 
@@ -241,11 +300,15 @@ pnpm --filter @mastra/convex test
 
 ## Status
 
-Beta – the adapter is functional but may have breaking changes as we add native vector search and component packaging.
+Beta – the adapter is functional but may have breaking changes.
 
 ## Roadmap
 
-- [ ] Native Convex vector index support
+- [x] Native Convex vector index support (automatic fallback)
+- [x] Index-aware query routing
+- [x] Live query functions for real-time updates
+- [x] Safe batch sizes for bandwidth limits
+- [x] Runtime auth token support (non-admin)
 - [ ] Convex Component packaging for isolated namespaces
-- [ ] Cursor-based pagination for large result sets
+- [ ] Cursor-based pagination API exposed to users
 - [ ] Aggregation queries (counts without full scans)

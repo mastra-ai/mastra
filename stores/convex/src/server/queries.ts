@@ -1,5 +1,5 @@
 /**
- * Convex query functions for live-updating subscriptions.
+ * Convex query functions for live-updating subscriptions and vector search.
  *
  * These queries can be used with Convex's reactive query system to get
  * real-time updates when data changes.
@@ -12,6 +12,7 @@
  *   watchMessages,
  *   watchWorkflowRun,
  *   watchThreadsByResource,
+ *   vectorSearch,
  * } from '@mastra/convex/server/queries';
  * ```
  *
@@ -26,6 +27,93 @@
 
 import { queryGeneric } from 'convex/server';
 import { v } from 'convex/values';
+
+// ============================================================================
+// Vector Search Query
+// ============================================================================
+
+/**
+ * Perform native vector similarity search.
+ *
+ * Requires a vectorIndex to be defined on the mastra_vectors table:
+ * ```ts
+ * mastra_vectors: mastraVectorsTable.vectorIndex('by_embedding', {
+ *   vectorField: 'embedding',
+ *   dimensions: 1536,
+ *   filterFields: ['indexName'],
+ * })
+ * ```
+ *
+ * If no vectorIndex is defined, falls back to brute-force search.
+ */
+export const vectorSearch = queryGeneric({
+  args: {
+    indexName: v.string(),
+    queryVector: v.array(v.float64()),
+    topK: v.optional(v.number()),
+    includeVector: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { indexName, queryVector, topK = 10, includeVector = false }) => {
+    // Try native vector search first
+    try {
+      const results = await (ctx.db as any)
+        .query('mastra_vectors')
+        .withSearchIndex('by_embedding', (q: any) => q.vector('embedding', queryVector).eq('indexName', indexName))
+        .take(topK);
+
+      return results.map((doc: any) => ({
+        id: doc.id,
+        score: doc._score ?? 1.0,
+        metadata: doc.metadata,
+        ...(includeVector ? { vector: doc.embedding } : {}),
+      }));
+    } catch {
+      // Fall back to brute-force search
+      const docs = await ctx.db
+        .query('mastra_vectors')
+        .withIndex('by_index', (q: any) => q.eq('indexName', indexName))
+        .take(Math.min(500, topK * 10));
+
+      const scored = docs
+        .map((doc: any) => ({
+          id: doc.id,
+          score: cosineSimilarity(queryVector, doc.embedding),
+          metadata: doc.metadata,
+          ...(includeVector ? { vector: doc.embedding } : {}),
+        }))
+        .filter((r: any) => Number.isFinite(r.score))
+        .sort((a: any, b: any) => b.score - a.score)
+        .slice(0, topK);
+
+      return scored;
+    }
+  },
+});
+
+/**
+ * Calculate cosine similarity between two vectors.
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return -1;
+
+  let dot = 0,
+    magA = 0,
+    magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    const aVal = a[i] ?? 0;
+    const bVal = b[i] ?? 0;
+    dot += aVal * bVal;
+    magA += aVal * aVal;
+    magB += bVal * bVal;
+  }
+
+  if (magA === 0 || magB === 0) return -1;
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+}
+
+// ============================================================================
+// Live Query Functions
+// ============================================================================
 
 /**
  * Watch a thread by ID for live updates.
