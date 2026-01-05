@@ -13,6 +13,7 @@ import type { EvaluationResult, BenchmarkMetrics, QuestionType } from './data/ty
 import { PrepareCommand } from './commands/prepare';
 import { RunCommand } from './commands/run';
 import { SyncCommand } from './commands/sync';
+import { CleanCommand } from './commands/clean';
 
 const program = new Command();
 
@@ -444,6 +445,34 @@ program
   });
 
 // Results command - shows latest results for each memory configuration
+program
+  .command('clean')
+  .description('Delete prepared data by offset/subset')
+  .requiredOption('-d, --dataset <name>', 'Dataset name (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .option('-c, --memory-config <type>', 'Memory configuration to clean', 'observational-memory')
+  .option('-o, --offset <n>', 'Skip first N questions (delete from N+1 onwards)', parseInt)
+  .option('-s, --subset <n>', 'Only delete N questions (after offset)', parseInt)
+  .option('-q, --question-id <id>', 'Delete a specific question by ID')
+  .option('-p, --prepared-data <dir>', 'Prepared data directory', './prepared-data')
+  .option('--dry-run', 'Show what would be deleted without actually deleting')
+  .action(async options => {
+    try {
+      const cleanCommand = new CleanCommand();
+      await cleanCommand.run({
+        dataset: options.dataset,
+        memoryConfig: options.memoryConfig,
+        preparedDataDir: options.preparedData,
+        offset: options.offset,
+        subset: options.subset,
+        questionId: options.questionId,
+        dryRun: options.dryRun,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
 program
   .command('results')
   .description('Show latest benchmark results for each memory configuration')

@@ -466,17 +466,21 @@ Be specific rather than generic when the user has expressed clear preferences in
       inputProcessors: usesObservationalMemory
         ? [
             observationalMemory!,
-            // {
-            //   id: 'debug',
-            //   processInputStep: args => {
-            //     const omm = args.messageList.getSystemMessages(`observational-memory`);
-            //     if (omm.length && omm[0]?.content) {
-            //       writeFileSync(join(process.cwd(), 'omm.md'), omm[0].content as string);
-            //     }
-            //     omm;
-            //     return args.messageList;
-            //   },
-            // },
+            {
+              id: 'debug',
+              processInputStep: args => {
+                const omm = args.messageList.getSystemMessages(`observational-memory`);
+                if (omm.length && omm[0]?.content) {
+                  writeFileSync(
+                    join(process.cwd(), 'omm.md'),
+                    (omm[0].content as string) +
+                      `\n\n${JSON.stringify(args.messageList.get.all.core(), null, 2)}\n\n${JSON.stringify(args.requestContext?.get('MastraMemory') || {}, null, 2)}`,
+                  );
+                }
+                omm;
+                return args.messageList;
+              },
+            },
           ]
         : undefined,
       outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
@@ -527,11 +531,11 @@ Be specific rather than generic when the user has expressed clear preferences in
     // Check if there's an improved version - if so, we'll only retry that one
     const hasImprovedVersion = !!(meta.improvedQuestion || meta.improvedAnswer);
 
-    // Retry up to 5 times if requiresRetry is set and the first attempt failed
+    // Retry failed evaluations: always at least 1 retry, up to 5 if requiresRetry is set
     // Only retry vanilla if there's NO improved version (otherwise we retry the improved one)
     let retryCount = 0;
-    const maxRetries = 5;
-    while (!isCorrect && meta.requiresRetry && !hasImprovedVersion && retryCount < maxRetries) {
+    const maxRetries = meta.requiresRetry ? 5 : 1;
+    while (!isCorrect && !hasImprovedVersion && retryCount < maxRetries) {
       retryCount++;
       updateStatus(`Retry ${retryCount}/${maxRetries} for ${meta.questionId}...`);
 
