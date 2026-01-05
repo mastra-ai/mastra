@@ -98,6 +98,23 @@ export interface AgentRunMetrics {
   success: boolean;
   /** Error type if failed */
   errorType?: string;
+
+  // ---- Agentic-Specific Metrics ----
+
+  /** Time to first action (tool call or final response) in ms */
+  timeToFirstActionMs?: number;
+  /** Whether the agent completed its goal */
+  goalCompleted?: boolean;
+  /** Number of times agent backtracked/retried */
+  backtrackCount?: number;
+  /** Number of guardrail/tripwire triggers */
+  guardrailTriggerCount?: number;
+  /** Human interventions (approvals requested) */
+  humanInterventionCount?: number;
+  /** Steps that were only thinking (no tool calls) */
+  thinkingStepCount?: number;
+  /** Steps that included tool calls */
+  actionStepCount?: number;
 }
 
 /**
@@ -270,6 +287,145 @@ export interface HttpAggregateMetrics {
   byHost: Record<string, number>;
 }
 
+// ============================================================================
+// Agentic-Specific Metrics
+// ============================================================================
+
+/**
+ * Finish reasons and their semantic meaning for goal tracking
+ */
+export type AgentFinishReason =
+  | 'stop' // Agent decided it was done - GOAL COMPLETED
+  | 'end-turn' // End of turn - GOAL COMPLETED
+  | 'tool-calls' // Made tool calls, continuing - IN PROGRESS
+  | 'length' // Hit token limit - GOAL INCOMPLETE
+  | 'content-filter' // Blocked by safety filter - GOAL BLOCKED
+  | 'tripwire' // Guardrail triggered - GOAL BLOCKED
+  | 'retry' // Processor requested retry - IN PROGRESS
+  | 'error' // Exception occurred - GOAL FAILED
+  | 'timeout' // Took too long - GOAL FAILED
+  | 'cancelled' // User cancelled - GOAL ABANDONED
+  | 'unknown'; // Unknown state
+
+/**
+ * Maps finish reasons to goal states
+ */
+export function classifyGoalState(
+  finishReason: string | undefined,
+): 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned' | 'unknown' {
+  switch (finishReason) {
+    case 'stop':
+    case 'end-turn':
+      return 'completed';
+    case 'length':
+    case 'max-steps':
+      return 'incomplete';
+    case 'content-filter':
+    case 'tripwire':
+      return 'blocked';
+    case 'error':
+    case 'timeout':
+      return 'failed';
+    case 'cancelled':
+      return 'abandoned';
+    default:
+      return 'unknown';
+  }
+}
+
+/**
+ * Metrics for guardrail/tripwire events
+ */
+export interface GuardrailMetrics {
+  /** Agent ID */
+  agentId?: string;
+  /** Run ID */
+  runId: string;
+  /** Which processor triggered the guardrail */
+  processorId?: string;
+  /** Reason for the trigger */
+  reason: string;
+  /** Whether the agent will retry */
+  willRetry: boolean;
+  /** Additional metadata from the processor */
+  metadata?: Record<string, unknown>;
+  /** Timestamp */
+  timestamp: Date;
+}
+
+/**
+ * Metrics for human-in-the-loop interactions
+ */
+export interface HumanInterventionMetrics {
+  /** Agent ID */
+  agentId?: string;
+  /** Run ID */
+  runId: string;
+  /** Type of intervention */
+  type: 'approval_requested' | 'approved' | 'declined' | 'override';
+  /** Tool that required approval (if applicable) */
+  toolName?: string;
+  /** Tool call ID */
+  toolCallId?: string;
+  /** Time spent waiting for human (if completed) */
+  waitTimeMs?: number;
+  /** Timestamp */
+  timestamp: Date;
+}
+
+/**
+ * Per-step timing breakdown
+ */
+export interface StepTimingMetrics {
+  /** Step index (0-based) */
+  stepIndex: number;
+  /** Step type */
+  stepType: 'thinking' | 'action' | 'mixed';
+  /** Time spent in LLM generation */
+  llmTimeMs: number;
+  /** Time spent executing tools */
+  toolTimeMs: number;
+  /** Time to first token for this step */
+  ttftMs?: number;
+  /** Token usage for this step */
+  tokenUsage: TokenUsage;
+  /** Tool calls made in this step */
+  toolCalls: string[];
+  /** Finish reason for this step */
+  finishReason?: string;
+}
+
+/**
+ * Extended agent run metrics with full agentic context
+ */
+export interface AgenticRunMetrics extends AgentRunMetrics {
+  // ---- Goal Achievement ----
+  /** Classified goal state */
+  goalState: 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned' | 'unknown';
+
+  // ---- Timing Breakdown ----
+  /** Per-step timing details */
+  stepTimings?: StepTimingMetrics[];
+  /** Total time in LLM calls */
+  totalLlmTimeMs?: number;
+  /** Total time in tool execution */
+  totalToolTimeMs?: number;
+
+  // ---- Reasoning Efficiency ----
+  /** Ratio of thinking steps to action steps */
+  thinkingToActionRatio?: number;
+
+  // ---- Guardrails ----
+  /** Guardrail events that occurred */
+  guardrailEvents?: GuardrailMetrics[];
+
+  // ---- Human Involvement ----
+  /** Human intervention events */
+  humanEvents?: HumanInterventionMetrics[];
+  /** Total time waiting for humans */
+  humanWaitTimeMs?: number;
+}
+
 /**
  * Metrics for a single model call
  */
@@ -358,6 +514,36 @@ export const MetricNames = {
   HTTP_REQUEST_DURATION: 'http_request_duration_ms',
   HTTP_BYTES_SENT: 'http_bytes_sent_total',
   HTTP_BYTES_RECEIVED: 'http_bytes_received_total',
+
+  // Agentic metrics - Goal Achievement
+  GOAL_COMPLETED: 'agent_goal_completed_total',
+  GOAL_INCOMPLETE: 'agent_goal_incomplete_total',
+  GOAL_BLOCKED: 'agent_goal_blocked_total',
+  GOAL_FAILED: 'agent_goal_failed_total',
+  GOAL_ABANDONED: 'agent_goal_abandoned_total',
+
+  // Agentic metrics - Timing
+  TIME_TO_FIRST_ACTION: 'agent_time_to_first_action_ms',
+  LLM_TIME_TOTAL: 'agent_llm_time_ms',
+  TOOL_TIME_TOTAL: 'agent_tool_time_ms',
+  HUMAN_WAIT_TIME: 'agent_human_wait_time_ms',
+
+  // Agentic metrics - Reasoning
+  STEPS_PER_RUN: 'agent_steps_per_run',
+  THINKING_STEPS: 'agent_thinking_steps_total',
+  ACTION_STEPS: 'agent_action_steps_total',
+  BACKTRACK_COUNT: 'agent_backtracks_total',
+
+  // Agentic metrics - Guardrails
+  GUARDRAIL_TRIGGERS: 'agent_guardrail_triggers_total',
+  GUARDRAIL_RETRIES: 'agent_guardrail_retries_total',
+  GUARDRAIL_BLOCKS: 'agent_guardrail_blocks_total',
+
+  // Agentic metrics - Human in the Loop
+  HUMAN_APPROVALS_REQUESTED: 'agent_human_approvals_requested_total',
+  HUMAN_APPROVALS_GRANTED: 'agent_human_approvals_granted_total',
+  HUMAN_APPROVALS_DENIED: 'agent_human_approvals_denied_total',
+  HUMAN_OVERRIDES: 'agent_human_overrides_total',
 } as const;
 
 // ============================================================================
@@ -435,6 +621,23 @@ export interface IMetricsCollector {
    * Record cost
    */
   recordCost(cost: CostBreakdown, labels?: MetricLabels): void;
+
+  // ---- Agentic-Specific Methods ----
+
+  /**
+   * Record a guardrail/tripwire trigger
+   */
+  recordGuardrailTrigger(metrics: GuardrailMetrics): void;
+
+  /**
+   * Record a human intervention event
+   */
+  recordHumanIntervention(metrics: HumanInterventionMetrics): void;
+
+  /**
+   * Record goal completion state
+   */
+  recordGoalState(state: 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned', labels?: MetricLabels): void;
 
   // ---- Lifecycle ----
 
@@ -626,6 +829,84 @@ export abstract class BaseMetricsCollector implements IMetricsCollector {
   }
 
   /**
+   * Record a guardrail/tripwire trigger.
+   * Override this method if you need custom behavior.
+   */
+  recordGuardrailTrigger(metrics: GuardrailMetrics): void {
+    const labels: MetricLabels = {
+      agentId: metrics.agentId,
+      processorId: metrics.processorId,
+    };
+
+    this.incrementCounter(MetricNames.GUARDRAIL_TRIGGERS, labels);
+    if (metrics.willRetry) {
+      this.incrementCounter(MetricNames.GUARDRAIL_RETRIES, labels);
+    } else {
+      this.incrementCounter(MetricNames.GUARDRAIL_BLOCKS, labels);
+    }
+  }
+
+  /**
+   * Record a human intervention event.
+   * Override this method if you need custom behavior.
+   */
+  recordHumanIntervention(metrics: HumanInterventionMetrics): void {
+    const labels: MetricLabels = {
+      agentId: metrics.agentId,
+      type: metrics.type,
+      toolName: metrics.toolName,
+    };
+
+    switch (metrics.type) {
+      case 'approval_requested':
+        this.incrementCounter(MetricNames.HUMAN_APPROVALS_REQUESTED, labels);
+        break;
+      case 'approved':
+        this.incrementCounter(MetricNames.HUMAN_APPROVALS_GRANTED, labels);
+        if (metrics.waitTimeMs) {
+          this.recordHistogram(MetricNames.HUMAN_WAIT_TIME, labels, metrics.waitTimeMs);
+        }
+        break;
+      case 'declined':
+        this.incrementCounter(MetricNames.HUMAN_APPROVALS_DENIED, labels);
+        if (metrics.waitTimeMs) {
+          this.recordHistogram(MetricNames.HUMAN_WAIT_TIME, labels, metrics.waitTimeMs);
+        }
+        break;
+      case 'override':
+        this.incrementCounter(MetricNames.HUMAN_OVERRIDES, labels);
+        break;
+    }
+  }
+
+  /**
+   * Record goal completion state.
+   * Override this method if you need custom behavior.
+   */
+  recordGoalState(
+    state: 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned',
+    labels: MetricLabels = {},
+  ): void {
+    switch (state) {
+      case 'completed':
+        this.incrementCounter(MetricNames.GOAL_COMPLETED, labels);
+        break;
+      case 'incomplete':
+        this.incrementCounter(MetricNames.GOAL_INCOMPLETE, labels);
+        break;
+      case 'blocked':
+        this.incrementCounter(MetricNames.GOAL_BLOCKED, labels);
+        break;
+      case 'failed':
+        this.incrementCounter(MetricNames.GOAL_FAILED, labels);
+        break;
+      case 'abandoned':
+        this.incrementCounter(MetricNames.GOAL_ABANDONED, labels);
+        break;
+    }
+  }
+
+  /**
    * Record token usage.
    * Override this method if you need custom behavior.
    */
@@ -697,6 +978,21 @@ export class NoOpMetricsCollector implements IMetricsCollector {
     // No-op
   }
 
+  recordGuardrailTrigger(_metrics: GuardrailMetrics): void {
+    // No-op
+  }
+
+  recordHumanIntervention(_metrics: HumanInterventionMetrics): void {
+    // No-op
+  }
+
+  recordGoalState(
+    _state: 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned',
+    _labels?: MetricLabels,
+  ): void {
+    // No-op
+  }
+
   recordTokenUsage(_usage: TokenUsage, _labels?: MetricLabels): void {
     // No-op
   }
@@ -736,6 +1032,8 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
   private toolExecutions: ToolExecutionMetrics[] = [];
   private modelCalls: ModelCallMetrics[] = [];
   private httpRequests: HttpRequestMetrics[] = [];
+  private guardrailEvents: GuardrailMetrics[] = [];
+  private humanEvents: HumanInterventionMetrics[] = [];
 
   private makeKey(name: string, labels?: MetricLabels): string {
     if (!labels) return name;
@@ -801,6 +1099,16 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
     super.recordHttpRequest(metrics);
   }
 
+  override recordGuardrailTrigger(metrics: GuardrailMetrics): void {
+    this.guardrailEvents.push(metrics);
+    super.recordGuardrailTrigger(metrics);
+  }
+
+  override recordHumanIntervention(metrics: HumanInterventionMetrics): void {
+    this.humanEvents.push(metrics);
+    super.recordHumanIntervention(metrics);
+  }
+
   // ---- Accessors for testing/debugging ----
 
   getCounter(name: string, labels?: MetricLabels): number {
@@ -835,6 +1143,14 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
     return [...this.httpRequests];
   }
 
+  getGuardrailEvents(): GuardrailMetrics[] {
+    return [...this.guardrailEvents];
+  }
+
+  getHumanEvents(): HumanInterventionMetrics[] {
+    return [...this.humanEvents];
+  }
+
   getAllCounters(): Map<string, number> {
     return new Map(this.counters);
   }
@@ -848,5 +1164,7 @@ export class InMemoryMetricsCollector extends BaseMetricsCollector {
     this.toolExecutions = [];
     this.modelCalls = [];
     this.httpRequests = [];
+    this.guardrailEvents = [];
+    this.humanEvents = [];
   }
 }

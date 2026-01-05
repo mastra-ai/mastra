@@ -72,6 +72,8 @@ export type LogEventCategory =
   | 'resource' // Resource consumption (tokens, cost)
   | 'quality' // Quality signals (scores, feedback)
   | 'http' // HTTP requests and responses
+  | 'guardrail' // Guardrail/tripwire triggers
+  | 'human' // Human-in-the-loop interactions
   | 'error'; // Errors and failures
 
 // ============================================================================
@@ -372,10 +374,17 @@ export interface GuardrailTriggeredEvent extends BaseLogEvent {
   category: 'decision';
   event: 'guardrail.triggered';
   data: {
+    /** Guardrail/processor ID */
     guardrailId: string;
     guardrailName?: string;
-    action: 'blocked' | 'warned' | 'modified';
+    /** Action taken */
+    action: 'blocked' | 'warned' | 'modified' | 'retry';
+    /** Reason for trigger */
     reason?: string;
+    /** Whether the agent will retry */
+    willRetry?: boolean;
+    /** Additional metadata */
+    metadata?: Record<string, unknown>;
   };
 }
 
@@ -495,6 +504,67 @@ export interface HttpErrorEvent extends BaseLogEvent {
 }
 
 // ============================================================================
+// Agentic Events (Unique to AI Agents)
+// ============================================================================
+
+export interface GoalStateEvent extends BaseLogEvent {
+  category: 'lifecycle';
+  event: 'agent.goal';
+  data: {
+    agentName: string;
+    state: 'completed' | 'incomplete' | 'blocked' | 'failed' | 'abandoned';
+    finishReason?: string;
+    stepCount: number;
+    durationMs: number;
+  };
+}
+
+export interface HumanApprovalRequestedEvent extends BaseLogEvent {
+  category: 'human';
+  event: 'human.approval_requested';
+  data: {
+    toolName: string;
+    toolCallId: string;
+    args?: Record<string, unknown>;
+  };
+}
+
+export interface HumanApprovalResponseEvent extends BaseLogEvent {
+  category: 'human';
+  event: 'human.approval_response';
+  data: {
+    toolName: string;
+    toolCallId: string;
+    approved: boolean;
+    waitTimeMs: number;
+  };
+}
+
+export interface BacktrackEvent extends BaseLogEvent {
+  category: 'lifecycle';
+  event: 'agent.backtrack';
+  data: {
+    agentName: string;
+    reason: string;
+    fromStep: number;
+    processorId?: string;
+  };
+}
+
+export interface StepAnalysisEvent extends BaseLogEvent {
+  category: 'lifecycle';
+  event: 'agent.step';
+  data: {
+    stepIndex: number;
+    stepType: 'thinking' | 'action' | 'mixed';
+    llmTimeMs: number;
+    toolTimeMs: number;
+    toolCalls: string[];
+    finishReason?: string;
+  };
+}
+
+// ============================================================================
 // Error Events
 // ============================================================================
 
@@ -582,6 +652,16 @@ export type QualityEvent = ScoreComputedEvent | FeedbackReceivedEvent;
 export type HttpEvent = HttpRequestEvent | HttpResponseEvent | HttpErrorEvent;
 
 /**
+ * All human-in-the-loop events
+ */
+export type HumanEvent = HumanApprovalRequestedEvent | HumanApprovalResponseEvent;
+
+/**
+ * All agentic-specific events (unique to AI agents)
+ */
+export type AgenticEvent = HumanEvent | GoalStateEvent | BacktrackEvent | StepAnalysisEvent;
+
+/**
  * All error events (beyond AgentErrorEvent)
  */
 export type ErrorEvent = AgentErrorEvent | RateLimitEvent | TimeoutEvent;
@@ -598,6 +678,7 @@ export type AgentLogEvent =
   | ResourceEvent
   | QualityEvent
   | HttpEvent
+  | AgenticEvent
   | ErrorEvent;
 
 // ============================================================================

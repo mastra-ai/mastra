@@ -31,6 +31,11 @@ import type {
   ScoreComputedEvent,
   DecisionMadeEvent,
   GuardrailTriggeredEvent,
+  GoalStateEvent,
+  HumanApprovalRequestedEvent,
+  HumanApprovalResponseEvent,
+  BacktrackEvent,
+  StepAnalysisEvent,
   HttpRequestEvent,
   HttpResponseEvent,
   HttpErrorEvent,
@@ -42,10 +47,7 @@ import type {
 // Agent Events
 // ============================================================================
 
-export function agentStarted(
-  context: LogContext,
-  data: AgentStartedEvent['data'],
-): AgentStartedEvent {
+export function agentStarted(context: LogContext, data: AgentStartedEvent['data']): AgentStartedEvent {
   return {
     category: 'lifecycle',
     event: 'agent.started',
@@ -57,10 +59,7 @@ export function agentStarted(
   };
 }
 
-export function agentCompleted(
-  context: LogContext,
-  data: AgentCompletedEvent['data'],
-): AgentCompletedEvent {
+export function agentCompleted(context: LogContext, data: AgentCompletedEvent['data']): AgentCompletedEvent {
   return {
     category: 'lifecycle',
     event: 'agent.completed',
@@ -72,10 +71,7 @@ export function agentCompleted(
   };
 }
 
-export function agentError(
-  context: LogContext,
-  data: AgentErrorEvent['data'],
-): AgentErrorEvent {
+export function agentError(context: LogContext, data: AgentErrorEvent['data']): AgentErrorEvent {
   return {
     category: 'error',
     event: 'agent.error',
@@ -91,10 +87,7 @@ export function agentError(
 // Workflow Events
 // ============================================================================
 
-export function workflowStarted(
-  context: LogContext,
-  data: WorkflowStartedEvent['data'],
-): WorkflowStartedEvent {
+export function workflowStarted(context: LogContext, data: WorkflowStartedEvent['data']): WorkflowStartedEvent {
   return {
     category: 'lifecycle',
     event: 'workflow.started',
@@ -106,10 +99,7 @@ export function workflowStarted(
   };
 }
 
-export function workflowCompleted(
-  context: LogContext,
-  data: WorkflowCompletedEvent['data'],
-): WorkflowCompletedEvent {
+export function workflowCompleted(context: LogContext, data: WorkflowCompletedEvent['data']): WorkflowCompletedEvent {
   return {
     category: 'lifecycle',
     event: 'workflow.completed',
@@ -155,10 +145,7 @@ export function workflowStepCompleted(
 // Model Events
 // ============================================================================
 
-export function modelRequest(
-  context: LogContext,
-  data: ModelRequestEvent['data'],
-): ModelRequestEvent {
+export function modelRequest(context: LogContext, data: ModelRequestEvent['data']): ModelRequestEvent {
   return {
     category: 'model',
     event: 'model.request',
@@ -170,13 +157,8 @@ export function modelRequest(
   };
 }
 
-export function modelResponse(
-  context: LogContext,
-  data: ModelResponseEvent['data'],
-): ModelResponseEvent {
-  const tokens = data.inputTokens && data.outputTokens
-    ? ` (${data.inputTokens}+${data.outputTokens} tokens)`
-    : '';
+export function modelResponse(context: LogContext, data: ModelResponseEvent['data']): ModelResponseEvent {
+  const tokens = data.inputTokens && data.outputTokens ? ` (${data.inputTokens}+${data.outputTokens} tokens)` : '';
   return {
     category: 'model',
     event: 'model.response',
@@ -188,10 +170,7 @@ export function modelResponse(
   };
 }
 
-export function modelStreamStart(
-  context: LogContext,
-  data: ModelStreamStartEvent['data'],
-): ModelStreamStartEvent {
+export function modelStreamStart(context: LogContext, data: ModelStreamStartEvent['data']): ModelStreamStartEvent {
   return {
     category: 'model',
     event: 'model.stream.start',
@@ -203,10 +182,7 @@ export function modelStreamStart(
   };
 }
 
-export function modelStreamEnd(
-  context: LogContext,
-  data: ModelStreamEndEvent['data'],
-): ModelStreamEndEvent {
+export function modelStreamEnd(context: LogContext, data: ModelStreamEndEvent['data']): ModelStreamEndEvent {
   const ttft = data.timeToFirstTokenMs ? ` (TTFT: ${data.timeToFirstTokenMs}ms)` : '';
   return {
     category: 'model',
@@ -219,10 +195,7 @@ export function modelStreamEnd(
   };
 }
 
-export function modelRetry(
-  context: LogContext,
-  data: ModelRetryEvent['data'],
-): ModelRetryEvent {
+export function modelRetry(context: LogContext, data: ModelRetryEvent['data']): ModelRetryEvent {
   return {
     category: 'model',
     event: 'model.retry',
@@ -234,10 +207,7 @@ export function modelRetry(
   };
 }
 
-export function modelFallback(
-  context: LogContext,
-  data: ModelFallbackEvent['data'],
-): ModelFallbackEvent {
+export function modelFallback(context: LogContext, data: ModelFallbackEvent['data']): ModelFallbackEvent {
   return {
     category: 'model',
     event: 'model.fallback',
@@ -253,10 +223,7 @@ export function modelFallback(
 // Tool Events
 // ============================================================================
 
-export function toolCalled(
-  context: LogContext,
-  data: ToolCalledEvent['data'],
-): ToolCalledEvent {
+export function toolCalled(context: LogContext, data: ToolCalledEvent['data']): ToolCalledEvent {
   return {
     category: 'tool',
     event: 'tool.called',
@@ -268,10 +235,7 @@ export function toolCalled(
   };
 }
 
-export function toolResult(
-  context: LogContext,
-  data: ToolResultEvent['data'],
-): ToolResultEvent {
+export function toolResult(context: LogContext, data: ToolResultEvent['data']): ToolResultEvent {
   const status = data.success ? 'succeeded' : 'failed';
   return {
     category: 'tool',
@@ -288,10 +252,7 @@ export function toolResult(
 // Memory Events
 // ============================================================================
 
-export function memoryRetrieved(
-  context: LogContext,
-  data: MemoryRetrievedEvent['data'],
-): MemoryRetrievedEvent {
+export function memoryRetrieved(context: LogContext, data: MemoryRetrievedEvent['data']): MemoryRetrievedEvent {
   return {
     category: 'memory',
     event: 'memory.retrieved',
@@ -303,10 +264,7 @@ export function memoryRetrieved(
   };
 }
 
-export function memorySaved(
-  context: LogContext,
-  data: MemorySavedEvent['data'],
-): MemorySavedEvent {
+export function memorySaved(context: LogContext, data: MemorySavedEvent['data']): MemorySavedEvent {
   return {
     category: 'memory',
     event: 'memory.saved',
@@ -322,10 +280,7 @@ export function memorySaved(
 // Resource Events
 // ============================================================================
 
-export function tokenUsage(
-  context: LogContext,
-  data: TokenUsageEvent['data'],
-): TokenUsageEvent {
+export function tokenUsage(context: LogContext, data: TokenUsageEvent['data']): TokenUsageEvent {
   return {
     category: 'resource',
     event: 'resource.tokens',
@@ -337,10 +292,7 @@ export function tokenUsage(
   };
 }
 
-export function costIncurred(
-  context: LogContext,
-  data: CostIncurredEvent['data'],
-): CostIncurredEvent {
+export function costIncurred(context: LogContext, data: CostIncurredEvent['data']): CostIncurredEvent {
   return {
     category: 'resource',
     event: 'resource.cost',
@@ -356,10 +308,7 @@ export function costIncurred(
 // Quality Events
 // ============================================================================
 
-export function scoreComputed(
-  context: LogContext,
-  data: ScoreComputedEvent['data'],
-): ScoreComputedEvent {
+export function scoreComputed(context: LogContext, data: ScoreComputedEvent['data']): ScoreComputedEvent {
   return {
     category: 'quality',
     event: 'quality.score',
@@ -375,10 +324,7 @@ export function scoreComputed(
 // Decision Events
 // ============================================================================
 
-export function decisionMade(
-  context: LogContext,
-  data: DecisionMadeEvent['data'],
-): DecisionMadeEvent {
+export function decisionMade(context: LogContext, data: DecisionMadeEvent['data']): DecisionMadeEvent {
   return {
     category: 'decision',
     event: 'decision.made',
@@ -394,13 +340,14 @@ export function guardrailTriggered(
   context: LogContext,
   data: GuardrailTriggeredEvent['data'],
 ): GuardrailTriggeredEvent {
+  const retryText = data.willRetry ? ' (will retry)' : '';
   return {
     category: 'decision',
     event: 'guardrail.triggered',
     level: data.action === 'blocked' ? LogLevel.WARN : LogLevel.INFO,
     context,
     timestamp: new Date(),
-    message: `Guardrail ${data.guardrailName || data.guardrailId} ${data.action}`,
+    message: `Guardrail ${data.guardrailName || data.guardrailId} ${data.action}${retryText}`,
     data,
   };
 }
@@ -409,10 +356,7 @@ export function guardrailTriggered(
 // Error Events
 // ============================================================================
 
-export function rateLimitHit(
-  context: LogContext,
-  data: RateLimitEvent['data'],
-): RateLimitEvent {
+export function rateLimitHit(context: LogContext, data: RateLimitEvent['data']): RateLimitEvent {
   return {
     category: 'error',
     event: 'error.rate_limit',
@@ -424,10 +368,7 @@ export function rateLimitHit(
   };
 }
 
-export function timeout(
-  context: LogContext,
-  data: TimeoutEvent['data'],
-): TimeoutEvent {
+export function timeout(context: LogContext, data: TimeoutEvent['data']): TimeoutEvent {
   return {
     category: 'error',
     event: 'error.timeout',
@@ -443,10 +384,7 @@ export function timeout(
 // HTTP Events
 // ============================================================================
 
-export function httpRequest(
-  context: LogContext,
-  data: HttpRequestEvent['data'],
-): HttpRequestEvent {
+export function httpRequest(context: LogContext, data: HttpRequestEvent['data']): HttpRequestEvent {
   const arrow = data.direction === 'outbound' ? '→' : '←';
   return {
     category: 'http',
@@ -459,10 +397,7 @@ export function httpRequest(
   };
 }
 
-export function httpResponse(
-  context: LogContext,
-  data: HttpResponseEvent['data'],
-): HttpResponseEvent {
+export function httpResponse(context: LogContext, data: HttpResponseEvent['data']): HttpResponseEvent {
   const arrow = data.direction === 'outbound' ? '←' : '→';
   const status = data.success ? data.statusCode : `${data.statusCode} FAILED`;
   return {
@@ -476,10 +411,7 @@ export function httpResponse(
   };
 }
 
-export function httpError(
-  context: LogContext,
-  data: HttpErrorEvent['data'],
-): HttpErrorEvent {
+export function httpError(context: LogContext, data: HttpErrorEvent['data']): HttpErrorEvent {
   return {
     category: 'http',
     event: 'http.error',
@@ -487,6 +419,86 @@ export function httpError(
     context,
     timestamp: new Date(),
     message: `HTTP ${data.method} ${data.url} failed: ${data.errorMessage}`,
+    data,
+  };
+}
+
+// ============================================================================
+// Agentic Events
+// ============================================================================
+
+export function goalState(context: LogContext, data: GoalStateEvent['data']): GoalStateEvent {
+  const stateEmoji = {
+    completed: '✓',
+    incomplete: '…',
+    blocked: '⛔',
+    failed: '✗',
+    abandoned: '⏹',
+  }[data.state];
+  return {
+    category: 'lifecycle',
+    event: 'agent.goal',
+    level: data.state === 'completed' ? LogLevel.INFO : LogLevel.WARN,
+    context,
+    timestamp: new Date(),
+    message: `${stateEmoji} Agent ${data.agentName} goal ${data.state} after ${data.stepCount} steps (${data.durationMs}ms)`,
+    data,
+  };
+}
+
+export function humanApprovalRequested(
+  context: LogContext,
+  data: HumanApprovalRequestedEvent['data'],
+): HumanApprovalRequestedEvent {
+  return {
+    category: 'human',
+    event: 'human.approval_requested',
+    level: LogLevel.INFO,
+    context,
+    timestamp: new Date(),
+    message: `⏸ Awaiting human approval for tool: ${data.toolName}`,
+    data,
+  };
+}
+
+export function humanApprovalResponse(
+  context: LogContext,
+  data: HumanApprovalResponseEvent['data'],
+): HumanApprovalResponseEvent {
+  const result = data.approved ? '✓ Approved' : '✗ Denied';
+  return {
+    category: 'human',
+    event: 'human.approval_response',
+    level: data.approved ? LogLevel.INFO : LogLevel.WARN,
+    context,
+    timestamp: new Date(),
+    message: `${result}: ${data.toolName} (waited ${data.waitTimeMs}ms)`,
+    data,
+  };
+}
+
+export function backtrack(context: LogContext, data: BacktrackEvent['data']): BacktrackEvent {
+  return {
+    category: 'lifecycle',
+    event: 'agent.backtrack',
+    level: LogLevel.WARN,
+    context,
+    timestamp: new Date(),
+    message: `↩ Agent ${data.agentName} backtracking from step ${data.fromStep}: ${data.reason}`,
+    data,
+  };
+}
+
+export function stepAnalysis(context: LogContext, data: StepAnalysisEvent['data']): StepAnalysisEvent {
+  const typeEmoji = { thinking: '💭', action: '⚡', mixed: '🔄' }[data.stepType];
+  const tools = data.toolCalls.length > 0 ? ` [${data.toolCalls.join(', ')}]` : '';
+  return {
+    category: 'lifecycle',
+    event: 'agent.step',
+    level: LogLevel.DEBUG,
+    context,
+    timestamp: new Date(),
+    message: `${typeEmoji} Step ${data.stepIndex}: ${data.stepType} (LLM: ${data.llmTimeMs}ms, Tools: ${data.toolTimeMs}ms)${tools}`,
     data,
   };
 }
