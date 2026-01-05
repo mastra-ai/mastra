@@ -23,12 +23,12 @@
     "@mastra/memory": "beta",
     "@mastra/observability": "beta",
     "@browserbasehq/stagehand": "^2.5.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/node": "^24.0.4",
     "mastra": "beta",
-    "dotenv": "^17.2.1",
+    "dotenv": "^16.4.5",
     "typescript": "^5.8.3"
   }
 }
