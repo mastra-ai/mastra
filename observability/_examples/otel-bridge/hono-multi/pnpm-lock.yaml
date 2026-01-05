@@ -18,7 +18,7 @@ importers:
     devDependencies:
       '@hono/otel':
         specifier: ^1.0.1
-        version: 1.0.1(hono@4.10.6)
+        version: 1.0.1(hono@4.11.3)
       '@types/node':
         specifier: ^20.19.0
         version: 20.19.25
@@ -54,7 +54,7 @@ importers:
         version: 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.2.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))
       '@hono/otel':
         specifier: ^1.0.1
-        version: 1.0.1(hono@4.10.6)
+        version: 1.0.1(hono@4.11.3)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -118,13 +118,13 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.15.1
-        version: 1.19.6(hono@4.10.6)
+        version: 1.19.6(hono@4.11.3)
       '@hono/otel':
         specifier: ^1.0.1
-        version: 1.0.1(hono@4.10.6)
+        version: 1.0.1(hono@4.11.3)
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.10.6)
+        version: 0.5.2(hono@4.11.3)
       '@mastra/core':
         specifier: link:../../../../../packages/core
         version: link:../../../../../packages/core
@@ -153,8 +153,8 @@ importers:
         specifier: ^17.2.0
         version: 17.2.3
       hono:
-        specifier: ^4.10.1
-        version: 4.10.6
+        specifier: ^4.11.3
+        version: 4.11.3
       zod:
         specifier: ^4.1.13
         version: 4.1.13
@@ -179,10 +179,10 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.6(hono@4.10.6)
+        version: 1.19.6(hono@4.11.3)
       '@hono/otel':
         specifier: ^1.0.1
-        version: 1.0.1(hono@4.10.6)
+        version: 1.0.1(hono@4.11.3)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
         version: link:../instrumentation
@@ -193,8 +193,8 @@ importers:
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
       hono:
-        specifier: ^4.10.1
-        version: 4.10.6
+        specifier: ^4.11.3
+        version: 4.11.3
     devDependencies:
       '@types/node':
         specifier: ^20.19.0
@@ -213,10 +213,10 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.19.5
-        version: 1.19.6(hono@4.10.6)
+        version: 1.19.6(hono@4.11.3)
       '@hono/otel':
         specifier: ^1.0.1
-        version: 1.0.1(hono@4.10.6)
+        version: 1.0.1(hono@4.11.3)
       '@mastra/hono-multi-instrumentation':
         specifier: workspace:*
         version: link:../instrumentation
@@ -227,8 +227,8 @@ importers:
         specifier: ^0.208.0
         version: 0.208.0(@opentelemetry/api@1.9.0)
       hono:
-        specifier: ^4.10.1
-        version: 4.10.6
+        specifier: ^4.11.3
+        version: 4.11.3
     devDependencies:
       '@types/node':
         specifier: ^20.19.0
@@ -1255,8 +1255,8 @@ packages:
     resolution: {integrity: sha512-+CqsMbHPiSTdtSO14O51eMNlrp9N79gmeqmXeouJOhfucAedHw9noVe/n5uJk3tbKE6a+6ZCQg3RPhVhHByAIw==}
     engines: {node: '>=18'}
 
-  hono@4.10.6:
-    resolution: {integrity: sha512-BIdolzGpDO9MQ4nu3AUuDwHZZ+KViNm+EZ75Ae55eMXMqLVhDFqEMXxtUe9Qh8hjL+pIna/frs2j6Y2yD5Ua/g==}
+  hono@4.11.3:
+    resolution: {integrity: sha512-PmQi306+M/ct/m5s66Hrg+adPnkD5jiO6IjA7WhWw0gSBSo1EcRegwuI1deZ+wd5pzCGynCcn2DprnE4/yEV4w==}
     engines: {node: '>=16.9.0'}
 
   http-proxy-agent@5.0.0:
@@ -1898,19 +1898,19 @@ snapshots:
       protobufjs: 7.5.4
       yargs: 17.7.2
 
-  '@hono/node-server@1.19.6(hono@4.10.6)':
+  '@hono/node-server@1.19.6(hono@4.11.3)':
     dependencies:
-      hono: 4.10.6
+      hono: 4.11.3
 
-  '@hono/otel@1.0.1(hono@4.10.6)':
+  '@hono/otel@1.0.1(hono@4.11.3)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/semantic-conventions': 1.38.0
-      hono: 4.10.6
+      hono: 4.11.3
 
-  '@hono/swagger-ui@0.5.2(hono@4.10.6)':
+  '@hono/swagger-ui@0.5.2(hono@4.11.3)':
     dependencies:
-      hono: 4.10.6
+      hono: 4.11.3
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -2682,7 +2682,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  hono@4.10.6: {}
+  hono@4.11.3: {}
 
   http-proxy-agent@5.0.0:
     dependencies:

@@ -11,8 +11,10 @@ import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { isControllerOpen } from '../stream';
 
-interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>
-  extends LoopRun<Tools, OUTPUT> {
+interface AgenticLoopParams<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> extends LoopRun<
+  Tools,
+  OUTPUT
+> {
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
   outputWriter: OutputWriter;
 }
