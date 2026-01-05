@@ -2,10 +2,20 @@ import chalk from 'chalk';
 import { join } from 'path';
 import { readdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { xxh64 } from '@node-rs/xxhash';
+import xxhash, { type XXHashAPI } from 'xxhash-wasm';
 
 import { DatasetLoader } from '../data/loader';
 import type { DatasetType } from '../data/types';
+
+// Lazy-loaded hasher instance (same pattern as ObservationalMemory)
+let hasherPromise: Promise<XXHashAPI> | null = null;
+
+async function getHasher(): Promise<XXHashAPI> {
+  if (!hasherPromise) {
+    hasherPromise = xxhash();
+  }
+  return hasherPromise;
+}
 
 export interface ObscureThreadIdsOptions {
   dataset: DatasetType;
@@ -17,19 +27,20 @@ export interface ObscureThreadIdsOptions {
 /**
  * Hash a thread ID using xxhash to create an opaque, non-reversible identifier.
  * This prevents LLMs from recognizing patterns like "answer_" in thread IDs.
+ * Uses the same xxhash-wasm h32ToString as the runtime ObservationalMemory.
  */
-function hashThreadId(threadId: string): string {
-  return xxh64(threadId).toString(16);
+async function hashThreadId(threadId: string): Promise<string> {
+  const hasher = await getHasher();
+  return hasher.h32ToString(threadId);
 }
 
 /**
- * Replace all thread IDs in a string with their hashed versions.
- * Handles patterns like:
+ * Replace thread IDs in a string with their hashed versions.
+ * Handles XML patterns:
  * - <thread id="...">  
  * - <other-conversation id="...">
- * - thread_id: "..."
  */
-function replaceThreadIds(
+function replaceThreadIdsInString(
   content: string,
   threadIdMap: Map<string, string>,
 ): { content: string; replacements: number } {
@@ -61,20 +72,69 @@ function replaceThreadIds(
     },
   );
 
-  // Replace thread_id: "..." patterns (in JSON)
-  result = result.replace(
-    /"thread_id":\s*"([^"]+)"/g,
-    (match, threadId) => {
-      const hashed = threadIdMap.get(threadId);
-      if (hashed && hashed !== threadId) {
-        replacements++;
-        return `"thread_id": "${hashed}"`;
-      }
-      return match;
-    },
-  );
-
   return { content: result, replacements };
+}
+
+/**
+ * Process an om.json file: parse JSON, replace thread IDs in observation fields,
+ * and return the modified JSON.
+ * 
+ * Structure: 
+ *   observationalMemory[i] = [resourceKey, innerArray]
+ *   innerArray = [recordKey, record]
+ *   record.activeObservations contains the observation text with <thread id="..."> tags
+ */
+function processOmJson(
+  jsonContent: string,
+  threadIdMap: Map<string, string>,
+): { content: string; replacements: number } {
+  let totalReplacements = 0;
+
+  try {
+    const data = JSON.parse(jsonContent);
+
+    // observationalMemory is an array of [resourceKey, [recordKey, record]] pairs
+    if (data.observationalMemory && Array.isArray(data.observationalMemory)) {
+      for (const outerEntry of data.observationalMemory) {
+        if (Array.isArray(outerEntry) && outerEntry.length === 2) {
+          const innerArray = outerEntry[1]; // [recordKey, record]
+          
+          if (Array.isArray(innerArray) && innerArray.length === 2) {
+            const record = innerArray[1]; // The actual OM record
+            
+            // Replace in activeObservations
+            if (record.activeObservations && typeof record.activeObservations === 'string') {
+              const { content, replacements } = replaceThreadIdsInString(
+                record.activeObservations,
+                threadIdMap,
+              );
+              record.activeObservations = content;
+              totalReplacements += replacements;
+            }
+
+            // Replace in bufferedObservations (if present)
+            if (record.bufferedObservations && typeof record.bufferedObservations === 'string') {
+              const { content, replacements } = replaceThreadIdsInString(
+                record.bufferedObservations,
+                threadIdMap,
+              );
+              record.bufferedObservations = content;
+              totalReplacements += replacements;
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      content: JSON.stringify(data, null, 2),
+      replacements: totalReplacements,
+    };
+  } catch (error) {
+    // If JSON parsing fails, return original content
+    console.error(`Failed to parse JSON: ${error}`);
+    return { content: jsonContent, replacements: 0 };
+  }
 }
 
 export class ObscureThreadIdsCommand {
@@ -103,7 +163,7 @@ export class ObscureThreadIdsCommand {
       if (question.haystack_session_ids) {
         for (const sessionId of question.haystack_session_ids) {
           if (sessionId && !threadIdMap.has(sessionId)) {
-            threadIdMap.set(sessionId, hashThreadId(sessionId));
+            threadIdMap.set(sessionId, await hashThreadId(sessionId));
             sessionCount++;
           }
         }
@@ -112,7 +172,7 @@ export class ObscureThreadIdsCommand {
       if (question.answer_session_ids) {
         for (const sessionId of question.answer_session_ids) {
           if (sessionId && !threadIdMap.has(sessionId)) {
-            threadIdMap.set(sessionId, hashThreadId(sessionId));
+            threadIdMap.set(sessionId, await hashThreadId(sessionId));
             sessionCount++;
           }
         }
@@ -157,7 +217,7 @@ export class ObscureThreadIdsCommand {
 
       try {
         const content = await readFile(omPath, 'utf-8');
-        const { content: newContent, replacements } = replaceThreadIds(content, threadIdMap);
+        const { content: newContent, replacements } = processOmJson(content, threadIdMap);
 
         if (replacements > 0) {
           if (!dryRun) {

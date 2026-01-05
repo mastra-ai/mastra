@@ -9,6 +9,7 @@ import type {
   ProcessOutputResultArgs,
 } from '@mastra/core/processors';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
+import xxhash from 'xxhash-wasm';
 
 import {
   buildObserverSystemPrompt,
@@ -95,6 +96,8 @@ export interface ObservationalMemoryConfig {
    * Useful for debugging and understanding the observation flow.
    */
   onDebugEvent?: (event: ObservationDebugEvent) => void;
+
+  obscureThreadIds?: boolean;
 }
 
 /**
@@ -245,7 +248,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   //  */
   // private reflectionBuffering: Map<string, BufferingOperation> = new Map();
 
+  private shouldObscureThreadIds = false;
+  private hasher = xxhash();
+  private threadIdCache = new Map<string, string>();
+
   constructor(config: ObservationalMemoryConfig) {
+    this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
 
@@ -856,7 +864,7 @@ ${suggestedResponse}
           const messagesByThread = this.groupMessagesByThread(historicalMessages);
 
           // Format other threads' messages as <unobserved-context> blocks
-          unobservedContextBlocks = this.formatUnobservedContextBlocks(messagesByThread, threadId);
+          unobservedContextBlocks = await this.formatUnobservedContextBlocks(messagesByThread, threadId);
           if (unobservedContextBlocks) {
             console.info(
               `[OM processInputStep] Including unobserved context from ${messagesByThread.size - 1} other threads`,
@@ -966,10 +974,10 @@ ${suggestedResponse}
    * These are injected into the Actor's context so it has awareness of activity
    * in other threads for the same resource.
    */
-  private formatUnobservedContextBlocks(
+  private async formatUnobservedContextBlocks(
     messagesByThread: Map<string, MastraDBMessage[]>,
     currentThreadId: string,
-  ): string {
+  ): Promise<string> {
     const blocks: string[] = [];
 
     for (const [threadId, messages] of messagesByThread) {
@@ -983,13 +991,30 @@ ${suggestedResponse}
       const formattedMessages = formatMessagesForObserver(messages);
 
       if (formattedMessages) {
-        blocks.push(`<other-conversation id="${threadId}">
+        const obscuredId = await this.representThreadIDInContext(threadId);
+        blocks.push(`<other-conversation id="${obscuredId}">
 ${formattedMessages}
 </other-conversation>`);
       }
     }
 
     return blocks.join('\n\n');
+  }
+
+  private async representThreadIDInContext(threadId: string): Promise<string> {
+    if (this.shouldObscureThreadIds) {
+      // Check cache first
+      const cached = this.threadIdCache.get(threadId);
+      if (cached) return cached;
+
+      // Use xxhash (32-bit) to create short, opaque, non-reversible identifiers
+      // This prevents LLMs from recognizing patterns like "answer_" in base64
+      const hasher = await this.hasher;
+      const hashed = hasher.h32ToString(threadId);
+      this.threadIdCache.set(threadId, hashed);
+      return hashed;
+    }
+    return threadId;
   }
 
   /**
@@ -1025,10 +1050,11 @@ ${formattedMessages}
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
-  private wrapWithThreadTag(threadId: string, observations: string): string {
+  private async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
     // First strip any thread tags the Observer might have added
     const cleanObservations = this.stripThreadTags(observations);
-    return `<thread id="${threadId}">\n${cleanObservations}\n</thread>`;
+    const obscuredId = await this.representThreadIDInContext(threadId);
+    return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
   }
 
   /**
@@ -1214,7 +1240,7 @@ ${formattedMessages}
       let newObservations: string;
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
-        const threadSection = this.wrapWithThreadTag(threadId, result.observations);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
         newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
       } else {
         // In thread scope: simple append
@@ -1409,7 +1435,7 @@ ${formattedMessages}
         const { threadId, threadMessages, result } = obsResult;
 
         // Wrap with thread tag and append (in thread order for consistency)
-        const threadSection = this.wrapWithThreadTag(threadId, result.observations);
+        const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
         currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
         // Update thread-specific metadata (currentTask, suggestedResponse)

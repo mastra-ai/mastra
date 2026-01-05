@@ -427,6 +427,7 @@ Active evaluations:`;
       }
 
       observationalMemory = new ObservationalMemory({
+        obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         storage: omStorage,
         observer: {
           model: retry4o.model,
@@ -456,8 +457,8 @@ Be specific rather than generic when the user has expressed clear preferences in
     const agent = new Agent({
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
-      model: modelProvider,
-      // model: 'cerebras/zai-glm-4.6',
+      // model: modelProvider,
+      model: 'cerebras/zai-glm-4.6',
       instructions: agentInstructions,
       memory,
       // For OM, use processors instead of memory

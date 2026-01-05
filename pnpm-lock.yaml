@@ -866,6 +866,9 @@ importers:
       ora:
         specifier: ^8.1.1
         version: 8.2.0
+      xxhash-wasm:
+        specifier: ^1.1.0
+        version: 1.1.0
       zod:
         specifier: ^3.23.8
         version: 3.25.76

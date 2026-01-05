@@ -504,6 +504,7 @@ export class PrepareCommand {
 
       // For OM: use REAL model for Observer/Reflector subagents (they need real LLMs to extract observations)
       observationalMemory = new ObservationalMemory({
+        obscureThreadIds: true, // can't show answer_x in context when we put the thread id in xml tags
         storage: omStorage,
         observer: {
           model: model, // Real model for Observer
