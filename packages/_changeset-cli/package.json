@@ -16,7 +16,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@changesets/assemble-release-plan": "^6.0.9",
-    "@changesets/config": "^3.1.1",
+    "@changesets/config": "^3.1.2",
     "@changesets/git": "^3.0.4",
     "@changesets/read": "^0.6.5",
     "@changesets/types": "^6.1.0",
