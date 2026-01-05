@@ -11,8 +11,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.9",
-    "@ai-sdk/openai": "^2.0.23",
+    "@ai-sdk/anthropic": "^3.0.2",
+    "@ai-sdk/openai": "^3.0.2",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "zod": "^3.25.76"

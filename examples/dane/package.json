@@ -29,7 +29,7 @@
     "tsx": "^4.19.3"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
+    "@ai-sdk/anthropic": "^3.0.2",
     "@inquirer/prompts": "^7.8.4",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",

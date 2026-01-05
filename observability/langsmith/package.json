@@ -35,7 +35,7 @@
     "langsmith": ">=0.3.79"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.35",
+    "@ai-sdk/openai": "^3.0.2",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

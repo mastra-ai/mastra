@@ -7,7 +7,7 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/react": "^1.2.12",
+    "@ai-sdk/react": "^3.0.5",
     "@mastra/client-js": "*",
     "@mastra/mcp": "*",
     "dotenv": "^16.6.1",
