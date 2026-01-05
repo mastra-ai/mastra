@@ -165,7 +165,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [Netlify | Models | Mastra](https://mastra.ai/en/models/gateways/netlify): Use AI models through Netlify.
 - [OpenRouter | Models | Mastra](https://mastra.ai/en/models/gateways/openrouter): Use AI models through OpenRouter.
 - [Vercel | Models | Mastra](https://mastra.ai/en/models/gateways/vercel): Use AI models through Vercel.
-- [Models](https://mastra.ai/en/models): Access 66+ AI providers and 1607+ models through Mastra's model router.
+- [Models](https://mastra.ai/en/models): Access 66+ AI providers and 1606+ models through Mastra's model router.
 - [Abacus | Models | Mastra](https://mastra.ai/en/models/providers/abacus): Use Abacus models with Mastra. 52 models available.
 - [AgentRouter | Models | Mastra](https://mastra.ai/en/models/providers/agentrouter): Use AgentRouter models with Mastra. 20 models available.
 - [AIHubMix](https://mastra.ai/en/models/providers/aihubmix): Use AIHubMix models via the AI SDK.
@@ -190,7 +190,7 @@ Each section contains detailed markdown files that provide comprehensive informa
 - [GitHub Models | Models | Mastra](https://mastra.ai/en/models/providers/github-models): Use GitHub Models models with Mastra. 55 models available.
 - [Vertex](https://mastra.ai/en/models/providers/google-vertex): Use Vertex models via the AI SDK.
 - [Google | Models | Mastra](https://mastra.ai/en/models/providers/google): Use Google models with Mastra. 26 models available.
-- [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 10 models available.
+- [Groq | Models | Mastra](https://mastra.ai/en/models/providers/groq): Use Groq models with Mastra. 9 models available.
 - [Helicone | Models | Mastra](https://mastra.ai/en/models/providers/helicone): Use Helicone models with Mastra. 91 models available.
 - [Hugging Face | Models | Mastra](https://mastra.ai/en/models/providers/huggingface): Use Hugging Face models with Mastra. 14 models available.
 - [iFlow | Models | Mastra](https://mastra.ai/en/models/providers/iflowcn): Use iFlow models with Mastra. 20 models available.
