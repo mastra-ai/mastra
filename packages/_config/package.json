@@ -21,7 +21,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-testing-library": "^7.13.3",
     "globals": "^16.5.0",
-    "typescript-eslint": "^8.38.0"
+    "typescript-eslint": "^8.51.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
