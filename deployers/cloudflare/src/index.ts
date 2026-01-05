@@ -61,8 +61,10 @@ export class CloudflareDeployer extends Deployer {
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
+    const { env: userEnv, ...userConfig } = this.userConfig;
+    const server = this.mastra.getServer();
     const env = await this.loadEnvVars();
-    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), this.userConfig.env);
+    const envsAsObject = Object.assign({}, Object.fromEntries(env.entries()), userEnv);
 
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
@@ -74,8 +76,8 @@ export class CloudflareDeployer extends Deployer {
           enabled: true,
         },
       },
+      ...userConfig,
       vars: envsAsObject,
-      ...this.userConfig,
     };
 
     await writeFile(join(outputDirectory, this.outputDir, 'wrangler.json'), JSON.stringify(wranglerConfig));
