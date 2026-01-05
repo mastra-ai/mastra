@@ -22,7 +22,7 @@ export type BundlerPlatform = 'node' | 'browser' | 'neutral';
  * preserve Bun-specific globals (like Bun.s3).
  */
 export function detectRuntime(): RuntimePlatform {
-  if (typeof (globalThis as any).Bun !== 'undefined') {
+  if (process.versions?.bun) {
     return 'bun';
   }
   return 'node';

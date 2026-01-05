@@ -14,7 +14,7 @@ export class BuildBundler extends Bundler {
     super('Build');
     this.studio = studio ?? false;
     // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
-    this.platform = typeof (globalThis as any).Bun !== 'undefined' ? 'neutral' : 'node';
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
   protected async getUserBundlerOptions(

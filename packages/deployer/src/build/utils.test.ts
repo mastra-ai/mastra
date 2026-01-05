@@ -519,33 +519,28 @@ describe('normalizeStudioBase', () => {
  * @see GitHub Issue #11253: Bun S3 API's not working inside Mastra Workflows
  */
 describe('detectRuntime', () => {
-  const originalGlobalBun = (globalThis as any).Bun;
+  const originalBunVersion = process.versions.bun;
 
   beforeEach(() => {
-    // Clean up Bun global before each test
-    delete (globalThis as any).Bun;
+    // Clean up bun version before each test
+    delete (process.versions as Record<string, string | undefined>).bun;
   });
 
   afterEach(() => {
-    // Restore original Bun global
-    if (originalGlobalBun) {
-      (globalThis as any).Bun = originalGlobalBun;
+    // Restore original bun version
+    if (originalBunVersion) {
+      (process.versions as Record<string, string | undefined>).bun = originalBunVersion;
     } else {
-      delete (globalThis as any).Bun;
+      delete (process.versions as Record<string, string | undefined>).bun;
     }
   });
 
-  it('should return "node" when Bun global is not present', () => {
+  it('should return "node" when process.versions.bun is not present', () => {
     expect(detectRuntime()).toBe('node');
   });
 
-  it('should return "bun" when Bun global is present', () => {
-    (globalThis as any).Bun = { version: '1.0.0' };
-    expect(detectRuntime()).toBe('bun');
-  });
-
-  it('should return "bun" even when Bun global is an empty object', () => {
-    (globalThis as any).Bun = {};
+  it('should return "bun" when process.versions.bun is present', () => {
+    (process.versions as Record<string, string | undefined>).bun = '1.0.0';
     expect(detectRuntime()).toBe('bun');
   });
 });
