@@ -15,19 +15,19 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       playwright:
-        specifier: ^1.56.0
+        specifier: ^1.57.0
         version: 1.57.0
       react:
-        specifier: ^19.2.0
+        specifier: ^19.2.3
         version: 19.2.3
       react-dom:
-        specifier: ^19.2.0
+        specifier: ^19.2.3
         version: 19.2.3(react@19.2.3)
       tsx:
-        specifier: ^4.20.6
+        specifier: ^4.21.0
         version: 4.21.0
       verdaccio:
-        specifier: ^6.2.0
+        specifier: ^6.2.4
         version: 6.2.4(typanion@3.14.0)
       verdaccio-auth-memory:
         specifier: ^10.3.1
@@ -40,19 +40,19 @@ importers:
         version: 3.2.4(@types/node@22.13.17)(tsx@4.21.0)
     devDependencies:
       '@playwright/test':
-        specifier: ^1.56.0
+        specifier: ^1.57.0
         version: 1.57.0
       '@types/node':
         specifier: 22.13.17
         version: 22.13.17
       '@types/react':
-        specifier: ^19.2.2
+        specifier: ^19.2.7
         version: 19.2.7
       '@types/react-dom':
-        specifier: ^19.2.1
+        specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.7)
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       get-port:
         specifier: ^7.1.0

@@ -9,13 +9,13 @@ importers:
   .:
     devDependencies:
       execa:
-        specifier: ^9.6.0
+        specifier: ^9.6.1
         version: 9.6.1
       get-port:
         specifier: ^7.1.0
         version: 7.1.0
       globby:
-        specifier: ^16.0.0
+        specifier: ^16.1.0
         version: 16.1.0
       npm-cli-login:
         specifier: ^1.0.0
@@ -24,7 +24,7 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
       verdaccio:
-        specifier: ^6.2.2
+        specifier: ^6.2.4
         version: 6.2.4(typanion@3.14.0)
       verdaccio-auth-memory:
         specifier: ^10.3.1
