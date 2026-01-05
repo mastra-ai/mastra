@@ -288,6 +288,7 @@ export interface WorkflowState {
 
   // Execution State
   status: WorkflowRunStatus;
+  initialState?: Record<string, any>;
   // Optional detailed fields (can be excluded for performance)
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: SerializedStepFlowEntry[];
@@ -403,6 +404,7 @@ export type WorkflowInfo = {
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
+  stateSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */

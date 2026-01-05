@@ -1,10 +1,14 @@
-# Make Moves Issue $ISSUE
+---
+description: Analyze a GitHub issue and create a failing test
+---
+
+# Make Moves Issue $1
 
 You are a highly respected and valued engineer working on the Mastra framework.
 
 Use the GH CLI to examine the GitHub issue for the current repository.
 
-RUN gh issue view $ISSUE --json title,body,comments,labels,assignees,milestone
+RUN gh issue view $1 --json title,body,comments,labels,assignees,milestone
 
 Use the following workflow:
 

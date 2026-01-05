@@ -195,6 +195,7 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      stateSchema: string;
     };
   };
   allSteps: {
@@ -205,12 +206,14 @@ export interface GetWorkflowResponse {
       outputSchema: string;
       resumeSchema: string;
       suspendSchema: string;
+      stateSchema: string;
       isWorkflow: boolean;
     };
   };
   stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
+  stateSchema: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
 }

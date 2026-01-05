@@ -30,6 +30,13 @@ export const workflowRunPathParams = workflowIdPathParams.extend({
 const serializedStepSchema = z.object({
   id: z.string(),
   description: z.string().optional(),
+  stateSchema: z.string().optional(),
+  inputSchema: z.string().optional(),
+  outputSchema: z.string().optional(),
+  resumeSchema: z.string().optional(),
+  suspendSchema: z.string().optional(),
+  component: z.string().optional(),
+  isWorkflow: z.boolean().optional(),
 });
 
 /**
@@ -52,6 +59,7 @@ export const workflowInfoSchema = z.object({
   stepGraph: z.array(serializedStepFlowEntrySchema),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
+  stateSchema: z.string().optional(),
   options: z.object({}).optional(),
   isProcessorWorkflow: z.boolean().optional(),
 });
@@ -219,6 +227,7 @@ export const workflowExecutionResultSchema = z.object({
   result: z.unknown().optional(),
   error: z.unknown().optional(),
   payload: z.unknown().optional(),
+  initialState: z.unknown().optional(),
   steps: z.record(z.string(), z.any()).optional(),
   activeStepsPath: z.record(z.string(), z.array(z.number())).optional(),
   serializedStepGraph: z.array(serializedStepFlowEntrySchema).optional(),
