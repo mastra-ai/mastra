@@ -301,6 +301,66 @@ export interface ModelCallMetrics {
 }
 
 // ============================================================================
+// Metric Names Constants
+// ============================================================================
+
+/**
+ * Standard metric names for consistency across implementations.
+ * Use these constants when calling incrementCounter, recordHistogram, etc.
+ */
+export const MetricNames = {
+  // Agent metrics
+  AGENT_RUNS_TOTAL: 'agent_runs_total',
+  AGENT_RUNS_SUCCESS: 'agent_runs_success_total',
+  AGENT_RUNS_ERROR: 'agent_runs_error_total',
+  AGENT_RUN_DURATION: 'agent_run_duration_ms',
+  AGENT_TOOL_CALLS: 'agent_tool_calls_total',
+
+  // Workflow metrics
+  WORKFLOW_RUNS_TOTAL: 'workflow_runs_total',
+  WORKFLOW_RUNS_SUCCESS: 'workflow_runs_completed_total',
+  WORKFLOW_RUNS_FAILED: 'workflow_runs_failed_total',
+  WORKFLOW_RUNS_SUSPENDED: 'workflow_runs_suspended_total',
+  WORKFLOW_RUN_DURATION: 'workflow_run_duration_ms',
+  WORKFLOW_STEPS_EXECUTED: 'workflow_steps_executed_total',
+
+  // Tool metrics
+  TOOL_CALLS_TOTAL: 'tool_calls_total',
+  TOOL_CALLS_SUCCESS: 'tool_calls_success_total',
+  TOOL_CALLS_ERROR: 'tool_calls_error_total',
+  TOOL_CALL_DURATION: 'tool_call_duration_ms',
+
+  // Model metrics
+  MODEL_CALLS_TOTAL: 'model_calls_total',
+  MODEL_CALLS_SUCCESS: 'model_calls_success_total',
+  MODEL_CALLS_ERROR: 'model_calls_error_total',
+  MODEL_RETRIES: 'model_retries_total',
+  MODEL_FALLBACKS: 'model_fallbacks_total',
+  MODEL_CALL_DURATION: 'model_call_duration_ms',
+  MODEL_TIME_TO_FIRST_TOKEN: 'model_time_to_first_token_ms',
+
+  // Token metrics
+  TOKENS_INPUT: 'tokens_input_total',
+  TOKENS_OUTPUT: 'tokens_output_total',
+  TOKENS_TOTAL: 'tokens_total',
+  TOKENS_CACHED: 'tokens_cached_total',
+  TOKENS_REASONING: 'tokens_reasoning_total',
+
+  // Cost metrics
+  COST_USD: 'cost_usd_total',
+  COST_MODEL_USD: 'cost_model_usd_total',
+  COST_TOOL_USD: 'cost_tool_usd_total',
+
+  // HTTP metrics
+  HTTP_REQUESTS_TOTAL: 'http_requests_total',
+  HTTP_REQUESTS_SUCCESS: 'http_requests_success_total',
+  HTTP_REQUESTS_ERROR: 'http_requests_error_total',
+  HTTP_REQUEST_DURATION: 'http_request_duration_ms',
+  HTTP_BYTES_SENT: 'http_bytes_sent_total',
+  HTTP_BYTES_RECEIVED: 'http_bytes_received_total',
+} as const;
+
+// ============================================================================
 // Metrics Collector Interface
 // ============================================================================
 
@@ -390,6 +450,213 @@ export interface IMetricsCollector {
 }
 
 // ============================================================================
+// Base Metrics Collector (Abstract)
+// ============================================================================
+
+/**
+ * Abstract base class for metrics collectors.
+ *
+ * Extend this class to create custom metrics backends (Prometheus, DataDog, etc.).
+ * You only need to implement the primitive operations:
+ * - incrementCounter
+ * - setGauge
+ * - recordHistogram
+ * - flush
+ * - shutdown
+ *
+ * The high-level recording methods (recordAgentRun, recordWorkflowRun, etc.)
+ * are provided with default implementations that call the primitive operations.
+ *
+ * @example
+ * ```typescript
+ * class PrometheusMetricsCollector extends BaseMetricsCollector {
+ *   private registry: Registry;
+ *
+ *   incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
+ *     // Push to Prometheus counter
+ *   }
+ *
+ *   setGauge(name: string, labels: MetricLabels, value: number): void {
+ *     // Set Prometheus gauge
+ *   }
+ *
+ *   recordHistogram(name: string, labels: MetricLabels, value: number): void {
+ *     // Observe in Prometheus histogram
+ *   }
+ *
+ *   async flush(): Promise<void> {
+ *     // Push to Pushgateway if needed
+ *   }
+ *
+ *   async shutdown(): Promise<void> {
+ *     // Cleanup
+ *   }
+ * }
+ * ```
+ */
+export abstract class BaseMetricsCollector implements IMetricsCollector {
+  // ---- Abstract primitive operations (must implement) ----
+
+  abstract incrementCounter(name: string, labels?: MetricLabels, value?: number): void;
+  abstract setGauge(name: string, labels: MetricLabels, value: number): void;
+  abstract recordHistogram(name: string, labels: MetricLabels, value: number): void;
+  abstract flush(): Promise<void>;
+  abstract shutdown(): Promise<void>;
+
+  // ---- High-level recording methods (default implementations) ----
+
+  /**
+   * Record metrics from an agent run.
+   * Override this method if you need custom behavior.
+   */
+  recordAgentRun(metrics: AgentRunMetrics): void {
+    const labels: MetricLabels = { agentId: metrics.agentId };
+
+    this.incrementCounter(MetricNames.AGENT_RUNS_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.AGENT_RUNS_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.AGENT_RUNS_ERROR, { ...labels, errorType: metrics.errorType });
+    }
+    this.recordHistogram(MetricNames.AGENT_RUN_DURATION, labels, metrics.durationMs);
+    this.incrementCounter(MetricNames.AGENT_TOOL_CALLS, labels, metrics.toolCallCount);
+    this.recordTokenUsage(metrics.tokenUsage, labels);
+    if (metrics.cost) {
+      this.recordCost(metrics.cost, labels);
+    }
+  }
+
+  /**
+   * Record metrics from a workflow run.
+   * Override this method if you need custom behavior.
+   */
+  recordWorkflowRun(metrics: WorkflowRunMetrics): void {
+    const labels: MetricLabels = { workflowId: metrics.workflowId };
+
+    this.incrementCounter(MetricNames.WORKFLOW_RUNS_TOTAL, labels);
+    this.incrementCounter(`workflow_runs_${metrics.status}_total`, labels);
+    this.recordHistogram(MetricNames.WORKFLOW_RUN_DURATION, labels, metrics.durationMs);
+    this.incrementCounter(MetricNames.WORKFLOW_STEPS_EXECUTED, labels, metrics.stepsExecuted);
+  }
+
+  /**
+   * Record metrics from a tool execution.
+   * Override this method if you need custom behavior.
+   */
+  recordToolExecution(metrics: ToolExecutionMetrics): void {
+    const labels: MetricLabels = {
+      tool: metrics.toolName,
+      toolType: metrics.toolType,
+      agentId: metrics.agentId,
+    };
+
+    this.incrementCounter(MetricNames.TOOL_CALLS_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.TOOL_CALLS_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.TOOL_CALLS_ERROR, labels);
+    }
+    this.recordHistogram(MetricNames.TOOL_CALL_DURATION, labels, metrics.durationMs);
+  }
+
+  /**
+   * Record metrics from a model call.
+   * Override this method if you need custom behavior.
+   */
+  recordModelCall(metrics: ModelCallMetrics): void {
+    const labels: MetricLabels = {
+      model: metrics.model,
+      provider: metrics.provider,
+      agentId: metrics.agentId,
+    };
+
+    this.incrementCounter(MetricNames.MODEL_CALLS_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.MODEL_CALLS_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.MODEL_CALLS_ERROR, labels);
+    }
+    if (metrics.isRetry) {
+      this.incrementCounter(MetricNames.MODEL_RETRIES, labels);
+    }
+    if (metrics.isFallback) {
+      this.incrementCounter(MetricNames.MODEL_FALLBACKS, { ...labels, fallbackFrom: metrics.fallbackFrom });
+    }
+    this.recordHistogram(MetricNames.MODEL_CALL_DURATION, labels, metrics.durationMs);
+    if (metrics.timeToFirstTokenMs !== undefined) {
+      this.recordHistogram(MetricNames.MODEL_TIME_TO_FIRST_TOKEN, labels, metrics.timeToFirstTokenMs);
+    }
+    this.recordTokenUsage(metrics.tokenUsage, labels);
+  }
+
+  /**
+   * Record metrics from an HTTP request.
+   * Override this method if you need custom behavior.
+   */
+  recordHttpRequest(metrics: HttpRequestMetrics): void {
+    const labels: MetricLabels = {
+      method: metrics.method,
+      host: metrics.host,
+      direction: metrics.direction,
+      source: metrics.source,
+      agentId: metrics.agentId,
+      workflowId: metrics.workflowId,
+    };
+
+    this.incrementCounter(MetricNames.HTTP_REQUESTS_TOTAL, labels);
+    if (metrics.success) {
+      this.incrementCounter(MetricNames.HTTP_REQUESTS_SUCCESS, labels);
+    } else {
+      this.incrementCounter(MetricNames.HTTP_REQUESTS_ERROR, { ...labels, errorType: metrics.errorType });
+    }
+
+    // Track by status code
+    this.incrementCounter('http_requests_by_status', { ...labels, statusCode: String(metrics.statusCode) });
+
+    // Record latency
+    this.recordHistogram(MetricNames.HTTP_REQUEST_DURATION, labels, metrics.durationMs);
+
+    // Record bytes if available
+    if (metrics.requestSize) {
+      this.incrementCounter(MetricNames.HTTP_BYTES_SENT, labels, metrics.requestSize);
+    }
+    if (metrics.responseSize) {
+      this.incrementCounter(MetricNames.HTTP_BYTES_RECEIVED, labels, metrics.responseSize);
+    }
+  }
+
+  /**
+   * Record token usage.
+   * Override this method if you need custom behavior.
+   */
+  recordTokenUsage(usage: TokenUsage, labels: MetricLabels = {}): void {
+    this.incrementCounter(MetricNames.TOKENS_INPUT, labels, usage.inputTokens);
+    this.incrementCounter(MetricNames.TOKENS_OUTPUT, labels, usage.outputTokens);
+    this.incrementCounter(MetricNames.TOKENS_TOTAL, labels, usage.inputTokens + usage.outputTokens);
+    if (usage.cachedTokens) {
+      this.incrementCounter(MetricNames.TOKENS_CACHED, labels, usage.cachedTokens);
+    }
+    if (usage.reasoningTokens) {
+      this.incrementCounter(MetricNames.TOKENS_REASONING, labels, usage.reasoningTokens);
+    }
+  }
+
+  /**
+   * Record cost.
+   * Override this method if you need custom behavior.
+   */
+  recordCost(cost: CostBreakdown, labels: MetricLabels = {}): void {
+    this.incrementCounter(MetricNames.COST_USD, labels, cost.totalCostUSD);
+    if (cost.modelCostUSD !== undefined) {
+      this.incrementCounter(MetricNames.COST_MODEL_USD, labels, cost.modelCostUSD);
+    }
+    if (cost.toolCostUSD !== undefined) {
+      this.incrementCounter(MetricNames.COST_TOOL_USD, labels, cost.toolCostUSD);
+    }
+  }
+}
+
+// ============================================================================
 // No-Op Metrics Collector
 // ============================================================================
 
@@ -453,9 +720,14 @@ export class NoOpMetricsCollector implements IMetricsCollector {
 
 /**
  * Simple in-memory metrics collector for development and testing.
- * Stores metrics in memory and provides access to them.
+ * Extends BaseMetricsCollector and stores raw metrics for inspection.
+ *
+ * This is useful for:
+ * - Unit tests that need to verify metrics were recorded
+ * - Development environments for debugging
+ * - Prototyping before integrating a real metrics backend
  */
-export class InMemoryMetricsCollector implements IMetricsCollector {
+export class InMemoryMetricsCollector extends BaseMetricsCollector {
   private counters: Map<string, number> = new Map();
   private gauges: Map<string, number> = new Map();
   private histograms: Map<string, number[]> = new Map();
@@ -475,6 +747,8 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
     return labelStr ? `${name}{${labelStr}}` : name;
   }
 
+  // ---- Primitive operations (required by BaseMetricsCollector) ----
+
   incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
     const key = this.makeKey(name, labels);
     this.counters.set(key, (this.counters.get(key) || 0) + value);
@@ -492,141 +766,39 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
     this.histograms.set(key, values);
   }
 
-  recordAgentRun(metrics: AgentRunMetrics): void {
-    this.agentRuns.push(metrics);
-
-    // Also update counters
-    const labels: MetricLabels = { agentId: metrics.agentId };
-    this.incrementCounter('agent_runs_total', labels);
-    if (metrics.success) {
-      this.incrementCounter('agent_runs_success_total', labels);
-    } else {
-      this.incrementCounter('agent_runs_error_total', { ...labels, errorType: metrics.errorType });
-    }
-    this.recordHistogram('agent_run_duration_ms', labels, metrics.durationMs);
-    this.incrementCounter('agent_tool_calls_total', labels, metrics.toolCallCount);
-    this.recordTokenUsage(metrics.tokenUsage, labels);
-    if (metrics.cost) {
-      this.recordCost(metrics.cost, labels);
-    }
-  }
-
-  recordWorkflowRun(metrics: WorkflowRunMetrics): void {
-    this.workflowRuns.push(metrics);
-
-    const labels: MetricLabels = { workflowId: metrics.workflowId };
-    this.incrementCounter('workflow_runs_total', labels);
-    this.incrementCounter(`workflow_runs_${metrics.status}_total`, labels);
-    this.recordHistogram('workflow_run_duration_ms', labels, metrics.durationMs);
-    this.incrementCounter('workflow_steps_executed_total', labels, metrics.stepsExecuted);
-  }
-
-  recordToolExecution(metrics: ToolExecutionMetrics): void {
-    this.toolExecutions.push(metrics);
-
-    const labels: MetricLabels = {
-      tool: metrics.toolName,
-      toolType: metrics.toolType,
-      agentId: metrics.agentId,
-    };
-    this.incrementCounter('tool_calls_total', labels);
-    if (metrics.success) {
-      this.incrementCounter('tool_calls_success_total', labels);
-    } else {
-      this.incrementCounter('tool_calls_error_total', labels);
-    }
-    this.recordHistogram('tool_call_duration_ms', labels, metrics.durationMs);
-  }
-
-  recordModelCall(metrics: ModelCallMetrics): void {
-    this.modelCalls.push(metrics);
-
-    const labels: MetricLabels = {
-      model: metrics.model,
-      provider: metrics.provider,
-      agentId: metrics.agentId,
-    };
-    this.incrementCounter('model_calls_total', labels);
-    if (metrics.success) {
-      this.incrementCounter('model_calls_success_total', labels);
-    } else {
-      this.incrementCounter('model_calls_error_total', labels);
-    }
-    if (metrics.isRetry) {
-      this.incrementCounter('model_retries_total', labels);
-    }
-    if (metrics.isFallback) {
-      this.incrementCounter('model_fallbacks_total', { ...labels, fallbackFrom: metrics.fallbackFrom });
-    }
-    this.recordHistogram('model_call_duration_ms', labels, metrics.durationMs);
-    if (metrics.timeToFirstTokenMs !== undefined) {
-      this.recordHistogram('model_time_to_first_token_ms', labels, metrics.timeToFirstTokenMs);
-    }
-    this.recordTokenUsage(metrics.tokenUsage, labels);
-  }
-
-  recordHttpRequest(metrics: HttpRequestMetrics): void {
-    this.httpRequests.push(metrics);
-
-    const labels: MetricLabels = {
-      method: metrics.method,
-      host: metrics.host,
-      direction: metrics.direction,
-      source: metrics.source,
-      agentId: metrics.agentId,
-      workflowId: metrics.workflowId,
-    };
-
-    this.incrementCounter('http_requests_total', labels);
-    if (metrics.success) {
-      this.incrementCounter('http_requests_success_total', labels);
-    } else {
-      this.incrementCounter('http_requests_error_total', { ...labels, errorType: metrics.errorType });
-    }
-
-    // Track by status code
-    this.incrementCounter('http_requests_by_status', { ...labels, statusCode: String(metrics.statusCode) });
-
-    // Record latency
-    this.recordHistogram('http_request_duration_ms', labels, metrics.durationMs);
-
-    // Record bytes if available
-    if (metrics.requestSize) {
-      this.incrementCounter('http_bytes_sent_total', labels, metrics.requestSize);
-    }
-    if (metrics.responseSize) {
-      this.incrementCounter('http_bytes_received_total', labels, metrics.responseSize);
-    }
-  }
-
-  recordTokenUsage(usage: TokenUsage, labels: MetricLabels = {}): void {
-    this.incrementCounter('tokens_input_total', labels, usage.inputTokens);
-    this.incrementCounter('tokens_output_total', labels, usage.outputTokens);
-    this.incrementCounter('tokens_total', labels, usage.inputTokens + usage.outputTokens);
-    if (usage.cachedTokens) {
-      this.incrementCounter('tokens_cached_total', labels, usage.cachedTokens);
-    }
-    if (usage.reasoningTokens) {
-      this.incrementCounter('tokens_reasoning_total', labels, usage.reasoningTokens);
-    }
-  }
-
-  recordCost(cost: CostBreakdown, labels: MetricLabels = {}): void {
-    this.incrementCounter('cost_usd_total', labels, cost.totalCostUSD);
-    if (cost.modelCostUSD) {
-      this.incrementCounter('cost_model_usd_total', labels, cost.modelCostUSD);
-    }
-    if (cost.toolCostUSD) {
-      this.incrementCounter('cost_tool_usd_total', labels, cost.toolCostUSD);
-    }
-  }
-
   async flush(): Promise<void> {
     // In-memory, nothing to flush
   }
 
   async shutdown(): Promise<void> {
     // In-memory, nothing to shutdown
+  }
+
+  // ---- Override high-level methods to also store raw metrics ----
+
+  override recordAgentRun(metrics: AgentRunMetrics): void {
+    this.agentRuns.push(metrics);
+    super.recordAgentRun(metrics);
+  }
+
+  override recordWorkflowRun(metrics: WorkflowRunMetrics): void {
+    this.workflowRuns.push(metrics);
+    super.recordWorkflowRun(metrics);
+  }
+
+  override recordToolExecution(metrics: ToolExecutionMetrics): void {
+    this.toolExecutions.push(metrics);
+    super.recordToolExecution(metrics);
+  }
+
+  override recordModelCall(metrics: ModelCallMetrics): void {
+    this.modelCalls.push(metrics);
+    super.recordModelCall(metrics);
+  }
+
+  override recordHttpRequest(metrics: HttpRequestMetrics): void {
+    this.httpRequests.push(metrics);
+    super.recordHttpRequest(metrics);
   }
 
   // ---- Accessors for testing/debugging ----
@@ -678,62 +850,3 @@ export class InMemoryMetricsCollector implements IMetricsCollector {
     this.httpRequests = [];
   }
 }
-
-// ============================================================================
-// Metric Names Constants
-// ============================================================================
-
-/**
- * Standard metric names for consistency across implementations
- */
-export const MetricNames = {
-  // Agent metrics
-  AGENT_RUNS_TOTAL: 'agent_runs_total',
-  AGENT_RUNS_SUCCESS: 'agent_runs_success_total',
-  AGENT_RUNS_ERROR: 'agent_runs_error_total',
-  AGENT_RUN_DURATION: 'agent_run_duration_ms',
-  AGENT_TOOL_CALLS: 'agent_tool_calls_total',
-
-  // Workflow metrics
-  WORKFLOW_RUNS_TOTAL: 'workflow_runs_total',
-  WORKFLOW_RUNS_SUCCESS: 'workflow_runs_completed_total',
-  WORKFLOW_RUNS_FAILED: 'workflow_runs_failed_total',
-  WORKFLOW_RUNS_SUSPENDED: 'workflow_runs_suspended_total',
-  WORKFLOW_RUN_DURATION: 'workflow_run_duration_ms',
-  WORKFLOW_STEPS_EXECUTED: 'workflow_steps_executed_total',
-
-  // Tool metrics
-  TOOL_CALLS_TOTAL: 'tool_calls_total',
-  TOOL_CALLS_SUCCESS: 'tool_calls_success_total',
-  TOOL_CALLS_ERROR: 'tool_calls_error_total',
-  TOOL_CALL_DURATION: 'tool_call_duration_ms',
-
-  // Model metrics
-  MODEL_CALLS_TOTAL: 'model_calls_total',
-  MODEL_CALLS_SUCCESS: 'model_calls_success_total',
-  MODEL_CALLS_ERROR: 'model_calls_error_total',
-  MODEL_RETRIES: 'model_retries_total',
-  MODEL_FALLBACKS: 'model_fallbacks_total',
-  MODEL_CALL_DURATION: 'model_call_duration_ms',
-  MODEL_TIME_TO_FIRST_TOKEN: 'model_time_to_first_token_ms',
-
-  // Token metrics
-  TOKENS_INPUT: 'tokens_input_total',
-  TOKENS_OUTPUT: 'tokens_output_total',
-  TOKENS_TOTAL: 'tokens_total',
-  TOKENS_CACHED: 'tokens_cached_total',
-  TOKENS_REASONING: 'tokens_reasoning_total',
-
-  // Cost metrics
-  COST_USD: 'cost_usd_total',
-  COST_MODEL_USD: 'cost_model_usd_total',
-  COST_TOOL_USD: 'cost_tool_usd_total',
-
-  // HTTP metrics
-  HTTP_REQUESTS_TOTAL: 'http_requests_total',
-  HTTP_REQUESTS_SUCCESS: 'http_requests_success_total',
-  HTTP_REQUESTS_ERROR: 'http_requests_error_total',
-  HTTP_REQUEST_DURATION: 'http_request_duration_ms',
-  HTTP_BYTES_SENT: 'http_bytes_sent_total',
-  HTTP_BYTES_RECEIVED: 'http_bytes_received_total',
-} as const;
