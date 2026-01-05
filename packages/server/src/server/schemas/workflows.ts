@@ -250,6 +250,7 @@ export const workflowRunResultSchema = z.object({
 
   // Execution state
   status: workflowRunStatusSchema,
+  initialState: z.record(z.string(), z.any()).optional(),
   result: z.unknown().optional(),
   error: z.unknown().optional(),
   payload: z.unknown().optional(),
