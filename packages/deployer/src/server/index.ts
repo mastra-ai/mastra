@@ -12,7 +12,6 @@ import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
 import { normalizeStudioBase } from '../build/utils';
@@ -199,8 +198,9 @@ export async function createHonoServer(
     }
   }
 
+  // Enable structured HTTP request logging if configured
   if (server?.build?.apiReqLogs) {
-    app.use(logger());
+    honoServerAdapter.registerHttpInstrumentationMiddleware();
   }
 
   // Register adapter routes (adapter was created earlier with configuration)

@@ -1,5 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import * as logEvents from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core/mastra';
+import type { HttpRequestMetrics } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
@@ -375,5 +377,91 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
     this.app.use('*', authenticationMiddleware);
     this.app.use('*', authorizationMiddleware);
+  }
+
+  /**
+   * Creates middleware that automatically logs and records metrics for all HTTP requests.
+   * This provides structured logging with correlation to agents/workflows when available.
+   */
+  createHttpInstrumentationMiddleware(): MiddlewareHandler {
+    return async (c, next) => {
+      const startTime = Date.now();
+      const method = c.req.method;
+      const url = c.req.url;
+      const path = c.req.path;
+
+      // Parse host from URL
+      let host: string | undefined;
+      try {
+        const parsed = new URL(url);
+        host = parsed.host;
+      } catch {
+        // URL parsing failed, skip host
+      }
+
+      const logger = this.mastra.getLogger();
+      const metrics = this.mastra.getMetrics();
+
+      // Build log context - try to get agent/workflow context if available
+      const logContext: Record<string, string | undefined> = {};
+
+      // Log request start
+      const requestEvent = logEvents.httpRequest(logContext, {
+        method,
+        url,
+        host,
+        path,
+        direction: 'inbound',
+        source: 'server',
+        contentLength: c.req.header('content-length') ? parseInt(c.req.header('content-length')!, 10) : undefined,
+      });
+      logger?.logEvent?.(requestEvent);
+
+      // Execute the request
+      await next();
+
+      // Calculate duration and get response info
+      const durationMs = Date.now() - startTime;
+      const statusCode = c.res.status;
+      const success = statusCode >= 200 && statusCode < 400;
+
+      // Log response
+      const responseEvent = logEvents.httpResponse(logContext, {
+        method,
+        url,
+        host,
+        path,
+        direction: 'inbound',
+        source: 'server',
+        statusCode,
+        durationMs,
+        success,
+        contentLength: c.res.headers.get('content-length')
+          ? parseInt(c.res.headers.get('content-length')!, 10)
+          : undefined,
+      });
+      logger?.logEvent?.(responseEvent);
+
+      // Record metrics
+      const httpMetrics: HttpRequestMetrics = {
+        method,
+        url: path, // Use path for metrics to avoid cardinality explosion
+        host,
+        direction: 'inbound',
+        source: 'server',
+        statusCode,
+        durationMs,
+        success,
+      };
+      metrics?.recordHttpRequest(httpMetrics);
+    };
+  }
+
+  /**
+   * Registers the HTTP instrumentation middleware.
+   * Call this after registerContextMiddleware() to enable automatic HTTP logging.
+   */
+  registerHttpInstrumentationMiddleware(): void {
+    this.app.use('*', this.createHttpInstrumentationMiddleware());
   }
 }
