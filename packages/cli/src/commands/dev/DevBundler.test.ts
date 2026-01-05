@@ -53,7 +53,6 @@ vi.mock('@mastra/deployer/build', () => {
       off: vi.fn(),
     }),
     getWatcherInputOptions: vi.fn().mockResolvedValue({ plugins: [] }),
-    getEsbuildPlatform: vi.fn().mockReturnValue('node'),
   };
 });
 
@@ -86,15 +85,14 @@ describe('DevBundler', () => {
       // Arrange
       process.env.NODE_ENV = 'test-env';
       const devBundler = new DevBundler();
-      const { getWatcherInputOptions, getEsbuildPlatform } = await import('@mastra/deployer/build');
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       const tmpDir = '.test-tmp';
       try {
         // Act
         await devBundler.watch('test-entry.js', tmpDir, []);
 
-        // Assert - verify platform detection was called during module initialization
-        expect(getEsbuildPlatform).toHaveBeenCalled();
+        // Assert
         expect(getWatcherInputOptions).toHaveBeenCalledWith(
           'test-entry.js',
           'node',

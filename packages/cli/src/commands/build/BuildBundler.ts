@@ -1,6 +1,6 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FileService, getEsbuildPlatform } from '@mastra/deployer/build';
+import { FileService } from '@mastra/deployer/build';
 import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
 import type { Config } from '@mastra/core/mastra';
 import { copy } from 'fs-extra';
@@ -13,7 +13,8 @@ export class BuildBundler extends Bundler {
   constructor({ studio }: { studio?: boolean } = {}) {
     super('Build');
     this.studio = studio ?? false;
-    this.platform = getEsbuildPlatform();
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = typeof (globalThis as any).Bun !== 'undefined' ? 'neutral' : 'node';
   }
 
   protected async getUserBundlerOptions(

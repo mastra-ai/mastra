@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, getEsbuildPlatform } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
@@ -16,7 +16,8 @@ export class DevBundler extends Bundler {
   constructor(customEnvFile?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
-    this.platform = getEsbuildPlatform();
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = typeof (globalThis as any).Bun !== 'undefined' ? 'neutral' : 'node';
   }
 
   getEnvFiles(): Promise<string[]> {

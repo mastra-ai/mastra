@@ -28,16 +28,6 @@ export function detectRuntime(): RuntimePlatform {
   return 'node';
 }
 
-/**
- * Get the appropriate esbuild platform based on the detected runtime.
- *
- * - For Node.js: use 'node' platform
- * - For Bun: use 'neutral' platform to preserve Bun-specific globals
- */
-export function getEsbuildPlatform(): BundlerPlatform {
-  return detectRuntime() === 'bun' ? 'neutral' : 'node';
-}
-
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
 
