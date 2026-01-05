@@ -452,17 +452,17 @@ Be specific rather than generic when the user has expressed clear preferences in
       inputProcessors: usesObservationalMemory
         ? [
             observationalMemory!,
-            {
-              id: 'debug',
-              processInputStep: args => {
-                const omm = args.messageList.getSystemMessages(`observational-memory`);
-                if (omm.length && omm[0]?.content) {
-                  writeFileSync(join(process.cwd(), 'omm.md'), omm[0].content as string);
-                }
-                omm;
-                return args.messageList;
-              },
-            },
+            // {
+            //   id: 'debug',
+            //   processInputStep: args => {
+            //     const omm = args.messageList.getSystemMessages(`observational-memory`);
+            //     if (omm.length && omm[0]?.content) {
+            //       writeFileSync(join(process.cwd(), 'omm.md'), omm[0].content as string);
+            //     }
+            //     omm;
+            //     return args.messageList;
+            //   },
+            // },
           ]
         : undefined,
       outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
