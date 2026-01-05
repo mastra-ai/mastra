@@ -1,7 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import * as logEvents from '@mastra/core/logger';
 import type { Mastra } from '@mastra/core/mastra';
-import type { HttpRequestMetrics } from '@mastra/core/observability';
+import { isExposableMetricsCollector, type HttpRequestMetrics } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
@@ -463,5 +463,41 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
    */
   registerHttpInstrumentationMiddleware(): void {
     this.app.use('*', this.createHttpInstrumentationMiddleware());
+  }
+
+  /**
+   * Registers a /metrics endpoint that exposes metrics for scraping (e.g., by Prometheus).
+   * Only works if the configured metrics collector implements IExposableMetricsCollector.
+   *
+   * @param path - The path to expose metrics on (default: '/metrics')
+   */
+  registerMetricsEndpoint(path = '/metrics'): void {
+    const metrics = this.mastra.getMetrics();
+
+    if (!metrics) {
+      console.warn('[MastraServer] No metrics collector configured, skipping /metrics endpoint');
+      return;
+    }
+
+    if (!isExposableMetricsCollector(metrics)) {
+      console.warn(
+        '[MastraServer] Metrics collector does not support exposure (missing getMetrics/getContentType), skipping /metrics endpoint',
+      );
+      return;
+    }
+
+    const exposableMetrics = metrics;
+
+    this.app.get(path, async (c: Context) => {
+      try {
+        const metricsOutput = await exposableMetrics.getMetrics();
+        return c.text(metricsOutput, 200, {
+          'Content-Type': exposableMetrics.getContentType(),
+        });
+      } catch (error) {
+        console.error('[MastraServer] Error getting metrics:', error);
+        return c.text('Error collecting metrics', 500);
+      }
+    });
   }
 }

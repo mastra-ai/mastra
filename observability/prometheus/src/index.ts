@@ -6,3 +6,6 @@
  */
 
 export { PrometheusMetricsCollector, type PrometheusCollectorOptions } from './collector';
+
+// Re-export the interface for type checking
+export type { IExposableMetricsCollector } from '@mastra/core/observability';

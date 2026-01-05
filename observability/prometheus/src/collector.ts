@@ -6,7 +6,12 @@
  */
 
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
-import { BaseMetricsCollector, MetricNames, type MetricLabels } from '@mastra/core/observability';
+import {
+  BaseMetricsCollector,
+  MetricNames,
+  type MetricLabels,
+  type IExposableMetricsCollector,
+} from '@mastra/core/observability';
 
 export interface PrometheusCollectorOptions {
   /**
@@ -62,7 +67,7 @@ export interface PrometheusCollectorOptions {
  * });
  * ```
  */
-export class PrometheusMetricsCollector extends BaseMetricsCollector {
+export class PrometheusMetricsCollector extends BaseMetricsCollector implements IExposableMetricsCollector {
   private registry: Registry;
   private prefix: string;
   private counters: Map<string, Counter<string>> = new Map();

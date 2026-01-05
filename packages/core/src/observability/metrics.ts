@@ -652,6 +652,32 @@ export interface IMetricsCollector {
   shutdown(): Promise<void>;
 }
 
+/**
+ * Interface for metrics collectors that can expose their metrics for scraping.
+ * Implement this interface for pull-based metrics systems like Prometheus.
+ */
+export interface IExposableMetricsCollector extends IMetricsCollector {
+  /**
+   * Get all metrics in a format suitable for scraping (e.g., Prometheus text format).
+   */
+  getMetrics(): Promise<string>;
+
+  /**
+   * Get the content type for the metrics response.
+   */
+  getContentType(): string;
+}
+
+/**
+ * Type guard to check if a metrics collector can expose its metrics for scraping.
+ */
+export function isExposableMetricsCollector(collector: IMetricsCollector): collector is IExposableMetricsCollector {
+  return (
+    typeof (collector as IExposableMetricsCollector).getMetrics === 'function' &&
+    typeof (collector as IExposableMetricsCollector).getContentType === 'function'
+  );
+}
+
 // ============================================================================
 // Base Metrics Collector (Abstract)
 // ============================================================================
