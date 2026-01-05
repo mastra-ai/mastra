@@ -13,7 +13,7 @@ import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-u
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools';
-import type { ChunkType, StepFailure, StreamEvent, WorkflowRunState, WorkflowStreamEvent } from './types';
+import type { ChunkType, StepFailure, StreamEvent, WorkflowStreamEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow, mapVariable } from './workflow';
 
 const testStorage = new MockStore();
