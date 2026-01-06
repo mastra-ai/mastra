@@ -47,6 +47,8 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType } from
 import type { ToolOptions } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
+import type { Workspace } from '../workspace';
+import { createWorkspaceTools } from '../workspace';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -127,6 +129,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #voice: CompositeVoice;
+  #workspace?: DynamicArgument<Workspace>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
   #maxProcessorRetries?: number;
@@ -244,6 +247,10 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       }
     } else {
       this.#voice = new DefaultVoice();
+    }
+
+    if (config.workspace) {
+      this.#workspace = config.workspace;
     }
 
     if (config.inputProcessors) {
@@ -572,6 +579,67 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
     }
 
     return resolvedMemory;
+  }
+
+  /**
+   * Checks if this agent has its own workspace configured.
+   *
+   * @example
+   * ```typescript
+   * if (agent.hasOwnWorkspace()) {
+   *   const workspace = await agent.getWorkspace();
+   * }
+   * ```
+   */
+  public hasOwnWorkspace(): boolean {
+    return Boolean(this.#workspace);
+  }
+
+  /**
+   * Gets the workspace instance for this agent, resolving function-based workspace if necessary.
+   * The workspace provides filesystem and sandbox capabilities for file operations and code execution.
+   *
+   * @example
+   * ```typescript
+   * const workspace = await agent.getWorkspace();
+   * if (workspace) {
+   *   await workspace.writeFile('/data.json', JSON.stringify(data));
+   *   const result = await workspace.executeCode('console.log("Hello")');
+   * }
+   * ```
+   */
+  public async getWorkspace({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
+    Workspace | undefined
+  > {
+    if (!this.#workspace) {
+      return undefined;
+    }
+
+    let resolvedWorkspace: Workspace;
+
+    if (typeof this.#workspace !== 'function') {
+      resolvedWorkspace = this.#workspace;
+    } else {
+      const result = this.#workspace({ requestContext, mastra: this.#mastra });
+      resolvedWorkspace = await Promise.resolve(result);
+
+      if (!resolvedWorkspace) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_WORKSPACE_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based workspace returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+    }
+
+    return resolvedWorkspace;
   }
 
   get voice() {
@@ -1455,6 +1523,73 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   }
 
   /**
+   * Lists workspace tools if a workspace is configured.
+   * @internal
+   */
+  private async listWorkspaceTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    tracingContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    tracingContext?: TracingContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  }) {
+    let convertedWorkspaceTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      this.logger.debug(`[Agent:${this.name}] - Skipping workspace tools (agent network context)`, { runId });
+      return convertedWorkspaceTools;
+    }
+
+    // Get workspace tools if available
+    const workspace = await this.getWorkspace({ requestContext });
+
+    if (!workspace) {
+      return convertedWorkspaceTools;
+    }
+
+    const workspaceTools = createWorkspaceTools(workspace);
+
+    if (Object.keys(workspaceTools).length > 0) {
+      this.logger.debug(
+        `[Agent:${this.name}] - Adding workspace tools: ${Object.keys(workspaceTools).join(', ')}`,
+        { runId },
+      );
+
+      for (const [toolName, tool] of Object.entries(workspaceTools)) {
+        const toolObj = tool;
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          agentName: this.name,
+          requestContext,
+          tracingContext,
+          model: await this.getModel({ requestContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: (toolObj as any).requireApproval,
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        convertedWorkspaceTools[toolName] = convertedToCoreTool;
+      }
+    }
+
+    return convertedWorkspaceTools;
+  }
+
+  /**
    * Executes input processors on the message list before LLM processing.
    * @internal
    */
@@ -2313,6 +2448,16 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       autoResumeSuspendedTools,
     });
 
+    const workspaceTools = await this.listWorkspaceTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      tracingContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+    });
+
     return this.formatTools({
       ...assignedTools,
       ...memoryTools,
@@ -2320,6 +2465,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
       ...clientSideTools,
       ...agentTools,
       ...workflowTools,
+      ...workspaceTools,
     });
   }
 

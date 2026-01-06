@@ -123,3 +123,9 @@ export type { InstallPackageResult } from './sandbox';
 
 export { LocalFilesystem, type LocalFilesystemOptions } from './local-filesystem';
 export { LocalSandbox, type LocalSandboxOptions } from './local-sandbox';
+
+// =============================================================================
+// Workspace Tools (for agent auto-injection)
+// =============================================================================
+
+export { createWorkspaceTools, WORKSPACE_TOOL_NAMES } from './tools';

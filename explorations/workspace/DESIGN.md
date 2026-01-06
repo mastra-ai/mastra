@@ -314,9 +314,48 @@ class Workspace {
 
 **Total: 50 passing tests (in explorations/workspace)**
 
+### ✅ Agent Integration Complete
+
+When you configure a workspace on an agent, the following tools are automatically injected:
+
+**Filesystem tools** (when `filesystem` is configured):
+- `workspace_read_file` - Read file contents
+- `workspace_write_file` - Write content to a file
+- `workspace_list_files` - List files in a directory
+- `workspace_delete_file` - Delete a file
+- `workspace_file_exists` - Check if a file exists
+- `workspace_mkdir` - Create a directory
+
+**Sandbox tools** (when `sandbox` is configured):
+- `workspace_execute_code` - Execute code (Node.js, Python, shell, etc.)
+- `workspace_execute_command` - Execute shell commands
+- `workspace_install_package` - Install packages
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+
+// Create and initialize workspace
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './agent-workspace' }),
+});
+await workspace.init();
+
+// Create agent with workspace - tools are auto-injected
+const agent = new Agent({
+  id: 'code-assistant',
+  name: 'Code Assistant',
+  model: 'openai/gpt-4',
+  instructions: 'You are a helpful coding assistant with access to a workspace.',
+  workspace,
+});
+
+// Agent now has access to workspace_read_file, workspace_write_file, etc.
+const response = await agent.generate('Create a hello.txt file with "Hello World" content');
+```
+
 ### 📋 Planned
 
 1. **AgentFS provider** - Using `agentfs-sdk` from Turso
 2. **ComputeSDKSandbox provider** - E2B, Modal, Docker, etc.
-3. **Agent integration** - Add `workspace` config to AgentConfig
-4. **Auto tool injection** - Inject workspace tools when workspace is configured

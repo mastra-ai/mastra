@@ -14,6 +14,8 @@ The Workspace abstraction provides filesystem and sandbox capabilities for agent
 
 ## Quick Start
 
+### Standalone Workspace
+
 ```typescript
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
 
@@ -37,6 +39,44 @@ console.log(result.stdout); // "Hello!"
 
 // Cleanup
 await workspace.destroy();
+```
+
+### With an Agent (Auto Tool Injection)
+
+When you configure a workspace on an agent, workspace tools are automatically available:
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+
+// Create and initialize workspace
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './agent-workspace' }),
+});
+await workspace.init();
+
+// Create agent with workspace
+const agent = new Agent({
+  id: 'code-assistant',
+  name: 'Code Assistant',
+  model: 'openai/gpt-4',
+  instructions: 'You are a helpful coding assistant.',
+  workspace,
+});
+
+// Agent automatically has access to:
+// - workspace_read_file
+// - workspace_write_file
+// - workspace_list_files
+// - workspace_delete_file
+// - workspace_file_exists
+// - workspace_mkdir
+// - workspace_execute_code
+// - workspace_execute_command
+// - workspace_install_package
+
+const response = await agent.generate('Create a hello.txt file with "Hello World"');
 ```
 
 ## Available Providers
