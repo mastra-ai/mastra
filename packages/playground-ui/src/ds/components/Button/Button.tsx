@@ -9,7 +9,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   prefetch?: boolean | null;
   children: React.ReactNode;
   size?: 'md' | 'lg';
-  variant?: 'default' | 'light';
+  variant?: 'default' | 'light' | 'outline' | 'ghost';
   target?: string;
   type?: 'button' | 'submit' | 'reset';
 }
@@ -22,17 +22,12 @@ const sizeClasses = {
 const variantClasses = {
   default: 'bg-surface2 hover:bg-surface4 text-icon3 hover:text-icon6 disabled:opacity-50',
   light: 'bg-surface3 hover:bg-surface5 text-icon6 disabled:opacity-50',
+  outline: 'bg-transparent hover:bg-surface2 text-icon3 hover:text-icon6 disabled:opacity-50',
+  ghost: 'bg-transparent border-transparent hover:bg-surface2 text-icon3 hover:text-icon6 disabled:opacity-50',
 };
 
-export function buttonVariants(options?: {
-  variant?: ButtonProps['variant'] | 'outline' | 'ghost';
-  size?: ButtonProps['size'];
-}) {
-  // Map old variants to new ones
-  let variant: ButtonProps['variant'] = 'default';
-  if (options?.variant === 'light' || options?.variant === 'default') {
-    variant = options.variant;
-  }
+export function buttonVariants(options?: { variant?: ButtonProps['variant']; size?: ButtonProps['size'] }) {
+  const variant = options?.variant || 'default';
   const size = options?.size || 'md';
 
   return clsx(

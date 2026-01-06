@@ -118,20 +118,17 @@ export function Combobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
+        <DSButton
           ref={triggerRef}
           role="combobox"
           aria-expanded={open}
-          className={cn(
-            'bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6',
-            'w-full justify-between',
-            className,
-          )}
+          variant={variant}
+          className={cn('w-full justify-between', className)}
           disabled={disabled}
         >
           <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </button>
+        </DSButton>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-fit" align="start">
         <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
