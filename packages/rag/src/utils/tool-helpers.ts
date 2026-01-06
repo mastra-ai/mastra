@@ -131,16 +131,24 @@ export async function resolveVectorStore(
 
 /**
  * Coerces a topK value to a number, handling string inputs and providing a default.
+ * Validates that the result is a finite positive number greater than zero.
  * @param topK - The value to coerce (number, string, or undefined)
  * @param defaultValue - Default value if coercion fails (defaults to 10)
- * @returns A valid number for topK
+ * @returns A valid positive number for topK, or defaultValue if invalid/non-finite/zero/negative
  */
 export function coerceTopK(topK: number | string | undefined, defaultValue: number = 10): number {
-  if (typeof topK === 'number' && !isNaN(topK)) {
-    return topK;
+  if (typeof topK === 'number') {
+    if (Number.isFinite(topK) && topK > 0) {
+      return topK;
+    }
+    return defaultValue;
   }
-  if (typeof topK === 'string' && !isNaN(Number(topK))) {
-    return Number(topK);
+  if (typeof topK === 'string') {
+    const parsed = Number(topK);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+    return defaultValue;
   }
   return defaultValue;
 }
