@@ -55,6 +55,15 @@ export {
   type ExecuteCodeOptions,
   type ExecuteCommandOptions,
   type InstallPackageOptions,
+  type InstallPackageResult,
   type SandboxStatus,
   type SandboxInfo,
+  // Built-in providers
+  LocalFilesystem,
+  LocalSandbox,
+  type LocalFilesystemOptions,
+  type LocalSandboxOptions,
+  // Workspace tools for agent integration
+  createWorkspaceTools,
+  WORKSPACE_TOOL_NAMES,
 } from './workspace';

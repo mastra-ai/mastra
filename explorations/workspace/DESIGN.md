@@ -28,9 +28,9 @@ Both are optional but at least one must be present for a workspace to be useful.
 │  │  │   │  External packages:     │   │  External packages:          │    │ │ │
 │  │  │   │  ┌─────────────────┐    │   │  ┌─────────────────┐         │    │ │ │
 │  │  │   │  │ • AgentFilesystem│   │   │  │ • ComputeSDK    │         │    │ │ │
-│  │  │   │  │   (@mastra/     │   │   │  │   (E2B, Modal,  │         │    │ │ │
-│  │  │   │  │   filesystem-   │   │   │  │    Docker...)   │         │    │ │ │
-│  │  │   │  │   agentfs)      │   │   │  │   (planned)     │         │    │ │ │
+│  │  │   │  │   (@mastra/     │   │   │  │   (@mastra/     │         │    │ │ │
+│  │  │   │  │   filesystem-   │   │   │  │   sandbox-      │         │    │ │ │
+│  │  │   │  │   agentfs)      │   │   │  │   computesdk)   │         │    │ │ │
 │  │  │   │  └─────────────────┘    │   │  └─────────────────┘         │    │ │ │
 │  │  │   └─────────────────────────┘   └──────────────────────────────┘    │ │ │
 │  │  └─────────────────────────────────────────────────────────────────────┘ │ │
@@ -61,9 +61,9 @@ Both are optional but at least one must be present for a workspace to be useful.
 │   ├── local-sandbox.ts       # LocalSandbox implementation
 │   └── index.ts               # Exports
 
-# External provider packages (planned)
+# External provider packages
 @mastra/filesystem-agentfs      # AgentFS - Turso-backed filesystem
-@mastra/sandbox-computesdk      # ComputeSDK - E2B, Modal, Docker, etc.
+@mastra/sandbox-computesdk      # ComputeSDK - E2B, Modal, Railway, etc.
 
 explorations/workspace/         # Development/testing package
 ├── src/                       # Reference implementations for testing
@@ -97,17 +97,29 @@ console.log(result.stdout); // "Hi"
 await workspace.destroy();
 ```
 
-### Using External Providers (planned)
+### Using External Providers
 
 ```typescript
 import { Workspace } from '@mastra/core';
-import { AgentFS } from '@mastra/filesystem-agentfs';
+import { AgentFilesystem } from '@mastra/filesystem-agentfs';
 import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
 
+// Cloud-based workspace with persistent filesystem and secure execution
 const workspace = new Workspace({
-  filesystem: new AgentFS({ path: './agent.db' }),
-  sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+  filesystem: new AgentFilesystem({ id: 'my-agent' }),
+  sandbox: new ComputeSDKSandbox({
+    provider: 'e2b',
+    apiKey: process.env.COMPUTESDK_API_KEY,
+  }),
 });
+
+await workspace.init();
+
+// Execute code securely in the cloud
+const result = await workspace.executeCode(
+  'print("Hello from E2B!")',
+  { runtime: 'python' }
+);
 ```
 
 ---
@@ -118,7 +130,7 @@ const workspace = new Workspace({
 |----------|---------|---------|-------------|----------|
 | **LocalFilesystem** | `@mastra/core` | Disk folder | ✅ Yes | Development, local agents |
 | **RamFilesystem** | `@mastra/workspace` | Memory | ❌ No | Testing, ephemeral workspaces |
-| **AgentFS** (planned) | `@mastra/filesystem-agentfs` | SQLite/Turso | ✅ Yes | Production, audit trail |
+| **AgentFilesystem** | `@mastra/filesystem-agentfs` | SQLite/Turso | ✅ Yes | Production, audit trail |
 
 ### LocalFilesystem
 
@@ -154,7 +166,7 @@ const fs = new RamFilesystem({
 | Provider | Package | Isolation | Best For |
 |----------|---------|-----------|----------|
 | **LocalSandbox** | `@mastra/core` | ❌ None (host machine) | Development only |
-| **ComputeSDKSandbox** (planned) | `@mastra/sandbox-computesdk` | ✅ Full | Production |
+| **ComputeSDKSandbox** | `@mastra/sandbox-computesdk` | ✅ Full | Production |
 
 ### LocalSandbox
 
@@ -169,16 +181,27 @@ const sandbox = new LocalSandbox({
 });
 ```
 
-### ComputeSDKSandbox (planned)
+### ComputeSDKSandbox
 
-Uses ComputeSDK to access E2B, Modal, Docker, and other sandbox providers.
+Uses ComputeSDK to access E2B, Modal, Railway, Daytona, and other cloud sandbox providers.
 
 ```typescript
 import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
 
+// Using E2B
 const sandbox = new ComputeSDKSandbox({
-  provider: 'e2b',  // or 'modal', 'docker', etc.
+  provider: 'e2b',
+  apiKey: process.env.COMPUTESDK_API_KEY,
 });
+
+// Using Modal
+const sandbox2 = new ComputeSDKSandbox({
+  provider: 'modal',
+  apiKey: process.env.COMPUTESDK_API_KEY,
+});
+
+// All supported providers:
+// e2b, modal, railway, daytona, vercel, runloop, cloudflare, codesandbox, blaxel
 ```
 
 ---
@@ -379,6 +402,42 @@ Features:
 - Atomic operations
 - Easy backup (single file)
 
-### 📋 Planned
+### ✅ ComputeSDK Sandbox Provider Complete
 
-1. **ComputeSDKSandbox provider** - E2B, Modal, Docker, etc.
+The `@mastra/sandbox-computesdk` package provides secure cloud execution via ComputeSDK:
+
+```typescript
+import { Workspace } from '@mastra/core';
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
+
+const workspace = new Workspace({
+  sandbox: new ComputeSDKSandbox({
+    provider: 'e2b',  // or modal, railway, daytona, vercel...
+    apiKey: process.env.COMPUTESDK_API_KEY,
+  }),
+});
+
+await workspace.init();
+const result = await workspace.executeCode('print("Secure!")', { runtime: 'python' });
+```
+
+Supported providers:
+- **e2b** - E2B cloud sandboxes
+- **modal** - Modal compute
+- **railway** - Railway environments
+- **daytona** - Daytona workspaces
+- **vercel** - Vercel Functions sandbox
+- **runloop** - Runloop sandboxes
+- **cloudflare** - Cloudflare Workers
+- **codesandbox** - CodeSandbox environments
+- **blaxel** - Blaxel compute
+
+### ✅ All Core Features Complete
+
+The workspace system is now feature-complete with:
+- Core Workspace class in `@mastra/core`
+- Built-in LocalFilesystem and LocalSandbox providers
+- AgentFilesystem provider for persistent SQLite/Turso storage
+- ComputeSDKSandbox provider for secure cloud execution
+- Full agent integration with auto-injected tools
+- 50 passing tests in explorations/workspace

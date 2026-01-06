@@ -16,6 +16,7 @@ packages:
   - explorations/agent-builder-gh-repro
   - explorations/workspace
   - filesystem/*
+  - sandbox/*
 
 catalog:
   '@vitest/coverage-v8': 4.0.12

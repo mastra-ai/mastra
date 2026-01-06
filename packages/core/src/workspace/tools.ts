@@ -253,7 +253,7 @@ export function createWorkspaceTools(workspace: Workspace) {
         success: z.boolean(),
         packageName: z.string(),
         version: z.string().optional(),
-        error: z.string().optional(),
+        errorMessage: z.string().optional(),
         executionTimeMs: z.number(),
       }),
       execute: async ({ packageName, packageManager, version }) => {
@@ -261,12 +261,18 @@ export function createWorkspaceTools(workspace: Workspace) {
           return {
             success: false,
             packageName,
-            error: 'Package installation not supported by this sandbox',
+            errorMessage: 'Package installation not supported by this sandbox',
             executionTimeMs: 0,
           };
         }
         const result = await workspace.sandbox!.installPackage(packageName, { packageManager, version });
-        return result;
+        return {
+          success: result.success,
+          packageName: result.packageName,
+          version: result.version,
+          errorMessage: result.error,
+          executionTimeMs: result.executionTimeMs,
+        };
       },
     });
   }

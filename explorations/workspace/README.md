@@ -94,12 +94,12 @@ const response = await agent.generate('Create a hello.txt file with "Hello World
 |----------|-------------|----------|
 | `RamFilesystem` | In-memory (ephemeral) | Testing, temp workspaces |
 
-### Planned (external packages)
+### External Packages (Available)
 
 | Provider | Package | Description |
 |----------|---------|-------------|
-| `AgentFS` | `@mastra/filesystem-agentfs` | Turso-backed with audit trail |
-| `ComputeSDKSandbox` | `@mastra/sandbox-computesdk` | E2B, Modal, Docker, etc. |
+| `AgentFilesystem` | `@mastra/filesystem-agentfs` | Turso-backed with audit trail |
+| `ComputeSDKSandbox` | `@mastra/sandbox-computesdk` | E2B, Modal, Railway, etc. |
 
 ## LocalFilesystem
 
@@ -169,31 +169,46 @@ const fs = new RamFilesystem({
 await fs.writeFile('/data.txt', 'content');
 ```
 
-## Planned Providers
+## External Provider Packages
 
-### AgentFS
+### AgentFilesystem
 
 Turso-backed filesystem with full audit trail.
 
 ```typescript
-// Coming soon
-import { AgentFS } from '@mastra/filesystem-agentfs';
+import { Workspace } from '@mastra/core';
+import { AgentFilesystem } from '@mastra/filesystem-agentfs';
 
-const fs = new AgentFS({ path: './agent.db' });
+const workspace = new Workspace({
+  filesystem: new AgentFilesystem({ id: 'my-agent' }),
+});
+
+await workspace.init();
+await workspace.writeFile('/data.json', '{"key": "value"}');
 ```
 
 ### ComputeSDKSandbox
 
-Access to E2B, Modal, Docker, and other sandbox providers via ComputeSDK.
+Secure cloud execution via E2B, Modal, Railway, and other providers.
 
 ```typescript
-// Coming soon
+import { Workspace } from '@mastra/core';
 import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
 
-const sandbox = new ComputeSDKSandbox({
-  provider: 'e2b',  // or 'modal', 'docker', etc.
+const workspace = new Workspace({
+  sandbox: new ComputeSDKSandbox({
+    provider: 'e2b',  // or modal, railway, daytona, vercel...
+    apiKey: process.env.COMPUTESDK_API_KEY,
+  }),
 });
+
+await workspace.init();
+
+// Execute code securely in the cloud
+const result = await workspace.executeCode('print("Hello!")', { runtime: 'python' });
 ```
+
+Supported providers: e2b, modal, railway, daytona, vercel, runloop, cloudflare, codesandbox, blaxel
 
 ## Development
 
