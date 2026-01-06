@@ -20,9 +20,13 @@ Both are optional but at least one must be present for a workspace to be useful.
 │  │  │   │      Filesystem         │   │         Sandbox              │    │ │ │
 │  │  │   │  (provider instance)    │   │    (provider instance)       │    │ │ │
 │  │  │   │                         │   │                              │    │ │ │
-│  │  │   │  Implementations:       │   │  Implementations:            │    │ │ │
+│  │  │   │  Built-in (@mastra/core):│   │  Built-in (@mastra/core):   │    │ │ │
 │  │  │   │  ┌─────────────────┐    │   │  ┌─────────────────┐         │    │ │ │
 │  │  │   │  │ • LocalFilesystem│   │   │  │ • LocalSandbox  │         │    │ │ │
+│  │  │   │  └─────────────────┘    │   │  └─────────────────┘         │    │ │ │
+│  │  │   │                         │   │                              │    │ │ │
+│  │  │   │  External packages:     │   │  External packages:          │    │ │ │
+│  │  │   │  ┌─────────────────┐    │   │  ┌─────────────────┐         │    │ │ │
 │  │  │   │  │ • AgentFS        │   │   │  │ • ComputeSDK    │         │    │ │ │
 │  │  │   │  │ • RamFilesystem  │   │   │  │   (E2B, Modal,  │         │    │ │ │
 │  │  │   │  └─────────────────┘    │   │  │    Docker...)   │         │    │ │ │
@@ -39,31 +43,26 @@ Both are optional but at least one must be present for a workspace to be useful.
 2. **Instance-Based** - Users pass provider instances directly to Workspace
 3. **Composable** - Mix any FS provider with any Sandbox provider
 4. **Optional Components** - Workspace can have just FS, just Sandbox, or both
-5. **Core in Core** - Workspace class lives in `@mastra/core`, providers are separate packages
+5. **Built-in Basics** - LocalFilesystem and LocalSandbox are in `@mastra/core`
+6. **External Providers** - Cloud/remote providers are separate packages
 
 ---
 
 ## Package Structure
 
 ```
-@mastra/core                    # Core Workspace class and interfaces
+@mastra/core                    # Core Workspace class, interfaces, AND local providers
 ├── src/workspace/
 │   ├── workspace.ts           # Workspace class
 │   ├── filesystem.ts          # WorkspaceFilesystem interface
 │   ├── sandbox.ts             # WorkspaceSandbox interface
+│   ├── local-filesystem.ts    # LocalFilesystem implementation
+│   ├── local-sandbox.ts       # LocalSandbox implementation
 │   └── index.ts               # Exports
 
-filesystem/                     # Filesystem providers (top-level folder)
-├── local/                     # @mastra/filesystem-local
-│   └── src/index.ts           # LocalFilesystem - folder on disk
-├── agentfs/                   # @mastra/filesystem-agentfs (planned)
-│   └── src/index.ts           # AgentFS - Turso-backed
-
-sandbox/                        # Sandbox providers (top-level folder)
-├── local/                     # @mastra/sandbox-local
-│   └── src/index.ts           # LocalSandbox - host machine execution
-├── computesdk/                # @mastra/sandbox-computesdk (planned)
-│   └── src/index.ts           # ComputeSDK - E2B, Modal, Docker, etc.
+# External provider packages (planned)
+@mastra/filesystem-agentfs      # AgentFS - Turso-backed filesystem
+@mastra/sandbox-computesdk      # ComputeSDK - E2B, Modal, Docker, etc.
 
 explorations/workspace/         # Development/testing package
 ├── src/                       # Reference implementations for testing
@@ -76,13 +75,12 @@ explorations/workspace/         # Development/testing package
 ### Basic Usage
 
 ```typescript
-import { Workspace } from '@mastra/core';
-import { LocalFilesystem, LocalSandbox } from '@mastra/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
 
 // Create a workspace with local filesystem (folder on disk)
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
-  sandbox: new LocalSandbox(),
+  sandbox: new LocalSandbox({ workingDirectory: './my-workspace' }),
 });
 
 await workspace.init();
@@ -98,12 +96,12 @@ console.log(result.stdout); // "Hi"
 await workspace.destroy();
 ```
 
-### Using AgentFS (planned)
+### Using External Providers (planned)
 
 ```typescript
 import { Workspace } from '@mastra/core';
-import { AgentFS } from '@mastra/workspace-fs-agentfs';
-import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+import { AgentFS } from '@mastra/filesystem-agentfs';
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
 
 const workspace = new Workspace({
   filesystem: new AgentFS({ path: './agent.db' }),
@@ -115,18 +113,18 @@ const workspace = new Workspace({
 
 ## Filesystem Providers
 
-| Provider | Storage | Persistence | Best For |
-|----------|---------|-------------|----------|
-| **LocalFilesystem** | Disk folder | ✅ Yes | Development, local agents |
-| **RamFilesystem** | Memory | ❌ No | Testing, ephemeral workspaces |
-| **AgentFS** (planned) | SQLite/Turso | ✅ Yes | Production, audit trail |
+| Provider | Package | Storage | Persistence | Best For |
+|----------|---------|---------|-------------|----------|
+| **LocalFilesystem** | `@mastra/core` | Disk folder | ✅ Yes | Development, local agents |
+| **RamFilesystem** | `@mastra/workspace` | Memory | ❌ No | Testing, ephemeral workspaces |
+| **AgentFS** (planned) | `@mastra/filesystem-agentfs` | SQLite/Turso | ✅ Yes | Production, audit trail |
 
 ### LocalFilesystem
 
-Stores files in a folder on the user's machine. This is the recommended filesystem for development.
+Stores files in a folder on the user's machine. Built into `@mastra/core`.
 
 ```typescript
-import { LocalFilesystem } from '@mastra/workspace';
+import { LocalFilesystem } from '@mastra/core';
 
 const fs = new LocalFilesystem({
   basePath: './workspace',  // Files stored here
@@ -136,7 +134,7 @@ const fs = new LocalFilesystem({
 
 ### RamFilesystem
 
-In-memory filesystem for testing and ephemeral workspaces. Data is lost when the process exits.
+In-memory filesystem for testing and ephemeral workspaces. Available in exploration package.
 
 ```typescript
 import { RamFilesystem } from '@mastra/workspace';
@@ -152,22 +150,21 @@ const fs = new RamFilesystem({
 
 ## Sandbox Providers
 
-| Provider | Isolation | Best For |
-|----------|-----------|----------|
-| **LocalSandbox** | ❌ None (host machine) | Development only |
-| **ComputeSDKSandbox** (planned) | ✅ Full | Production |
+| Provider | Package | Isolation | Best For |
+|----------|---------|-----------|----------|
+| **LocalSandbox** | `@mastra/core` | ❌ None (host machine) | Development only |
+| **ComputeSDKSandbox** (planned) | `@mastra/sandbox-computesdk` | ✅ Full | Production |
 
 ### LocalSandbox
 
-Runs code directly on the host machine. **Only use for development.**
+Runs code directly on the host machine. Built into `@mastra/core`. **Only use for development.**
 
 ```typescript
-import { LocalSandbox } from '@mastra/workspace';
+import { LocalSandbox } from '@mastra/core';
 
 const sandbox = new LocalSandbox({
-  cwd: './workspace',        // Working directory
-  timeout: 30000,            // Default timeout (ms)
-  defaultRuntime: 'node',    // Default runtime
+  workingDirectory: './workspace',  // Working directory
+  timeout: 30000,                   // Default timeout (ms)
 });
 ```
 
@@ -176,7 +173,7 @@ const sandbox = new LocalSandbox({
 Uses ComputeSDK to access E2B, Modal, Docker, and other sandbox providers.
 
 ```typescript
-import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
 
 const sandbox = new ComputeSDKSandbox({
   provider: 'e2b',  // or 'modal', 'docker', etc.
@@ -240,7 +237,7 @@ interface WorkspaceSandbox {
   executeCommandStream?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<StreamingExecutionResult>;
 
   // Package management
-  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<void>;
+  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<InstallPackageResult>;
 
   // Lifecycle
   start(): Promise<void>;
@@ -301,21 +298,21 @@ class Workspace {
    - Snapshot and restore capabilities
    - Sync between filesystem and sandbox
 
-2. **LocalFilesystem provider**
+2. **LocalFilesystem in @mastra/core**
    - Folder-based storage on disk
    - Path traversal protection (sandbox mode)
    - Full POSIX-like operations
 
-3. **RamFilesystem provider**
+3. **LocalSandbox in @mastra/core**
+   - Multi-runtime support (Node, Python, Bash, etc.)
+   - Code and command execution
+   - Package installation
+
+4. **RamFilesystem (explorations package)**
    - In-memory filesystem for testing
    - Initial file seeding support
 
-4. **LocalSandbox provider**
-   - Multi-runtime support (Node, Python, Bash, etc.)
-   - Code and command execution
-   - Streaming output support
-
-**Total: 50 passing tests**
+**Total: 50 passing tests (in explorations/workspace)**
 
 ### 📋 Planned
 

@@ -28,33 +28,35 @@
 // Core Types
 // =============================================================================
 
-export type SandboxRuntime = 'python' | 'node' | 'bash' | 'ruby' | 'go' | 'rust' | 'deno' | 'bun';
+export type SandboxRuntime = 'python' | 'node' | 'bash' | 'shell' | 'ruby' | 'go' | 'rust' | 'deno' | 'bun';
 
 export interface ExecutionResult {
+  /** Whether execution completed successfully (exitCode === 0) */
+  success: boolean;
   /** Exit code (0 = success) */
   exitCode: number;
   /** Standard output */
   stdout: string;
   /** Standard error */
   stderr: string;
-  /** Execution duration in milliseconds */
-  duration: number;
+  /** Execution time in milliseconds */
+  executionTimeMs: number;
   /** Whether execution timed out */
-  timedOut: boolean;
+  timedOut?: boolean;
   /** Whether execution was killed */
-  killed: boolean;
+  killed?: boolean;
 }
 
 export interface CommandResult extends ExecutionResult {
   /** The command that was executed */
-  command: string;
+  command?: string;
   /** Arguments passed to the command */
-  args: string[];
+  args?: string[];
 }
 
 export interface CodeResult extends ExecutionResult {
   /** The runtime used */
-  runtime: SandboxRuntime;
+  runtime?: SandboxRuntime;
   /** Return value if the code produced one (runtime-dependent) */
   returnValue?: unknown;
 }
@@ -104,13 +106,28 @@ export interface ExecuteCommandOptions {
 
 export interface InstallPackageOptions {
   /** Package manager to use */
-  packageManager?: 'npm' | 'pip' | 'cargo' | 'go' | 'auto';
+  packageManager?: 'npm' | 'pip' | 'cargo' | 'go' | 'yarn' | 'pnpm' | 'auto';
   /** Install as dev dependency */
   dev?: boolean;
   /** Specific version */
   version?: string;
+  /** Install globally */
+  global?: boolean;
   /** Timeout in milliseconds */
   timeout?: number;
+}
+
+export interface InstallPackageResult {
+  /** Whether installation succeeded */
+  success: boolean;
+  /** Package name */
+  packageName: string;
+  /** Installed version (if available) */
+  version?: string;
+  /** Error message if failed */
+  error?: string;
+  /** Execution time in milliseconds */
+  executionTimeMs: number;
 }
 
 // =============================================================================
@@ -188,12 +205,12 @@ export interface WorkspaceSandbox {
   /**
    * Install a package in the sandbox environment.
    */
-  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<void>;
+  installPackage?(packageName: string, options?: InstallPackageOptions): Promise<InstallPackageResult>;
 
   /**
    * Install multiple packages.
    */
-  installPackages?(packages: string[], options?: InstallPackageOptions): Promise<void>;
+  installPackages?(packages: string[], options?: InstallPackageOptions): Promise<InstallPackageResult[]>;
 
   // ---------------------------------------------------------------------------
   // Filesystem Access (Sandbox's internal FS)
@@ -254,6 +271,7 @@ export type SandboxStatus = 'pending' | 'starting' | 'running' | 'stopping' | 's
 
 export interface SandboxInfo {
   id: string;
+  name: string;
   provider: string;
   status: SandboxStatus;
   /** When the sandbox was created */
@@ -262,13 +280,14 @@ export interface SandboxInfo {
   lastUsedAt?: Date;
   /** Time until auto-shutdown (if applicable) */
   timeoutAt?: Date;
-  /** Resource usage (if available) */
+  /** Resource info (if available) */
   resources?: {
-    memoryUsedMb?: number;
-    memoryLimitMb?: number;
+    memoryMB?: number;
+    memoryUsedMB?: number;
+    cpuCores?: number;
     cpuPercent?: number;
-    diskUsedMb?: number;
-    diskLimitMb?: number;
+    diskMB?: number;
+    diskUsedMB?: number;
   };
   /** Provider-specific metadata */
   metadata?: Record<string, unknown>;
@@ -312,8 +331,8 @@ export class SandboxTimeoutError extends SandboxError {
 }
 
 export class SandboxNotReadyError extends SandboxError {
-  constructor(status: SandboxStatus) {
-    super(`Sandbox is not ready (status: ${status})`, 'NOT_READY', { status });
+  constructor(idOrStatus: string) {
+    super(`Sandbox is not ready: ${idOrStatus}`, 'NOT_READY', { id: idOrStatus });
     this.name = 'SandboxNotReadyError';
   }
 }

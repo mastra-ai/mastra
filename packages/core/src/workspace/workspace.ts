@@ -135,8 +135,12 @@ export interface WorkspaceInfo {
     status: string;
     supportedRuntimes: readonly SandboxRuntime[];
     resources?: {
-      memoryUsedMb?: number;
-      memoryLimitMb?: number;
+      memoryMB?: number;
+      memoryUsedMB?: number;
+      cpuCores?: number;
+      cpuPercent?: number;
+      diskMB?: number;
+      diskUsedMB?: number;
     };
   };
 }

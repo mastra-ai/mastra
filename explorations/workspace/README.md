@@ -1,31 +1,26 @@
 # @mastra/workspace
 
-Workspace providers for Mastra agents - filesystem and sandbox capabilities.
+Workspace exploration and test suite for Mastra agents.
 
-## Design Philosophy
+## Overview
 
-This package provides **provider implementations** for the Workspace class in `@mastra/core`.
+The Workspace abstraction provides filesystem and sandbox capabilities for agents.
 
-- **Workspace class** → lives in `@mastra/core`
-- **Providers** → separate packages (this one and future packages)
-- **Instance-based API** → users pass provider instances, not config objects
-
-## Installation
-
-```bash
-pnpm add @mastra/workspace
-```
+- **Workspace class** → `@mastra/core`
+- **LocalFilesystem** → `@mastra/core` (built-in)
+- **LocalSandbox** → `@mastra/core` (built-in)
+- **RamFilesystem** → This package (for testing)
+- **External providers** → Separate packages (AgentFS, ComputeSDK, etc.)
 
 ## Quick Start
 
 ```typescript
-import { Workspace } from '@mastra/core';
-import { LocalFilesystem, LocalSandbox } from '@mastra/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
 
-// Create a workspace with local filesystem (folder on disk)
+// Create a workspace with local filesystem and sandbox
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
-  sandbox: new LocalSandbox(),
+  sandbox: new LocalSandbox({ workingDirectory: './my-workspace' }),
 });
 
 await workspace.init();
@@ -46,25 +41,32 @@ await workspace.destroy();
 
 ## Available Providers
 
-### Filesystem Providers
+### Built-in (in @mastra/core)
 
 | Provider | Description | Best For |
 |----------|-------------|----------|
 | `LocalFilesystem` | Folder on disk | Development, local agents |
-| `RamFilesystem` | In-memory (ephemeral) | Testing, temp workspaces |
+| `LocalSandbox` | Host machine execution | Development only ⚠️ |
 
-### Sandbox Providers
+### In This Package (explorations)
 
 | Provider | Description | Best For |
 |----------|-------------|----------|
-| `LocalSandbox` | Host machine execution | Development only ⚠️ |
+| `RamFilesystem` | In-memory (ephemeral) | Testing, temp workspaces |
+
+### Planned (external packages)
+
+| Provider | Package | Description |
+|----------|---------|-------------|
+| `AgentFS` | `@mastra/filesystem-agentfs` | Turso-backed with audit trail |
+| `ComputeSDKSandbox` | `@mastra/sandbox-computesdk` | E2B, Modal, Docker, etc. |
 
 ## LocalFilesystem
 
-Stores files in a folder on the user's machine.
+Built into `@mastra/core`. Stores files in a folder on the user's machine.
 
 ```typescript
-import { LocalFilesystem } from '@mastra/workspace';
+import { LocalFilesystem } from '@mastra/core';
 
 const fs = new LocalFilesystem({
   basePath: './workspace',  // Required: base directory
@@ -80,6 +82,33 @@ const content = await fs.readFile('/hello.txt', { encoding: 'utf-8' });
 // Directory operations
 await fs.mkdir('/data');
 const entries = await fs.readdir('/');
+```
+
+## LocalSandbox
+
+Built into `@mastra/core`. Runs code directly on the host machine.
+
+⚠️ **Warning:** Only use for development. For production, use ComputeSDKSandbox.
+
+```typescript
+import { LocalSandbox } from '@mastra/core';
+
+const sandbox = new LocalSandbox({
+  workingDirectory: './workspace',  // Optional: working directory
+  timeout: 30000,                   // Optional: default timeout (ms)
+});
+
+await sandbox.start();
+
+// Execute code
+const result = await sandbox.executeCode('console.log("Hello!")', {
+  runtime: 'node',
+});
+
+// Execute commands
+const cmdResult = await sandbox.executeCommand('echo', ['Hello', 'World']);
+
+await sandbox.destroy();
 ```
 
 ## RamFilesystem
@@ -100,34 +129,6 @@ const fs = new RamFilesystem({
 await fs.writeFile('/data.txt', 'content');
 ```
 
-## LocalSandbox
-
-Runs code directly on the host machine.
-
-⚠️ **Warning:** Only use for development. For production, use ComputeSDKSandbox.
-
-```typescript
-import { LocalSandbox } from '@mastra/workspace';
-
-const sandbox = new LocalSandbox({
-  cwd: './workspace',        // Optional: working directory
-  timeout: 30000,            // Optional: default timeout (ms)
-  defaultRuntime: 'node',    // Optional: default runtime
-});
-
-await sandbox.start();
-
-// Execute code
-const result = await sandbox.executeCode('console.log("Hello!")', {
-  runtime: 'node',
-});
-
-// Execute commands
-const cmdResult = await sandbox.executeCommand('echo', ['Hello', 'World']);
-
-await sandbox.destroy();
-```
-
 ## Planned Providers
 
 ### AgentFS
@@ -136,7 +137,7 @@ Turso-backed filesystem with full audit trail.
 
 ```typescript
 // Coming soon
-import { AgentFS } from '@mastra/workspace-fs-agentfs';
+import { AgentFS } from '@mastra/filesystem-agentfs';
 
 const fs = new AgentFS({ path: './agent.db' });
 ```
@@ -147,7 +148,7 @@ Access to E2B, Modal, Docker, and other sandbox providers via ComputeSDK.
 
 ```typescript
 // Coming soon
-import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+import { ComputeSDKSandbox } from '@mastra/sandbox-computesdk';
 
 const sandbox = new ComputeSDKSandbox({
   provider: 'e2b',  // or 'modal', 'docker', etc.
