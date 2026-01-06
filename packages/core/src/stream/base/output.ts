@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import { TripWire } from '../../agent';
-import { MessageList, coreContentToString } from '../../agent/message-list';
+import { coreContentToString } from '../../agent/message-list';
+import type { MessageList } from '../../agent/message-list';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
