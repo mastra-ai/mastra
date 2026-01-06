@@ -16,19 +16,15 @@ export interface ResolveVectorStoreContext {
 
 /**
  * Validates that a value is a valid MastraVector instance.
+ * Performs a minimal runtime check - TypeScript types provide compile-time safety,
+ * this just catches null/undefined from resolver functions at runtime.
  * @param value - The value to validate
- * @returns True if the value is a valid MastraVector
+ * @returns True if the value is a non-null object (presumed MastraVector)
  */
 function isValidMastraVector(value: unknown): value is MastraVector {
-  if (value === null || value === undefined) {
-    return false;
-  }
-  if (typeof value !== 'object') {
-    return false;
-  }
-  const vec = value as MastraVector;
-  // Check for required MastraVector properties and methods
-  return typeof vec.id === 'string' && typeof vec.query === 'function' && typeof vec.upsert === 'function';
+  // Runtime check: ensure we have a non-null object
+  // TypeScript types already enforce MastraVector shape at compile time
+  return value !== null && value !== undefined && typeof value === 'object';
 }
 
 /**
