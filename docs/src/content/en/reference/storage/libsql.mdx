@@ -1,6 +1,10 @@
 ---
 title: "Reference: libSQL Storage | Storage"
 description: Documentation for the libSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # libSQL Storage
@@ -115,7 +119,7 @@ const mastra = new Mastra({
 
 If using storage directly without Mastra, call `init()` explicitly:
 
-```typescript 
+```typescript
 import { LibSQLStore } from "@mastra/libsql";
 
 const storage = new LibSQLStore({
@@ -124,5 +128,8 @@ const storage = new LibSQLStore({
 });
 
 await storage.init();
-await storage.getThread({ threadId: "..." });
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```

@@ -93,6 +93,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "providers/abacus",
+          label: "Abacus",
+        },
+        {
+          type: "doc",
           id: "providers/aihubmix",
           label: "AIHubMix",
         },
@@ -170,6 +175,11 @@ const sidebars = {
           type: "doc",
           id: "providers/fireworks-ai",
           label: "Fireworks AI",
+        },
+        {
+          type: "doc",
+          id: "providers/friendli",
+          label: "Friendli",
         },
         {
           type: "doc",
@@ -260,6 +270,11 @@ const sidebars = {
           type: "doc",
           id: "providers/morph",
           label: "Morph",
+        },
+        {
+          type: "doc",
+          id: "providers/nano-gpt",
+          label: "NanoGPT",
         },
         {
           type: "doc",

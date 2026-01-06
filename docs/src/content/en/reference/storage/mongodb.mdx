@@ -1,6 +1,10 @@
 ---
 title: "Reference: MongoDB Storage | Storage"
 description: Documentation for the MongoDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
 ---
 
 # MongoDB Storage
@@ -117,6 +121,7 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { MongoDBStore } from "@mastra/mongodb";
 
 const storage = new MongoDBStore({
+  id: 'mongodb-storage',
   url: process.env.MONGODB_URL,
   dbName: process.env.MONGODB_DATABASE,
 });
@@ -124,8 +129,9 @@ const storage = new MongoDBStore({
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning

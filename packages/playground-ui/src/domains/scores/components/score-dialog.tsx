@@ -10,13 +10,13 @@ import {
   CalculatorIcon,
 } from 'lucide-react';
 
-import { ClientScoreRowData } from '@mastra/client-js';
+import type { ScoreRowData } from '@mastra/core/evals';
 import { useLinkComponent } from '@/lib/framework';
 import { Sections } from '@/index';
 import { format } from 'date-fns/format';
 
 type ScoreDialogProps = {
-  score?: ClientScoreRowData;
+  score?: ScoreRowData;
   scorerName?: string;
   isOpen: boolean;
   onClose: () => void;
@@ -96,7 +96,7 @@ export function ScoreDialog({
                 ? [
                     {
                       label: 'Scorer',
-                      value: score?.scorer?.name || '-',
+                      value: (score?.scorer?.name as string) || '-',
                       key: 'scorer-name',
                     },
                   ]

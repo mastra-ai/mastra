@@ -73,8 +73,9 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
 /**
  * Arguments for processOutputResult method
  */
-export interface ProcessOutputResultArgs<TTripwireMetadata = unknown>
-  extends ProcessorMessageContext<TTripwireMetadata> {}
+export interface ProcessOutputResultArgs<
+  TTripwireMetadata = unknown,
+> extends ProcessorMessageContext<TTripwireMetadata> {}
 
 /**
  * Arguments for processInputStep method
@@ -188,6 +189,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   text?: string;
   /** All system messages */
   systemMessages: CoreMessageV4[];
+  /** All completed steps so far (including the current step) */
+  steps: Array<StepResult<any>>;
 }
 
 /**

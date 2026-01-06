@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.1.0-beta.14",
+  "version": "0.1.0-beta.19",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -63,7 +63,7 @@
     "@tailwindcss/vite": "^4.1.17",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.4",
+    "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
@@ -73,7 +73,7 @@
     "rollup-plugin-node-externals": "^8.0.1",
     "storybook": "^9.1.10",
     "tailwindcss": "^4",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vite": "^7.1.9",
     "vite-plugin-dts": "^4.5.4",
     "vitest": "catalog:"

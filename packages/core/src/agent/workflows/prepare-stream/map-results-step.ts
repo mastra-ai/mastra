@@ -66,7 +66,7 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
       requestContext,
       messageList: memoryData.messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep) {
+        if (options.savePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -131,7 +131,10 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
     // Handle structuredOutput option by creating an StructuredOutputProcessor
     // Only create the processor if a model is explicitly provided
     if (options.structuredOutput?.model) {
-      const structuredProcessor = new StructuredOutputProcessor(options.structuredOutput);
+      const structuredProcessor = new StructuredOutputProcessor({
+        ...options.structuredOutput,
+        logger: capabilities.logger,
+      });
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -188,7 +191,7 @@ export function createMapResultsStep<OUTPUT extends OutputSchema | undefined = u
               outputText,
               thread: result.thread,
               threadId: result.threadId,
-              readOnlyMemory: options.memory?.readOnly,
+              readOnlyMemory: memoryConfig?.readOnly,
               resourceId,
               memoryConfig,
               requestContext,

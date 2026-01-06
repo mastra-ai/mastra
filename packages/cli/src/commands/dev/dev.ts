@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
@@ -9,6 +10,8 @@ import getPort from 'get-port';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { createLogger } from '../../utils/logger.js';
+import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
+import { getMastraPackages } from '../../utils/mastra-packages.js';
 
 import { DevBundler } from './DevBundler';
 
@@ -27,7 +30,15 @@ interface StartOptions {
   inspectBrk?: string | boolean;
   customArgs?: string[];
   https?: HTTPSOptions;
+  mastraPackages?: MastraPackageInfo[];
 }
+
+type ProcessOptions = {
+  port: number;
+  host: string;
+  studioBasePath: string;
+  publicDir: string;
+};
 
 const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
   try {
@@ -50,15 +61,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
 
 const startServer = async (
   dotMastraPath: string,
-  {
-    port,
-    host,
-    studioBasePath,
-  }: {
-    port: number;
-    host: string;
-    studioBasePath: string;
-  },
+  { port, host, studioBasePath, publicDir }: ProcessOptions,
   env: Map<string, string>,
   startOptions: StartOptions = {},
   errorRestartCount = 0,
@@ -88,16 +91,24 @@ const startServer = async (
       commands.push(...startOptions.customArgs);
     }
 
-    commands.push('index.mjs');
+    commands.push(join(dotMastraPath, 'index.mjs'));
 
+    // Write mastra packages to a file and pass the file path via env var
+    const packagesFilePath = join(dotMastraPath, '..', 'mastra-packages.json');
+    await mkdir(dotMastraPath, { recursive: true });
+    if (startOptions.mastraPackages) {
+      await writeFile(packagesFilePath, JSON.stringify(startOptions.mastraPackages), 'utf-8');
+    }
+
+    await mkdir(publicDir, { recursive: true });
     currentServerProcess = execa(process.execPath, commands, {
-      cwd: dotMastraPath,
+      cwd: publicDir,
       env: {
         NODE_ENV: 'production',
         ...Object.fromEntries(env),
         MASTRA_DEV: 'true',
         PORT: port.toString(),
-        MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
+        MASTRA_PACKAGES_FILE: packagesFilePath,
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
@@ -214,6 +225,7 @@ const startServer = async (
             port,
             host,
             studioBasePath,
+            publicDir,
           },
           env,
           startOptions,
@@ -226,15 +238,7 @@ const startServer = async (
 
 async function checkAndRestart(
   dotMastraPath: string,
-  {
-    port,
-    host,
-    studioBasePath,
-  }: {
-    port: number;
-    host: string;
-    studioBasePath: string;
-  },
+  { port, host, studioBasePath, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -259,20 +263,12 @@ async function checkAndRestart(
 
   // Proceed with restart
   devLogger.info('[Mastra Dev] - ✅ Restarting server...');
-  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath }, bundler, startOptions);
+  await rebundleAndRestart(dotMastraPath, { port, host, studioBasePath, publicDir }, bundler, startOptions);
 }
 
 async function rebundleAndRestart(
   dotMastraPath: string,
-  {
-    port,
-    host,
-    studioBasePath,
-  }: {
-    port: number;
-    host: string;
-    studioBasePath: string;
-  },
+  { port, host, studioBasePath, publicDir }: ProcessOptions,
   bundler: DevBundler,
   startOptions: StartOptions = {},
 ) {
@@ -302,6 +298,7 @@ async function rebundleAndRestart(
         port,
         host,
         studioBasePath,
+        publicDir,
       },
       env,
       startOptions,
@@ -385,7 +382,10 @@ export async function dev({
     httpsOptions = { key, cert };
   }
 
-  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions };
+  // Extract mastra packages from the project's package.json
+  const mastraPackages = await getMastraPackages(rootDir);
+
+  const startOptions: StartOptions = { inspect, inspectBrk, customArgs, https: httpsOptions, mastraPackages };
 
   await bundler.prepare(dotMastraPath);
 
@@ -397,6 +397,7 @@ export async function dev({
       port: Number(portToUse),
       host: hostToUse,
       studioBasePath: studioBasePathToUse,
+      publicDir: join(mastraDir, 'public'),
     },
     loadedEnv,
     startOptions,
@@ -416,6 +417,7 @@ export async function dev({
           port: Number(portToUse),
           host: hostToUse,
           studioBasePath: studioBasePathToUse,
+          publicDir: join(mastraDir, 'public'),
         },
         bundler,
         startOptions,

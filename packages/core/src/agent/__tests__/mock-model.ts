@@ -1,5 +1,6 @@
 import { openai as openai_v4 } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
+import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -8,11 +9,15 @@ import {
   MockLanguageModelV3,
 } from '@internal/ai-v6/test';
 
-export function getOpenAIModel(version: 'v1' | 'v2') {
+export function getOpenAIModel(version: 'v1' | 'v2' | 'v3') {
   if (version === 'v1') {
     return openai_v4('gpt-4o-mini');
   }
-  return openai_v5('gpt-4o-mini');
+  if (version === 'v2') {
+    return openai_v5('gpt-4o-mini');
+  }
+  // v3
+  return openai_v6('gpt-4o-mini');
 }
 
 export function getSingleDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
@@ -74,7 +79,7 @@ export function getSingleDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
     // v3
     return new MockLanguageModelV3({
       doGenerate: async () => ({
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
           inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -104,7 +109,7 @@ export function getSingleDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 20, text: 20, reasoning: undefined },
@@ -192,7 +197,7 @@ export function getDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
     // v3
     return new MockLanguageModelV3({
       doGenerate: async _options => ({
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
           inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 10, text: 10, reasoning: undefined },
@@ -226,7 +231,7 @@ export function getDummyResponseModel(version: 'v1' | 'v2' | 'v3') {
           { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 10, text: 10, reasoning: undefined },
@@ -290,7 +295,7 @@ export function getEmptyResponseModel(version: 'v1' | 'v2' | 'v3') {
     // v3
     return new MockLanguageModelV3({
       doGenerate: async _options => ({
-        finishReason: 'stop',
+        finishReason: { unified: 'stop', raw: 'stop' },
         usage: {
           inputTokens: { total: 0, noCache: 0, cacheRead: undefined, cacheWrite: undefined },
           outputTokens: { total: 0, text: 0, reasoning: undefined },
@@ -312,7 +317,7 @@ export function getEmptyResponseModel(version: 'v1' | 'v2' | 'v3') {
           },
           {
             type: 'finish',
-            finishReason: 'stop',
+            finishReason: { unified: 'stop', raw: 'stop' },
             usage: {
               inputTokens: { total: 0, noCache: 0, cacheRead: undefined, cacheWrite: undefined },
               outputTokens: { total: 0, text: 0, reasoning: undefined },

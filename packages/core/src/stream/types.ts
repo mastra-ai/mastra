@@ -12,6 +12,7 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type z from 'zod';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -484,6 +485,7 @@ interface ToolCallApprovalPayload {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
+  resumeSchema: z.ZodType<any>;
 }
 
 interface ToolCallSuspendedPayload {
@@ -491,6 +493,7 @@ interface ToolCallSuspendedPayload {
   toolName: string;
   suspendPayload: any;
   args: Record<string, any>;
+  resumeSchema: z.ZodType<any>;
 }
 
 export type DataChunkType = {
@@ -582,6 +585,10 @@ export type WorkflowStreamEvent =
     })
   | (BaseChunkType & {
       type: 'workflow-canceled';
+      payload: {};
+    })
+  | (BaseChunkType & {
+      type: 'workflow-paused';
       payload: {};
     })
   | (BaseChunkType & {

@@ -21,15 +21,25 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
-import type { MongoDBDomainConfig } from '../../types';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
 export class MemoryStorageMongoDB extends MemoryStorage {
   #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
+
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES] as const;
 
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (MemoryStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
   }
 
   private async getCollection(name: string) {
@@ -37,26 +47,69 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async init(): Promise<void> {
-    // Create indexes for threads collection
-    const threadsCollection = await this.getCollection(TABLE_THREADS);
-    await threadsCollection.createIndex({ id: 1 }, { unique: true });
-    await threadsCollection.createIndex({ resourceId: 1 });
-    await threadsCollection.createIndex({ createdAt: -1 });
-    await threadsCollection.createIndex({ updatedAt: -1 });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
 
-    // Create indexes for messages collection
-    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
-    await messagesCollection.createIndex({ id: 1 }, { unique: true });
-    await messagesCollection.createIndex({ thread_id: 1 });
-    await messagesCollection.createIndex({ resourceId: 1 });
-    await messagesCollection.createIndex({ createdAt: -1 });
-    await messagesCollection.createIndex({ thread_id: 1, createdAt: 1 });
+  /**
+   * Returns default index definitions for the memory domain collections.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      // Threads collection indexes
+      { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1 } },
+      { collection: TABLE_THREADS, keys: { createdAt: -1 } },
+      { collection: TABLE_THREADS, keys: { updatedAt: -1 } },
+      // Messages collection indexes
+      { collection: TABLE_MESSAGES, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_MESSAGES, keys: { thread_id: 1 } },
+      { collection: TABLE_MESSAGES, keys: { resourceId: 1 } },
+      { collection: TABLE_MESSAGES, keys: { createdAt: -1 } },
+      { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
+      // Resources collection indexes
+      { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
+      { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
+    ];
+  }
 
-    // Create indexes for resources collection
-    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
-    await resourcesCollection.createIndex({ id: 1 }, { unique: true });
-    await resourcesCollection.createIndex({ createdAt: -1 });
-    await resourcesCollection.createIndex({ updatedAt: -1 });
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -212,11 +265,13 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       if (filter?.dateRange?.start) {
-        query.createdAt = { ...query.createdAt, $gte: filter.dateRange.start };
+        const startOp = filter.dateRange.startExclusive ? '$gt' : '$gte';
+        query.createdAt = { ...query.createdAt, [startOp]: formatDateForMongoDB(filter.dateRange.start) };
       }
 
       if (filter?.dateRange?.end) {
-        query.createdAt = { ...query.createdAt, $lte: filter.dateRange.end };
+        const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
+        query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
       // Get total count

@@ -1,5 +1,15 @@
 # create-mastra
 
+## 1.0.0-beta.12
+
+### Minor Changes
+
+- Add Antigravity IDE support to create-mastra CLI. Users can now select Antigravity during project initialization and automatically configure the global Mastra MCP server for the IDE, reducing manual setup and enabling immediate use of Mastra agents. ([#11374](https://github.com/mastra-ai/mastra/pull/11374))
+
+### Patch Changes
+
+- Add debugger-like click-through UI to workflow graph ([#11350](https://github.com/mastra-ai/mastra/pull/11350))
+
 ## 1.0.0-beta.11
 
 ## 1.0.0-beta.10

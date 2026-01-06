@@ -146,7 +146,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
 
       pubsub.subscribe('workflows-finish', finishCb).catch(err => {
-        console.error('Failed to subscribe to workflows-finish:', err);
+        this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
         reject(err);
       });
     });

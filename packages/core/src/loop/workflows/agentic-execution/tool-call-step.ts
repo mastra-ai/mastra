@@ -38,6 +38,7 @@ export function createToolCallStep<
   streamState,
   modelSpanTracker,
   _internal,
+  logger,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -114,15 +115,58 @@ export function createToolCallStep<
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
           const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
-          return !!suspendedTools?.[toolName];
+          const foundTool = !!suspendedTools?.[toolName];
+          if (foundTool) {
+            return true;
+          }
+          const dataToolSuspendedParts = msg.content.parts?.filter(
+            part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
+          );
+          if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
+            const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === toolName);
+            if (foundTool) {
+              return true;
+            }
+          }
+          return false;
         });
 
         if (lastAssistantMessage) {
           const metadata = getMetadata(lastAssistantMessage);
-          const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
+          let suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
+          if (!suspendedTools) {
+            suspendedTools = lastAssistantMessage.content.parts
+              ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
+              ?.reduce(
+                (acc, part) => {
+                  if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                    acc[(part.data as any).toolName] = part.data;
+                  }
+                  return acc;
+                },
+                {} as Record<string, any>,
+              );
+          }
 
           if (suspendedTools && typeof suspendedTools === 'object') {
-            delete suspendedTools[toolName];
+            if (metadata) {
+              delete suspendedTools[toolName];
+            } else {
+              lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
+                if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                  if ((part.data as any).toolName === toolName) {
+                    return {
+                      ...part,
+                      data: {
+                        ...(part.data as any),
+                        resumed: true,
+                      },
+                    };
+                  }
+                }
+                return part;
+              });
+            }
 
             // If no more pending suspensions, remove the whole object
             if (metadata && Object.keys(suspendedTools).length === 0) {
@@ -133,7 +177,7 @@ export function createToolCallStep<
             try {
               await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
             } catch (error) {
-              console.error('Error removing tool suspension metadata:', error);
+              logger?.error('Error removing tool suspension metadata:', error);
             }
           }
         }
@@ -165,7 +209,7 @@ export function createToolCallStep<
           // Flush all pending messages immediately
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
-          console.error('Error flushing messages before suspension:', error);
+          logger?.error('Error flushing messages before suspension:', error);
         }
       };
 
@@ -190,7 +234,7 @@ export function createToolCallStep<
             abortSignal: options?.abortSignal,
           });
         } catch (error) {
-          console.error('Error calling onInputAvailable', error);
+          logger?.error('Error calling onInputAvailable', error);
         }
       }
 
@@ -214,7 +258,26 @@ export function createToolCallStep<
 
         const isResumeToolCall = !!resumeDataFromArgs;
 
-        if (requireToolApproval || (tool as any).requireApproval) {
+        // Check if approval is required
+        // requireApproval can be:
+        // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
+        // - undefined (no approval needed)
+        // If needsApprovalFn exists, evaluate it with the tool args
+        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
+        if ((tool as any).needsApprovalFn) {
+          // Evaluate the function with the parsed args
+          try {
+            const needsApprovalResult = await (tool as any).needsApprovalFn(args);
+            toolRequiresApproval = needsApprovalResult;
+          } catch (error) {
+            // Log error to help developers debug faulty needsApprovalFn implementations
+            logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
+            // On error, default to requiring approval to be safe
+            toolRequiresApproval = true;
+          }
+        }
+
+        if (toolRequiresApproval) {
           if (!resumeData) {
             controller.enqueue({
               type: 'tool-call-approval',
@@ -224,6 +287,13 @@ export function createToolCallStep<
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
+                resumeSchema: z.object({
+                  approved: z
+                    .boolean()
+                    .describe(
+                      'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                    ),
+                }),
               },
             });
 
@@ -273,6 +343,12 @@ export function createToolCallStep<
           await removeToolMetadata(inputData.toolName, 'suspension');
         }
 
+        //this is to avoid passing resume data to the tool if it's not needed
+        const resumeDataToPassToToolOptions =
+          toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+            ? undefined
+            : resumeData;
+
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal: options?.abortSignal,
           toolCallId: inputData.toolCallId,
@@ -290,6 +366,7 @@ export function createToolCallStep<
                 toolName: inputData.toolName,
                 suspendPayload,
                 args: inputData.args,
+                resumeSchema: options?.resumeSchema,
               },
             });
 
@@ -318,7 +395,7 @@ export function createToolCallStep<
               },
             );
           },
-          resumeData,
+          resumeData: resumeDataToPassToToolOptions,
         };
 
         const result = await tool.execute(args, toolOptions);
@@ -333,7 +410,7 @@ export function createToolCallStep<
               abortSignal: options?.abortSignal,
             });
           } catch (error) {
-            console.error('Error calling onOutput', error);
+            logger?.error('Error calling onOutput', error);
           }
         }
 

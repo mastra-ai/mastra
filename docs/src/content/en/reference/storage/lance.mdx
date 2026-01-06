@@ -1,6 +1,9 @@
 ---
 title: "Reference: LanceDB Storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/lance"
 ---
 
 # LanceDB Storage
@@ -98,8 +101,9 @@ const storage = await LanceStorage.create("my-storage", "/path/to/db");
 // Required when using storage directly
 await storage.init();
 
-// Now you can use the storage
-await storage.getThread({ threadId: "..." });
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
 ```
 
 :::warning

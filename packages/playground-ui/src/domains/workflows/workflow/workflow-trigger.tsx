@@ -46,12 +46,16 @@ export interface WorkflowTriggerProps {
     workflowId,
     runId,
     inputData,
+    initialState,
     requestContext,
+    perStep,
   }: {
     workflowId: string;
     runId: string;
     inputData: Record<string, unknown>;
+    initialState?: Record<string, unknown>;
     requestContext: Record<string, unknown>;
+    perStep?: boolean;
   }) => Promise<void>;
   observeWorkflowStream?: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
   resumeWorkflow: ({
@@ -60,12 +64,14 @@ export interface WorkflowTriggerProps {
     runId,
     resumeData,
     requestContext,
+    perStep,
   }: {
     workflowId: string;
     step: string | string[];
     runId: string;
     resumeData: Record<string, unknown>;
     requestContext: Record<string, unknown>;
+    perStep?: boolean;
   }) => Promise<void>;
   streamResult: WorkflowRunStreamResult | null;
   isCancellingWorkflowRun: boolean;
@@ -96,6 +102,7 @@ export function WorkflowTrigger({
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
   const triggerSchema = workflow?.inputSchema;
+  const stateSchema = workflow?.stateSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -111,8 +118,11 @@ export function WorkflowTrigger({
       setRunId?.(run.runId);
       setInnerRunId(run.runId);
       setContextRunId(run.runId);
+      const { initialState, inputData: dataInputData } = data ?? {};
 
-      streamWorkflow({ workflowId, runId: run.runId, inputData: data, requestContext });
+      const inputData = stateSchema ? dataInputData : data;
+
+      streamWorkflow({ workflowId, runId: run.runId, inputData, initialState, requestContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -188,6 +198,14 @@ export function WorkflowTrigger({
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
+  const zodStateSchema = stateSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stateSchema))) : null;
+
+  const zodSchemaToUse = zodStateSchema
+    ? z.object({
+        inputData: zodInputSchema,
+        initialState: zodStateSchema,
+      })
+    : zodInputSchema;
 
   const workflowActivePaths = streamResultToUse?.steps ?? {};
   const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
@@ -208,9 +226,9 @@ export function WorkflowTrigger({
 
         {!isSuspendedSteps && (
           <>
-            {zodInputSchema ? (
+            {zodSchemaToUse ? (
               <WorkflowInputData
-                schema={zodInputSchema}
+                schema={zodSchemaToUse}
                 defaultValues={payload}
                 isSubmitLoading={isStreamingWorkflow}
                 submitButtonLabel="Run"

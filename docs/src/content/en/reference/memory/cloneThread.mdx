@@ -1,0 +1,237 @@
+---
+title: "Reference: Memory.cloneThread() | Memory"
+description: "Documentation for the `Memory.cloneThread()` method in Mastra, which creates a copy of a conversation thread with all its messages."
+packages:
+  - "@mastra/memory"
+---
+
+# Memory.cloneThread()
+
+The `.cloneThread()` method creates a copy of an existing conversation thread, including all its messages. This enables creating divergent conversation paths from a specific point in a conversation. When semantic recall is enabled, the method also creates vector embeddings for the cloned messages.
+
+## Usage Example
+
+```typescript
+const { thread, clonedMessages } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+});
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThreadId",
+      type: "string",
+      description: "The ID of the thread to clone",
+      isOptional: false,
+    },
+    {
+      name: "newThreadId",
+      type: "string",
+      description:
+        "Optional custom ID for the cloned thread. If not provided, one will be generated.",
+      isOptional: true,
+    },
+    {
+      name: "resourceId",
+      type: "string",
+      description:
+        "Optional resource ID for the cloned thread. Defaults to the source thread's resourceId.",
+      isOptional: true,
+    },
+    {
+      name: "title",
+      type: "string",
+      description:
+        "Optional title for the cloned thread. Defaults to '[source title] (Copy)'.",
+      isOptional: true,
+    },
+    {
+      name: "metadata",
+      type: "Record<string, unknown>",
+      description:
+        "Optional metadata to merge with the source thread's metadata. Clone metadata is automatically added.",
+      isOptional: true,
+    },
+    {
+      name: "options",
+      type: "CloneOptions",
+      description: "Optional filtering options for the clone operation.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Options Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "messageLimit",
+      type: "number",
+      description:
+        "Maximum number of messages to clone. When set, clones the most recent N messages.",
+      isOptional: true,
+    },
+    {
+      name: "messageFilter",
+      type: "MessageFilter",
+      description: "Filter criteria for selecting which messages to clone.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### MessageFilter Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "startDate",
+      type: "Date",
+      description: "Only clone messages created on or after this date.",
+      isOptional: true,
+    },
+    {
+      name: "endDate",
+      type: "Date",
+      description: "Only clone messages created on or before this date.",
+      isOptional: true,
+    },
+    {
+      name: "messageIds",
+      type: "string[]",
+      description: "Only clone messages with these specific IDs.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "thread",
+      type: "StorageThreadType",
+      description: "The newly created cloned thread with clone metadata.",
+    },
+    {
+      name: "clonedMessages",
+      type: "MastraDBMessage[]",
+      description:
+        "Array of the cloned messages with new IDs assigned to the new thread.",
+    },
+  ]}
+/>
+
+### Clone Metadata
+
+The cloned thread's metadata includes a `clone` property with:
+
+<PropertiesTable
+  content={[
+    {
+      name: "sourceThreadId",
+      type: "string",
+      description: "The ID of the original thread that was cloned.",
+    },
+    {
+      name: "clonedAt",
+      type: "Date",
+      description: "Timestamp when the clone was created.",
+    },
+    {
+      name: "lastMessageId",
+      type: "string",
+      description:
+        "The ID of the last message in the source thread at the time of cloning.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Extended Usage Example
+
+```typescript title="src/test-clone.ts"
+import { mastra } from "./mastra";
+
+const agent = mastra.getAgent("agent");
+const memory = await agent.getMemory();
+
+// Clone a thread with all messages
+const { thread: fullClone } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  title: "Alternative Conversation Path",
+});
+
+// Clone with a custom ID
+const { thread: customIdClone } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  newThreadId: "my-custom-clone-id",
+});
+
+// Clone only the last 5 messages
+const { thread: partialClone, clonedMessages } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  options: {
+    messageLimit: 5,
+  },
+});
+
+// Clone messages from a specific date range
+const { thread: dateFilteredClone } = await memory.cloneThread({
+  sourceThreadId: "original-thread-123",
+  options: {
+    messageFilter: {
+      startDate: new Date("2024-01-01"),
+      endDate: new Date("2024-01-31"),
+    },
+  },
+});
+
+// Continue conversation on the cloned thread
+const response = await agent.generate("Let's try a different approach", {
+  threadId: fullClone.id,
+  resourceId: fullClone.resourceId,
+});
+```
+
+## Vector Embeddings
+
+When the Memory instance has semantic recall enabled (with a vector store and embedder configured), `cloneThread()` automatically creates vector embeddings for all cloned messages. This ensures that semantic search works correctly on the cloned thread.
+
+```typescript
+import { Memory } from "@mastra/memory";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+
+const memory = new Memory({
+  storage: new LibSQLStore({ url: "file:./memory.db" }),
+  vector: new LibSQLVector({ connectionUrl: "file:./vector.db" }),
+  embedder: embeddingModel,
+  options: {
+    semanticRecall: true,
+  },
+});
+
+// Clone will also create embeddings for cloned messages
+const { thread } = await memory.cloneThread({
+  sourceThreadId: "original-thread",
+});
+
+// Semantic search works on the cloned thread
+const results = await memory.recall({
+  threadId: thread.id,
+  vectorSearchString: "search query",
+});
+```
+
+### Related
+
+- [Memory Class Reference](/reference/v1/memory/memory-class)
+- [createThread](/reference/v1/memory/createThread)
+- [Clone Utility Methods](/reference/v1/memory/clone-utilities)
+- [recall](/reference/v1/memory/recall)
+- [Semantic Recall](/docs/v1/memory/semantic-recall)

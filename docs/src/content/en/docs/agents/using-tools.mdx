@@ -1,6 +1,8 @@
 ---
 title: "Using Tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
+packages:
+  - "@mastra/core"
 ---
 
 # Using Tools
@@ -87,6 +89,61 @@ export const weatherAgent = new Agent({
   name: "Weather Agent",
   tools: { weatherTool, activitiesTool },
 });
+```
+
+## Using workflows as tools
+
+Workflows can be added to agents through the `workflows` configuration. When you add a workflow, Mastra automatically converts it to a tool that the agent can call. The generated tool is named `workflow-<workflowName>` and uses the workflow's `inputSchema` and `outputSchema`.
+
+```typescript {14-16} title="src/mastra/agents/research-agent.ts"
+import { Agent } from "@mastra/core/agent";
+import { researchWorkflow } from "../workflows/research-workflow";
+
+export const researchAgent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: `
+      You are a research assistant.
+      Use the research workflow to gather and compile information on topics.`,
+  model: "openai/gpt-5.1",
+  tools: {
+    weatherTool,
+  },
+  workflows: {
+    researchWorkflow,
+  },
+});
+```
+
+The workflow should include a `description` to help the agent understand when to use it:
+
+```typescript title="src/mastra/workflows/research-workflow.ts"
+import { createWorkflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+export const researchWorkflow = createWorkflow({
+  id: "research-workflow",
+  description: "Gathers information on a topic and compiles a summary report.",
+  inputSchema: z.object({
+    topic: z.string(),
+  }),
+  outputSchema: z.object({
+    summary: z.string(),
+    sources: z.array(z.string()),
+  }),
+})
+  .then(gatherSourcesStep)
+  .then(compileReportStep)
+  .commit();
+```
+
+When the agent calls the workflow tool, it receives a response containing the workflow result and a `runId` that can be used to track the execution:
+
+```typescript
+{
+  result: { summary: "...", sources: ["..."] },
+  runId: "abc-123"
+}
 ```
 
 ## Related

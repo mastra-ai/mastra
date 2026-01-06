@@ -1,5 +1,4 @@
-import type { EmbeddingModel, AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
-import type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodObject } from 'zod';
 
@@ -9,7 +8,7 @@ import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared
 import type { RequestContext } from '../request-context';
 import type { MastraStorage } from '../storage';
 import type { DynamicArgument } from '../types';
-import type { MastraVector } from '../vector';
+import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
 
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -487,7 +486,26 @@ export type SharedMemoryConfig = {
    * embedder: openai.embedding("text-embedding-3-small")
    * ```
    */
-  embedder?: EmbeddingModelId | EmbeddingModel<string> | EmbeddingModelV2<string>;
+  embedder?: EmbeddingModelId | MastraEmbeddingModel<string>;
+
+  /**
+   * Options to pass to the embedder when generating embeddings.
+   * Use this to pass provider-specific options like outputDimensionality for Google models.
+   *
+   * @example
+   * ```typescript
+   * // Control embedding dimensions for Google models
+   * embedderOptions: {
+   *   providerOptions: {
+   *     google: {
+   *       outputDimensionality: 768,
+   *       taskType: 'RETRIEVAL_DOCUMENT'
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  embedderOptions?: MastraEmbeddingOptions;
 
   /**
    * @deprecated This option is deprecated and will throw an error if used.

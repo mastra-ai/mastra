@@ -221,7 +221,6 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
   options?: MemoryConfig;
-  readOnly?: boolean;
 };
 
 /**

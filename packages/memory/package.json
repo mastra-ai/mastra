@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.0.0-beta.6",
+  "version": "1.0.0-beta.10",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,8 +24,9 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "tsup --silent --config tsup.config.ts",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/memory",
+    "build:watch": "pnpm build:lib --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
     "test": "pnpm test:integration && pnpm test:unit",
@@ -37,7 +38,7 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "async-mutex": "^0.5.0",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.2",
     "xxhash-wasm": "^1.1.0"
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/ai-v6": "workspace:*",
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.53",
     "@internal/lint": "workspace:*",
@@ -57,8 +59,8 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.51.0",
     "vitest": "catalog:"
   },
   "peerDependencies": {
