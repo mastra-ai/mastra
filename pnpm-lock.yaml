@@ -22,6 +22,7 @@ overrides:
   cookie: '>=0.7.2'
   tmp: '>=0.2.5'
   jsondiffpatch: '>=0.7.3'
+  ssri: '>=6.0.2'
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
