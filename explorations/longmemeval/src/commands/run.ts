@@ -431,12 +431,12 @@ Active evaluations:`;
         storage: omStorage,
         observer: {
           model: retry4o.model,
-          observationThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.observer.observationThreshold,
+          observationThreshold: 100_000, // high number because the eval agent shouldn't be making observations
           focus: observationalMemoryConfig.focus,
         },
         reflector: {
           model: retry4o.model,
-          reflectionThreshold: OBSERVATIONAL_MEMORY_DEFAULTS.reflector.reflectionThreshold,
+          reflectionThreshold: 100_000, // high number because the eval agent shouldn't be making observations
         },
         scope: observationalMemoryConfig.scope,
       });
@@ -485,7 +485,8 @@ Be specific rather than generic when the user has expressed clear preferences in
             },
           ]
         : undefined,
-      outputProcessors: usesObservationalMemory ? [messageHistory!, observationalMemory!] : undefined,
+      // don't use output processors, this eval agent shouldn't be writing back to the db at all
+      // outputProcessors: usesObservationalMemory ? [observationalMemory!] : undefined,
     });
 
     // Create a fresh thread for the evaluation question
