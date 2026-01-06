@@ -501,7 +501,12 @@ export function setupUseChatV5Plus({ useChatFunc, version }: { useChatFunc: any;
         responseContains: [state.clipboard],
       });
 
-      const messagesResult = await agentMemory.recall({ threadId: localThreadId, resourceId });
+      // Use MastraClient to recall messages from the server's memory (not the test's local memory)
+      // This is necessary because the server and test run in different processes with different databases
+      const mastraClient = new MastraClient({ baseUrl: `http://localhost:${port}` });
+      const messagesResult = await mastraClient
+        .getMemoryThread({ threadId: localThreadId, agentId: 'test' })
+        .listMessages({ resourceId });
 
       const clipboardToolInvocation = messagesResult.messages.filter(
         m =>
