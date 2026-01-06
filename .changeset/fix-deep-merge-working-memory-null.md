@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Fix deepMergeWorkingMemory crashing when LLM calls updateWorkingMemory with empty object. The function now handles null/undefined/empty updates gracefully by preserving existing data.
+Fixed a crash when updating working memory with an empty or null update; existing data is now preserved.
