@@ -27,37 +27,10 @@ Traces are created by:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-
-export const mastra = new Mastra({
-  observability: new Observability({
-    default: { enabled: true }, // Enables DefaultExporter and CloudExporter
-  }),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: "file:./mastra.db", // Storage is required for tracing
-  }),
-});
-```
-
-When enabled, the default configuration automatically includes:
-
-- **Service Name**: `"mastra"`
-- **Sampling**: `"always"`- Sample (100% of traces)
-- **Exporters**:
-  - `DefaultExporter` - Persists traces to your configured storage
-  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
-- **Span Output Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
-
-### Expanded Basic Config
-
-This default configuration is a minimal helper that equates to this more verbose configuration:
-
-```ts title="src/mastra/index.ts"
 import {
   Observability,
-  CloudExporter,
   DefaultExporter,
+  CloudExporter,
   SensitiveDataFilter,
 } from "@mastra/observability";
 
@@ -66,9 +39,13 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: "mastra",
-        sampling: { type: "always" },
-        spanOutputProcessors: [new SensitiveDataFilter()],
-        exporters: [new CloudExporter(), new DefaultExporter()],
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
       },
     },
   }),
@@ -78,6 +55,36 @@ export const mastra = new Mastra({
   }),
 });
 ```
+
+This configuration includes:
+
+- **Service Name**: `"mastra"` - identifies your service in traces
+- **Sampling**: `"always"` by default (100% of traces)
+- **Exporters**:
+  - `DefaultExporter` - Persists traces to your configured storage for Mastra Studio
+  - `CloudExporter` - Sends traces to Mastra Cloud (requires `MASTRA_CLOUD_ACCESS_TOKEN`)
+- **Span Output Processors**: `SensitiveDataFilter` - Automatically redacts sensitive fields
+
+### Shorthand Config
+
+For convenience, a shorthand configuration is also available that expands to the same config as above:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    default: { enabled: true },
+  }),
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: "file:./mastra.db", // Storage is required for tracing
+  }),
+});
+```
+
+The explicit configuration is recommended as it makes clear exactly what exporters and processors are being used.
 
 ## Exporters
 
