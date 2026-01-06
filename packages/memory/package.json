@@ -38,7 +38,7 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "async-mutex": "^0.5.0",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.2",
     "xxhash-wasm": "^1.1.0"

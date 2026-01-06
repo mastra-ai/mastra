@@ -5,8 +5,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import type { ServerRoute } from '@mastra/server/server-adapter';
-import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
@@ -123,12 +127,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     }
   }
 
-  async getParams(
-    route: ServerRoute,
-    request: Request,
-  ): Promise<{ urlParams: Record<string, string>; queryParams: Record<string, string>; body: unknown }> {
+  async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
     const urlParams = request.params;
-    const queryParams = request.query;
+    // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
+    const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
@@ -150,7 +152,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
     }
 
-    return { urlParams, queryParams: queryParams as Record<string, string>, body };
+    return { urlParams, queryParams, body };
   }
 
   /**
@@ -325,7 +327,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         if (params.queryParams) {
           try {
-            params.queryParams = await this.parseQueryParams(route, params.queryParams as Record<string, string>);
+            params.queryParams = await this.parseQueryParams(route, params.queryParams);
           } catch (error) {
             console.error('Error parsing query params', error);
             // Zod validation errors should return 400 Bad Request with structured issues

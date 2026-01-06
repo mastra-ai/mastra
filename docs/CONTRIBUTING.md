@@ -62,7 +62,7 @@ packages:
 ---
 ```
 
-The `packages` field enables embedded documentation generation for npm packages, allowing coding agents to access relevant docs directly from `node_modules`. See [EMBEDDED_DOCS.md](/EMBEDDED_DOCS.md) for more details.
+The `packages` field enables embedded documentation generation for npm packages, allowing coding agents to access relevant docs directly from `node_modules`. See [EMBEDDED_DOCS.md](../scripts/EMBEDDED_DOCS.md) for more details.
 
 ### Edit this Page via GitHub
 

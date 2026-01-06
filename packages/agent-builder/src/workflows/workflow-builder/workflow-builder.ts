@@ -168,6 +168,8 @@ const projectDiscoveryStep = createStep({
   },
 });
 
+type WorkflowResearchResult = z.infer<typeof WorkflowResearchResultSchema>;
+
 // Step 3: Research what is needed to be done
 const workflowResearchStep = createStep({
   id: 'workflow-research',
@@ -203,7 +205,7 @@ const workflowResearchStep = createStep({
         // stopWhen: stepCountIs(10),
       });
 
-      const researchResult = await result.object;
+      const researchResult = (await result.object) as unknown as WorkflowResearchResult | null;
       if (!researchResult) {
         return {
           success: false,

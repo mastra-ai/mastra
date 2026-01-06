@@ -9,7 +9,7 @@ import {
   useWorkflow,
   WorkflowRunList,
   WorkflowInformation,
-  useWorkflowRunExecutionResult,
+  useWorkflowRun,
   Skeleton,
   Txt,
   TracingSettingsProvider,
@@ -22,7 +22,7 @@ import { WorkflowRunState } from '@mastra/core/workflows';
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runExecutionResult } = useWorkflowRunExecutionResult(workflowId ?? '', runId ?? '');
+  const { data: runExecutionResult } = useWorkflowRun(workflowId ?? '', runId ?? '');
 
   if (!workflowId) {
     return (

@@ -14,8 +14,13 @@ import type { ZodType } from 'zod';
  */
 export function deepMergeWorkingMemory(
   existing: Record<string, unknown> | null | undefined,
-  update: Record<string, unknown>,
+  update: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
+  // Handle null/undefined/empty updates - preserve existing or return empty object
+  if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
+    return existing && typeof existing === 'object' ? { ...existing } : {};
+  }
+
   if (!existing || typeof existing !== 'object') {
     return update;
   }

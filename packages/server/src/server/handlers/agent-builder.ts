@@ -10,11 +10,12 @@ import {
   startAsyncAgentBuilderBodySchema,
   workflowExecutionResultSchema,
   workflowControlResponseSchema,
-  workflowRunResponseSchema,
   workflowRunsResponseSchema,
   workflowInfoSchema,
   listWorkflowsResponseSchema,
   streamLegacyAgentBuilderBodySchema,
+  workflowRunResultSchema,
+  workflowRunResultQuerySchema,
 } from '../schemas/agent-builder';
 import { streamResponseSchema } from '../schemas/agents';
 import { optionalRunIdSchema, runIdSchema } from '../schemas/common';
@@ -126,9 +127,11 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
   path: '/api/agent-builder/:actionId/runs/:runId',
   responseType: 'json',
   pathParamSchema: actionRunPathParams,
-  responseSchema: workflowRunResponseSchema,
+  queryParamSchema: workflowRunResultQuerySchema,
+  responseSchema: workflowRunResultSchema,
   summary: 'Get action run by ID',
-  description: 'Returns details for a specific action run',
+  description:
+    'Returns details for a specific action run with metadata and processed execution state. Use the fields query parameter to reduce payload size.',
   tags: ['Agent Builder'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
@@ -149,40 +152,6 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
     } catch (error) {
       logger.error('Error getting agent builder action run', { error, actionId, runId });
       return handleError(error, 'Error getting agent builder action run');
-    } finally {
-      WorkflowRegistry.cleanup();
-    }
-  },
-});
-
-export const GET_AGENT_BUILDER_ACTION_RUN_EXECUTION_RESULT_ROUTE = createRoute({
-  method: 'GET',
-  path: '/api/agent-builder/:actionId/runs/:runId/execution-result',
-  responseType: 'json',
-  pathParamSchema: actionRunPathParams,
-  responseSchema: workflowExecutionResultSchema,
-  summary: 'Get action execution result',
-  description: 'Returns the final execution result of a completed action run',
-  tags: ['Agent Builder'],
-  handler: async ctx => {
-    const { mastra, actionId, runId } = ctx;
-    const logger = mastra.getLogger();
-    try {
-      WorkflowRegistry.registerTemporaryWorkflows(agentBuilderWorkflows, mastra);
-
-      if (actionId && !WorkflowRegistry.isAgentBuilderWorkflow(actionId)) {
-        throw new HTTPException(400, { message: `Invalid agent-builder action: ${actionId}` });
-      }
-
-      logger.info('Getting agent builder action run execution result', { actionId, runId });
-
-      return await workflows.GET_WORKFLOW_RUN_EXECUTION_RESULT_ROUTE.handler({
-        ...ctx,
-        workflowId: actionId,
-      });
-    } catch (error) {
-      logger.error('Error getting execution result', { error, actionId, runId });
-      return handleError(error, 'Error getting agent builder action execution result');
     } finally {
       WorkflowRegistry.cleanup();
     }

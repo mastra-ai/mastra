@@ -2,6 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic-v5';
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic-v5';
 import { google } from '@ai-sdk/google-v5';
 import { openai } from '@ai-sdk/openai-v5';
+import { openai as openaiV6 } from '@ai-sdk/openai-v6';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 
@@ -294,5 +295,88 @@ describe('provider-defined tools', () => {
     expect(toolResult).toBeDefined();
     expect(toolResult?.payload.providerExecuted).toBe(true);
     expect((toolResult?.payload.result as any).type).toBe('code_execution_result');
+  });
+});
+
+// NOTE: AI SDK v6 (@ai-sdk/openai@3) webSearch tests were previously skipped because of
+// what was thought to be an upstream bug. The issue was actually that Mastra's tool preparation
+// was using V2 tool types ('provider-defined') when V3 models expect ('provider').
+// This has been fixed in prepare-tools.ts by using the correct tool type based on model version.
+describe('provider-defined tools with AI SDK v6 (@ai-sdk/openai@3)', () => {
+  it('stream - should handle openai web search tool with v6 provider', { timeout: 60000 }, async () => {
+    const tool = openaiV6.tools.webSearch({});
+
+    const agent = new Agent({
+      id: 'test-openai-v6-web-search-agent',
+      name: 'test-openai-v6-web-search-agent',
+      instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
+      model: openaiV6('gpt-4o-mini'),
+      tools: { search: tool },
+    });
+
+    const result = await agent.stream('What is the capital of France? Use the search tool to find the answer.', {});
+
+    await result.consumeStream();
+
+    expect(result).toBeDefined();
+
+    const text = await result.text;
+    const finishReason = await result.finishReason;
+    const toolCalls = await result.toolCalls;
+    const toolResults = await result.toolResults;
+
+    // Verify web search tool was called
+    const webSearchToolCall = toolCalls.find(tc => tc.payload.toolName === 'web_search');
+    expect(webSearchToolCall).toBeDefined();
+    expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
+
+    // Verify web search tool result was processed
+    const webSearchToolResult = toolResults.find(tr => tr.payload.toolName === 'web_search');
+    expect(webSearchToolResult).toBeDefined();
+    // Note: providerExecuted flag on tool results is optional - the key check is that the result exists
+
+    // The agent should generate a text response after processing the web search results
+    expect(text).toBeDefined();
+    expect(text.length).toBeGreaterThan(0);
+    // The response should mention Paris (the capital of France)
+    expect(text.toLowerCase()).toContain('paris');
+
+    // Verify finish reason is 'stop' (not 'tool-calls')
+    expect(finishReason).toBe('stop');
+  });
+
+  it('generate - should handle openai web search tool with v6 provider', { timeout: 60000 }, async () => {
+    const tool = openaiV6.tools.webSearch({});
+
+    const agent = new Agent({
+      id: 'test-openai-v6-web-search-agent-generate',
+      name: 'test-openai-v6-web-search-agent-generate',
+      instructions: 'You are a search assistant. When asked to search for something, always use the search tool.',
+      model: openaiV6('gpt-4o-mini'),
+      tools: { search: tool },
+    });
+
+    const result = await agent.generate('What is the capital of France? Use the search tool to find the answer.', {});
+
+    expect(result).toBeDefined();
+
+    // The agent should generate a text response after processing the web search results
+    expect(result.text).toBeDefined();
+    expect(result.text.length).toBeGreaterThan(0);
+    expect(result.text.toLowerCase()).toContain('paris');
+
+    // Verify web search tool was called
+    const webSearchToolCall = result.toolCalls.find(tc => tc.payload.toolName === 'web_search');
+    expect(webSearchToolCall).toBeDefined();
+    expect(webSearchToolCall?.payload.providerExecuted).toBe(true);
+
+    // Verify web search tool result was processed
+    const webSearchToolResult = result.toolResults.find(tr => tr.payload.toolName === 'web_search');
+    expect(webSearchToolResult).toBeDefined();
+    // Note: For provider-executed tools, the result may not have providerExecuted flag
+    // since it's implied by the presence of the tool result from a provider tool
+
+    // Verify finish reason is 'stop' (not 'tool-calls')
+    expect(result.finishReason).toBe('stop');
   });
 });

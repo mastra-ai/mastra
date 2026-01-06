@@ -640,9 +640,19 @@ describe('runEvals', () => {
         saveScore: saveScoreSpy,
       };
 
+      // Mock workflows store with getWorkflowRunById for createRun
+      const mockWorkflowsStore = {
+        getWorkflowRunById: vi.fn().mockResolvedValue(null),
+        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+      };
+
       const mockStorage = {
         init: vi.fn().mockResolvedValue(undefined),
-        getStore: vi.fn().mockResolvedValue(mockScoresStore),
+        getStore: vi.fn().mockImplementation(async (domain: string) => {
+          if (domain === 'workflows') return mockWorkflowsStore;
+          if (domain === 'scores') return mockScoresStore;
+          return null;
+        }),
         __setLogger: vi.fn(),
       };
 

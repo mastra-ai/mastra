@@ -47,7 +47,7 @@ export function createFaithfulnessScorer({
         const assistantMessage = run.output.find(({ role }) => role === 'assistant');
         const context =
           options?.context ??
-          assistantMessage?.content?.toolInvocations?.map(toolCall =>
+          assistantMessage?.content?.toolInvocations?.map((toolCall: any) =>
             toolCall.state === 'result' ? JSON.stringify(toolCall.result) : '',
           ) ??
           [];
@@ -77,7 +77,7 @@ export function createFaithfulnessScorer({
         const prompt = createFaithfulnessReasonPrompt({
           input: getUserMessageFromRunInput(run.input) ?? '',
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
-          context: assistantMessage?.content?.toolInvocations?.map(toolCall => JSON.stringify(toolCall)) || [],
+          context: assistantMessage?.content?.toolInvocations?.map((toolCall: any) => JSON.stringify(toolCall)) || [],
           score,
           scale: options?.scale || 1,
           verdicts: results.analyzeStepResult?.verdicts || [],
