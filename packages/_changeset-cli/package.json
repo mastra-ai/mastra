@@ -18,7 +18,7 @@
     "@changesets/assemble-release-plan": "^6.0.9",
     "@changesets/config": "^3.1.2",
     "@changesets/git": "^3.0.4",
-    "@changesets/read": "^0.6.5",
+    "@changesets/read": "^0.6.6",
     "@changesets/types": "^6.1.0",
     "@changesets/write": "^0.4.0",
     "@clack/prompts": "1.0.0-alpha.6",
@@ -41,7 +41,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

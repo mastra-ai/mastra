@@ -23,9 +23,9 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts packages/rag",
-    "build:watch": "pnpm build --watch",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/rag",
+    "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
     "lint": "eslint ."
@@ -35,7 +35,7 @@
   "dependencies": {
     "@paralleldrive/cuid2": "^2.3.1",
     "big.js": "^7.0.1",
-    "js-tiktoken": "^1.0.20",
+    "js-tiktoken": "^1.0.21",
     "node-html-better-parser": "^1.5.8",
     "pathe": "^2.0.3",
     "zeroentropy": "0.1.0-alpha.6"
@@ -60,7 +60,7 @@
     "dotenv": "^17.0.0",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"
   },

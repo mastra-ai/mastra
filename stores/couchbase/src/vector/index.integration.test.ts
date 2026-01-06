@@ -4,7 +4,7 @@
 
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import axios from 'axios';
+
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
 import { connect, QueryScanConsistency } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -69,15 +69,13 @@ async function checkBucketHealth(
 
   while (attempt < maxAttempts) {
     try {
-      const response = await axios.get(url, {
-        auth: {
-          username,
-          password,
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
         },
-        validateStatus: () => true, // Don't throw on any status code
       });
 
-      const responseData = response.data;
+      const responseData = await response.json();
       if (
         response.status === 200 &&
         responseData.nodes &&
