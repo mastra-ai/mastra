@@ -146,6 +146,32 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
             payload: typedInputData,
           });
         }
+
+        // Persist step-finish to messageList so it can be recalled from memory
+        // This allows users to see workflow step completion details when loading previous threads
+        if (messageId) {
+          const dataPart = {
+            type: 'data-step-finish' as `data-${string}`,
+            data: {
+              stepResult: typedInputData.stepResult,
+              messageId: typedInputData.messageId,
+            },
+          };
+          messageList.add(
+            {
+              id: messageId,
+              role: 'assistant' as const,
+              content: {
+                format: 2 as const,
+                parts: [dataPart],
+              },
+              createdAt: new Date(),
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+            },
+            'response',
+          );
+        }
       }
 
       const reason = typedInputData.stepResult?.reason;

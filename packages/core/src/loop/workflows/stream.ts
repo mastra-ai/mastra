@@ -68,6 +68,29 @@ export function workflowLoopStream<
           };
           messageList.add(message, 'response');
         }
+
+        // Persist step-finish and tool-output events so they can be recalled from memory
+        // These events are important for displaying workflow execution history in the UI
+        if ((chunk.type === 'step-finish' || chunk.type === 'tool-output') && messageId) {
+          const payload = 'payload' in chunk ? chunk.payload : undefined;
+          const dataPart = {
+            type: `data-${chunk.type}` as `data-${string}`,
+            data: payload,
+          };
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [dataPart],
+            },
+            createdAt: new Date(),
+            threadId: _internal?.threadId,
+            resourceId: _internal?.resourceId,
+          };
+          messageList.add(message, 'response');
+        }
+
         void controller.enqueue(chunk);
       };
 
