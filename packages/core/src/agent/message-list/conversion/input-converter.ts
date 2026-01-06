@@ -70,6 +70,10 @@ export function inputToMastraDBMessage(
     return AIV4Adapter.fromUIMessage(message as UIMessageV4 | UIMessageWithMetadata, context, messageSource);
   }
 
+  // Use custom ID generator if message doesn't have an ID, otherwise keep the original
+  const hasOriginalId = 'id' in message && typeof message.id === 'string';
+  const id = hasOriginalId ? message.id : context.newMessageId();
+
   if (TypeDetector.isAIV5CoreMessage(message)) {
     const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
     // Only use the original createdAt from input message metadata, not the generated one from the static method
@@ -83,6 +87,7 @@ export function inputToMastraDBMessage(
         : undefined;
     return {
       ...dbMsg,
+      id,
       createdAt: context.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: context.memoryInfo?.threadId,
       resourceId: context.memoryInfo?.resourceId,
@@ -95,6 +100,7 @@ export function inputToMastraDBMessage(
     const rawCreatedAt = 'createdAt' in message ? message.createdAt : undefined;
     return {
       ...dbMsg,
+      id,
       createdAt: context.generateCreatedAt(messageSource, rawCreatedAt),
       threadId: context.memoryInfo?.threadId,
       resourceId: context.memoryInfo?.resourceId,

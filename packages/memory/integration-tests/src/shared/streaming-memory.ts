@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { UUID } from 'node:crypto';
 import { toAISdkStream } from '@mastra/ai-sdk';
 import { Agent } from '@mastra/core/agent';
+import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
@@ -148,7 +149,8 @@ export async function setupStreamingMemoryTest({
       const { messages } = await agentMemory.recall({ threadId });
 
       expect(messages).toHaveLength(2);
-      expect(messages.length).toBeLessThan(customIds.length);
+      // Custom ID generator should be called at least once per message
+      expect(customIds.length).toBeGreaterThanOrEqual(messages.length);
       for (const message of messages) {
         if (!(`id` in message)) {
           throw new Error(`Expected message.id`);
@@ -261,7 +263,7 @@ export async function setupStreamingMemoryTest({
 
         // Now convert to AIV5 UI format (this is what the frontend would receive)
         const { MessageList } = await import('@mastra/core/agent');
-        const uiMessages = recallResult.messages.map((m: any) => MessageList.mastraDBMessageToAIV5UIMessage(m));
+        const uiMessages = recallResult.messages.map((m: any) => AIV5Adapter.toUIMessage(m));
 
         expect(uiMessages.length).toBe(3);
 
