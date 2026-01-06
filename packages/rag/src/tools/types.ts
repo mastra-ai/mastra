@@ -1,6 +1,6 @@
 import type { MastraUnion } from '@mastra/core/action';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { MastraVector, MastraEmbeddingModel } from '@mastra/core/vector';
+import type { MastraVector, MastraEmbeddingModel, MastraEmbeddingOptions } from '@mastra/core/vector';
 
 import type { RerankConfig } from '../rerank';
 
@@ -174,17 +174,62 @@ export type VectorQueryToolOptions = {
       }
   );
 
+/**
+ * Configuration options for creating a GraphRAG tool.
+ *
+ * GraphRAG combines vector similarity search with graph-based retrieval for improved
+ * context relevance through random walk algorithms.
+ *
+ * This type uses a discriminated union pattern for vector store configuration,
+ * allowing two mutually exclusive approaches:
+ *
+ * 1. **By name**: Use `vectorStoreName` to reference a vector store registered with Mastra
+ * 2. **Direct instance**: Use `vectorStore` to provide a vector store instance or resolver function
+ *
+ * @example Using a named vector store
+ * ```typescript
+ * const tool = createGraphRAGTool({
+ *   vectorStoreName: 'myVectorStore',
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ * });
+ * ```
+ *
+ * @example With custom graph options
+ * ```typescript
+ * const tool = createGraphRAGTool({
+ *   vectorStoreName: 'myVectorStore',
+ *   indexName: 'documents',
+ *   model: openai.embedding('text-embedding-3-small'),
+ *   graphOptions: {
+ *     randomWalkSteps: 200,
+ *     restartProb: 0.2,
+ *   },
+ * });
+ * ```
+ */
 export type GraphRagToolOptions = {
+  /** Custom tool ID. Defaults to `GraphRAG {storeName} {indexName} Tool` */
   id?: string;
+  /** Custom tool description for the LLM */
   description?: string;
+  /** Name of the index to query within the vector store */
   indexName: string;
+  /** Embedding model used to convert query text into vectors */
   model: MastraEmbeddingModel<string>;
+  /** When true, enables metadata filtering in queries. Adds a `filter` input to the tool schema */
   enableFilter?: boolean;
+  /** When true, includes source documents in the response. Defaults to true */
   includeSources?: boolean;
+  /** Configuration options for the graph-based retrieval algorithm */
   graphOptions?: {
+    /** Vector dimension size. Defaults to 1536 */
     dimension?: number;
+    /** Number of steps in the random walk. Defaults to 100 */
     randomWalkSteps?: number;
+    /** Probability of restarting the random walk. Defaults to 0.15 */
     restartProb?: number;
+    /** Similarity threshold for graph edges. Defaults to 0.7 */
     threshold?: number;
   };
 } & ProviderOptions &
@@ -229,20 +274,12 @@ export type ProviderOptions = {
    * **For v2 models**: Use providerOptions:
    * ✅ providerOptions: { openai: { dimensions: 512 } }
    */
-  providerOptions?: Record<string, Record<string, any>>;
+  providerOptions?: MastraEmbeddingOptions['providerOptions'];
 };
 
 /**
  * Default options for GraphRAG
- * @default
- * ```json
- * {
- *   "dimension": 1536,
- *   "randomWalkSteps": 100,
- *   "restartProb": 0.15,
- *   "threshold": 0.7
- * }
- * ```
+ * @default { dimension: 1536, randomWalkSteps: 100, restartProb: 0.15, threshold: 0.7 }
  */
 export const defaultGraphOptions = {
   dimension: 1536,

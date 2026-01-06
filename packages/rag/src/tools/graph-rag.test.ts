@@ -207,6 +207,32 @@ describe('createGraphRAGTool', () => {
       );
     });
 
+    it('should propagate error when async vectorStore resolver throws', async () => {
+      const resolverError = new Error('Failed to resolve vector store for tenant');
+
+      const failingVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          throw resolverError;
+        },
+      );
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: failingVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await expect(tool.execute({ queryText: 'test query', topK: 5 }, { requestContext })).rejects.toThrow(
+        'Failed to resolve vector store for tenant',
+      );
+
+      expect(failingVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
     it('should pass mastra instance to vectorStore resolver function', async () => {
       const vectorStoreResolver = vi.fn(({ mastra: _mastra }: { mastra?: any }) => {
         // Use mastra to get a custom vector store

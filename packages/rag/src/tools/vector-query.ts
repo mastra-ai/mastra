@@ -16,7 +16,7 @@ import {
 } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
-import type { VectorQueryToolOptions } from './types';
+import type { ProviderOptions, VectorQueryToolOptions } from './types';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
   const { id, description } = options;
@@ -41,7 +41,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const reranker: RerankConfig | undefined = requestContext?.get('reranker') ?? options.reranker;
       const databaseConfig = requestContext?.get('databaseConfig') ?? options.databaseConfig;
       const model: MastraEmbeddingModel<string> = requestContext?.get('model') ?? options.model;
-      const providerOptions: Record<string, Record<string, any>> | undefined =
+      const providerOptions: ProviderOptions['providerOptions'] =
         requestContext?.get('providerOptions') ?? options.providerOptions;
 
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
@@ -61,10 +61,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
 
         const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
-          if (logger) {
-            logger.error('Vector store not found', { vectorStoreName });
-          }
-          return { relevantContext: [], sources: [] };
+          throw new Error(`Vector store '${vectorStoreName}' not found`);
         }
         // Get relevant chunks from the vector database
         const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
@@ -145,7 +142,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        return { relevantContext: [], sources: [] };
+        throw err;
       }
     },
     // Use any for output schema as the structure of the output causes type inference issues

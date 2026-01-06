@@ -519,6 +519,28 @@ describe('createVectorQueryTool', () => {
       );
     });
 
+    it('should propagate error when async vectorStore resolver throws', async () => {
+      const asyncVectorStoreResolver = vi.fn(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        throw new Error('Failed to initialize vector store for tenant');
+      });
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await expect(tool.execute({ queryText: 'test query', topK: 5 }, { requestContext })).rejects.toThrow(
+        'Failed to initialize vector store for tenant',
+      );
+
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
     it('should pass mastra instance to vectorStore resolver function', async () => {
       const vectorStoreResolver = vi.fn(({ mastra: _mastra }: { mastra?: any }) => {
         // Use mastra to get a custom vector store

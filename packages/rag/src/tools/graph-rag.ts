@@ -14,7 +14,7 @@ import {
 } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
-import type { GraphRagToolOptions } from './types';
+import type { GraphRagToolOptions, ProviderOptions } from './types';
 import { defaultGraphOptions } from './types';
 
 export const createGraphRAGTool = (options: GraphRagToolOptions) => {
@@ -52,7 +52,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
       const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
       const filter: Record<string, any> = requestContext?.get('filter') ?? (inputData.filter as Record<string, any>);
       const queryText = inputData.queryText;
-      const providerOptions: Record<string, Record<string, any>> | undefined =
+      const providerOptions: ProviderOptions['providerOptions'] =
         requestContext?.get('providerOptions') ?? options.providerOptions;
 
       const enableFilter = !!requestContext?.get('filter') || (options.enableFilter ?? false);
@@ -66,10 +66,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
 
         const vectorStore = await resolveVectorStore(options, { requestContext, mastra, vectorStoreName });
         if (!vectorStore) {
-          if (logger) {
-            logger.error('Vector store not found', { vectorStoreName });
-          }
-          return { relevantContext: [], sources: [] };
+          throw new Error(`Vector store '${vectorStoreName}' not found`);
         }
 
         const queryFilter = enableFilter && filter ? parseFilterValue(filter, logger) : {};
@@ -139,7 +136,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        return { relevantContext: [], sources: [] };
+        throw err;
       }
     },
     // Use any for output schema as the structure of the output causes type inference issues
