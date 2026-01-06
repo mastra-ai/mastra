@@ -458,6 +458,8 @@ Be specific rather than generic when the user has expressed clear preferences in
       id: 'longmemeval-agent',
       name: 'LongMemEval Agent',
       model: modelProvider,
+      // model: 'cerebras/zai-glm-4.6',
+      // model: 'cerebras/gpt-oss-120b',
       instructions: agentInstructions,
       memory,
       // For OM, use processors instead of memory
