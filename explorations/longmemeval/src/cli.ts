@@ -15,6 +15,7 @@ import { RunCommand } from './commands/run';
 import { SyncCommand } from './commands/sync';
 import { CleanCommand } from './commands/clean';
 import { ObscureThreadIdsCommand } from './commands/obscure-thread-ids';
+import { SessionsCommand } from './commands/sessions';
 
 const program = new Command();
 
@@ -795,5 +796,26 @@ async function ensureDatasetExists(dataset: string) {
     process.exit(1);
   }
 }
+
+// Sessions command - browse answer sessions for a question
+program
+  .command('sessions')
+  .description('Browse answer sessions for a specific question ID')
+  .requiredOption('-d, --dataset <dataset>', 'Dataset to use (longmemeval_s, longmemeval_m, longmemeval_oracle)')
+  .requiredOption('-q, --question-id <id>', 'Question ID to browse')
+  .option('-a, --all', 'Show all haystack sessions, not just answer sessions')
+  .action(async options => {
+    try {
+      const sessionsCommand = new SessionsCommand();
+      await sessionsCommand.run({
+        dataset: options.dataset,
+        questionId: options.questionId,
+        showAll: options.all,
+      });
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
 
 program.parse();
