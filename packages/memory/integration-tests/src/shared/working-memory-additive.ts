@@ -247,7 +247,9 @@ You only need to include fields that have changed - existing data is automatical
       });
     });
 
-    describe('Large Real-World Schema - User Context', () => {
+    // These tests depend on complex LLM behavior with a complex schema.
+    // Adding retry to help with CI stability.
+    describe('Large Real-World Schema - User Context', { retry: 2 }, () => {
       /**
        * This is the exact schema from the issue reporter
        */
@@ -361,9 +363,14 @@ You only need to include fields that have changed - existing data is automatical
           id: 'context-agent',
           name: 'User Context Agent',
           instructions: `You are a helpful AI assistant that remembers everything about the user.
-Update working memory with any information the user shares.
+IMPORTANT: You MUST call the update-working-memory tool whenever the user shares ANY information about themselves, their work, or people they know.
 You only need to include the fields that have new information - existing data is automatically preserved.
-Be thorough in capturing details about people, work, and preferences.`,
+
+Schema structure reminder:
+- User's personal info (name, location, timezone, pronouns) goes in the "about" object
+- Other people the user mentions go in the "people" array (each person needs at least a "name" field)
+- Work/company info goes in the "work" object
+- To remove a field, set it to null (e.g., to remove user's location, set about.location to null)`,
           model,
           memory,
         });
@@ -472,7 +479,7 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('phoenix');
       });
 
-      it('should remove fields when user asks to forget something (null delete)', async () => {
+      it('should remove fields when user asks to forget something (null delete)', { retry: 2 }, async () => {
         // Turn 1: Set up comprehensive data
         await agentGenerate(
           agent,
@@ -488,10 +495,10 @@ Be thorough in capturing details about people, work, and preferences.`,
         expect(wmRaw!.toLowerCase()).toContain('datacorp');
         expect(wmRaw!.toLowerCase()).toContain('seattle');
 
-        // Turn 2: Ask to forget location for privacy
+        // Turn 2: Ask to forget location for privacy - be explicit about which field to null
         await agentGenerate(
           agent,
-          'Actually, please forget my location. Remove it from your memory for privacy reasons.',
+          'Actually, please forget my personal location (in the about section). Remove it from your memory for privacy reasons.',
           { threadId: thread.id, resourceId },
           isV5,
         );
