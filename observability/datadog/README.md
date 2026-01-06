@@ -96,29 +96,7 @@ All unmapped span types (including `MODEL_CHUNK`, `GENERIC`, etc., and future sp
 - **Message formatting**: LLM inputs/outputs formatted as message arrays
 - **Metadata as tags**: Span metadata is flattened into searchable Datadog tags
 - **Error tracking**: Error spans include error tags with message, ID, and category
-- **Evaluation scoring**: Submit scores via `addScoreToTrace()` method
 - **Parent/child hierarchy**: Spans are emitted parent-first to preserve trace trees in Datadog
-
-## Evaluation Scoring
-
-Submit evaluation scores for traces:
-
-```typescript
-await datadog.addScoreToTrace({
-  traceId: 'trace-123',
-  spanId: 'span-456',
-  score: 0.95,
-  reason: 'Response was accurate and helpful',
-  scorerName: 'quality_scorer',
-  metadata: { category: 'helpfulness' },
-});
-```
-
-Notes:
-
-- Evaluations attach to spans only after the span has been emitted (on `span_ended`).
-- Annotations use dd-trace keys: `inputData`, `outputData`, `metadata`, `tags`, `metrics`.
-- **Important**: Evaluations must be submitted within 60 seconds of the trace completing. Scores submitted after trace cleanup will be dropped with a warning log.
 
 ## License
 

@@ -2,7 +2,7 @@
 '@mastra/datadog': minor
 ---
 
-New Datadog LLM Observability exporter for Mastra applications.
+Added a Datadog LLM Observability exporter for Mastra applications.
 
 This exporter integrates with Datadog's LLM Observability product to provide comprehensive tracing and monitoring for AI/LLM applications built with Mastra.
 
@@ -11,8 +11,6 @@ This exporter integrates with Datadog's LLM Observability product to provide com
 - **Span Type Mapping**: Automatically maps Mastra span types to Datadog LLMObs kinds (llm, agent, tool, workflow, task)
 - **Message Formatting**: LLM inputs/outputs are formatted as message arrays for proper visualization in Datadog
 - **Token Metrics**: Captures inputTokens, outputTokens, totalTokens, reasoningTokens, and cached tokens
-- **Evaluation Scoring**: Submit quality scores via `addScoreToTrace()` method
-- **User/Session Tracking**: Configure `defaultUserId` and `defaultSessionId` for all spans
 - **Error Tracking**: Error spans include detailed error info (message, ID, domain, category)
 - **Hierarchical Traces**: Tree-based span emission preserves parent-child relationships
 

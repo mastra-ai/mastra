@@ -90,62 +90,6 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to Datadog LLM Observability.
 
-### addScoreToTrace
-
-```typescript
-async addScoreToTrace(options: {
-  traceId: string;
-  spanId?: string;
-  score: number;
-  reason?: string;
-  scorerName: string;
-  metadata?: Record<string, any>;
-}): Promise<void>
-```
-
-Submits an evaluation score to Datadog for a specific trace/span. Scores must be submitted within 60 seconds of trace completion.
-
-<PropertiesTable
-  props={[
-    {
-      name: "traceId",
-      type: "string",
-      description: "The trace ID to attach the score to.",
-      required: true,
-    },
-    {
-      name: "spanId",
-      type: "string",
-      description: "The span ID to attach the score to. If omitted and only one span exists, uses that span.",
-      required: false,
-    },
-    {
-      name: "score",
-      type: "number",
-      description: "Numeric score value.",
-      required: true,
-    },
-    {
-      name: "reason",
-      type: "string",
-      description: "Explanation for the score.",
-      required: false,
-    },
-    {
-      name: "scorerName",
-      type: "string",
-      description: "Name of the scorer/evaluator.",
-      required: true,
-    },
-    {
-      name: "metadata",
-      type: "Record<string, any>",
-      description: "Additional metadata tags for the evaluation.",
-      required: false,
-    },
-  ]}
-/>
-
 ### shutdown
 
 ```typescript
@@ -192,19 +136,6 @@ Mastra span types are mapped to Datadog LLMObs span kinds:
 | All other types | `task` |
 
 All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
-
-## Evaluation Scoring
-
-```typescript
-await exporter.addScoreToTrace({
-  traceId: "trace-123",
-  spanId: "span-456",
-  score: 0.95,
-  reason: "Response was accurate and helpful",
-  scorerName: "quality_scorer",
-  metadata: { category: "helpfulness" },
-});
-```
 
 ## Environment Variables
 

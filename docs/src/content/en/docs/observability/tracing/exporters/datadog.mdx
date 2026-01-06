@@ -90,23 +90,6 @@ new DatadogExporter({
 
 Note: When using agent mode, the API key is read from the local agent's configuration.
 
-## Evaluation Scoring
-
-Submit evaluation scores to track quality metrics in Datadog:
-
-```typescript
-await datadog.addScoreToTrace({
-  traceId: "trace-123",
-  spanId: "span-456", // Optional: defaults to root span if only one exists
-  score: 0.95,
-  reason: "Response was accurate and helpful",
-  scorerName: "quality_scorer",
-  metadata: { category: "helpfulness" },
-});
-```
-
-**Important**: Evaluations must be submitted within 60 seconds of the trace completing. Scores submitted after trace cleanup will be dropped with a warning log.
-
 ## Span Type Mapping
 
 Mastra span types are automatically mapped to Datadog LLMObs span kinds:

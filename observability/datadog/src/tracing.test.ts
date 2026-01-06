@@ -958,77 +958,6 @@ describe('DatadogExporter', () => {
     });
   });
 
-  describe('scoring (addScoreToTrace)', () => {
-    it('calls submitEvaluation with emitted Datadog span context', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
-      const span = createMockSpan({ id: 'span-1', traceId: 'trace-ctx', isRootSpan: true });
-
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
-
-      await exporter.addScoreToTrace({
-        traceId: 'trace-ctx',
-        spanId: 'span-1',
-        score: 0.95,
-        reason: 'Good response',
-        scorerName: 'quality_scorer',
-        metadata: { category: 'helpfulness' },
-      });
-
-      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
-        { traceId: 'dd-trace-id', spanId: 'mock-dd-span-1' },
-        {
-          label: 'quality_scorer',
-          metricType: 'score',
-          value: 0.95,
-          tags: { reason: 'Good response', category: 'helpfulness' },
-        },
-      );
-    });
-
-    it('allows missing spanId when a single span context exists', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
-      const span = createMockSpan({ id: 'span-1', traceId: 'trace-ctx2', isRootSpan: true });
-
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
-
-      await exporter.addScoreToTrace({
-        traceId: 'trace-ctx2',
-        score: 0.8,
-        scorerName: 'scorer',
-      });
-
-      expect(mockSubmitEvaluation).toHaveBeenCalledWith(
-        { traceId: 'dd-trace-id', spanId: 'mock-dd-span-1' },
-        expect.objectContaining({ label: 'scorer' }),
-      );
-    });
-
-    it('does not call submitEvaluation when context is missing', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
-
-      await exporter.addScoreToTrace({
-        traceId: 'unknown-trace',
-        spanId: 'missing-span',
-        score: 0.7,
-        scorerName: 'scorer',
-      });
-
-      expect(mockSubmitEvaluation).not.toHaveBeenCalled();
-    });
-
-    it('does not call submitEvaluation when disabled', async () => {
-      const exporter = new DatadogExporter({}); // Missing mlApp, will be disabled
-
-      await exporter.addScoreToTrace({
-        traceId: 'trace-123',
-        score: 0.9,
-        scorerName: 'scorer',
-      });
-
-      expect(mockSubmitEvaluation).not.toHaveBeenCalled();
-    });
-  });
-
   describe('shutdown', () => {
     it('flushes and disables llmobs on shutdown', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
@@ -1179,41 +1108,6 @@ describe('DatadogExporter', () => {
           eventType: 'span_ended',
           spanId: 'error-span',
           spanName: 'error-test',
-        }),
-      );
-    });
-
-    it('catches and logs errors from submitEvaluation', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
-      const loggerSpy = vi.spyOn((exporter as any).logger, 'error');
-
-      // First emit a span to create context
-      const span = createMockSpan({ id: 'eval-span', traceId: 'eval-trace', isRootSpan: true });
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
-
-      // Make submitEvaluation throw
-      mockSubmitEvaluation.mockImplementationOnce(() => {
-        throw new Error('submitEvaluation failed');
-      });
-
-      // Should not throw
-      await expect(
-        exporter.addScoreToTrace({
-          traceId: 'eval-trace',
-          spanId: 'eval-span',
-          score: 0.9,
-          scorerName: 'test-scorer',
-        }),
-      ).resolves.not.toThrow();
-
-      // Should log the error
-      expect(loggerSpy).toHaveBeenCalledWith(
-        'Error submitting evaluation to Datadog',
-        expect.objectContaining({
-          error: expect.any(Error),
-          traceId: 'eval-trace',
-          spanId: 'eval-span',
-          scorerName: 'test-scorer',
         }),
       );
     });

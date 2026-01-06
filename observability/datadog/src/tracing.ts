@@ -321,59 +321,6 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
-   * Submits an evaluation score to Datadog for a specific trace/span.
-   * Scores can be used for quality metrics, feedback tracking, and model evaluation.
-   */
-  async addScoreToTrace({
-    traceId,
-    spanId,
-    score,
-    reason,
-    scorerName,
-    metadata,
-  }: {
-    traceId: string;
-    spanId?: string;
-    score: number;
-    reason?: string;
-    scorerName: string;
-    metadata?: Record<string, any>;
-  }): Promise<void> {
-    if (this.isDisabled || !tracer.llmobs) return;
-
-    const ctx = this.getDatadogSpanContext(traceId, spanId);
-    if (!ctx) {
-      this.logger.warn('Datadog span context not found for evaluation', { traceId, spanId });
-      return;
-    }
-
-    const exported = ctx.exported ?? (tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ctx.ddSpan) : undefined);
-    if (!exported) {
-      this.logger.warn('Unable to export Datadog span context for evaluation', { traceId, spanId });
-      return;
-    }
-
-    try {
-      tracer.llmobs.submitEvaluation(exported, {
-        label: scorerName,
-        metricType: 'score',
-        value: score,
-        tags: {
-          ...(reason ? { reason } : {}),
-          ...metadata,
-        },
-      });
-    } catch (error) {
-      this.logger.error('Error submitting evaluation to Datadog', {
-        error,
-        traceId,
-        spanId,
-        scorerName,
-      });
-    }
-  }
-
-  /**
    * Gracefully shuts down the exporter.
    */
   async shutdown(): Promise<void> {
@@ -691,27 +638,5 @@ export class DatadogExporter extends BaseExporter {
     } else {
       runTrace();
     }
-  }
-
-  /**
-   * Look up the Datadog span context for a Mastra span.
-   * If spanId is omitted and only one span exists, return that context.
-   */
-  private getDatadogSpanContext(
-    traceId: string,
-    spanId?: string,
-  ): { ddSpan: any; exported?: { traceId: string; spanId: string } } | undefined {
-    const state = this.traceState.get(traceId);
-    if (!state) return undefined;
-
-    if (spanId) {
-      return state.contexts.get(spanId);
-    }
-
-    if (state.contexts.size === 1) {
-      return Array.from(state.contexts.values())[0];
-    }
-
-    return undefined;
   }
 }
