@@ -1,5 +1,71 @@
 # @mastra/core
 
+## 0.24.10-alpha.0
+
+### Patch Changes
+
+- Fix model-level and runtime header support for LLM calls ([#11303](https://github.com/mastra-ai/mastra/pull/11303))
+
+  This fixes a bug where custom headers configured on models (like `anthropic-beta`) were not being passed through to the underlying AI SDK calls. The fix properly handles headers from multiple sources with correct priority:
+
+  **Header Priority (low to high):**
+  1. Model config headers - Headers set in model configuration
+  2. ModelSettings headers - Runtime headers that override model config
+  3. Provider-level headers - Headers baked into AI SDK providers (not overridden)
+
+  **Examples that now work:**
+
+  ```typescript
+  // Model config headers
+  new Agent({
+    model: {
+      id: 'anthropic/claude-4-5-sonnet',
+      headers: { 'anthropic-beta': 'context-1m-2025-08-07' },
+    },
+  });
+
+  // Runtime headers override config
+  agent.generate('...', {
+    modelSettings: { headers: { 'x-custom': 'runtime-value' } },
+  });
+
+  // Provider-level headers preserved
+  const openai = createOpenAI({ headers: { 'openai-organization': 'org-123' } });
+  new Agent({ model: openai('gpt-4o-mini') });
+  ```
+
+- Add helpful JSDoc comments to `BundlerConfig` properties (used with `bundler` option) ([#11300](https://github.com/mastra-ai/mastra/pull/11300))
+
+- Fix telemetry disabled configuration being ignored by decorators ([#11267](https://github.com/mastra-ai/mastra/pull/11267))
+
+  The `hasActiveTelemetry()` function now properly checks the `enabled` configuration flag before creating spans. Previously, it only checked if a tracer existed (which always returns true in OpenTelemetry), causing decorators to create spans even when `telemetry: { enabled: false }` was set.
+
+  **What changed:**
+  - Added short-circuit evaluation in `hasActiveTelemetry()` to check `globalThis.__TELEMETRY__?.isEnabled()` before checking for tracer existence
+  - This prevents unnecessary span creation overhead when telemetry is disabled
+
+  **How to use:**
+
+  ```typescript
+  // Telemetry disabled at initialization
+  const mastra = new Mastra({
+    telemetry: { enabled: false },
+  });
+
+  // Or disable at runtime
+  Telemetry.setEnabled(false);
+  ```
+
+  **Breaking changes:** None - this is a bug fix that makes the existing API work as documented.
+
+## 0.24.9
+
+### Patch Changes
+
+- Fix memory leak in telemetry decorators when processing large payloads. The `@withSpan` decorator now uses bounded serialization utilities to prevent unbounded memory growth when tracing agents with large inputs like base64 images. ([#11231](https://github.com/mastra-ai/mastra/pull/11231))
+
+## 0.24.9-alpha.1
+
 ## 0.24.9-alpha.0
 
 ### Patch Changes

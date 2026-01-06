@@ -2083,4 +2083,146 @@ describe('AI Tracing Integration Tests', () => {
 
     testExporter.finalExpectations();
   });
+
+  it('should have MODEL_STEP span startTime close to MODEL_GENERATION startTime, not endTime (issue #11271)', async () => {
+    // This test verifies that MODEL_STEP spans have correct startTime.
+    // The span should start when the model API call begins, not when the response starts streaming.
+
+    const SIMULATED_MODEL_DELAY_MS = 100; // Simulate model processing time before first token
+
+    const delayedMockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        // Simulate model processing delay before first token
+        await new Promise(resolve => setTimeout(resolve, SIMULATED_MODEL_DELAY_MS));
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: 'resp-1' },
+            { type: 'text-delta', id: '1', delta: 'Hello ' },
+            { type: 'text-delta', id: '2', delta: 'world' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const delayedAgent = new Agent({
+      id: 'delayed-agent',
+      name: 'Delayed Agent',
+      instructions: 'You are a test agent',
+      model: delayedMockModel,
+    });
+
+    const mastra = new Mastra({
+      ...getBaseMastraConfig(testExporter),
+      agents: { delayedAgent },
+    });
+
+    const agent = mastra.getAgent('delayedAgent');
+    const result = await agent.stream('Hello');
+
+    // Consume the stream to trigger span lifecycle
+    let fullText = '';
+    for await (const chunk of result.textStream) {
+      fullText += chunk;
+    }
+    expect(fullText).toBe('Hello world');
+
+    const llmGenerationSpans = testExporter.getSpansByType(AISpanType.MODEL_GENERATION);
+    const llmStepSpans = testExporter.getSpansByType(AISpanType.MODEL_STEP);
+
+    expect(llmGenerationSpans.length).toBe(1);
+    expect(llmStepSpans.length).toBe(1);
+
+    const generationSpan = llmGenerationSpans[0]!;
+    const stepSpan = llmStepSpans[0]!;
+
+    // Both spans should have defined times
+    expect(generationSpan.startTime).toBeDefined();
+    expect(generationSpan.endTime).toBeDefined();
+    expect(stepSpan.startTime).toBeDefined();
+    expect(stepSpan.endTime).toBeDefined();
+
+    const generationStart = generationSpan.startTime.getTime();
+    const generationEnd = generationSpan.endTime!.getTime();
+    const stepStart = stepSpan.startTime.getTime();
+
+    const generationDuration = generationEnd - generationStart;
+    const stepStartOffset = stepStart - generationStart;
+
+    // Log values for debugging (only visible in verbose mode or on failure)
+    console.log('MODEL_GENERATION span:', {
+      start: generationSpan.startTime.toISOString(),
+      end: generationSpan.endTime!.toISOString(),
+      duration: `${generationDuration}ms`,
+    });
+    console.log('MODEL_STEP span:', {
+      start: stepSpan.startTime.toISOString(),
+      end: stepSpan.endTime!.toISOString(),
+      startOffset: `${stepStartOffset}ms from generation start`,
+    });
+
+    // The step should start close to when the generation started (within 50ms tolerance)
+    expect(stepStartOffset).toBeLessThan(50);
+
+    // The step should NOT start close to when the generation ended
+    const stepStartToGenerationEnd = generationEnd - stepStart;
+    expect(stepStartToGenerationEnd).toBeGreaterThan(50);
+
+    testExporter.finalExpectations();
+  });
+});
+
+describe('Telemetry disabled integration tests', () => {
+  beforeEach(() => {
+    // Clear global telemetry instance before each test
+    globalThis.__TELEMETRY__ = undefined;
+  });
+
+  it('should respect enabled: false configuration via hasActiveTelemetry', async () => {
+    const { hasActiveTelemetry } = await import('../telemetry/utility');
+    const { Telemetry } = await import('../telemetry/telemetry');
+
+    // Initialize telemetry with enabled: false
+    Telemetry.init({ enabled: false });
+
+    // Verify hasActiveTelemetry returns false due to short-circuit on isEnabled check
+    expect(hasActiveTelemetry()).toBe(false);
+    expect(Telemetry.isEnabled()).toBe(false);
+  });
+
+  it('should respect enabled: true configuration via hasActiveTelemetry', async () => {
+    const { hasActiveTelemetry } = await import('../telemetry/utility');
+    const { Telemetry } = await import('../telemetry/telemetry');
+
+    // Initialize telemetry with enabled: true
+    Telemetry.init({ enabled: true });
+
+    // Verify hasActiveTelemetry returns true (tracer always exists from OpenTelemetry)
+    expect(hasActiveTelemetry()).toBe(true);
+    expect(Telemetry.isEnabled()).toBe(true);
+  });
+
+  it('should allow runtime control of telemetry', async () => {
+    const { hasActiveTelemetry } = await import('../telemetry/utility');
+    const { Telemetry } = await import('../telemetry/telemetry');
+
+    // Initialize with enabled: true
+    Telemetry.init({ enabled: true });
+    expect(hasActiveTelemetry()).toBe(true);
+
+    // Disable at runtime - should short-circuit and return false
+    Telemetry.setEnabled(false);
+    expect(hasActiveTelemetry()).toBe(false);
+    expect(Telemetry.isEnabled()).toBe(false);
+
+    // Re-enable at runtime
+    Telemetry.setEnabled(true);
+    expect(hasActiveTelemetry()).toBe(true);
+    expect(Telemetry.isEnabled()).toBe(true);
+  });
 });

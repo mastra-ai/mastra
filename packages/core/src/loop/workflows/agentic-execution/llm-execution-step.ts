@@ -420,7 +420,7 @@ function executeStreamWithFallbackModels<T>(models: ModelManagerModelConfig[]): 
       while (attempt <= maxRetries) {
         try {
           const isLastModel = attempt === maxRetries && index === models.length;
-          const result = await callback(modelConfig.model, isLastModel);
+          const result = await callback(modelConfig, isLastModel);
           finalResult = result;
           done = true;
           break;
@@ -450,6 +450,7 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   messageId,
   runId,
   modelStreamSpan,
+  modelSpanTracker,
   telemetry_settings,
   tools,
   toolChoice,
@@ -462,7 +463,6 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
   controller,
   structuredOutput,
   outputProcessors,
-  headers,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -473,6 +473,9 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      // Start the MODEL_STEP span at the beginning of LLM execution
+      modelSpanTracker?.startStep();
+
       let modelResult;
       let warnings: any;
       let request: any;
@@ -482,7 +485,10 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
         outputStream: MastraModelOutput<OUTPUT | undefined>;
         runState: AgenticRunState;
         callBail?: boolean;
-      }>(models)(async (model, isLastModel) => {
+      }>(models)(async (modelConfig, isLastModel) => {
+        const model = modelConfig.model;
+        const modelHeaders = modelConfig.headers;
+
         const runState = new AgenticRunState({
           _internal: _internal!,
           model,
@@ -558,7 +564,8 @@ export function createLLMExecutionStep<Tools extends ToolSet = ToolSet, OUTPUT e
               telemetry_settings,
               includeRawChunks,
               structuredOutput,
-              headers,
+              headers:
+                modelHeaders || modelSettings?.headers ? { ...modelHeaders, ...modelSettings?.headers } : undefined,
               methodType,
               onResult: ({
                 warnings: warningsFromStream,

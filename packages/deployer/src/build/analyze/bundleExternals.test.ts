@@ -709,4 +709,292 @@ describe('bundleExternals', () => {
 
     expect(optionsTestResult.output).toBeDefined();
   });
+
+  describe('externals: true behavior', () => {
+    it('should remove non-workspace deps from bundling and add to usedExternals', async () => {
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        [
+          'lodash',
+          {
+            exports: ['map', 'filter'],
+            rootPath: '/node_modules/lodash',
+            isWorkspace: false,
+          },
+        ],
+        [
+          'axios',
+          {
+            exports: ['default'],
+            rootPath: '/node_modules/axios',
+            isWorkspace: false,
+          },
+        ],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        projectRoot: testDir,
+        bundlerOptions: {
+          externals: true,
+        },
+      });
+
+      // Non-workspace deps should be removed from depsToOptimize (no bundling)
+      expect(depsToOptimize.size).toBe(0);
+
+      // Should have no bundled output chunks (everything is external)
+      const chunks = result.output.filter(o => o.type === 'chunk');
+      expect(chunks.length).toBe(0);
+
+      // usedExternals should contain the non-workspace deps
+      const externalEntries = Object.entries(result.usedExternals);
+      expect(externalEntries.length).toBeGreaterThan(0);
+
+      // Find the synthetic entry that contains our externals
+      const syntheticEntry = externalEntries.find(([_key, value]) => {
+        return typeof value === 'object' && ('lodash' in value || 'axios' in value);
+      });
+
+      expect(syntheticEntry).toBeDefined();
+      const [_path, externalsMap] = syntheticEntry!;
+      expect(externalsMap['lodash']).toBe('/node_modules/lodash');
+      expect(externalsMap['axios']).toBe('/node_modules/axios');
+    });
+
+    it('should still bundle workspace packages when externals: true', async () => {
+      await createWorkspacePackageJson(join(testDir, 'packages', 'utils'), '@workspace/utils');
+
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        [
+          '@workspace/utils',
+          {
+            location: join(testDir, 'packages', 'utils'),
+            dependencies: {},
+            version: '1.0.0',
+          },
+        ],
+      ]);
+
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        [
+          '@workspace/utils',
+          {
+            exports: ['helper', 'default'],
+            rootPath: join(testDir, 'packages', 'utils'),
+            isWorkspace: true,
+          },
+        ],
+        [
+          'lodash',
+          {
+            exports: ['map'],
+            rootPath: '/node_modules/lodash',
+            isWorkspace: false,
+          },
+        ],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        workspaceRoot: testDir,
+        projectRoot: join(testDir, 'app'),
+        workspaceMap,
+        bundlerOptions: {
+          externals: true,
+          isDev: true,
+        },
+      });
+
+      // Only workspace package should remain in depsToOptimize
+      expect(depsToOptimize.size).toBe(1);
+      expect(depsToOptimize.has('@workspace/utils')).toBe(true);
+
+      // Should have bundled output for workspace package
+      const chunks = result.output.filter(o => o.type === 'chunk');
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Workspace package should be in fileNameToDependencyMap
+      const dependencyValues = Array.from(result.fileNameToDependencyMap.values());
+      expect(dependencyValues).toContain('@workspace/utils');
+
+      // Non-workspace dep should be in usedExternals
+      const externalEntries = Object.entries(result.usedExternals);
+      const syntheticEntry = externalEntries.find(([_key, value]) => {
+        return typeof value === 'object' && 'lodash' in value;
+      });
+      expect(syntheticEntry).toBeDefined();
+    });
+
+    it('should handle externals: true with only workspace packages', async () => {
+      await createWorkspacePackageJson(join(testDir, 'packages', 'utils'), '@workspace/utils');
+
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        [
+          '@workspace/utils',
+          {
+            location: join(testDir, 'packages', 'utils'),
+            dependencies: {},
+            version: '1.0.0',
+          },
+        ],
+      ]);
+
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        [
+          '@workspace/utils',
+          {
+            exports: ['helper'],
+            rootPath: join(testDir, 'packages', 'utils'),
+            isWorkspace: true,
+          },
+        ],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        workspaceRoot: testDir,
+        projectRoot: join(testDir, 'app'),
+        workspaceMap,
+        bundlerOptions: {
+          externals: true,
+          isDev: false,
+        },
+      });
+
+      // Workspace package should still be bundled
+      expect(depsToOptimize.size).toBe(1);
+      expect(depsToOptimize.has('@workspace/utils')).toBe(true);
+
+      // Should have output chunks
+      const chunks = result.output.filter(o => o.type === 'chunk');
+      expect(chunks.length).toBeGreaterThan(0);
+
+      // Workspace package should be in mapping
+      const dependencyValues = Array.from(result.fileNameToDependencyMap.values());
+      expect(dependencyValues).toContain('@workspace/utils');
+    });
+
+    it('should handle externals: true with only non-workspace packages', async () => {
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        [
+          'react',
+          {
+            exports: ['default', 'useState'],
+            rootPath: '/node_modules/react',
+            isWorkspace: false,
+          },
+        ],
+        [
+          'lodash',
+          {
+            exports: ['map'],
+            rootPath: '/node_modules/lodash',
+            isWorkspace: false,
+          },
+        ],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        projectRoot: testDir,
+        bundlerOptions: {
+          externals: true,
+        },
+      });
+
+      // All deps should be removed (nothing to bundle)
+      expect(depsToOptimize.size).toBe(0);
+
+      // No bundled chunks
+      const chunks = result.output.filter(o => o.type === 'chunk');
+      expect(chunks.length).toBe(0);
+
+      // All deps should be in usedExternals
+      const externalEntries = Object.entries(result.usedExternals);
+      const syntheticEntry = externalEntries.find(([_key, value]) => {
+        return typeof value === 'object' && ('react' in value || 'lodash' in value);
+      });
+
+      expect(syntheticEntry).toBeDefined();
+      const [_path, externalsMap] = syntheticEntry!;
+      expect(externalsMap['react']).toBe('/node_modules/react');
+      expect(externalsMap['lodash']).toBe('/node_modules/lodash');
+    });
+
+    it('should handle externals: true with deps that have null rootPath', async () => {
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        [
+          'unknown-package',
+          {
+            exports: ['something'],
+            rootPath: null,
+            isWorkspace: false,
+          },
+        ],
+        [
+          'another-unknown',
+          {
+            exports: ['other'],
+            rootPath: null,
+            isWorkspace: false,
+          },
+        ],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        projectRoot: testDir,
+        bundlerOptions: {
+          externals: true,
+        },
+      });
+
+      // Deps should be removed
+      expect(depsToOptimize.size).toBe(0);
+
+      // Should be in usedExternals with package name as fallback
+      const externalEntries = Object.entries(result.usedExternals);
+      const syntheticEntry = externalEntries.find(([_key, value]) => {
+        return typeof value === 'object' && ('unknown-package' in value || 'another-unknown' in value);
+      });
+
+      expect(syntheticEntry).toBeDefined();
+      const [_path, externalsMap] = syntheticEntry!;
+      // When rootPath is null, it falls back to the package name
+      expect(externalsMap['unknown-package']).toBe('unknown-package');
+      expect(externalsMap['another-unknown']).toBe('another-unknown');
+    });
+
+    it('should not affect behavior when externals is an array (existing behavior)', async () => {
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        [
+          'lodash',
+          {
+            exports: ['map'],
+            rootPath: '/node_modules/lodash',
+            isWorkspace: false,
+          },
+        ],
+        [
+          'react',
+          {
+            exports: ['default'],
+            rootPath: '/node_modules/react',
+            isWorkspace: false,
+          },
+        ],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        projectRoot: testDir,
+        bundlerOptions: {
+          externals: ['custom-external'],
+        },
+      });
+
+      // When externals is an array, deps should still be bundled
+      // (they're not removed from depsToOptimize)
+      expect(result.output).toBeDefined();
+      expect(result.fileNameToDependencyMap.size).toBe(2);
+
+      const dependencyValues = Array.from(result.fileNameToDependencyMap.values());
+      expect(dependencyValues).toContain('lodash');
+      expect(dependencyValues).toContain('react');
+    });
+  });
 });

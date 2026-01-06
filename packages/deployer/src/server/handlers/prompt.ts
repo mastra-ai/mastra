@@ -1,9 +1,18 @@
 import type { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import type { ScoreRowData, ScorerRunInputForAgent, ScorerRunOutputForAgent } from '@mastra/core/scores';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
 import { handleError } from './error';
+
+const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent) => {
+  return input?.inputMessages.find(({ role }) => role === 'user')?.content;
+};
+
+const extractAgentResponseMessages = (runOutput: ScorerRunOutputForAgent): string[] => {
+  return runOutput.filter(msg => msg.role === 'assistant').map(msg => msg.content);
+};
 
 export async function generateSystemPromptHandler(c: Context) {
   try {
@@ -21,35 +30,34 @@ export async function generateSystemPromptHandler(c: Context) {
     }
 
     const mastra: Mastra<any> = c.get('mastra');
-    const agent = mastra.getAgent(agentId);
+    const agent: Agent<any> = mastra.getAgent(agentId);
 
     if (!agent) {
       return c.json({ error: 'Agent not found' }, 404);
     }
 
-    let evalSummary = '';
-
+    let scoreSummary = '';
     try {
-      // Get both test and live evals
-      const testEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
-      const liveEvals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
-      // Format eval results for the prompt
-      const evalsMapped = [...testEvals, ...liveEvals].filter(
-        ({ instructions: evalInstructions }) => evalInstructions === instructions,
-      );
+      const scoresResult = await mastra.getStorage()?.getScoresByEntityId?.({
+        entityId: agent.name,
+        entityType: 'AGENT',
+        pagination: { page: 0, perPage: 100 },
+      });
+      const scores = (scoresResult?.scores || []) as ScoreRowData[];
 
-      evalSummary = evalsMapped
-        .map(
-          ({ input, output, result }) => `
-          Input: ${input}\n
-          Output: ${output}\n
-          Result: ${JSON.stringify(result)}
-
-        `,
-        )
+      scoreSummary = scores
+        .map(({ input, output, score, reason, scorer }) => {
+          const userMessage = getUserMessageFromRunInput(input);
+          const agentResponses = extractAgentResponseMessages(output);
+          return `
+          User: ${userMessage}\n
+          Agent: ${agentResponses.join('\n')}\n
+          Score: ${score}${reason ? `\n          Reason: ${reason}` : ''}${scorer?.name ? `\n          Scorer: ${scorer.name}` : ''}
+        `;
+        })
         .join('');
     } catch (error) {
-      mastra.getLogger().error(`Error fetching evals`, { error });
+      mastra.getLogger().error(`Error fetching scores`, { error });
     }
 
     const ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS = `
@@ -101,9 +109,10 @@ export async function generateSystemPromptHandler(c: Context) {
         `;
 
     const systemPromptAgent = new Agent({
+      id: 'system-prompt-enhancer',
       name: 'system-prompt-enhancer',
       instructions: ENHANCE_SYSTEM_PROMPT_INSTRUCTIONS,
-      model: agent.llm?.getModel(),
+      model: await agent.getModel(),
     });
 
     const result = await systemPromptAgent.generate(
@@ -111,7 +120,7 @@ export async function generateSystemPromptHandler(c: Context) {
             We need to improve the system prompt. 
             Current: ${instructions}
             ${comment ? `User feedback: ${comment}` : ''}
-            ${evalSummary ? `\nEvaluation Results:\n${evalSummary}` : ''}
+            ${scoreSummary ? `\nScoring Results:\n${scoreSummary}` : ''}
         `,
       {
         output: z.object({

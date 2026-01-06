@@ -75,9 +75,16 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Start a new Model execution step
+   * Start a new Model execution step.
+   * This should be called at the beginning of LLM execution to capture accurate startTime.
+   * The step-start chunk payload can be passed later via updateStep() if needed.
    */
-  #startStepSpan(payload?: StepStartPayload) {
+  startStep(payload?: StepStartPayload): void {
+    // Don't create duplicate step spans
+    if (this.#currentStepSpan) {
+      return;
+    }
+
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: AISpanType.MODEL_STEP,
@@ -90,6 +97,25 @@ export class ModelSpanTracker {
     });
     // Reset chunk sequence for new step
     this.#chunkSequence = 0;
+  }
+
+  /**
+   * Update the current step span with additional payload data.
+   * Called when step-start chunk arrives with request/warnings info.
+   */
+  updateStep(payload?: StepStartPayload): void {
+    if (!this.#currentStepSpan || !payload) {
+      return;
+    }
+
+    // Update span with request/warnings from the step-start chunk
+    this.#currentStepSpan.update({
+      input: payload.request,
+      attributes: {
+        ...(payload.messageId ? { messageId: payload.messageId } : {}),
+        ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
+      },
+    });
   }
 
   /**
@@ -132,7 +158,7 @@ export class ModelSpanTracker {
   #startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
-      this.#startStepSpan();
+      this.startStep();
     }
 
     this.#currentChunkSpan = this.#currentStepSpan?.createChildSpan({
@@ -178,7 +204,7 @@ export class ModelSpanTracker {
   #createEventSpan(chunkType: string, output: any) {
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
-      this.#startStepSpan();
+      this.startStep();
     }
 
     const span = this.#currentStepSpan?.createEventSpan({
@@ -345,7 +371,13 @@ export class ModelSpanTracker {
               break;
 
             case 'step-start':
-              this.#startStepSpan(chunk.payload);
+              // If step already started (via startStep()), just update with payload data
+              // Otherwise start a new step (for backwards compatibility)
+              if (this.#currentStepSpan) {
+                this.updateStep(chunk.payload);
+              } else {
+                this.startStep(chunk.payload);
+              }
               break;
 
             case 'step-finish':
