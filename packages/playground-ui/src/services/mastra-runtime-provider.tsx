@@ -76,6 +76,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
 };
 
 const initializeMessageState = (initialMessages: UIMessageWithMetadata[]) => {
+  // @ts-expect-error - TODO: fix the ThreadMessageLike type, it's missing some properties like "data" from the role.
   const convertedMessages: ThreadMessageLike[] = initialMessages
     ?.map((message: UIMessageWithMetadata) => {
       const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
