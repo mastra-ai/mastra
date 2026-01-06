@@ -301,9 +301,8 @@ export class ModerationProcessor implements Processor<'moderation'> {
         });
       }
 
-      const result = response.object satisfies ModerationResult;
-
-      return result;
+      // Type assertion needed due to inferOutput limitations with Zod v4
+      return response.object as ModerationResult;
     } catch (error) {
       console.warn('[ModerationProcessor] Agent moderation failed, allowing content:', error);
       // Fail open - return empty result if moderation agent fails (no moderation needed)

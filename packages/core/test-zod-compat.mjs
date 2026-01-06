@@ -28,19 +28,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Test code that should compile with both Zod v3 and v4
 const testCode = `
+import { z as zv3 } from 'zod/v3';
 import { z } from 'zod';
-import { z as zv4 } from 'zod/v4';
 import { createTool } from './src/tools/tool';
 
 // Test with Zod v4
 const v4Tool = createTool({
   id: "test-tool",
   description: "Reverse the input string",
-  inputSchema: zv4.object({
-    input: zv4.string()
+  inputSchema: z.object({
+    input: z.string()
   }),
-  outputSchema: zv4.object({
-    output: zv4.string()
+  outputSchema: z.object({
+    output: z.string()
   }),
   execute: async (inputData) => {
     const reversed = inputData.input.split("").reverse().join("");
@@ -54,11 +54,11 @@ const v4Tool = createTool({
 const v3Tool = createTool({
   id: 'v3-tool',
   description: 'Tool with v3 schemas',
-  inputSchema: z.object({
-    message: z.string()
+  inputSchema: zv3.object({
+    message: zv3.string()
   }),
-  outputSchema: z.object({
-    result: z.string()
+  outputSchema: zv3.object({
+    result: zv3.string()
   }),
   execute: async (inputData) => ({
     result: inputData.message.toUpperCase()

@@ -9,11 +9,11 @@ export type DataContent = string | Uint8Array | ArrayBuffer | Buffer;
 /**
 @internal
  */
-export const dataContentSchema: z.ZodType<DataContent> = z.union([
+export const dataContentSchema = z.union([
   z.string(),
   z.instanceof(Uint8Array),
   z.instanceof(ArrayBuffer),
-  z.custom(
+  z.custom<Buffer>(
     // Buffer might not be available in some environments such as CloudFlare:
     (value: unknown): value is Buffer => globalThis.Buffer?.isBuffer(value) ?? false,
     { message: 'Must be a Buffer' },

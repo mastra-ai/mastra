@@ -24,7 +24,7 @@ import type {
   WorkingMemory,
 } from './types';
 
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
+const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any> => v instanceof ZodObject;
 
 export class MockMemory extends MastraMemory {
   constructor({

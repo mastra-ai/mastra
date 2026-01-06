@@ -2,13 +2,19 @@ import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptio
 import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
-import type { z, ZodSchema } from 'zod';
+import type { z, ZodSchema, ZodType } from 'zod';
 import type { TracingPolicy } from '../../observability';
 import type { ScoringData } from './base.types';
 import type { ModelRouterModelId } from './provider-registry.js';
 
-export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodSchema
-  ? z.infer<Output>
+// In Zod v4, we need to extract the output type directly using infer
+// ZodType<Output, Def, Internals> structure in v4
+export type inferOutput<Output extends ZodSchema | JSONSchema7 | undefined = undefined> = Output extends ZodType<
+  infer Out,
+  any,
+  any
+>
+  ? Out
   : Output extends JSONSchema7
     ? unknown
     : undefined;

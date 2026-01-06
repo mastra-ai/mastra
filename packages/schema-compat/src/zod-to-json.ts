@@ -110,6 +110,7 @@ export function zodToJsonSchema(
     }) satisfies JSONSchema7;
   } else {
     // Zod v3 path - use the original converter
+    // Runtime check above ensures this is a v3 schema
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,

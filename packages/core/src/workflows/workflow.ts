@@ -1353,8 +1353,7 @@ export class Workflow<
         {
           [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema'];
         },
-        any,
-        z.ZodTypeAny
+        any
       >
     >;
   }
@@ -1412,8 +1411,7 @@ export class Workflow<
         {
           [K in keyof StepsRecord<ExtractedSteps[]>]: z.ZodOptional<StepsRecord<ExtractedSteps[]>[K]['outputSchema']>;
         },
-        any,
-        z.ZodTypeAny
+        any
       >
     >;
   }

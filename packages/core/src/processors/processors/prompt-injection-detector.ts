@@ -250,9 +250,8 @@ export class PromptInjectionDetector implements Processor<'prompt-injection-dete
         });
       }
 
-      const result = response.object satisfies PromptInjectionResult;
-
-      return result;
+      // Type assertion needed due to inferOutput limitations with Zod v4
+      return response.object as PromptInjectionResult;
     } catch (error) {
       console.warn('[PromptInjectionDetector] Detection agent failed, allowing content:', error);
       // Fail open - return empty result if detection agent fails (no injection detected)

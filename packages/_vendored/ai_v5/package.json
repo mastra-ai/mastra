@@ -55,7 +55,7 @@
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.0",
     "typescript": "catalog:",
-    "zod": "^3.25.0"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "zod": "^3.25.76 || ^4.0.0"

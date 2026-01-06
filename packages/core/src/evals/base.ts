@@ -590,7 +590,8 @@ class MastraScorer<
           tracingContext,
         });
       }
-      return { result: result.object.score, prompt };
+      // Type assertion needed due to inferOutput limitations with Zod v4
+      return { result: (result.object as { score: number }).score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
