@@ -53,19 +53,20 @@ Both are optional but at least one must be present for a workspace to be useful.
 │   ├── sandbox.ts             # WorkspaceSandbox interface
 │   └── index.ts               # Exports
 
-@mastra/workspace              # Reference implementations (this package)
-├── src/
-│   ├── types.ts               # Type definitions
-│   ├── filesystem/
-│   │   └── providers/
-│   │       ├── local.ts       # LocalFilesystem - folder on disk
-│   │       └── ram.ts         # RamFilesystem - in-memory (ephemeral)
-│   └── sandbox/
-│       └── providers/
-│           └── local.ts       # LocalSandbox - host machine execution
+filesystem/                     # Filesystem providers (top-level folder)
+├── local/                     # @mastra/filesystem-local
+│   └── src/index.ts           # LocalFilesystem - folder on disk
+├── agentfs/                   # @mastra/filesystem-agentfs (planned)
+│   └── src/index.ts           # AgentFS - Turso-backed
 
-@mastra/workspace-fs-agentfs   # AgentFS from Turso (planned)
-@mastra/workspace-sandbox-computesdk  # ComputeSDK integration (planned)
+sandbox/                        # Sandbox providers (top-level folder)
+├── local/                     # @mastra/sandbox-local
+│   └── src/index.ts           # LocalSandbox - host machine execution
+├── computesdk/                # @mastra/sandbox-computesdk (planned)
+│   └── src/index.ts           # ComputeSDK - E2B, Modal, Docker, etc.
+
+explorations/workspace/         # Development/testing package
+├── src/                       # Reference implementations for testing
 ```
 
 ---
