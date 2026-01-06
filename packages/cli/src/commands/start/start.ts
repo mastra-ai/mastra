@@ -28,7 +28,7 @@ export async function start(options: StartOptions = {}) {
     commands.push('index.mjs');
 
     // Start the server using node
-    const server = spawn('node', commands, {
+    const server = spawn(process.execPath, commands, {
       cwd: outputPath,
       stdio: ['inherit', 'inherit', 'pipe'],
       env: {
