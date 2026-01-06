@@ -129,7 +129,7 @@ export class CloudExporter extends BaseExporter {
     return spanRecord;
   }
 
-  private shouldFlush(): boolean {
+  protected shouldFlush(): boolean {
     // Size-based flush
     if (this.buffer.totalSize >= this.config.maxBatchSize) {
       return true;
@@ -166,7 +166,7 @@ export class CloudExporter extends BaseExporter {
     }, this.config.maxBatchWaitMs);
   }
 
-  private async flush(): Promise<void> {
+  protected async flush(): Promise<void> {
     // Clear timer since we're flushing
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);

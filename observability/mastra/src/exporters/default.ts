@@ -333,7 +333,7 @@ export class DefaultExporter extends BaseExporter {
   /**
    * Schedules a flush using setTimeout
    */
-  private scheduleFlush(): void {
+  protected scheduleFlush(): void {
     if (this.#flushTimer) {
       clearTimeout(this.#flushTimer);
     }
@@ -541,7 +541,7 @@ export class DefaultExporter extends BaseExporter {
   /**
    * Flushes the current buffer to storage with retry logic
    */
-  private async flush(): Promise<void> {
+  protected async flush(): Promise<void> {
     if (!this.#observability) {
       this.logger.debug('Cannot flush traces. Observability storage is not initialized');
       return;

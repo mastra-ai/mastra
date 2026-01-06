@@ -156,7 +156,7 @@ export abstract class BaseExporter implements ObservabilityExporter {
    *
    * Default implementation does nothing. Override to add custom flush logic.
    */
-  async flush(): Promise<void> {
+  protected async flush(): Promise<void> {
     // No-op by default
   }
 
