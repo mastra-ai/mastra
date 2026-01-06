@@ -519,7 +519,7 @@ Schema structure reminder:
         // Turn 1: Mention people first
         await agentGenerate(
           agent,
-          'I work closely with Alice (my manager), Bob (engineering lead), and Carol (design director).',
+          'Please remember these people I work with: Alice (my manager), Bob (engineering lead), and Carol (design director). Add them to my people list.',
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -533,7 +533,7 @@ Schema structure reminder:
         // Turn 2: Add work details (people should be preserved)
         await agentGenerate(
           agent,
-          "We're at TechStartup Inc, a Series A company focused on AI tools.",
+          "Store this work info: We're at TechStartup Inc, a Series A company focused on AI tools.",
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -550,7 +550,7 @@ Schema structure reminder:
         // Turn 3: Add about info (people and work should be preserved)
         await agentGenerate(
           agent,
-          "By the way, my name is Jamie and I'm in the Seattle area.",
+          "Remember my personal info: my name is Jamie and I'm located in the Seattle area.",
           { threadId: thread.id, resourceId },
           isV5,
         );
@@ -603,8 +603,13 @@ Schema structure reminder:
       });
 
       it('should update people list when team changes', async () => {
-        // Turn 1: Set up initial team
-        await agentGenerate(agent, 'My team is Alice, Bob, and Charlie.', { threadId: thread.id, resourceId }, isV5);
+        // Turn 1: Set up initial team - be explicit about storing in memory
+        await agentGenerate(
+          agent,
+          'Please remember my team members: Alice (engineer), Bob (designer), and Charlie (PM). Store them in my people list.',
+          { threadId: thread.id, resourceId },
+          isV5,
+        );
 
         let wmRaw = await memory.getWorkingMemory({ threadId: thread.id, resourceId });
         expect(wmRaw).not.toBeNull();
@@ -615,7 +620,7 @@ Schema structure reminder:
         // Turn 2: Team changes - replace the people array
         await agentGenerate(
           agent,
-          "Update: my team has completely changed. It's now Diana and Eric. Alice, Bob, and Charlie are no longer on my team.",
+          'Update my people list: my team has completely changed. Replace the list with Diana (engineer) and Eric (lead). Remove Alice, Bob, and Charlie.',
           { threadId: thread.id, resourceId },
           isV5,
         );
