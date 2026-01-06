@@ -157,8 +157,21 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
-  // Mock legacy generate - returns a stream
-  vi.spyOn(agent, 'generateLegacy').mockResolvedValue(createMockStream() as any);
+  // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
+  vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
+    text: 'test response',
+    toolCalls: [],
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 5 },
+    experimental_output: undefined,
+    response: {
+      id: 'test-response-id',
+      timestamp: new Date(),
+      modelId: 'gpt-4',
+    },
+    request: {},
+    warnings: [],
+  } as any);
 
   // Helper to create a mock Response object for datastream-response routes
   const createMockResponse = () => {
