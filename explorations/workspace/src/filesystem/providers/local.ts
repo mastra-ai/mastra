@@ -1,13 +1,15 @@
 /**
  * Local Filesystem Provider
  *
- * A filesystem implementation backed by the local disk.
+ * A filesystem implementation backed by a folder on the local disk.
+ * This is the "in memory" filesystem referred to in the Mastra workspace design -
+ * it stores files in a local folder on the user's machine.
+ *
  * Operations are sandboxed to a base directory for security.
  */
 
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import { BaseFilesystem } from '../base';
+import * as nodePath from 'node:path';
 import type {
   FileContent,
   FileStat,
@@ -17,8 +19,7 @@ import type {
   ListOptions,
   RemoveOptions,
   CopyOptions,
-  LocalFSProviderConfig,
-} from '../types';
+} from '../../types';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -27,21 +28,40 @@ import {
   NotDirectoryError,
   DirectoryNotEmptyError,
   PermissionError,
-} from '../types';
+} from '../../types';
 
 /**
  * Local filesystem provider configuration.
  */
 export interface LocalFilesystemOptions {
-  id: string;
+  /** Unique identifier for this filesystem instance */
+  id?: string;
+  /** Base directory path on disk */
   basePath: string;
+  /** Restrict operations to basePath (default: true) */
   sandbox?: boolean;
 }
 
 /**
  * Local filesystem implementation.
+ *
+ * Stores files in a folder on the user's machine.
+ * This is the recommended filesystem for development and persistent local storage.
+ *
+ * @example
+ * ```typescript
+ * import { Workspace } from '@mastra/core';
+ * import { LocalFilesystem } from '@mastra/workspace-fs-local';
+ *
+ * const workspace = new Workspace({
+ *   filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+ * });
+ *
+ * await workspace.init();
+ * await workspace.writeFile('/hello.txt', 'Hello World!');
+ * ```
  */
-export class LocalFilesystem extends BaseFilesystem {
+export class LocalFilesystem implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'LocalFilesystem';
   readonly provider = 'local';
@@ -49,16 +69,45 @@ export class LocalFilesystem extends BaseFilesystem {
   private readonly basePath: string;
   private readonly sandbox: boolean;
 
-  constructor(config: LocalFSProviderConfig | LocalFilesystemOptions) {
-    super();
-    this.id = config.id;
-    this.basePath = path.resolve(config.basePath);
-    this.sandbox = config.sandbox ?? true;
+  constructor(options: LocalFilesystemOptions) {
+    this.id = options.id ?? this.generateId();
+    this.basePath = nodePath.resolve(options.basePath);
+    this.sandbox = options.sandbox ?? true;
+  }
+
+  private generateId(): string {
+    return `local-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   // ---------------------------------------------------------------------------
-  // Path Utilities
+  // Private Helpers
   // ---------------------------------------------------------------------------
+
+  private toBuffer(content: FileContent): Buffer {
+    if (Buffer.isBuffer(content)) return content;
+    if (content instanceof Uint8Array) return Buffer.from(content);
+    return Buffer.from(content, 'utf-8');
+  }
+
+  private getMimeType(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      txt: 'text/plain',
+      html: 'text/html',
+      css: 'text/css',
+      js: 'application/javascript',
+      ts: 'application/typescript',
+      json: 'application/json',
+      xml: 'application/xml',
+      md: 'text/markdown',
+      py: 'text/x-python',
+      rb: 'text/x-ruby',
+      go: 'text/x-go',
+      rs: 'text/x-rust',
+      sh: 'text/x-sh',
+    };
+    return mimeTypes[ext ?? ''] ?? 'application/octet-stream';
+  }
 
   /**
    * Resolve a path relative to the base path.
@@ -67,13 +116,13 @@ export class LocalFilesystem extends BaseFilesystem {
   private resolvePath(inputPath: string): string {
     // Remove leading slashes to treat all paths as relative to basePath
     const cleanedPath = inputPath.replace(/^\/+/, '');
-    const normalizedInput = path.normalize(cleanedPath);
-    const absolutePath = path.resolve(this.basePath, normalizedInput);
+    const normalizedInput = nodePath.normalize(cleanedPath);
+    const absolutePath = nodePath.resolve(this.basePath, normalizedInput);
 
     // Sandbox check: ensure path is within basePath
     if (this.sandbox) {
-      const relative = path.relative(this.basePath, absolutePath);
-      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      const relative = nodePath.relative(this.basePath, absolutePath);
+      if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
         throw new PermissionError(inputPath, 'access');
       }
     }
@@ -85,7 +134,7 @@ export class LocalFilesystem extends BaseFilesystem {
    * Convert absolute path back to workspace-relative path.
    */
   private toRelativePath(absolutePath: string): string {
-    return '/' + path.relative(this.basePath, absolutePath).replace(/\\/g, '/');
+    return '/' + nodePath.relative(this.basePath, absolutePath).replace(/\\/g, '/');
   }
 
   // ---------------------------------------------------------------------------
@@ -105,9 +154,9 @@ export class LocalFilesystem extends BaseFilesystem {
         return await fs.readFile(absolutePath, { encoding: options.encoding });
       }
       return await fs.readFile(absolutePath);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (error.code === 'ENOENT') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         throw new FileNotFoundError(inputPath);
       }
       throw error;
@@ -121,13 +170,13 @@ export class LocalFilesystem extends BaseFilesystem {
       try {
         await fs.access(absolutePath);
         throw new FileExistsError(inputPath);
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (error instanceof FileExistsError) throw error;
       }
     }
 
     if (options?.recursive !== false) {
-      const dir = path.dirname(absolutePath);
+      const dir = nodePath.dirname(absolutePath);
       await fs.mkdir(dir, { recursive: true });
     }
 
@@ -136,7 +185,7 @@ export class LocalFilesystem extends BaseFilesystem {
 
   async appendFile(inputPath: string, content: FileContent): Promise<void> {
     const absolutePath = this.resolvePath(inputPath);
-    const dir = path.dirname(absolutePath);
+    const dir = nodePath.dirname(absolutePath);
     await fs.mkdir(dir, { recursive: true });
     await fs.appendFile(absolutePath, this.toBuffer(content));
   }
@@ -150,9 +199,9 @@ export class LocalFilesystem extends BaseFilesystem {
         throw new IsDirectoryError(inputPath);
       }
       await fs.unlink(absolutePath);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (error.code === 'ENOENT') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         if (!options?.force) {
           throw new FileNotFoundError(inputPath);
         }
@@ -178,16 +227,16 @@ export class LocalFilesystem extends BaseFilesystem {
           try {
             await fs.access(destPath);
             throw new FileExistsError(dest);
-          } catch (error: any) {
+          } catch (error: unknown) {
             if (error instanceof FileExistsError) throw error;
           }
         }
-        await fs.mkdir(path.dirname(destPath), { recursive: true });
+        await fs.mkdir(nodePath.dirname(destPath), { recursive: true });
         await fs.copyFile(srcPath, destPath);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof IsDirectoryError || error instanceof FileExistsError) throw error;
-      if (error.code === 'ENOENT') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -199,8 +248,8 @@ export class LocalFilesystem extends BaseFilesystem {
     const entries = await fs.readdir(src, { withFileTypes: true });
 
     for (const entry of entries) {
-      const srcEntry = path.join(src, entry.name);
-      const destEntry = path.join(dest, entry.name);
+      const srcEntry = nodePath.join(src, entry.name);
+      const destEntry = nodePath.join(dest, entry.name);
 
       if (entry.isDirectory()) {
         await this.copyDirectory(srcEntry, destEntry, options);
@@ -227,12 +276,12 @@ export class LocalFilesystem extends BaseFilesystem {
         try {
           await fs.access(destPath);
           throw new FileExistsError(dest);
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (error instanceof FileExistsError) throw error;
         }
       }
 
-      await fs.mkdir(path.dirname(destPath), { recursive: true });
+      await fs.mkdir(nodePath.dirname(destPath), { recursive: true });
 
       try {
         await fs.rename(srcPath, destPath);
@@ -240,9 +289,9 @@ export class LocalFilesystem extends BaseFilesystem {
         await this.copyFile(src, dest, { ...options, overwrite: true });
         await fs.rm(srcPath, { recursive: true, force: true });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof FileExistsError) throw error;
-      if (error.code === 'ENOENT') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         throw new FileNotFoundError(src);
       }
       throw error;
@@ -258,8 +307,8 @@ export class LocalFilesystem extends BaseFilesystem {
 
     try {
       await fs.mkdir(absolutePath, { recursive: options?.recursive ?? true });
-    } catch (error: any) {
-      if (error.code === 'EEXIST') {
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
         const stats = await fs.stat(absolutePath);
         if (!stats.isDirectory()) {
           throw new FileExistsError(inputPath);
@@ -288,14 +337,11 @@ export class LocalFilesystem extends BaseFilesystem {
         }
         await fs.rmdir(absolutePath);
       }
-    } catch (error: any) {
-      if (
-        error instanceof NotDirectoryError ||
-        error instanceof DirectoryNotEmptyError
-      ) {
+    } catch (error: unknown) {
+      if (error instanceof NotDirectoryError || error instanceof DirectoryNotEmptyError) {
         throw error;
       }
-      if (error.code === 'ENOENT') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         if (!options?.force) {
           throw new DirectoryNotFoundError(inputPath);
         }
@@ -318,14 +364,12 @@ export class LocalFilesystem extends BaseFilesystem {
       const result: FileEntry[] = [];
 
       for (const entry of entries) {
-        const entryPath = path.join(absolutePath, entry.name);
+        const entryPath = nodePath.join(absolutePath, entry.name);
 
         if (options?.extension) {
-          const extensions = Array.isArray(options.extension)
-            ? options.extension
-            : [options.extension];
+          const extensions = Array.isArray(options.extension) ? options.extension : [options.extension];
           if (entry.isFile()) {
-            const ext = path.extname(entry.name);
+            const ext = nodePath.extname(entry.name);
             if (!extensions.some((e) => e === ext || e === ext.slice(1))) {
               continue;
             }
@@ -351,10 +395,7 @@ export class LocalFilesystem extends BaseFilesystem {
         if (options?.recursive && entry.isDirectory()) {
           const depth = options.maxDepth ?? Infinity;
           if (depth > 0) {
-            const subEntries = await this.readdir(
-              this.toRelativePath(entryPath),
-              { ...options, maxDepth: depth - 1 },
-            );
+            const subEntries = await this.readdir(this.toRelativePath(entryPath), { ...options, maxDepth: depth - 1 });
             result.push(
               ...subEntries.map((e) => ({
                 ...e,
@@ -366,9 +407,9 @@ export class LocalFilesystem extends BaseFilesystem {
       }
 
       return result;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof NotDirectoryError) throw error;
-      if (error.code === 'ENOENT') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         throw new DirectoryNotFoundError(inputPath);
       }
       throw error;
@@ -395,7 +436,7 @@ export class LocalFilesystem extends BaseFilesystem {
     try {
       const stats = await fs.stat(absolutePath);
       return {
-        name: path.basename(absolutePath),
+        name: nodePath.basename(absolutePath),
         path: this.toRelativePath(absolutePath),
         type: stats.isDirectory() ? 'directory' : 'file',
         size: stats.size,
@@ -403,8 +444,8 @@ export class LocalFilesystem extends BaseFilesystem {
         modifiedAt: stats.mtime,
         mimeType: stats.isFile() ? this.getMimeType(absolutePath) : undefined,
       };
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
         throw new FileNotFoundError(inputPath);
       }
       throw error;
@@ -433,7 +474,12 @@ export class LocalFilesystem extends BaseFilesystem {
   // Lifecycle
   // ---------------------------------------------------------------------------
 
-  override async init(): Promise<void> {
+  async init(): Promise<void> {
     await fs.mkdir(this.basePath, { recursive: true });
+  }
+
+  async destroy(): Promise<void> {
+    // LocalFilesystem doesn't clean up on destroy by default
+    // Users can call rmdir('/') if they want to clear the workspace
   }
 }

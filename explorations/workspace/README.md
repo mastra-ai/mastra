@@ -1,14 +1,14 @@
 # @mastra/workspace
 
-Workspace abstraction for Mastra agents - provides filesystem and code execution capabilities.
+Workspace providers for Mastra agents - filesystem and sandbox capabilities.
 
 ## Design Philosophy
 
-This package follows an **interface-first** design:
+This package provides **provider implementations** for the Workspace class in `@mastra/core`.
 
-- **Consumers** use factory functions that return interface types
-- **Integrators** depend on contracts (interfaces), not implementations
-- **Providers** extend base classes to implement new backends
+- **Workspace class** → lives in `@mastra/core`
+- **Providers** → separate packages (this one and future packages)
+- **Instance-based API** → users pass provider instances, not config objects
 
 ## Installation
 
@@ -19,260 +19,140 @@ pnpm add @mastra/workspace
 ## Quick Start
 
 ```typescript
-import {
-  createMemoryWorkspace,
-  type Workspace,
-  type WorkspaceFilesystem,
-} from '@mastra/workspace';
+import { Workspace } from '@mastra/core';
+import { LocalFilesystem, LocalSandbox } from '@mastra/workspace';
 
-// Factory functions return interface types
-const workspace: Workspace = await createMemoryWorkspace({
-  id: 'my-workspace',
-  scope: 'thread',
-  agentId: 'my-agent',
-  threadId: 'thread-123',
-  withExecutor: true,
+// Create a workspace with local filesystem (folder on disk)
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './my-workspace' }),
+  sandbox: new LocalSandbox(),
 });
 
-// Work with the Workspace interface
-await workspace.writeFile('/code/app.js', 'console.log("Hello!");');
+await workspace.init();
+
+// File operations
+await workspace.writeFile('/code/app.js', 'console.log("Hello!")');
 const code = await workspace.readFile('/code/app.js', { encoding: 'utf-8' });
 
 // Execute code
-const result = await workspace.executeCode('console.log("Hello!");', {
+const result = await workspace.executeCode('console.log("Hello!")', {
   runtime: 'node',
 });
 console.log(result.stdout); // "Hello!"
-
-// Use key-value state
-await workspace.state?.set('config', { debug: true });
-const config = await workspace.state?.get('config');
 
 // Cleanup
 await workspace.destroy();
 ```
 
-## Interface-First Pattern
+## Available Providers
 
-### For Consumers
+### Filesystem Providers
 
-Use factory functions which return interface types:
+| Provider | Description | Best For |
+|----------|-------------|----------|
+| `LocalFilesystem` | Folder on disk | Development, local agents |
+| `RamFilesystem` | In-memory (ephemeral) | Testing, temp workspaces |
+
+### Sandbox Providers
+
+| Provider | Description | Best For |
+|----------|-------------|----------|
+| `LocalSandbox` | Host machine execution | Development only ⚠️ |
+
+## LocalFilesystem
+
+Stores files in a folder on the user's machine.
 
 ```typescript
-import { createMemoryWorkspace, type Workspace } from '@mastra/workspace';
+import { LocalFilesystem } from '@mastra/workspace';
 
-// Get a Workspace interface - don't care about implementation
-const workspace: Workspace = await createMemoryWorkspace({ scope: 'thread' });
+const fs = new LocalFilesystem({
+  basePath: './workspace',  // Required: base directory
+  sandbox: true,            // Optional: prevent path traversal (default: true)
+});
 
-// All operations go through the interface
-await workspace.writeFile('/hello.txt', 'Hello!');
+await fs.init();
+
+// File operations
+await fs.writeFile('/hello.txt', 'Hello World!');
+const content = await fs.readFile('/hello.txt', { encoding: 'utf-8' });
+
+// Directory operations
+await fs.mkdir('/data');
+const entries = await fs.readdir('/');
 ```
 
-### For Integrators
+## RamFilesystem
 
-Depend on interface types, not concrete implementations:
-
-```typescript
-import type { Workspace, WorkspaceFilesystem, WorkspaceExecutor } from '@mastra/workspace';
-
-// Function accepts interface, works with any implementation
-async function processWithWorkspace(workspace: Workspace) {
-  const files = await workspace.readdir('/');
-  // ...
-}
-
-// Or work with individual components
-async function saveToFilesystem(fs: WorkspaceFilesystem, path: string, data: string) {
-  await fs.writeFile(path, data);
-}
-```
-
-### For Provider Implementers
-
-Extend base classes to create new backends:
+In-memory filesystem for testing. Data is lost when process exits.
 
 ```typescript
-import { BaseFilesystem, BaseExecutor } from '@mastra/workspace';
-import type { WorkspaceFilesystem, FileStat, FileEntry } from '@mastra/workspace';
+import { RamFilesystem } from '@mastra/workspace';
 
-// Extend base class, implement abstract methods
-export class MyCustomFilesystem extends BaseFilesystem {
-  readonly id: string;
-  readonly name = 'MyCustomFilesystem';
-  readonly provider = 'custom';
-
-  async readFile(path: string): Promise<string | Buffer> {
-    // Your implementation
-  }
-
-  async writeFile(path: string, content: string | Buffer): Promise<void> {
-    // Your implementation
-  }
-
-  // ... implement other abstract methods
-}
-
-// Register with factory (for custom setups)
-```
-
-## Workspace Types
-
-### Memory Workspace
-
-In-memory filesystem, great for testing and ephemeral operations:
-
-```typescript
-const workspace: Workspace = await createMemoryWorkspace({
-  id: 'test-workspace',
-  scope: 'thread',
-  withExecutor: true, // Optional: enable code execution
+const fs = new RamFilesystem({
   initialFiles: {
-    // Optional: pre-populate files
-    '/config.json': '{"initialized": true}',
+    '/config.json': '{"debug": true}',
+    '/README.md': '# My Workspace',
   },
 });
+
+// Use like any other filesystem
+await fs.writeFile('/data.txt', 'content');
 ```
 
-### Local Workspace
+## LocalSandbox
 
-Uses the local filesystem and shell for execution:
+Runs code directly on the host machine.
+
+⚠️ **Warning:** Only use for development. For production, use ComputeSDKSandbox.
 
 ```typescript
-const workspace: Workspace = await createLocalWorkspace({
-  id: 'local-workspace',
-  basePath: '/path/to/workspace',
-  scope: 'agent',
-  agentId: 'my-agent',
+import { LocalSandbox } from '@mastra/workspace';
+
+const sandbox = new LocalSandbox({
+  cwd: './workspace',        // Optional: working directory
+  timeout: 30000,            // Optional: default timeout (ms)
+  defaultRuntime: 'node',    // Optional: default runtime
+});
+
+await sandbox.start();
+
+// Execute code
+const result = await sandbox.executeCode('console.log("Hello!")', {
+  runtime: 'node',
+});
+
+// Execute commands
+const cmdResult = await sandbox.executeCommand('echo', ['Hello', 'World']);
+
+await sandbox.destroy();
+```
+
+## Planned Providers
+
+### AgentFS
+
+Turso-backed filesystem with full audit trail.
+
+```typescript
+// Coming soon
+import { AgentFS } from '@mastra/workspace-fs-agentfs';
+
+const fs = new AgentFS({ path: './agent.db' });
+```
+
+### ComputeSDKSandbox
+
+Access to E2B, Modal, Docker, and other sandbox providers via ComputeSDK.
+
+```typescript
+// Coming soon
+import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+
+const sandbox = new ComputeSDKSandbox({
+  provider: 'e2b',  // or 'modal', 'docker', etc.
 });
 ```
-
-### Custom Workspace
-
-Full control over configuration:
-
-```typescript
-import { createWorkspace, type Workspace, type WorkspaceConfig } from '@mastra/workspace';
-
-const config: WorkspaceConfig = {
-  id: 'custom-workspace',
-  scope: 'thread',
-  filesystem: {
-    provider: 'memory',
-    id: 'custom-fs',
-    initialFiles: {
-      '/README.md': '# My Workspace',
-    },
-  },
-  executor: {
-    provider: 'local',
-    id: 'custom-exec',
-    defaultRuntime: 'node',
-  },
-};
-
-const workspace: Workspace = await createWorkspace(config, {
-  scope: 'thread',
-  agentId: 'agent',
-  threadId: 'thread',
-});
-```
-
-## Core Interfaces
-
-### Workspace
-
-The main interface combining filesystem and executor:
-
-```typescript
-interface Workspace {
-  readonly id: string;
-  readonly name: string;
-  readonly scope: WorkspaceScope;
-  readonly status: WorkspaceStatus;
-
-  // Components (accessed via interface)
-  readonly fs?: WorkspaceFilesystem;
-  readonly executor?: WorkspaceExecutor;
-  readonly state?: WorkspaceState;
-
-  // Convenience methods
-  readFile(path: string, options?: ReadOptions): Promise<string | Buffer>;
-  writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void>;
-  readdir(path: string, options?: ListOptions): Promise<FileEntry[]>;
-  exists(path: string): Promise<boolean>;
-  executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
-  executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-
-  // Lifecycle
-  init(): Promise<void>;
-  destroy(): Promise<void>;
-  snapshot(options?: SnapshotOptions): Promise<WorkspaceSnapshot>;
-  restore(snapshot: WorkspaceSnapshot, options?: RestoreOptions): Promise<void>;
-}
-```
-
-### WorkspaceFilesystem
-
-Interface for file storage:
-
-```typescript
-interface WorkspaceFilesystem {
-  readonly id: string;
-  readonly name: string;
-  readonly provider: string;
-
-  readFile(path: string, options?: ReadOptions): Promise<string | Buffer>;
-  writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void>;
-  deleteFile(path: string, options?: RemoveOptions): Promise<void>;
-  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
-  rmdir(path: string, options?: RemoveOptions): Promise<void>;
-  readdir(path: string, options?: ListOptions): Promise<FileEntry[]>;
-  exists(path: string): Promise<boolean>;
-  stat(path: string): Promise<FileStat>;
-  // ...
-}
-```
-
-### WorkspaceExecutor
-
-Interface for code execution:
-
-```typescript
-interface WorkspaceExecutor {
-  readonly id: string;
-  readonly name: string;
-  readonly provider: string;
-  readonly status: ExecutorStatus;
-  readonly supportedRuntimes: readonly Runtime[];
-
-  executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
-  executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
-  start(): Promise<void>;
-  destroy(): Promise<void>;
-  // ...
-}
-```
-
-## Providers
-
-### Built-in Filesystem Providers
-
-| Provider | Description | Status |
-| -------- | ----------- | ------ |
-| `memory` | In-memory filesystem | ✅ Implemented |
-| `local` | Local disk filesystem | ✅ Implemented |
-| `agentfs` | AgentFS from Turso | 📋 Planned |
-| `s3` | Amazon S3 | 📋 Planned |
-
-### Built-in Executor Providers
-
-| Provider | Description | Status |
-| -------- | ----------- | ------ |
-| `local` | Local shell execution | ✅ Implemented |
-| `e2b` | E2B sandbox | 📋 Planned |
-| `modal` | Modal sandbox | 📋 Planned |
-| `docker` | Docker containers | 📋 Planned |
-| `computesdk` | ComputeSDK unified API | 📋 Planned |
 
 ## Development
 

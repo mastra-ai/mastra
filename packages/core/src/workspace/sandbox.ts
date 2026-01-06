@@ -1,15 +1,34 @@
 /**
- * Workspace Executor Interface
+ * Workspace Sandbox Interface
  *
- * Provides a unified interface for code and command execution.
- * Implementations can be backed by E2B, Modal, Docker, local shell, etc.
+ * Defines the contract for sandbox providers that can be used with Workspace.
+ * Users pass sandbox provider instances to the Workspace constructor.
+ *
+ * Sandboxes provide isolated environments for code and command execution.
+ * They may have their own filesystem that's separate from the workspace FS.
+ *
+ * Built-in providers (via ComputeSDK):
+ * - E2B: Cloud sandboxes
+ * - Modal: GPU-enabled sandboxes
+ * - Docker: Container-based execution
+ * - Local: Development-only local execution
+ *
+ * @example
+ * ```typescript
+ * import { Workspace } from '@mastra/core';
+ * import { ComputeSDKSandbox } from '@mastra/workspace-sandbox-computesdk';
+ *
+ * const workspace = new Workspace({
+ *   sandbox: new ComputeSDKSandbox({ provider: 'e2b' }),
+ * });
+ * ```
  */
 
 // =============================================================================
 // Core Types
 // =============================================================================
 
-export type Runtime = 'python' | 'node' | 'bash' | 'ruby' | 'go' | 'rust' | 'deno' | 'bun';
+export type SandboxRuntime = 'python' | 'node' | 'bash' | 'ruby' | 'go' | 'rust' | 'deno' | 'bun';
 
 export interface ExecutionResult {
   /** Exit code (0 = success) */
@@ -35,7 +54,7 @@ export interface CommandResult extends ExecutionResult {
 
 export interface CodeResult extends ExecutionResult {
   /** The runtime used */
-  runtime: Runtime;
+  runtime: SandboxRuntime;
   /** Return value if the code produced one (runtime-dependent) */
   returnValue?: unknown;
 }
@@ -58,8 +77,8 @@ export interface StreamingExecutionResult {
 // =============================================================================
 
 export interface ExecuteCodeOptions {
-  /** Runtime to use (default: infer from code or use executor default) */
-  runtime?: Runtime;
+  /** Runtime to use (default: infer from code or use sandbox default) */
+  runtime?: SandboxRuntime;
   /** Timeout in milliseconds */
   timeout?: number;
   /** Environment variables */
@@ -95,17 +114,20 @@ export interface InstallPackageOptions {
 }
 
 // =============================================================================
-// Executor Interface
+// Sandbox Interface
 // =============================================================================
 
 /**
- * Abstract executor interface for code and command execution.
+ * Abstract sandbox interface for code and command execution.
  *
- * Executors provide isolated environments for running untrusted code.
+ * Providers implement this interface to provide execution capabilities.
+ * Users instantiate providers and pass them to the Workspace constructor.
+ *
+ * Sandboxes provide isolated environments for running untrusted code.
  * They may have their own filesystem that's separate from the workspace FS.
  */
-export interface WorkspaceExecutor {
-  /** Unique identifier for this executor instance */
+export interface WorkspaceSandbox {
+  /** Unique identifier for this sandbox instance */
   readonly id: string;
 
   /** Human-readable name (e.g., 'E2B Sandbox', 'Docker') */
@@ -115,13 +137,13 @@ export interface WorkspaceExecutor {
   readonly provider: string;
 
   /** Current status */
-  readonly status: ExecutorStatus;
+  readonly status: SandboxStatus;
 
   /** Supported runtimes */
-  readonly supportedRuntimes: readonly Runtime[];
+  readonly supportedRuntimes: readonly SandboxRuntime[];
 
   /** Default runtime */
-  readonly defaultRuntime: Runtime;
+  readonly defaultRuntime: SandboxRuntime;
 
   // ---------------------------------------------------------------------------
   // Code Execution
@@ -129,8 +151,8 @@ export interface WorkspaceExecutor {
 
   /**
    * Execute code in the sandbox.
-   * @throws {ExecutionError} if execution fails catastrophically
-   * @throws {TimeoutError} if execution times out
+   * @throws {SandboxExecutionError} if execution fails catastrophically
+   * @throws {SandboxTimeoutError} if execution times out
    */
   executeCode(code: string, options?: ExecuteCodeOptions): Promise<CodeResult>;
 
@@ -145,8 +167,8 @@ export interface WorkspaceExecutor {
 
   /**
    * Execute a shell command.
-   * @throws {ExecutionError} if command fails to start
-   * @throws {TimeoutError} if command times out
+   * @throws {SandboxExecutionError} if command fails to start
+   * @throws {SandboxTimeoutError} if command times out
    */
   executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
@@ -164,7 +186,7 @@ export interface WorkspaceExecutor {
   // ---------------------------------------------------------------------------
 
   /**
-   * Install a package in the executor environment.
+   * Install a package in the sandbox environment.
    */
   installPackage?(packageName: string, options?: InstallPackageOptions): Promise<void>;
 
@@ -174,22 +196,22 @@ export interface WorkspaceExecutor {
   installPackages?(packages: string[], options?: InstallPackageOptions): Promise<void>;
 
   // ---------------------------------------------------------------------------
-  // Filesystem Access (Executor's internal FS)
+  // Filesystem Access (Sandbox's internal FS)
   // ---------------------------------------------------------------------------
 
   /**
-   * Write a file to the executor's filesystem.
-   * This is the executor's internal FS, not the workspace FS.
+   * Write a file to the sandbox's filesystem.
+   * This is the sandbox's internal FS, not the workspace FS.
    */
   writeFile?(path: string, content: string | Buffer): Promise<void>;
 
   /**
-   * Read a file from the executor's filesystem.
+   * Read a file from the sandbox's filesystem.
    */
   readFile?(path: string): Promise<string>;
 
   /**
-   * List files in the executor's filesystem.
+   * List files in the sandbox's filesystem.
    */
   listFiles?(path: string): Promise<string[]>;
 
@@ -198,45 +220,45 @@ export interface WorkspaceExecutor {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start/initialize the executor.
-   * For cloud providers, this typically spins up a sandbox.
+   * Start/initialize the sandbox.
+   * For cloud providers, this typically spins up a sandbox instance.
    */
   start(): Promise<void>;
 
   /**
-   * Stop the executor, keeping state for potential restart.
+   * Stop the sandbox, keeping state for potential restart.
    */
   stop?(): Promise<void>;
 
   /**
-   * Destroy the executor and clean up all resources.
+   * Destroy the sandbox and clean up all resources.
    */
   destroy(): Promise<void>;
 
   /**
-   * Check if the executor is ready for commands.
+   * Check if the sandbox is ready for commands.
    */
   isReady(): Promise<boolean>;
 
   /**
-   * Get executor information/metadata.
+   * Get sandbox information/metadata.
    */
-  getInfo(): Promise<ExecutorInfo>;
+  getInfo(): Promise<SandboxInfo>;
 }
 
 // =============================================================================
-// Executor Status & Info
+// Sandbox Status & Info
 // =============================================================================
 
-export type ExecutorStatus = 'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'destroyed';
+export type SandboxStatus = 'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'error' | 'destroyed';
 
-export interface ExecutorInfo {
+export interface SandboxInfo {
   id: string;
   provider: string;
-  status: ExecutorStatus;
-  /** When the executor was created */
+  status: SandboxStatus;
+  /** When the sandbox was created */
   createdAt: Date;
-  /** When the executor was last used */
+  /** When the sandbox was last used */
   lastUsedAt?: Date;
   /** Time until auto-shutdown (if applicable) */
   timeoutAt?: Date;
@@ -253,106 +275,21 @@ export interface ExecutorInfo {
 }
 
 // =============================================================================
-// Provider Configuration
-// =============================================================================
-
-export interface ExecutorProviderConfig {
-  /** Unique ID for this executor instance */
-  id: string;
-  /** Default runtime */
-  defaultRuntime?: Runtime;
-  /** Default timeout in milliseconds */
-  timeout?: number;
-  /** Environment variables to set in all executions */
-  env?: Record<string, string>;
-}
-
-export interface E2BExecutorConfig extends ExecutorProviderConfig {
-  provider: 'e2b';
-  /** E2B API key (defaults to E2B_API_KEY env var) */
-  apiKey?: string;
-  /** E2B template ID */
-  templateId?: string;
-  /** Sandbox timeout in milliseconds */
-  sandboxTimeout?: number;
-}
-
-export interface ModalExecutorConfig extends ExecutorProviderConfig {
-  provider: 'modal';
-  /** Modal token ID (defaults to MODAL_TOKEN_ID env var) */
-  tokenId?: string;
-  /** Modal token secret (defaults to MODAL_TOKEN_SECRET env var) */
-  tokenSecret?: string;
-  /** GPU type if needed */
-  gpu?: string;
-}
-
-export interface DockerExecutorConfig extends ExecutorProviderConfig {
-  provider: 'docker';
-  /** Docker image to use */
-  image: string;
-  /** Pull image if not present */
-  pull?: boolean;
-  /** Mount volumes */
-  volumes?: Array<{ host: string; container: string; readonly?: boolean }>;
-  /** Memory limit (e.g., '512m', '1g') */
-  memory?: string;
-  /** CPU limit (e.g., '0.5', '2') */
-  cpus?: string;
-  /** Network mode */
-  network?: 'none' | 'bridge' | 'host';
-}
-
-export interface LocalExecutorConfig extends ExecutorProviderConfig {
-  provider: 'local';
-  /** Working directory for executions */
-  cwd?: string;
-  /** Use a shell for command execution */
-  shell?: boolean;
-  /** Restrict commands (security) */
-  allowedCommands?: string[];
-}
-
-export interface DaytonaExecutorConfig extends ExecutorProviderConfig {
-  provider: 'daytona';
-  /** Daytona API key (defaults to DAYTONA_API_KEY env var) */
-  apiKey?: string;
-  /** Workspace template */
-  template?: string;
-}
-
-export interface ComputeSDKExecutorConfig extends ExecutorProviderConfig {
-  provider: 'computesdk';
-  /** Let ComputeSDK auto-detect provider */
-  autoDetect?: boolean;
-  /** Force specific provider */
-  forceProvider?: 'e2b' | 'modal' | 'railway' | 'daytona' | 'vercel' | 'cloudflare';
-}
-
-export type ExecutorConfig =
-  | E2BExecutorConfig
-  | ModalExecutorConfig
-  | DockerExecutorConfig
-  | LocalExecutorConfig
-  | DaytonaExecutorConfig
-  | ComputeSDKExecutorConfig;
-
-// =============================================================================
 // Errors
 // =============================================================================
 
-export class ExecutorError extends Error {
+export class SandboxError extends Error {
   constructor(
     message: string,
     public readonly code: string,
     public readonly details?: Record<string, unknown>,
   ) {
     super(message);
-    this.name = 'ExecutorError';
+    this.name = 'SandboxError';
   }
 }
 
-export class ExecutionError extends ExecutorError {
+export class SandboxExecutionError extends SandboxError {
   constructor(
     message: string,
     public readonly exitCode: number,
@@ -360,29 +297,29 @@ export class ExecutionError extends ExecutorError {
     public readonly stderr: string,
   ) {
     super(message, 'EXECUTION_FAILED', { exitCode, stdout, stderr });
-    this.name = 'ExecutionError';
+    this.name = 'SandboxExecutionError';
   }
 }
 
-export class TimeoutError extends ExecutorError {
+export class SandboxTimeoutError extends SandboxError {
   constructor(
     public readonly timeoutMs: number,
     public readonly operation: 'code' | 'command',
   ) {
     super(`Execution timed out after ${timeoutMs}ms`, 'TIMEOUT', { timeoutMs, operation });
-    this.name = 'TimeoutError';
+    this.name = 'SandboxTimeoutError';
   }
 }
 
-export class ExecutorNotReadyError extends ExecutorError {
-  constructor(status: ExecutorStatus) {
-    super(`Executor is not ready (status: ${status})`, 'NOT_READY', { status });
-    this.name = 'ExecutorNotReadyError';
+export class SandboxNotReadyError extends SandboxError {
+  constructor(status: SandboxStatus) {
+    super(`Sandbox is not ready (status: ${status})`, 'NOT_READY', { status });
+    this.name = 'SandboxNotReadyError';
   }
 }
 
-export class UnsupportedRuntimeError extends ExecutorError {
-  constructor(runtime: string, supported: readonly Runtime[]) {
+export class UnsupportedRuntimeError extends SandboxError {
+  constructor(runtime: string, supported: readonly SandboxRuntime[]) {
     super(`Runtime '${runtime}' is not supported. Supported: ${supported.join(', ')}`, 'UNSUPPORTED_RUNTIME', {
       runtime,
       supported,
