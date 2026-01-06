@@ -10,13 +10,7 @@ type TabsRootProps<T extends string> = {
   className?: string;
 };
 
-export const TabsRoot = <T extends string>({
-  children,
-  defaultTab,
-  value,
-  onValueChange,
-  className,
-}: TabsRootProps<T>) => {
+export const Tabs = <T extends string>({ children, defaultTab, value, onValueChange, className }: TabsRootProps<T>) => {
   const [internalTab, setInternalTab] = useState<T>(defaultTab);
 
   // Use controlled mode if value and onValueChange are provided
