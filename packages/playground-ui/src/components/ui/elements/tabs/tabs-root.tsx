@@ -26,11 +26,7 @@ export const Tabs = <T extends string>({ children, defaultTab, value, onValueCha
   };
 
   return (
-    <RadixTabs.Root
-      value={currentTab}
-      onValueChange={handleTabChange}
-      className={cn('grid gap-8 overflow-y-auto', className)}
-    >
+    <RadixTabs.Root value={currentTab} onValueChange={handleTabChange} className={cn('overflow-y-auto', className)}>
       {children}
     </RadixTabs.Root>
   );
