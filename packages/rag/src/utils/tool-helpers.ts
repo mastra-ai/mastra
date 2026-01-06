@@ -15,6 +15,44 @@ export interface ResolveVectorStoreContext {
 }
 
 /**
+ * Validates that a value is a valid MastraVector instance.
+ * @param value - The value to validate
+ * @returns True if the value is a valid MastraVector
+ */
+function isValidMastraVector(value: unknown): value is MastraVector {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  if (typeof value !== 'object') {
+    return false;
+  }
+  const vec = value as MastraVector;
+  // Check for required MastraVector properties and methods
+  return typeof vec.id === 'string' && typeof vec.query === 'function' && typeof vec.upsert === 'function';
+}
+
+/**
+ * Builds a context string for error messages from the ResolveVectorStoreContext.
+ */
+function buildContextString(context: ResolveVectorStoreContext): string {
+  const parts: string[] = [];
+  if (context.vectorStoreName) {
+    parts.push(`vectorStoreName="${context.vectorStoreName}"`);
+  }
+  if (context.requestContext) {
+    // Include request context info if available
+    const schemaId = context.requestContext.get?.('schemaId');
+    const tenantId = context.requestContext.get?.('tenantId');
+    if (schemaId) parts.push(`schemaId="${schemaId}"`);
+    if (tenantId) parts.push(`tenantId="${tenantId}"`);
+  }
+  if (context.mastra) {
+    parts.push('mastra=provided');
+  }
+  return parts.length > 0 ? ` (context: ${parts.join(', ')})` : '';
+}
+
+/**
  * Resolves a vector store from options, supporting both static instances and dynamic resolver functions.
  * For multi-tenant setups, the resolver function receives the request context to select the appropriate store.
  *
@@ -32,8 +70,44 @@ export async function resolveVectorStore(
     const vectorStoreOption = options.vectorStore as MastraVector | VectorStoreResolver;
     // Support dynamic vector store resolution for multi-tenant setups
     if (typeof vectorStoreOption === 'function') {
-      return vectorStoreOption({ requestContext, mastra });
+      const resolved = await vectorStoreOption({ requestContext, mastra });
+
+      // Validate that the resolver returned a valid MastraVector
+      if (!isValidMastraVector(resolved)) {
+        const contextStr = buildContextString(context);
+        const receivedType = resolved === null ? 'null' : resolved === undefined ? 'undefined' : typeof resolved;
+
+        console.error(
+          `VectorStoreResolver returned invalid value: expected MastraVector instance, got ${receivedType}${contextStr}`,
+        );
+
+        // Fall back to mastra.getVector if available
+        if (mastra && vectorStoreName) {
+          return mastra.getVector(vectorStoreName);
+        }
+
+        return undefined;
+      }
+
+      return resolved;
     }
+
+    // Validate static vectorStore option
+    if (!isValidMastraVector(vectorStoreOption)) {
+      const contextStr = buildContextString(context);
+      const receivedType =
+        vectorStoreOption === null ? 'null' : vectorStoreOption === undefined ? 'undefined' : typeof vectorStoreOption;
+
+      console.error(`vectorStore option is not a valid MastraVector instance: got ${receivedType}${contextStr}`);
+
+      // Fall back to mastra.getVector if available
+      if (mastra && vectorStoreName) {
+        return mastra.getVector(vectorStoreName);
+      }
+
+      return undefined;
+    }
+
     return vectorStoreOption;
   }
 
