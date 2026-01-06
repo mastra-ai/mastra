@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { TextPart, UIMessage, StreamObjectResult } from '@internal/ai-sdk-v4';
+import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
 import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer } from '@mastra/schema-compat';
 import type { ModelInformation } from '@mastra/schema-compat';
 import type { JSONSchema7 } from 'json-schema';
@@ -18,7 +18,12 @@ import type {
 import { runScorer } from '../evals/hooks';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
-import type { GenerateObjectResult, GenerateTextResult, StreamTextResult } from '../llm/model/base.types';
+import type {
+  GenerateObjectResult,
+  GenerateTextResult,
+  StreamObjectResult,
+  StreamTextResult,
+} from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type {
