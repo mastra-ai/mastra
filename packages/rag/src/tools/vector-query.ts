@@ -100,6 +100,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           includeVectors,
           databaseConfig,
           providerOptions,
+          mastra,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -121,12 +122,19 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
                 ...reranker.options,
                 topK: reranker.options?.topK || topKValue,
               },
+              mastra,
             });
           } else {
-            rerankedResults = await rerank(results, queryText, reranker.model, {
-              ...reranker.options,
-              topK: reranker.options?.topK || topKValue,
-            });
+            rerankedResults = await rerank(
+              results,
+              queryText,
+              reranker.model,
+              {
+                ...reranker.options,
+                topK: reranker.options?.topK || topKValue,
+              },
+              mastra,
+            );
           }
 
           if (logger) {

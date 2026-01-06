@@ -1,7 +1,14 @@
+import type { Mastra } from '@mastra/core/mastra';
+import {
+  getGlobalMetricsCollector,
+  getOrCreateSpan,
+  SpanType,
+  EntityType,
+  type RagQueryAttributes,
+} from '@mastra/core/observability';
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
-import { getGlobalMetricsCollector } from '@mastra/core/observability';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
 type VectorQuerySearchParams = {
@@ -15,6 +22,8 @@ type VectorQuerySearchParams = {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /** Mastra instance for tracing (optional) - accepts any Mastra-like object */
+  mastra?: { observability?: unknown };
 } & ProviderOptions;
 
 interface VectorQuerySearchResult {
@@ -42,6 +51,7 @@ export const vectorQuerySearch = async ({
   maxRetries = 2,
   databaseConfig = {},
   providerOptions,
+  mastra,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   const startTime = Date.now();
   let embedDurationMs: number | undefined;
@@ -51,6 +61,21 @@ export const vectorQuerySearch = async ({
   let errorType: string | undefined;
   let embeddingDimension: number | undefined;
   let embeddingTokens: number | undefined;
+
+  // Create span for RAG query operation
+  const span = getOrCreateSpan<SpanType.RAG_QUERY>({
+    type: SpanType.RAG_QUERY,
+    name: `rag query: ${indexName}`,
+    entityType: EntityType.RAG,
+    entityId: indexName,
+    input: { queryText: queryText.substring(0, 100) + (queryText.length > 100 ? '...' : ''), topK },
+    attributes: {
+      indexName,
+      topK,
+      hasFilter: !!queryFilter,
+    } as RagQueryAttributes,
+    mastra: mastra as Mastra | undefined,
+  });
 
   try {
     // Measure embedding time
@@ -106,6 +131,8 @@ export const vectorQuerySearch = async ({
     return { results, queryEmbedding: embedding };
   } catch (error) {
     errorType = error instanceof Error ? error.name : 'UnknownError';
+    // Record error on span
+    span?.error({ error: error instanceof Error ? error : new Error(String(error)) });
     throw error;
   } finally {
     // Record RAG query metrics
@@ -146,6 +173,20 @@ export const vectorQuerySearch = async ({
         success,
         errorType: success ? undefined : errorType,
       });
+    }
+
+    // End span with result attributes
+    if (span) {
+      span.update({
+        attributes: {
+          resultCount,
+          durationMs,
+          embedDurationMs,
+          vectorSearchDurationMs,
+          success,
+        } as RagQueryAttributes,
+      });
+      span.end();
     }
   }
 };

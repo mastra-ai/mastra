@@ -474,6 +474,7 @@ describe('createVectorQueryTool', () => {
         includeVectors: false,
         databaseConfig: undefined,
         providerOptions: { google: { outputDimensionality: 1536 } },
+        mastra: mockMastra,
       });
     });
 
@@ -509,6 +510,7 @@ describe('createVectorQueryTool', () => {
         includeVectors: false,
         databaseConfig: undefined,
         providerOptions: { google: { outputDimensionality: 768 } },
+        mastra: mockMastra,
       });
     });
   });

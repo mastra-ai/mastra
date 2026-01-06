@@ -1,5 +1,12 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
-import { getGlobalMetricsCollector } from '@mastra/core/observability';
+import type { Mastra } from '@mastra/core/mastra';
+import {
+  getGlobalMetricsCollector,
+  getOrCreateSpan,
+  SpanType,
+  EntityType,
+  type RagRerankAttributes,
+} from '@mastra/core/observability';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
 import { Big } from 'big.js';
@@ -90,16 +97,34 @@ async function executeRerank({
   scorer,
   options,
   model,
+  mastra,
 }: {
   results: QueryResult[];
   query: string;
   scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
   model?: string;
+  mastra?: { observability?: unknown };
 }) {
   const startTime = Date.now();
   let success = false;
   let errorType: string | undefined;
+  const inputCount = results.length;
+
+  // Create span for rerank operation
+  const span = getOrCreateSpan<SpanType.RAG_RERANK>({
+    type: SpanType.RAG_RERANK,
+    name: `rag rerank: ${model || 'scorer'}`,
+    entityType: EntityType.RAG,
+    entityId: model || 'custom-scorer',
+    input: { query: query.substring(0, 100) + (query.length > 100 ? '...' : ''), inputCount },
+    attributes: {
+      model,
+      inputCount,
+      topK: options.topK,
+    } as RagRerankAttributes,
+    mastra: mastra as Mastra | undefined,
+  });
 
   try {
     const { queryEmbedding, topK = 3 } = options;
@@ -166,6 +191,8 @@ async function executeRerank({
     return rerankedResults;
   } catch (error) {
     errorType = error instanceof Error ? error.name : 'UnknownError';
+    // Record error on span
+    span?.error({ error: error instanceof Error ? error : new Error(String(error)) });
     throw error;
   } finally {
     // Record rerank metrics
@@ -173,12 +200,25 @@ async function executeRerank({
     const metrics = getGlobalMetricsCollector();
     metrics.recordRagRerank({
       model,
-      inputCount: results.length,
+      inputCount,
       outputCount: success ? (options.topK ?? 3) : 0,
       durationMs,
       success,
       errorType,
     });
+
+    // End span with result attributes
+    if (span) {
+      span.update({
+        attributes: {
+          inputCount,
+          outputCount: success ? (options.topK ?? 3) : 0,
+          durationMs,
+          success,
+        } as RagRerankAttributes,
+      });
+      span.end();
+    }
   }
 }
 
@@ -187,11 +227,13 @@ export async function rerankWithScorer({
   query,
   scorer,
   options,
+  mastra,
 }: {
   results: QueryResult[];
   query: string;
   scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
+  mastra?: { observability?: unknown };
 }): Promise<RerankResult[]> {
   return executeRerank({
     results,
@@ -199,6 +241,7 @@ export async function rerankWithScorer({
     scorer,
     options,
     model: 'custom-scorer',
+    mastra,
   });
 }
 
@@ -208,6 +251,7 @@ export async function rerank(
   query: string,
   model: MastraLanguageModel,
   options: RerankerFunctionOptions,
+  mastra?: { observability?: unknown },
 ): Promise<RerankResult[]> {
   let semanticProvider: RelevanceScoreProvider;
 
@@ -223,5 +267,6 @@ export async function rerank(
     scorer: semanticProvider,
     options,
     model: model.modelId,
+    mastra,
   });
 }

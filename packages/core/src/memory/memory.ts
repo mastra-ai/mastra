@@ -184,6 +184,14 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
     this.#mastra = mastra;
   }
 
+  /**
+   * Gets the registered Mastra instance (for tracing/observability).
+   * @protected
+   */
+  protected get mastra(): Mastra | undefined {
+    return this.#mastra;
+  }
+
   protected _hasOwnStorage = false;
   get hasOwnStorage() {
     return this._hasOwnStorage;

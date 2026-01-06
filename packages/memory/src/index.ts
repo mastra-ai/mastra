@@ -13,7 +13,15 @@ import type {
   MessageDeleteInput,
 } from '@mastra/core/memory';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
-import { getGlobalMetricsCollector } from '@mastra/core/observability';
+import {
+  getGlobalMetricsCollector,
+  getOrCreateSpan,
+  SpanType,
+  EntityType,
+  type Span,
+  type MemoryRecallAttributes,
+  type MemorySaveAttributes,
+} from '@mastra/core/observability';
 import type {
   StorageListThreadsByResourceIdOutput,
   StorageListThreadsByResourceIdInput,
@@ -117,6 +125,22 @@ export class Memory extends MastraMemory {
     let errorType: string | undefined;
 
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
+
+    // Create span for memory recall operation
+    const span = getOrCreateSpan<SpanType.MEMORY_RECALL>({
+      type: SpanType.MEMORY_RECALL,
+      name: `memory recall: ${threadId}`,
+      entityType: EntityType.MEMORY,
+      entityId: this.id,
+      entityName: this.name,
+      input: { threadId, resourceId, vectorSearchString: vectorSearchString ? '[provided]' : undefined },
+      attributes: {
+        threadId,
+        resourceId,
+        semanticSearchEnabled: !!vectorSearchString,
+      } as MemoryRecallAttributes,
+      mastra: this.mastra,
+    });
 
     try {
       const config = this.getMergedThreadConfig(threadConfig || {});
@@ -256,6 +280,8 @@ export class Memory extends MastraMemory {
       return { messages };
     } catch (error) {
       errorType = error instanceof Error ? error.name : 'UnknownError';
+      // Record error on span
+      span?.error({ error: error instanceof Error ? error : new Error(String(error)) });
       throw error;
     } finally {
       // Record metrics
@@ -272,6 +298,19 @@ export class Memory extends MastraMemory {
         success,
         errorType,
       });
+
+      // End span with result attributes
+      if (span) {
+        span.update({
+          attributes: {
+            resultCount,
+            durationMs,
+            semanticSearchUsed,
+            success,
+          } as MemoryRecallAttributes,
+        });
+        span.end();
+      }
     }
   }
 
@@ -654,6 +693,20 @@ ${workingMemory}`;
     const messageCount = messages.length;
     let threadId: string | undefined;
 
+    // Create span for memory save operation
+    const span = getOrCreateSpan<SpanType.MEMORY_SAVE>({
+      type: SpanType.MEMORY_SAVE,
+      name: `memory save: ${messageCount} messages`,
+      entityType: EntityType.MEMORY,
+      entityId: this.id,
+      entityName: this.name,
+      input: { messageCount },
+      attributes: {
+        messageCount,
+      } as MemorySaveAttributes,
+      mastra: this.mastra,
+    });
+
     try {
       // Then strip working memory tags from all messages
       const updatedMessages = messages
@@ -664,6 +717,11 @@ ${workingMemory}`;
 
       // Capture threadId from first message if available
       threadId = updatedMessages[0]?.threadId;
+
+      // Update span with threadId once we have it
+      if (threadId && span) {
+        span.update({ attributes: { threadId } as MemorySaveAttributes });
+      }
 
       const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -763,6 +821,8 @@ ${workingMemory}`;
       return result;
     } catch (error) {
       errorType = error instanceof Error ? error.name : 'UnknownError';
+      // Record error on span
+      span?.error({ error: error instanceof Error ? error : new Error(String(error)) });
       throw error;
     } finally {
       // Record metrics
@@ -778,6 +838,19 @@ ${workingMemory}`;
         success,
         errorType,
       });
+
+      // End span with result attributes
+      if (span) {
+        span.update({
+          attributes: {
+            messageCount,
+            durationMs,
+            vectorized,
+            success,
+          } as MemorySaveAttributes,
+        });
+        span.end();
+      }
     }
   }
 
