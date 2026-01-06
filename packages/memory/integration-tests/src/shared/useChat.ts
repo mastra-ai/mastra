@@ -14,6 +14,7 @@ import { JSDOM } from 'jsdom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { weatherAgent } from '../v4/mastra/agents/weather';
 import { weatherAgent as weatherAgentV5 } from '../v5/mastra/agents/weather';
+import { AIV4Adapter } from '@mastra/core/agent/message-list/adapters';
 
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
@@ -169,7 +170,7 @@ export function setupUseChatV4() {
       const agentMemory = (await weatherAgent.getMemory())!;
       // Get initial messages from memory and convert to AI SDK v4 format
       const { messages } = await agentMemory.recall({ threadId });
-      const initialMessages = messages.map(m => MessageList.mastraDBMessageToAIV4UIMessage(m)) as Message[];
+      const initialMessages = messages.map(m => AIV4Adapter.toUIMessage(m)) as Message[];
       const state = { clipboard: '' };
       const { result } = renderHook(() => {
         const chat = useChat({
