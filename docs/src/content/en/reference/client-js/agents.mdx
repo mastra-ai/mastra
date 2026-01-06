@@ -81,12 +81,7 @@ const response = await agent.generate("Hello, how are you?", {
 Stream responses from the agent for real-time interactions:
 
 ```typescript
-const response = await agent.stream([
-  {
-    role: "user",
-    content: "Tell me a story",
-  },
-]);
+const response = await agent.stream("Tell me a story");
 
 // Process data stream with the processDataStream util
 response.processDataStream({
