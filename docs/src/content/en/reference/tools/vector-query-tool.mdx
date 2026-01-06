@@ -1,6 +1,10 @@
 ---
 title: "Reference: createVectorQueryTool() | Tools & MCP"
 description: Documentation for the Vector Query Tool in Mastra, which facilitates semantic search over vector stores with filtering and reranking capabilities.
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -13,13 +17,13 @@ The `createVectorQueryTool()` function creates a tool for semantic search over v
 ## Basic Usage
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -303,7 +307,7 @@ The tool determines the number of results to return based on the user's query, w
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -326,7 +330,7 @@ This agent-driven approach:
 
 For detailed filter syntax and store-specific capabilities, see the [Metadata Filters](../rag/metadata-filters) documentation.
 
-For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](/examples/v1/rag/usage/filter-rag) example.
+For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag) example.
 
 ## Example with Reranking
 
@@ -334,9 +338,9 @@ For an example of how agent-driven filtering works, see the [Agent-Driven Metada
 const queryTool = createVectorQueryTool({
   vectorStoreName: "milvus",
   indexName: "documentation",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   reranker: {
-    model: openai("gpt-4o-mini"),
+    model: "openai/gpt-5.1",
     options: {
       weights: {
         semantic: 0.5, // Semantic relevance weight
@@ -364,7 +368,7 @@ The reranker processes the initial vector search results and returns a reordered
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   description:
     "Search through document archives to find relevant information for answering questions about company policies and procedures",
 });
@@ -384,7 +388,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const pineconeQueryTool = createVectorQueryTool({
       vectorStoreName: "pinecone",
       indexName: "docs",
-      model: openai.embedding("text-embedding-3-small"),
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         pinecone: {
           namespace: "production",  // Organize vectors by environment
@@ -411,7 +415,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const pgVectorQueryTool = createVectorQueryTool({
       vectorStoreName: "postgres",
       indexName: "embeddings",
-      model: openai.embedding("text-embedding-3-small"),
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         pgvector: {
           minScore: 0.7,    // Only return results above 70% similarity
@@ -437,7 +441,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const chromaQueryTool = createVectorQueryTool({
       vectorStoreName: "chroma",
       indexName: "documents",
-      model: openai.embedding("text-embedding-3-small"),
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         chroma: {
           where: {                    // Metadata filtering
@@ -467,7 +471,7 @@ The `databaseConfig` parameter allows you to leverage unique features and optimi
     const multiDbQueryTool = createVectorQueryTool({
       vectorStoreName: "dynamic-store", // Will be set at runtime
       indexName: "docs",
-      model: openai.embedding("text-embedding-3-small"),
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
       databaseConfig: {
         pinecone: {
           namespace: "default"
@@ -501,7 +505,7 @@ import { RequestContext } from "@mastra/core/request-context";
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   databaseConfig: {
     pinecone: {
       namespace: "development",
@@ -534,7 +538,7 @@ This approach allows you to:
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding("text-embedding-3-small"),
+      model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 ```
 
@@ -555,7 +559,7 @@ requestContext.set("filter", { category: "docs" });
 requestContext.set("databaseConfig", {
   pinecone: { namespace: "runtime-namespace" },
 });
-requestContext.set("model", openai.embedding("text-embedding-3-small"));
+requestContext.set("model", "openai/text-embedding-3-small");
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",
@@ -567,15 +571,14 @@ const response = await agent.generate(
 
 For more information on request context, please see:
 
-- [Agent Request Context](/docs/v1/server-db/request-context)
-- [Tool Request Context](/docs/v1/tools-mcp/overview#using-requestcontext)
+- [Agent Request Context](/docs/v1/server/request-context)
+- [Request Context](/docs/v1/server/request-context#accessing-values-with-tools)
 
 ## Usage Without a Mastra Server
 
 The tool can be used by itself to retrieve documents matching a query:
 
-```typescript copy showLineNumbers title="src/index.ts"
-import { openai } from "@ai-sdk/openai";
+```typescript title="src/index.ts"
 import { RequestContext } from "@mastra/core/request-context";
 import { createVectorQueryTool } from "@mastra/rag";
 import { PgVector } from "@mastra/pg";
@@ -589,7 +592,7 @@ const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector", // optional since we're passing in a store
   vectorStore: pgVector,
   indexName: "embeddings",
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
 });
 
 const requestContext = new RequestContext();

@@ -1,6 +1,9 @@
 ---
 title: "Reference: voice.addInstructions() | Voice"
 description: "Documentation for the addInstructions() method available in voice providers, which adds instructions to guide the voice model's behavior."
+packages:
+  - "@mastra/core"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.addInstructions()
@@ -12,12 +15,11 @@ The `addInstructions()` method equips a voice provider with instructions that gu
 ```typescript
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });
@@ -27,7 +29,7 @@ const agent = new Agent({
   name: "Customer Support Agent",
   instructions:
     "You are a helpful customer support agent for a software company.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice,
 });
 

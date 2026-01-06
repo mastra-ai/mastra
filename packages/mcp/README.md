@@ -413,9 +413,65 @@ const httpClient = new MCPClient({
 
 The `authProvider` is automatically passed to both Streamable HTTP and SSE transports.
 
+### Custom Fetch for Dynamic Authentication
+
+For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or customize request behavior.
+
+When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL('https://api.example.com/mcp'),
+      fetch: async (url, init) => {
+        // Refresh token on each request
+        const token = await getAuthToken(); // Your token refresh logic
+
+        return fetch(url, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      },
+    },
+  },
+});
+```
+
+The custom `fetch` function is automatically used for both Streamable HTTP and SSE transports, making it a simpler alternative to configuring `requestInit` and `eventSourceInit` separately.
+
 ### SSE Authentication and Headers (Legacy Fallback)
 
-When the client falls back to using the legacy SSE (Server-Sent Events) transport and you need to include authentication or custom headers, you need to configure headers in a specific way. The standard `requestInit` headers won't work alone because SSE connections using the browser's `EventSource` API don't support custom headers directly.
+When the client falls back to using the legacy SSE (Server-Sent Events) transport and you need to include authentication or custom headers, you have two options:
+
+**Option 1: Using custom `fetch` (Recommended)**
+
+The simplest approach is to provide a custom `fetch` function, which will automatically be used for both POST requests and SSE connections:
+
+```typescript
+const sseClient = new MCPClient({
+  servers: {
+    authenticatedSseClient: {
+      url: new URL('https://your-mcp-server.com/sse'),
+      fetch: async (url, init) => {
+        const headers = new Headers(init?.headers || {});
+        headers.set('Authorization', 'Bearer your-token');
+        return fetch(url, {
+          ...init,
+          headers,
+        });
+      },
+    },
+  },
+});
+```
+
+**Option 2: Using `requestInit` and `eventSourceInit`**
+
+Alternatively, you can use both `requestInit` and `eventSourceInit`. The standard `requestInit` headers won't work alone because SSE connections using the browser's `EventSource` API don't support custom headers directly.
 
 The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
 
@@ -489,9 +545,10 @@ Here are the available options within `MastraMCPServerDefinition`:
 - **`args`**: (Optional, string[]) For Stdio servers: Arguments to pass to the command.
 - **`env`**: (Optional, Record<string, string>) For Stdio servers: Environment variables to set for the command.
 - **`url`**: (Optional, URL) For HTTP servers (Streamable HTTP or SSE): The URL of the server.
-- **`requestInit`**: (Optional, RequestInit) For HTTP servers: Request configuration for the fetch API. Used for the initial Streamable HTTP connection attempt and subsequent POST requests. Also used for the initial SSE connection attempt.
-- **`eventSourceInit`**: (Optional, EventSourceInit) **Only** for the legacy SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.
-- **`authProvider`**: (Optional, OAuthClientProvider) For HTTP servers: OAuth authentication provider for automatic token refresh. Automatically passed to both Streamable HTTP and SSE transports.
+- **`fetch`**: (Optional, FetchLike) For HTTP servers: Custom fetch implementation used for all network requests. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers (e.g., refreshing bearer tokens), customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+- **`requestInit`**: (Optional, RequestInit) For HTTP servers: Request configuration for the fetch API. Used for the initial Streamable HTTP connection attempt and subsequent POST requests. Also used for the initial SSE connection attempt. Optional when `fetch` is provided.
+- **`eventSourceInit`**: (Optional, EventSourceInit) **Only** for the legacy SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE. Optional when `fetch` is provided.
+- **`authProvider`**: (Optional, OAuthClientProvider) For HTTP servers: OAuth authentication provider for automatic token refresh. Automatically passed to both Streamable HTTP and SSE transports. Optional when `fetch` is provided.
 - **`logger`**: (Optional, LogHandler) Optional additional handler for logging.
 - **`timeout`**: (Optional, number) Server-specific timeout in milliseconds, overriding the global client/configuration timeout.
 - **`capabilities`**: (Optional, ClientCapabilities) Server-specific capabilities configuration.

@@ -15,10 +15,12 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "vitest": "*",
-    "@mastra/core": "*"
+    "@mastra/core": "*",
+    "vitest": "*"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:"
   }
 }

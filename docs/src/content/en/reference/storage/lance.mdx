@@ -1,6 +1,9 @@
 ---
 title: "Reference: LanceDB Storage | Storage"
 description: Documentation for the LanceDB storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/lance"
 ---
 
 # LanceDB Storage
@@ -17,7 +20,7 @@ npm install @mastra/lance@beta
 
 ### Basic Storage Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { LanceStorage } from "@mastra/lance";
 
 // Connect to a local database
@@ -72,6 +75,40 @@ The LanceStorage implementation automatically handles schema creation and update
 - `float` → Float32
 - `jsonb`, `json` → Utf8 (serialized)
 - `binary` → Binary
+
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { LanceStorage } from "@mastra/lance";
+
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+
+```typescript
+import { LanceStorage } from "@mastra/lance";
+
+const storage = await LanceStorage.create("my-storage", "/path/to/db");
+
+// Required when using storage directly
+await storage.init();
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+:::
 
 ### Deployment Options
 

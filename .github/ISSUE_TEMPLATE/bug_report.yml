@@ -29,22 +29,35 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: bug-reproduction
+    attributes:
+      label: Link to Minimal Reproducible Example
+      description: 'Follow the [instructions](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md#minimal-reproduction) to create a minimal reproduction of the problem. **A minimal reproduction is required** so that others can help debug your issue. If a report is vague (e.g. just a generic error message) and has no reproduction, it may be closed. Not sure how to create a minimal example? [Read our guide](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md#minimal-reproduction)'
+      placeholder: 'https://github.com/your-username/your-repo'
+    validations:
+      required: true
+
   - type: textarea
     attributes:
       label: Expected Behavior
       description: A clear and concise description of what you expected to happen.
       placeholder: 'The workflow should execute successfully and return the expected result.'
+    validations:
+      required: true
 
   - type: textarea
     attributes:
       label: Environment Information
-      description: Please provide details about your environment.
+      description: Run "npx envinfo --system --browsers --binaries --npmPackages --npmGlobalPackages" in your project directory and paste the output here.
+      render: block
       placeholder: |
-        - Mastra Version: (e.g., 0.1.11)
-        - Node.js Version: (e.g., v22.13.0)
-        - OS: (e.g., Windows 11, macOS, Ubuntu 22.04)
+        In addition to the "npx envinfo" output, please also include:
+
         - LLM Provider: (e.g., OpenAI, Anthropic, Google Gemini)
         - Browser (if applicable): (e.g., Chrome 120)
+    validations:
+      required: true
 
   - type: checkboxes
     attributes:

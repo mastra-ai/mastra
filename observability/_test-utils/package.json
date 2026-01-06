@@ -12,7 +12,9 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.18.1-0 <2.0.0-0"

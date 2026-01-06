@@ -156,7 +156,7 @@ describe('clone-template', () => {
         projectName: 'test-project',
       });
 
-      const fs = await import('fs/promises');
+      const fs = await import('node:fs/promises');
       const packageJsonContent = await fs.readFile('/test-project/package.json', 'utf-8');
       const packageJson = JSON.parse(packageJsonContent);
 
@@ -228,6 +228,119 @@ describe('clone-template', () => {
       expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test /custom/path/test-project', {
         cwd: process.cwd(),
       });
+    });
+
+    it('should clone from beta branch when branch is specified with degit', async () => {
+      const mockExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      const result = await cloneTemplate({
+        template: mockTemplate,
+        projectName: 'test-project',
+        branch: 'beta',
+      });
+
+      expect(result).toBe('/test-project');
+      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test\\#beta /test-project', {
+        cwd: process.cwd(),
+      });
+    });
+
+    it('should clone from beta branch with git clone when degit fails', async () => {
+      const mockExec = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('degit failed'))
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git clone succeeds
+
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      const result = await cloneTemplate({
+        template: mockTemplate,
+        projectName: 'test-project',
+        branch: 'beta',
+      });
+
+      expect(result).toBe('/test-project');
+      expect(mockExec).toHaveBeenCalledWith('npx degit mastra-ai/template-test\\#beta /test-project', {
+        cwd: process.cwd(),
+      });
+      expect(mockExec).toHaveBeenCalledWith(
+        'git clone --branch beta https\\://github.com/mastra-ai/template-test /test-project',
+        {
+          cwd: process.cwd(),
+        },
+      );
+    });
+
+    it('should not include branch in git clone when branch is not specified', async () => {
+      const mockExec = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('degit failed'))
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // git clone succeeds
+
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      const result = await cloneTemplate({
+        template: mockTemplate,
+        projectName: 'test-project',
+      });
+
+      expect(result).toBe('/test-project');
+      expect(mockExec).toHaveBeenCalledWith('git clone https\\://github.com/mastra-ai/template-test /test-project', {
+        cwd: process.cwd(),
+      });
+    });
+
+    it('should update MODEL in .env when llmProvider is specified', async () => {
+      const mockExec = vi.fn(async (cmd: string) => {
+        // Simulate degit creating the directory and files
+        if (cmd.includes('degit')) {
+          vol.fromJSON({
+            '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
+            '/test-project/.env.example': 'MODEL=openai/gpt-4o-mini\nOPENAI_API_KEY=\nANTHROPIC_API_KEY=',
+          });
+        }
+        return { stdout: '', stderr: '' };
+      });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      await cloneTemplate({
+        template: mockTemplate,
+        projectName: 'test-project',
+        llmProvider: 'anthropic',
+      });
+
+      const fs = await import('node:fs/promises');
+      const envContent = await fs.readFile('/test-project/.env', 'utf-8');
+
+      expect(envContent).toContain('MODEL=anthropic/claude-sonnet-4-5');
+      expect(envContent).not.toContain('MODEL=openai/gpt-4o-mini');
+    });
+
+    it('should not fail when llmProvider is specified but .env.example does not exist', async () => {
+      const mockExec = vi.fn(async (cmd: string) => {
+        // Simulate degit creating the directory without .env.example
+        if (cmd.includes('degit')) {
+          vol.fromJSON({
+            '/test-project/package.json': JSON.stringify({ name: 'old-name', version: '1.0.0' }),
+          });
+        }
+        return { stdout: '', stderr: '' };
+      });
+      vi.mocked(child_process.exec).mockImplementation(mockExec);
+
+      const { cloneTemplate } = await import('./clone-template');
+      const result = await cloneTemplate({
+        template: mockTemplate,
+        projectName: 'test-project',
+        llmProvider: 'anthropic',
+      });
+
+      expect(result).toBe('/test-project');
     });
   });
 

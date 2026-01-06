@@ -4,9 +4,9 @@ This guide provides instructions for developers who want to contribute to or wor
 
 ## Prerequisites
 
-- **Node.js** (v20.0+)
-- **pnpm** (v9.7.0+) - Mastra uses pnpm for package management
-- **Docker** (for local development services)
+- **Node.js** (v22.13.0 or later)
+- **pnpm** (v10.18.0 or later) - Mastra uses pnpm for package management
+- **Docker** (for local development services) - Only needed for a subset of tests, not required for general development
 
 ## Repository Structure
 
@@ -96,41 +96,45 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm build
 
 ## Testing
 
-Mastra uses Vitest for testing. To run tests:
+Mastra uses Vitest for testing. You can run all tests or only specific packages.
 
-1. **Ensure development services are running**:
+- All tests:
+  ```bash
+  pnpm test
+  ```
+- Specific package tests:
+  ```bash
+  pnpm test:core             # Core package tests
+  pnpm test:cli              # CLI tests
+  pnpm test:rag              # RAG tests
+  pnpm test:memory           # Memory tests
+  pnpm test:evals            # Evals tests
+  pnpm test:clients          # Client SDK tests
+  pnpm test:combined-stores  # Combined stores tests
+  ```
+- Watch mode (for development):
+  ```bash
+  pnpm test:watch
+  ```
 
-   ```bash
-   pnpm run dev:services:up
-   ```
+Some tests require environment variables to be set. If you're unsure about the required variables, ask for help in the pull request or wait for CI to run the tests.
 
-2. **Set up environment variables**:
+Create a `.env` file in the root directory with the following content:
 
-   ```bash
-   cp .env.example .env
-   ```
+```text
+OPENAI_API_KEY=
+COHERE_API_KEY=
+PINECONE_API_KEY=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+DB_URL=postgresql://postgres:postgres@localhost:5432/mastra
+```
 
-   Add any necessary API keys to the `.env` file.
+Afterwards, start the development services:
 
-3. **Run tests**:
-   - All tests:
-     ```bash
-     pnpm test
-     ```
-   - Specific package tests:
-     ```bash
-     pnpm test:core             # Core package tests
-     pnpm test:cli              # CLI tests
-     pnpm test:rag              # RAG tests
-     pnpm test:memory           # Memory tests
-     pnpm test:evals            # Evals tests
-     pnpm test:clients          # Client SDK tests
-     pnpm test:combined-stores  # Combined stores tests
-     ```
-   - Watch mode (for development):
-     ```bash
-     pnpm test:watch
-     ```
+```bash
+pnpm run dev:services:up
+```
 
 ## Contributing
 
@@ -158,11 +162,7 @@ Mastra uses Vitest for testing. To run tests:
 
 ## Documentation
 
-The documentation site is built from the `/docs` directory. To contribute to documentation:
-
-1. Make changes to the relevant Markdown files in the `/docs` directory
-2. Test your changes locally
-3. Submit a pull request with your documentation updates
+The documentation site is built from the `/docs` directory. Follow its [documentation guide](./docs/CONTRIBUTING.md) for instructions on contributing to the docs.
 
 ## Need Help?
 

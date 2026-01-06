@@ -1,6 +1,10 @@
 ---
 title: "Speech-to-Text (STT) | Voice"
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai"
 ---
 
 # Speech-to-Text (STT)
@@ -54,7 +58,6 @@ The primary method for STT is the `listen()` method, which converts spoken audio
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 import { getMicrophoneStream } from "@mastra/node-audio";
 
@@ -65,7 +68,7 @@ const agent = new Agent({
   name: "Voice Agent",
   instructions:
     "You are a voice assistant that provides recommendations based on user input.",
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice,
 });
 

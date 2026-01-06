@@ -1,7 +1,11 @@
 ---
 title: "Reference: Agent.stream() | Streaming"
 description: "Documentation for the `Agent.stream()` method in Mastra agents, which enables real-time streaming of responses with enhanced capabilities."
+packages:
+  - "@mastra/ai-sdk"
 ---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
 
 # Agent.stream()
 
@@ -9,14 +13,8 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 
 ## Usage example
 
-```ts title="index.ts" copy
-// Default Mastra format
-const mastraStream = await agent.stream("message for agent");
-
-// AI SDK v5 compatible format
-const aiSdkStream = await agent.stream("message for agent", {
-  format: "aisdk",
-});
+```ts title="index.ts"
+const stream = await agent.stream("message for agent");
 ```
 
 :::info
@@ -48,14 +46,6 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 <PropertiesTable
   content={[
-    {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output stream format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
     {
       name: "maxSteps",
       type: "number",
@@ -243,6 +233,17 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
@@ -251,6 +252,13 @@ const aiSdkStream = await agent.stream("message for agent", {
       isOptional: true,
       description:
         "Overrides the output processors set on the agent. Output processors that can modify or validate messages from the agent before they are returned to the user. Must implement either (or both) of the `processOutputResult` and `processOutputStream` functions.",
+    },
+    {
+      name: "includeRawChunks",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "Whether to include raw chunks in the stream output (not available on all model providers).",
     },
     {
       name: "inputProcessors",
@@ -316,7 +324,7 @@ const aiSdkStream = await agent.stream("message for agent", {
               type: "MemoryConfig",
               isOptional: true,
               description:
-                "Configuration for memory behavior, like message history and semantic recall.",
+                "Configuration for memory behavior including lastMessages, readOnly, semanticRecall, and workingMemory.",
             },
           ],
         },
@@ -396,91 +404,7 @@ const aiSdkStream = await agent.stream("message for agent", {
         },
       ],
     },
-    {
-      name: "modelSettings",
-      type: "CallSettings",
-      isOptional: true,
-      description:
-        "Model-specific settings like temperature, maxTokens, topP, etc. These are passed to the underlying language model.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description:
-                "Controls randomness in the model's output. Higher values (e.g., 0.8) make the output more random, lower values (e.g., 0.2) make it more focused and deterministic.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "maxRetries",
-              type: "number",
-              isOptional: true,
-              description: "Maximum number of retries for failed requests.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topP",
-              type: "number",
-              isOptional: true,
-              description:
-                "Nucleus sampling. This is a number between 0 and 1. It is recommended to set either temperature or topP, but not both.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topK",
-              type: "number",
-              isOptional: true,
-              description:
-                "Only sample from the top K options for each subsequent token. Used to remove 'long tail' low probability responses.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "presencePenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Presence penalty setting. It affects the likelihood of the model to repeat information that is already in the prompt. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "frequencyPenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Frequency penalty setting. It affects the likelihood of the model to repeatedly use the same words or phrases. A number between -1 (increase repetition) and 1 (maximum penalty, decrease repetition).",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "stopSequences",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Stop sequences. If set, the model will stop generating text when one of the stop sequences is generated.",
-            },
-          ],
-        },
-      ],
-    },
+    MODEL_SETTINGS_OBJECT,
     {
       name: "threadId",
       type: "string",
@@ -554,6 +478,27 @@ const aiSdkStream = await agent.stream("message for agent", {
       isOptional: true,
       description:
         "Save messages incrementally after each stream step completes (default: false).",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "When true, all tool calls require explicit approval before execution. The stream will emit `tool-call-approval` chunks and pause until `approveToolCall()` or `declineToolCall()` is called.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description:
+        "When true, automatically resumes suspended tools when the user sends a new message on the same thread. The agent extracts `resumeData` from the user's message based on the tool's `resumeSchema`. Requires memory to be configured.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
       name: "providerOptions",
@@ -659,14 +604,51 @@ const aiSdkStream = await agent.stream("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
-    },
-    {
-      name: "maxTokens",
-      type: "number",
-      isOptional: true,
-      description:
-        "Condition(s) that determine when to stop the agent's execution. Can be a single condition or array of conditions.",
     },
   ]}
 />
@@ -677,9 +659,9 @@ const aiSdkStream = await agent.stream("message for agent", {
   content={[
     {
       name: "stream",
-      type: "MastraModelOutput<Output> | AISDKV5OutputStream<Output>",
+      type: "MastraModelOutput<Output>",
       description:
-        "Returns a streaming interface based on the format parameter. When format is 'mastra' (default), returns MastraModelOutput. When format is 'aisdk', returns AISDKV5OutputStream for AI SDK v5 compatibility.",
+        "Returns a MastraModelOutput instance that provides access to the streaming output.",
     },
     {
       name: "traceId",
@@ -695,7 +677,7 @@ const aiSdkStream = await agent.stream("message for agent", {
 
 ### Mastra Format (Default)
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts"
 import { stepCountIs } from "ai-v5";
 
 const stream = await agent.stream("Tell me a story", {
@@ -710,39 +692,41 @@ for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 
+// or access full stream
+for await (const chunk of stream.fullStream) {
+  console.log(chunk);
+}
+
 // Get full text after streaming
 const fullText = await stream.text;
 ```
 
 ### AI SDK v5 Format
 
-```ts title="index.ts" showLineNumbers copy
-import { stepCountIs } from "ai-v5";
+To use the stream with AI SDK v5, you can convert it using our utility function `toAISdkStream`.
+
+```ts title="index.ts"
+import { stepCountIs, createUIMessageStreamResponse } from "ai";
+import { toAISdkStream } from "@mastra/ai-sdk";
 
 const stream = await agent.stream("Tell me a story", {
-  format: "aisdk",
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
   },
 });
 
-// Use with AI SDK v5 compatible interfaces
-for await (const part of stream.fullStream) {
-  if (part.type === "text-delta") {
-    console.log(part.text);
-  }
-}
-
 // In an API route for frontend integration
-return stream.toUIMessageStreamResponse();
+return createUIMessageStreamResponse({
+  stream: toAISdkStream(stream, { from: "agent" }),
+})
 ```
 
 ### Using Callbacks
 
 All callback functions are now available as top-level properties for a cleaner API experience.
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts"
 const stream = await agent.stream("Tell me a story", {
   onFinish: (result) => {
     console.log("Streaming finished:", result);
@@ -769,12 +753,11 @@ for await (const chunk of stream.textStream) {
 
 ### Advanced Example with Options
 
-```ts title="index.ts" showLineNumbers copy
+```ts title="index.ts"
 import { z } from "zod";
-import { stepCountIs } from "ai-v5";
+import { stepCountIs } from "ai";
 
 await agent.stream("message for agent", {
-  format: "aisdk", // Enable AI SDK v5 compatibility
   stopWhen: stepCountIs(3), // Stop after 3 steps
   modelSettings: {
     temperature: 0.7,
@@ -790,12 +773,12 @@ await agent.stream("message for agent", {
       sentiment: z.enum(["positive", "negative", "neutral"]),
       confidence: z.number(),
     }),
-    model: "openai/gpt-4o-mini",
+    model: "openai/gpt-5.1",
     errorStrategy: "warn",
   },
   // Output processors for streaming response validation
   outputProcessors: [
-    new ModerationProcessor({ model: "openai/gpt-4.1-nano" }),
+    new ModerationProcessor({ model: "openrouter/openai/gpt-oss-safeguard-20b" }),
     new BatchPartsProcessor({ maxBatchSize: 3, maxWaitTime: 100 }),
   ],
 });
@@ -805,3 +788,4 @@ await agent.stream("message for agent", {
 
 - [Generating responses](/docs/v1/agents/overview#generating-responses)
 - [Streaming responses](/docs/v1/agents/overview#generating-responses)
+- [Agent Approval](/docs/v1/agents/agent-approval)

@@ -1,5 +1,25 @@
 # @mastra/auth-clerk
 
+## 1.0.0-beta.2
+
+### Minor Changes
+
+- remove organization requirement from default authorization ([#10551](https://github.com/mastra-ai/mastra/pull/10551))
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/auth@1.0.0-beta.1
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+- Updated dependencies [[`a0a5b4b`](https://github.com/mastra-ai/mastra/commit/a0a5b4bbebe6c701ebbadf744873aa0d5ca01371)]:
+  - @mastra/auth@1.0.0-beta.1
+
 ## 1.0.0-beta.0
 
 ### Major Changes

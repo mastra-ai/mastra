@@ -35,10 +35,8 @@ describe('Vector Handlers', () => {
       await expect(
         upsertVectors({
           mastra: new Mastra(),
-          index: {
-            indexName: 'test-index',
-            vectors: [[1, 2, 3]],
-          },
+          indexName: 'test-index',
+          vectors: [[1, 2, 3]],
         }),
       ).rejects.toThrow('Vector name is required');
     });
@@ -48,10 +46,8 @@ describe('Vector Handlers', () => {
         upsertVectors({
           mastra: new Mastra(),
           vectorName: 'test-vector',
-          index: {
-            indexName: 'test-index',
-            vectors: [[1, 2, 3]],
-          },
+          indexName: 'test-index',
+          vectors: [[1, 2, 3]],
         }),
       ).rejects.toThrow('Vector with name test-vector not found');
     });
@@ -61,10 +57,9 @@ describe('Vector Handlers', () => {
         upsertVectors({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
+          indexName: 'test-index',
           // @ts-expect-error
-          index: {
-            indexName: 'test-index',
-          },
+          vectors: undefined,
         }),
       ).rejects.toThrow('Invalid request index. indexName and vectors array are required.');
     });
@@ -76,15 +71,13 @@ describe('Vector Handlers', () => {
       const result = await upsertVectors({
         mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
         vectorName: 'test-vector',
-        index: {
-          indexName: 'test-index',
-          vectors: [
-            [1, 2, 3],
-            [4, 5, 6],
-          ],
-          metadata: [{ key: 'value' }, { key: 'value2' }],
-          ids: mockIds,
-        },
+        indexName: 'test-index',
+        vectors: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+        metadata: [{ key: 'value' }, { key: 'value2' }],
+        ids: mockIds,
       });
 
       expect(result).toEqual({ ids: mockIds });
@@ -105,10 +98,8 @@ describe('Vector Handlers', () => {
       await expect(
         createIndex({
           mastra: new Mastra(),
-          index: {
-            indexName: 'test-index',
-            dimension: 3,
-          },
+          indexName: 'test-index',
+          dimension: 3,
         }),
       ).rejects.toThrow('Vector name is required');
     });
@@ -118,10 +109,8 @@ describe('Vector Handlers', () => {
         createIndex({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
-          index: {
-            indexName: 'test-index',
-            dimension: -1,
-          },
+          indexName: 'test-index',
+          dimension: -1,
         }),
       ).rejects.toThrow(
         new HTTPException(400, {
@@ -135,11 +124,9 @@ describe('Vector Handlers', () => {
         createIndex({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
-          index: {
-            indexName: 'test-index',
-            dimension: 3,
-            metric: 'invalid' as any,
-          },
+          indexName: 'test-index',
+          dimension: 3,
+          metric: 'invalid' as any,
         }),
       ).rejects.toThrow('Invalid metric');
     });
@@ -150,11 +137,9 @@ describe('Vector Handlers', () => {
       const result = await createIndex({
         mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
         vectorName: 'test-vector',
-        index: {
-          indexName: 'test-index',
-          dimension: 3,
-          metric: 'cosine',
-        },
+        indexName: 'test-index',
+        dimension: 3,
+        metric: 'cosine',
       });
 
       expect(result).toEqual({ success: true });
@@ -171,10 +156,8 @@ describe('Vector Handlers', () => {
       await expect(
         queryVectors({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
-          query: {
-            indexName: 'test-index',
-            queryVector: [1, 2, 3],
-          },
+          indexName: 'test-index',
+          queryVector: [1, 2, 3],
         }),
       ).rejects.toThrow('Vector name is required');
     });
@@ -185,10 +168,9 @@ describe('Vector Handlers', () => {
         queryVectors({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
+          indexName: 'test-index',
           // @ts-expect-error
-          query: {
-            indexName: 'test-index',
-          },
+          queryVector: undefined,
         }),
       ).rejects.toThrow('Invalid request query. indexName and queryVector array are required.');
     });
@@ -203,13 +185,11 @@ describe('Vector Handlers', () => {
       const result = await queryVectors({
         mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
         vectorName: 'test-vector',
-        query: {
-          indexName: 'test-index',
-          queryVector: [1, 2, 3],
-          topK: 2,
-          filter: { key: 'value' },
-          includeVector: true,
-        },
+        indexName: 'test-index',
+        queryVector: [1, 2, 3],
+        topK: 2,
+        filter: { key: 'value' },
+        includeVector: true,
       });
 
       expect(result).toEqual(mockResults);

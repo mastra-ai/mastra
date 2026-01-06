@@ -1,5 +1,5 @@
 import http from 'node:http';
-import path from 'path';
+import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
@@ -159,7 +159,8 @@ describe('MCPServer', () => {
     vi.clearAllMocks();
 
     // @ts-ignore - Mocking Date completely
-    global.Date = vi.fn((...args: any[]) => {
+    // Must use a regular function (not arrow function) to support `new Date()` constructor calls
+    global.Date = vi.fn(function (this: any, ...args: any[]) {
       if (args.length === 0) {
         // new Date()
         return mockDate;
@@ -171,9 +172,7 @@ describe('MCPServer', () => {
     // @ts-ignore
     global.Date.now = vi.fn(() => mockDate.getTime());
     // @ts-ignore
-    global.Date.prototype.toISOString = vi.fn(() => mockDateISO);
-    // @ts-ignore // Static Date.toISOString() might be used by some libraries
-    global.Date.toISOString = vi.fn(() => mockDateISO);
+    global.Date.prototype = OriginalDate.prototype;
   });
 
   // Restore original Date after all tests in this describe block
@@ -188,6 +187,7 @@ describe('MCPServer', () => {
       expect(server.name).toBe('TestServer');
       expect(server.version).toBe('1.0.0');
       expect(server.description).toBeUndefined();
+      expect(server.instructions).toBeUndefined();
       expect(server.repository).toBeUndefined();
       // MCPServerBase stores releaseDate as string, compare directly or re-parse
       expect(server.releaseDate).toBe(mockDateISO);
@@ -223,6 +223,33 @@ describe('MCPServer', () => {
       expect(server.packageCanonical).toBe('npm');
       expect(server.packages).toEqual(packages);
       expect(server.remotes).toEqual(remotes);
+    });
+
+    it('should initialize with instructions when provided', () => {
+      const instructions = 'You are a helpful assistant. Use the available tools to help users.';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        instructions,
+      };
+      const server = new MCPServer(customConfig);
+
+      expect(server.instructions).toBe(instructions);
+    });
+
+    it('should pass instructions to underlying SDK Server', () => {
+      const instructions = 'You are a weather assistant with access to real-time weather data.';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        instructions,
+      };
+      const server = new MCPServer(customConfig);
+
+      // Access the underlying SDK Server
+      const sdkServer = server.getServer();
+
+      // Check that the SDK Server was initialized with instructions
+      // @ts-ignore - accessing private property for testing
+      expect(sdkServer._instructions).toBe(instructions);
     });
   });
 
@@ -923,13 +950,17 @@ describe('MCPServer', () => {
       if (reader) {
         try {
           await reader.cancel();
-        } catch {}
+        } catch {
+          // swallow error
+        }
         reader = undefined;
       }
       if (sseRes && 'body' in sseRes && sseRes.body) {
         try {
           await sseRes.body.cancel();
-        } catch {}
+        } catch {
+          // swallow error
+        }
         sseRes = undefined;
       }
     });
@@ -1221,6 +1252,234 @@ describe('MCPServer', () => {
       expect(toolResult).toHaveProperty('windGust');
     });
   });
+
+  describe('MCPServer Session Management', () => {
+    let sessionServer: MCPServer;
+    let sessionHttpServer: http.Server;
+    let currentTestPort: number;
+
+    beforeEach(() => {
+      currentTestPort = 9600 + Math.floor(Math.random() * 1000);
+    });
+
+    afterEach(async () => {
+      if (sessionHttpServer) {
+        sessionHttpServer.closeAllConnections?.();
+        await new Promise<void>((resolve, reject) => {
+          sessionHttpServer.close(err => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+      if (sessionServer) {
+        await sessionServer.close();
+      }
+    });
+
+    it('should generate sessions by default when no sessionIdGenerator option is provided', async () => {
+      sessionServer = new MCPServer({
+        name: 'DefaultSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // No options provided - should use default sessionIdGenerator
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'default-session-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Verify that a session was created by checking if we can list tools
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+
+    it('should disable sessions when sessionIdGenerator is explicitly set to undefined', async () => {
+      sessionServer = new MCPServer({
+        name: 'NoSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: undefined, // Explicitly disable sessions
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'no-session-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work in stateless mode
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+
+    it('should run in serverless mode when serverless option is true', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            serverless: true, // Enable serverless mode
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'serverless-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work in stateless serverless mode
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+
+    it('should use custom sessionIdGenerator when provided', async () => {
+      const customSessionIds: string[] = [];
+      let sessionIdCounter = 0;
+
+      const customSessionIdGenerator = () => {
+        const customId = `custom-session-${sessionIdCounter++}`;
+        customSessionIds.push(customId);
+        return customId;
+      };
+
+      sessionServer = new MCPServer({
+        name: 'CustomSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: customSessionIdGenerator,
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'custom-session-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Verify that the custom session ID generator was called
+      expect(customSessionIds.length).toBeGreaterThan(0);
+      expect(customSessionIds[0]).toMatch(/^custom-session-\d+$/);
+
+      await client.disconnect();
+    });
+
+    it('should allow user options to override default sessionIdGenerator', async () => {
+      // This test verifies the core fix: user-provided options override defaults
+      sessionServer = new MCPServer({
+        name: 'OverrideTestServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: {
+            sessionIdGenerator: undefined, // User explicitly disables sessions
+          },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new InternalMastraMCPClient({
+        name: 'override-test-client',
+        server: {
+          url: new URL(`http://localhost:${currentTestPort}/http`),
+        },
+      });
+
+      await client.connect();
+
+      // Should work with serverless mode enabled
+      const tools = await client.tools();
+      expect(tools).toBeDefined();
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+      await client.disconnect();
+    });
+  });
 });
 
 describe('MCPServer - Agent to Tool Conversion', () => {
@@ -1441,6 +1700,36 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const agentMock = new MockLanguageModelV2({
+      doGenerate: async params => {
+        const hasToolResults = params.prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' ||
+            (Array.isArray(msg.content) && msg.content.some((c: any) => c.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName: 'authCheck',
+                input: JSON.stringify({ query: 'agent call' }),
+              },
+            ],
+            warnings: [],
+          };
+        } else {
+          return {
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Tool executed successfully' }],
+            warnings: [],
+          };
+        }
+      },
       doStream: async params => {
         const hasToolResults = params.prompt.some(
           (msg: any) =>
@@ -1484,6 +1773,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     });
 
     const agentWithTool = new Agent({
+      id: 'AgentWithAuthCheckTool',
       name: 'AgentWithAuthCheckTool',
       instructions: 'You use the authCheck tool',
       description: 'Agent that uses authCheck tool',
@@ -1520,13 +1810,14 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     expect(agentContextObj.requestContext).toBeDefined();
     expect(typeof agentContextObj.requestContext.get).toBe('function');
 
-    const mcpExtra = agentContextObj.requestContext.get('mcp.extra');
-    expect(mcpExtra).toBeDefined();
-    expect(mcpExtra.authInfo).toBeDefined();
-    expect(mcpExtra.authInfo.token).toBe('test-auth-token-123');
-    expect(mcpExtra.authInfo.clientId).toBe('test-client-456');
-    expect(mcpExtra.sessionId).toBe('auth-test-session');
-    expect(mcpExtra.requestId).toBe('auth-test-request');
+    // All keys from extra are spread directly on the requestContext
+    const authInfo = agentContextObj.requestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('test-auth-token-123');
+    expect(authInfo.clientId).toBe('test-client-456');
+    expect(authInfo.scopes).toEqual(['read', 'write']);
+    expect(agentContextObj.requestContext.get('sessionId')).toBe('auth-test-session');
+    expect(agentContextObj.requestContext.get('requestId')).toBe('auth-test-request');
     expect(agentExecOptions.mcp).toBeUndefined();
   });
 });
@@ -1539,7 +1830,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should convert a provided workflow to an MCP tool', () => {
-    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.');
+    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.', z.object({ input: z.string() }));
     server = new MCPServer({
       name: 'WorkflowToolServer',
       version: '1.0.0',
@@ -1657,6 +1948,106 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
       workflows: { unique_workflow_key_789: uniqueKeyWorkflow },
     });
     expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
+  });
+
+  it('should pass MCP context through requestContext to workflow steps', async () => {
+    const mockExtra: MCPRequestHandlerExtra = {
+      signal: new AbortController().signal,
+      sessionId: 'workflow-auth-test-session',
+      authInfo: {
+        token: 'workflow-auth-token-456',
+        clientId: 'workflow-client-789',
+        scopes: ['workflow:read', 'workflow:write'],
+      },
+      requestId: 'workflow-request-id',
+      sendNotification: vi.fn(),
+      sendRequest: vi.fn(),
+    };
+
+    let capturedRequestContext: any = null;
+
+    // Create a workflow with a step that captures the requestContext
+    const authCheckWorkflow = new Workflow({
+      id: 'authCheckWorkflow',
+      description: 'Workflow that checks for auth context in requestContext',
+      inputSchema: z.object({ message: z.string() }),
+      outputSchema: z.object({ message: z.string(), authInfo: z.any(), sessionId: z.string().optional() }),
+      steps: [],
+    });
+
+    const authCheckStep = createStep({
+      id: 'auth-check-step',
+      description: 'Step that captures auth context',
+      inputSchema: z.object({
+        message: z.string(),
+      }),
+      outputSchema: z.object({
+        message: z.string(),
+        authInfo: z.any(),
+        sessionId: z.string().optional(),
+      }),
+      execute: async ({ inputData, requestContext }) => {
+        capturedRequestContext = requestContext;
+        return {
+          message: inputData.message,
+          authInfo: requestContext?.get('authInfo') || null,
+          sessionId: requestContext?.get('sessionId') || null,
+        };
+      },
+    });
+
+    authCheckWorkflow.then(authCheckStep).commit();
+
+    server = new MCPServer({
+      name: 'WorkflowAuthContextServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { authCheckWorkflow },
+    });
+
+    const serverInstance = server.getServer();
+    // @ts-ignore - accessing private property for testing
+    const requestHandlers = serverInstance._requestHandlers;
+    const callToolHandler = requestHandlers.get('tools/call');
+
+    const result = await callToolHandler(
+      {
+        jsonrpc: '2.0' as const,
+        id: 'test-workflow-auth-1',
+        method: 'tools/call' as const,
+        params: {
+          name: 'run_authCheckWorkflow',
+          arguments: { message: 'test workflow auth' },
+        },
+      },
+      mockExtra,
+    );
+
+    // Verify the result
+    expect(result).toBeDefined();
+    expect(result.isError).toBe(false);
+    expect(result.content).toBeInstanceOf(Array);
+    expect(result.content.length).toBeGreaterThan(0);
+
+    const toolOutput = result.content[0];
+    expect(toolOutput.type).toBe('text');
+    const workflowResult = JSON.parse(toolOutput.text);
+
+    // Verify the workflow completed successfully
+    expect(workflowResult.status).toBe('success');
+
+    // Verify the requestContext was captured and all extra keys are set directly
+    expect(capturedRequestContext).toBeDefined();
+    expect(typeof capturedRequestContext.get).toBe('function');
+
+    // All keys from extra are spread directly on the context
+    const authInfo = capturedRequestContext.get('authInfo');
+    expect(authInfo).toBeDefined();
+    expect(authInfo.token).toBe('workflow-auth-token-456');
+    expect(authInfo.clientId).toBe('workflow-client-789');
+    expect(authInfo.scopes).toEqual(['workflow:read', 'workflow:write']);
+    expect(capturedRequestContext.get('sessionId')).toBe('workflow-auth-test-session');
+    expect(capturedRequestContext.get('requestId')).toBe('workflow-request-id');
   });
 });
 
@@ -1993,6 +2384,127 @@ describe('MCPServer - Elicitation', () => {
     expect(client1Handler).toHaveBeenCalled();
     expect(client2Handler).not.toHaveBeenCalled();
   }, 10000);
+
+  it('should support custom timeout in elicitation request options', async () => {
+    let elicitationStartTime: number | undefined;
+    let elicitationEndTime: number | undefined;
+
+    // Create a tool that uses custom timeout for elicitation
+    const toolWithCustomTimeout: ToolsInput = {
+      customTimeoutTool: {
+        description: 'A tool that uses custom timeout for elicitation',
+        parameters: z.object({
+          message: z.string().describe('Message to show to user'),
+          customTimeout: z.number().optional().describe('Custom timeout in milliseconds'),
+        }),
+        execute: async (inputData, context) => {
+          try {
+            const elicitation = context?.mcp?.elicitation;
+            elicitationStartTime = Date.now();
+            const result = await elicitation.sendRequest(
+              {
+                message: inputData.message,
+                requestedSchema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'string' },
+                  },
+                },
+              },
+              { timeout: inputData.customTimeout || 5000 },
+            );
+            elicitationEndTime = Date.now();
+            return result;
+          } catch (error) {
+            elicitationEndTime = Date.now();
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        },
+      },
+    };
+
+    const customTimeoutPort = 9600 + Math.floor(Math.random() * 1000);
+    const customTimeoutServer = new MCPServer({
+      name: 'CustomTimeoutServer',
+      version: '1.0.0',
+      tools: toolWithCustomTimeout,
+    });
+
+    const customTimeoutHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = new URL(req.url || '', `http://localhost:${customTimeoutPort}`);
+      await customTimeoutServer.startHTTP({
+        url,
+        httpPath: '/http',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => customTimeoutHttpServer.listen(customTimeoutPort, () => resolve()));
+
+    try {
+      // Create a client that responds after a delay but within the custom timeout
+      const mockElicitationHandler = vi.fn(async () => {
+        // Simulate a slow response that takes 200ms
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return {
+          action: 'accept' as const,
+          content: { data: 'response data' },
+        };
+      });
+
+      const customTimeoutClient = new InternalMastraMCPClient({
+        name: 'custom-timeout-client',
+        server: {
+          url: new URL(`http://localhost:${customTimeoutPort}/http`),
+        },
+      });
+      customTimeoutClient.elicitation.onRequest(mockElicitationHandler);
+      await customTimeoutClient.connect();
+
+      const tools = await customTimeoutClient.tools();
+      const tool = tools['customTimeoutTool'];
+      expect(tool).toBeDefined();
+
+      // Execute with a custom timeout of 5000ms (plenty of time for 200ms response)
+      const result = await tool.execute!({
+        message: 'Test with custom timeout',
+        customTimeout: 5000,
+      });
+
+      // Should succeed because the response (200ms) is well within the timeout (5000ms)
+      expect(mockElicitationHandler).toHaveBeenCalledTimes(1);
+      expect(result.isError).toBeFalsy();
+
+      // Verify the timing shows it completed successfully
+      expect(elicitationStartTime).toBeDefined();
+      expect(elicitationEndTime).toBeDefined();
+      const duration = elicitationEndTime! - elicitationStartTime!;
+      // Should take at least 200ms (the simulated delay)
+      expect(duration).toBeGreaterThanOrEqual(200);
+      // But should complete well before the timeout
+      expect(duration).toBeLessThan(5000);
+
+      await customTimeoutClient.disconnect();
+    } finally {
+      customTimeoutHttpServer.closeAllConnections?.();
+      await new Promise<void>((resolve, reject) => {
+        customTimeoutHttpServer.close(err => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      await customTimeoutServer.close();
+    }
+  }, 15000);
 });
 
 describe('MCPServer with Tool Output Schema', () => {
@@ -2067,13 +2579,10 @@ describe('MCPServer with Tool Output Schema', () => {
     const result = await tool.execute!({ input: 'hello' });
 
     expect(result).toBeDefined();
-    expect(result.structuredContent).toBeDefined();
-    expect(result.structuredContent.processedInput).toBe('processed: hello');
-    expect(result.structuredContent.timestamp).toBe(mockDateISO);
-
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-    expect(JSON.parse(result.content[0].text)).toEqual(result.structuredContent);
+    // When a tool has outputSchema, the MCP client returns structuredContent directly
+    // so output validation can work correctly
+    expect(result.processedInput).toBe('processed: hello');
+    expect(result.timestamp).toBe(mockDateISO);
   });
 });
 
@@ -2190,11 +2699,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Please fix the following errors');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Please fix the following errors');
     }
   });
@@ -2209,11 +2718,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('String must contain at least 3 character(s)');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Message must be at least 3 characters');
     }
   });
@@ -2228,10 +2737,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
     }
   });
 
@@ -2265,11 +2774,11 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
       expect(result.message).toContain('Array must contain at least 1 element(s)');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
       expect(result.content[0].text).toContain('Array must contain at least 1 element(s)');
     }
   });
@@ -2288,10 +2797,10 @@ describe('MCPServer - Tool Input Validation', () => {
     // Handle both client-side and server-side error formats
     if (result.error) {
       expect(result.error).toBe(true);
-      expect(result.message).toContain('Tool validation failed');
+      expect(result.message).toContain('Tool input validation failed');
     } else {
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Tool validation failed');
+      expect(result.content[0].text).toContain('Tool input validation failed');
     }
   });
 
@@ -2310,7 +2819,7 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       const errorText = result.message;
-      expect(errorText).toContain('Tool validation failed');
+      expect(errorText).toContain('Tool input validation failed');
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
@@ -2318,7 +2827,7 @@ describe('MCPServer - Tool Input Validation', () => {
     } else {
       expect(result.isError).toBe(true);
       const errorText = result.content[0].text;
-      expect(errorText).toContain('Tool validation failed');
+      expect(errorText).toContain('Tool input validation failed');
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
       expect(errorText).toContain('- tags: Array must contain at least 1 element(s)');
@@ -2341,7 +2850,294 @@ describe('MCPServer - Tool Input Validation', () => {
 
     // executeTool returns client-side validation format
     expect(invalidResult.error).toBe(true);
-    expect(invalidResult.message).toContain('Tool validation failed');
+    expect(invalidResult.message).toContain('Tool input validation failed');
     expect(invalidResult.message).toContain('Message must be at least 3 characters');
+  });
+});
+
+/**
+ * Tests for readJsonBody functionality
+ *
+ * These tests verify that MCP server correctly handles request bodies
+ * from both pre-parsed middleware (like express.json()) and raw streams.
+ */
+describe('MCPServer readJsonBody compatibility', () => {
+  const READ_JSON_BODY_PORT = 9400 + Math.floor(Math.random() * 100);
+  let readJsonServer: MCPServer;
+  let readJsonHttpServer: http.Server;
+
+  const echoTool = createTool({
+    id: 'echo',
+    description: 'Echoes the input back',
+    inputSchema: z.object({
+      message: z.string(),
+    }),
+    execute: async ({ message }) => ({ echo: message }),
+  });
+
+  beforeAll(async () => {
+    readJsonServer = new MCPServer({
+      name: 'readJsonBodyTestServer',
+      version: '1.0.0',
+      tools: { echo: echoTool },
+    });
+
+    readJsonHttpServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '', `http://localhost:${READ_JSON_BODY_PORT}`);
+      await readJsonServer.startHTTP({
+        url,
+        httpPath: '/mcp',
+        req,
+        res,
+      });
+    });
+
+    await new Promise<void>(resolve => {
+      readJsonHttpServer.listen(READ_JSON_BODY_PORT, resolve);
+    });
+  });
+
+  afterAll(async () => {
+    await readJsonServer.close();
+    readJsonHttpServer.close();
+  });
+
+  describe('HTTP transport with raw stream (no middleware)', () => {
+    it('should read body from stream when no middleware has parsed it', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${READ_JSON_BODY_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from stream');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('HTTP transport with pre-parsed body (simulating express.json())', () => {
+    const PREPARSED_PORT = 9500 + Math.floor(Math.random() * 100);
+    let preParsedServer: MCPServer;
+    let preParsedHttpServer: http.Server;
+
+    beforeAll(async () => {
+      preParsedServer = new MCPServer({
+        name: 'preParsedBodyTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body
+      preParsedHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${PREPARSED_PORT}`);
+
+        // Simulate express.json() middleware by reading and parsing body first
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors, let handler deal with it
+            }
+          }
+        }
+
+        await preParsedServer.startHTTP({
+          url,
+          httpPath: '/mcp',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        preParsedHttpServer.listen(PREPARSED_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await preParsedServer.close();
+      preParsedHttpServer.close();
+    });
+
+    it('should use pre-parsed body from req.body when available', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from pre-parsed');
+
+      await client.disconnect();
+    });
+
+    it('should handle multiple sequential requests with pre-parsed bodies', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${PREPARSED_PORT}/mcp`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+
+      // Multiple calls to ensure session handling works
+      for (let i = 0; i < 3; i++) {
+        const result = await tools['test_echo'].execute!({ message: `request ${i}` });
+        const parsed = JSON.parse((result.content[0] as any).text);
+        expect(parsed.echo).toBe(`request ${i}`);
+      }
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with pre-parsed body', () => {
+    const SSE_PORT = 9600 + Math.floor(Math.random() * 100);
+    let sseServer: MCPServer;
+    let sseHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseServer = new MCPServer({
+        name: 'ssePreParsedTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // Simulate express.json() by pre-parsing the body for POST requests
+      sseHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_PORT}`);
+
+        // Simulate express.json() middleware
+        if (req.method === 'POST') {
+          let data = '';
+          for await (const chunk of req) {
+            data += chunk;
+          }
+          if (data) {
+            try {
+              (req as any).body = JSON.parse(data);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+
+        await sseServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseHttpServer.listen(SSE_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseServer.close();
+      sseHttpServer.close();
+    });
+
+    it('should work with SSE transport when body is pre-parsed', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE pre-parsed' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE pre-parsed');
+
+      await client.disconnect();
+    });
+  });
+
+  describe('SSE transport with raw stream (no middleware)', () => {
+    const SSE_RAW_PORT = 9700 + Math.floor(Math.random() * 100);
+    let sseRawServer: MCPServer;
+    let sseRawHttpServer: http.Server;
+
+    beforeAll(async () => {
+      sseRawServer = new MCPServer({
+        name: 'sseRawTestServer',
+        version: '1.0.0',
+        tools: { echo: echoTool },
+      });
+
+      // No body parsing - raw stream
+      sseRawHttpServer = http.createServer(async (req, res) => {
+        const url = new URL(req.url || '', `http://localhost:${SSE_RAW_PORT}`);
+        await sseRawServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+
+      await new Promise<void>(resolve => {
+        sseRawHttpServer.listen(SSE_RAW_PORT, resolve);
+      });
+    });
+
+    afterAll(async () => {
+      await sseRawServer.close();
+      sseRawHttpServer.close();
+    });
+
+    it('should work with SSE transport when reading from raw stream', async () => {
+      const client = new MCPClient({
+        servers: {
+          test: {
+            url: new URL(`http://localhost:${SSE_RAW_PORT}/sse`),
+          },
+        },
+      });
+
+      const tools = await client.listTools();
+      expect(tools['test_echo']).toBeDefined();
+
+      const result = await tools['test_echo'].execute!({ message: 'hello from SSE raw stream' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse((result.content[0] as any).text);
+      expect(parsed.echo).toBe('hello from SSE raw stream');
+
+      await client.disconnect();
+    });
   });
 });

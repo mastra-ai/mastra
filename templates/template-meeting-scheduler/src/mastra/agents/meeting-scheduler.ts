@@ -1,5 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { anthropic } from '@ai-sdk/anthropic';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { fastembed } from '@mastra/fastembed';
@@ -52,7 +51,7 @@ Example response format:
 
 Once authorized, you can proceed with the requested email analysis and calendar operations. Always ask for permission before creating calendar events and provide clear summaries of what will be scheduled.
 `,
-  model: anthropic('claude-4-sonnet-20250514'),
+  model: process.env.MODEL || 'anthropic/claude-4-sonnet-20250514',
   memory: new Memory({
     storage: new LibSQLStore({
       id: 'meeting-scheduler-agent-storage',
@@ -66,7 +65,7 @@ Once authorized, you can proceed with the requested email analysis and calendar 
     options: {
       semanticRecall: true,
       workingMemory: { enabled: true },
-      threads: { generateTitle: true },
+      generateTitle: true,
     },
   }),
   tools: async ({ requestContext }) => {

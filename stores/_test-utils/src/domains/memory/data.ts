@@ -1,7 +1,7 @@
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import type { StorageResourceType } from '@mastra/core/storage';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 let role: 'assistant' | 'user' = 'assistant';
 export const getRole = () => {

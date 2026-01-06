@@ -1,6 +1,10 @@
 ---
 title: "Braintrust Exporter | Tracing | Observability"
 description: "Send traces to Braintrust for evaluation and monitoring"
+packages:
+  - "@mastra/braintrust"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Braintrust Exporter
@@ -64,6 +68,25 @@ new BraintrustExporter({
   logLevel: "info", // Diagnostic logging: debug | info | warn | error
 });
 ```
+
+## Using Tags
+
+Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 

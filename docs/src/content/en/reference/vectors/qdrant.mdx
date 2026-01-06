@@ -1,6 +1,8 @@
 ---
 title: "Reference: Qdrant Vector Store | Vectors"
 description: Documentation for integrating Qdrant with Mastra, a vector similarity search engine for managing vectors and payloads.
+packages:
+  - "@mastra/qdrant"
 ---
 
 # Qdrant Vector Store
@@ -137,7 +139,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -159,6 +161,8 @@ interface IndexStats {
 
 ### updateVector()
 
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
 <PropertiesTable
   content={[
     {
@@ -169,7 +173,14 @@ interface IndexStats {
     {
       name: "id",
       type: "string",
-      description: "ID of the vector to update",
+      isOptional: true,
+      description: "ID of the vector to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
     },
     {
       name: "update",
@@ -200,11 +211,37 @@ Updates a vector and/or its metadata in the specified index. If both vector and 
 
 Deletes a vector from the specified index by its ID.
 
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
 ## Response Types
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -217,7 +254,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

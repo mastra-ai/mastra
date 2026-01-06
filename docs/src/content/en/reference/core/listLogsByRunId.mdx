@@ -1,6 +1,8 @@
 ---
 title: "Reference: Mastra.listLogsByRunId() | Core"
 description: "Documentation for the `Mastra.listLogsByRunId()` method in Mastra, which retrieves logs for a specific run ID and transport ID."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.listLogsByRunId()
@@ -9,7 +11,7 @@ The `.listLogsByRunId()` method is used to retrieve logs for a specific run ID a
 
 ## Usage example
 
-```typescript copy
+```typescript
 mastra.listLogsByRunId({ runId: "123", transportId: "456" });
 ```
 
@@ -83,5 +85,5 @@ mastra.listLogsByRunId({ runId: "123", transportId: "456" });
 
 ## Related
 
-- [Logging overview](/docs/v1/logging)
+- [Logging overview](/docs/v1/observability/logging)
 - [Logger reference](/reference/v1/logging/pino-logger)

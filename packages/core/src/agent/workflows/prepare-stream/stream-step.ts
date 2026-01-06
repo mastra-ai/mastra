@@ -1,9 +1,14 @@
 import { z } from 'zod';
-import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
+import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
+import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { MastraMemory } from '../../../memory/memory';
+import type { MemoryConfig } from '../../../memory/types';
 import { RequestContext } from '../../../request-context';
 import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
+import type { SaveQueueManager } from '../../save-queue';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
 interface StreamStepOptions {
@@ -11,12 +16,20 @@ interface StreamStepOptions {
   runId: string;
   returnScorerData?: boolean;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
+  methodType: AgentMethodType;
+  saveQueueManager?: SaveQueueManager;
+  memoryConfig?: MemoryConfig;
+  memory?: MastraMemory;
+  resourceId?: string;
+  autoResumeSuspendedTools?: boolean;
 }
 
 export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
@@ -24,9 +37,17 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   runId,
   returnScorerData,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
+  methodType,
+  saveQueueManager,
+  memoryConfig,
+  memory,
+  resourceId,
+  autoResumeSuspendedTools,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -53,18 +74,29 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
             : capabilities.outputProcessors
           : []);
 
+      const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
+
       const streamResult = capabilities.llm.stream({
         ...validatedInputData,
         outputProcessors: processors,
         returnScorerData,
         tracingContext,
         requireToolApproval,
+        toolCallConcurrency,
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
+          saveQueueManager,
+          memoryConfig,
+          threadId: validatedInputData.threadId,
+          resourceId,
+          memory,
         },
         agentId,
+        agentName,
         toolCallId,
+        methodType: modelMethodType,
+        autoResumeSuspendedTools,
       });
 
       return streamResult;

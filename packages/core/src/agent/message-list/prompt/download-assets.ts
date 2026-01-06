@@ -73,21 +73,23 @@ export async function downloadAssetsFromMessages({
     })
 
     .filter((part): part is { mediaType: string | undefined; data: URL } => part.data instanceof URL)
-    .map(part => ({
-      url: part.data,
-      isUrlSupportedByModel:
-        part.mediaType != null &&
-        isUrlSupported({
-          url: part.data.toString(),
-          mediaType: part.mediaType,
-          supportedUrls: supportedUrls ?? {},
-        }),
-    }));
+    .map(part => {
+      return {
+        url: part.data,
+        isUrlSupportedByModel:
+          part.mediaType != null &&
+          isUrlSupported({
+            url: part.data.toString(),
+            mediaType: part.mediaType,
+            supportedUrls: supportedUrls ?? {},
+          }),
+      };
+    });
 
   const downloadedFiles = await pMap(
     filesToDownload,
     async fileItem => {
-      if (!fileItem.isUrlSupportedByModel) {
+      if (fileItem.isUrlSupportedByModel) {
         return null;
       }
       return {

@@ -1,6 +1,8 @@
 ---
 title: "Suspend & Resume | Workflows"
 description: "Suspend and resume in Mastra workflows allows you to pause execution while waiting for external input or resources."
+packages:
+  - "@mastra/core"
 ---
 
 # Suspend & Resume
@@ -13,9 +15,9 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 - If the condition isn’t met, the workflow pauses and returns `suspend()`.
 - If the condition is met, the workflow continues with the remaining logic in the step.
 
-![Pausing a workflow with suspend()](/img/workflows/workflows-suspend-resume-suspend.jpg)
+![Pausing a workflow with suspend()](/img/workflows/workflows-suspend.jpg)
 
-```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
   id: "step-1",
   inputSchema: z.object({
@@ -56,13 +58,15 @@ export const testWorkflow = createWorkflow({
 
 ## Restarting a workflow with `resume()`
 
-Use `resume()` to restart a suspended workflow from the step where it paused. To satisfy the step’s suspend condition, pass a value using `resumeData` that matches the step's `resumeSchema`, allowing execution to continue from the suspended step.
+Use `resume()` to restart a suspended workflow from the step where it paused. Pass `resumeData` matching the step's `resumeSchema` to satisfy the suspend condition and continue execution.
 
-![Restarting a workflow with resume()](/img/workflows/workflows-suspend-resume-resume.jpg)
+![Restarting a workflow with resume()](/img/workflows/workflows-resume.jpg)
 
-```typescript {13} showLineNumbers copy
+```typescript
+import { step1 } from "./workflows/test-workflow";
+
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 await run.start({
   inputData: {
@@ -72,34 +76,99 @@ await run.start({
 
 const handleResume = async () => {
   const result = await run.resume({
-    step: 'step-1',
+    step: step1,
     resumeData: { approved: true }
   });
 };
 ```
 
-You can resume a suspended workflow using different triggers, including [human input](/docs/v1/workflows/human-in-the-loop), external events from your application, or time-based conditions.
+Passing the `step` object provides full type-safety for `resumeData`. Alternatively, you can pass a step ID for more flexibility when the ID comes from user input or a database.
 
-```typescript {10} showLineNumbers copy
-const handleResume = async () => {
-  const result = await run.resume({
-    step: 'step-1',
-    resumeData: { approved: true }
-  });
-};
+```typescript
+const result = await run.resume({
+  step: "step-1",
+  resumeData: { approved: true }
+});
+```
 
+If only one step is suspended, you can omit the step argument entirely and Mastra will resume the last suspended step in the workflow.
+
+When resuming with only a `runId`, create a run instance first using `createRunAsync()`.
+
+```typescript
+const workflow = mastra.getWorkflow("testWorkflow");
+const run = await workflow.createRunAsync({ runId: "123" });
+
+const stream = run.resume({
+  resumeData: { approved: true }
+});
+```
+
+You can call `resume()` from anywhere in your application, including HTTP endpoints, event handlers, in response to [human input](/docs/v1/workflows/human-in-the-loop), or timers.
+
+```typescript
 const midnight = new Date();
 midnight.setUTCHours(24, 0, 0, 0);
-setTimeout(handleResume, midnight.getTime() - Date.now());
+
+setTimeout(async () => {
+  await run.resume({
+    step: "step-1",
+    resumeData: { approved: true }
+  });
+}, midnight.getTime() - Date.now());
 ```
+
+## Accessing suspend data with `suspendData`
+When a step is suspended, you may want to access the data that was provided to `suspend()` when the step is later resumed. Use the `suspendData` parameter in your step's execute function to access this data.
+
+```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts"
+const approvalStep = createStep({
+  id: "user-approval",
+  inputSchema: z.object({
+    requestId: z.string()
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean()
+  }),
+  suspendSchema: z.object({
+    reason: z.string(),
+    requestDetails: z.string()
+  }),
+  outputSchema: z.object({
+    result: z.string()
+  }),
+  execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+    const { requestId } = inputData;
+    const { approved } = resumeData ?? {};
+    
+    // On first execution, suspend with context
+    if (!approved) {
+      return await suspend({
+        reason: "User approval required",
+        requestDetails: `Request ${requestId} pending review`
+      });
+    }
+    
+    // On resume, access the original suspend data
+    const suspendReason = suspendData?.reason || "Unknown";
+    const details = suspendData?.requestDetails || "No details";
+    
+    return {
+      result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`
+    };
+  }
+});
+```
+
+The `suspendData` parameter is automatically populated when a step is resumed and contains the exact data that was passed to the `suspend()` function during the original suspension. This allows you to maintain context about why the workflow was suspended and use that information during the resume process.
 
 ## Identifying suspended executions
 
 When a workflow is suspended, it restarts from the step where it paused. You can check the workflow's `status` to confirm it's suspended, and use `suspended` to identify the paused step or [nested workflow](/docs/v1/workflows/overview#workflows-as-steps).
 
-```typescript {11} showLineNumbers copy
+```typescript {11}
 const workflow = mastra.getWorkflow("testWorkflow");
-const run = await workflow.createRunAsync();
+const run = await workflow.createRun();
 
 const result = await run.start({
   inputData: {
@@ -139,3 +208,5 @@ Sleep and event methods can be used to pause execution at the workflow level, wh
 
 - [Control Flow](/docs/v1/workflows/control-flow)
 - [Human-in-the-loop](/docs/v1/workflows/human-in-the-loop)
+- [Snapshots](/docs/v1/workflows/snapshots)
+- [Time Travel](/docs/v1/workflows/time-travel)

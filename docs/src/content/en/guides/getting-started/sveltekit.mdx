@@ -1,0 +1,329 @@
+---
+title: "SvelteKit | Frameworks"
+description: "Get started with Mastra and SvelteKit"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Integrate Mastra in your SvelteKit project
+
+In this guide, you'll build a tool-calling AI agent using Mastra, then connect it to SvelteKit by importing and calling the agent directly from your routes.
+
+You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) to create a beautiful, interactive chat experience.
+
+## Before you begin
+
+- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- Install Node.js `v22.13.0` or later
+
+## Create a new SvelteKit app (optional)
+
+If you already have a SvelteKit app using Tailwind, skip to the next step.
+
+Run the following command to [create a new SvelteKit app](https://svelte.dev/docs/kit/creating-a-project):
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install npm
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install pnpm
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install yarn
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun dlx sv create mastra-svelte --template minimal --types ts --add tailwindcss="plugins:forms" --install bun
+```
+
+</TabItem>
+</Tabs>
+
+This creates a project called `mastra-svelte`, but you can replace it with any name you want. Tailwind was added for styling purposes later on.
+
+## Initialize Mastra
+
+`cd` into your SvelteKit project and run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+
+When prompted, choose a provider (e.g. OpenAI) and enter your key:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+cd mastra-svelte
+npx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+cd mastra-svelte
+pnpm dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+cd mastra-svelte
+yarn dlx mastra@beta init
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+cd mastra-svelte
+bunx mastra@beta init
+```
+
+</TabItem>
+</Tabs>
+
+This creates a `src/mastra` folder with an example weather agent and the following files:
+
+-	`index.ts` - Mastra config, including memory
+- `tools/weather-tool.ts` - a tool to fetch weather for a given location
+-	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+
+You'll call `weather-agent.ts` from your SvelteKit routes in the next steps.
+
+## Install AI SDK UI
+
+Install AI SDK UI along with the Mastra adapter:
+
+<Tabs groupId="pm">
+<TabItem value="npm" label="npm">
+
+```bash
+npm install @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="pnpm" label="pnpm">
+
+```bash
+pnpm add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="yarn" label="yarn">
+
+```bash
+yarn add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+<TabItem value="bun" label="bun">
+
+```bash
+bun add @mastra/ai-sdk@beta @ai-sdk/svelte ai
+```
+
+</TabItem>
+</Tabs>
+
+## Create a chat route
+
+Create `src/routes/api/chat/+server.ts`:
+
+```ts title="src/routes/api/chat/+server.ts"
+import type { RequestHandler } from "./$types";
+import { handleChatStream } from "@mastra/ai-sdk";
+import { toAISdkV5Messages } from "@mastra/ai-sdk/ui";
+import { createUIMessageStreamResponse } from "ai";
+import { mastra } from "../../../mastra";
+
+const THREAD_ID = "example-user-id";
+const RESOURCE_ID = "weather-chat";
+
+export const POST: RequestHandler = async ({ request }) => {
+  const params = await request.json();
+  const stream = await handleChatStream({
+    mastra,
+    agentId: "weather-agent",
+    params: {
+      ...params,
+      memory: {
+        ...params.memory,
+        thread: THREAD_ID,
+        resource: RESOURCE_ID,
+      },
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+};
+
+export const GET: RequestHandler = async () => {
+  const memory = await mastra.getAgentById("weather-agent").getMemory();
+  let response = null;
+
+  try {
+    response = await memory?.recall({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+    });
+  } catch {
+    console.log("No previous messages found.");
+  }
+
+  const uiMessages = toAISdkV5Messages(response?.messages || []);
+
+  return Response.json(uiMessages);
+};
+```
+
+The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
+
+In order for the `GET` handler to be called, you need to create a `src/routes/+page.ts` file. Its `load()` function runs alongside `+page.svelte`.
+
+```ts title="src/routes/+page.ts"
+import type { UIDataTypes, UIMessage, UITools } from "ai";
+import type { PageLoad } from "./$types";
+
+export const load: PageLoad = async ({ fetch }) => {
+  const response = await fetch("/api/chat");
+  const initialMessages = (await response.json()) as UIMessage<
+    unknown,
+    UIDataTypes,
+    UITools
+  >[];
+  return { initialMessages };
+};
+```
+
+## Add the chat UI
+
+Replace `src/routes/+page.svelte` with the following.
+
+```html title="src/routes/+page.svelte"
+<script lang="ts">
+  import { Chat } from '@ai-sdk/svelte';
+  import { DefaultChatTransport, type ToolUIPart } from 'ai';
+
+  let input = $state('');
+  const { data } = $props();
+  let messages = $derived(data.initialMessages)
+
+  const chat = new Chat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat'
+    }),
+    get messages() {
+      return messages;
+    }
+  });
+
+  function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+    chat.sendMessage({ text: input });
+    input = '';
+  }
+
+  const STATE_TO_LABEL_MAP: Record<ToolUIPart["state"], string> = {
+    "input-streaming": "Pending",
+    "input-available": "Running",
+    // @ts-expect-error - Only available in AI SDK v6
+    "approval-requested": "Awaiting Approval",
+    "approval-responded": "Responded",
+    "output-available": "Completed",
+    "output-error": "Error",
+    "output-denied": "Denied",
+  };
+</script>
+
+<main class="max-w-3xl mx-auto p-6 size-full h-screen">
+  <div class="flex flex-col h-full">
+    <div class="flex-1 min-h-0 overflow-y-auto" data-name="conversation">
+      <div data-name="conversation-content" class="flex flex-col gap-8">
+        {#each chat.messages as message, messageIndex (messageIndex)}
+          <div>
+            {#each message.parts as part, partIndex (partIndex)}
+              {#if part.type === 'text'}
+                <div data-name="message" class={[message.role === 'user' && 'ml-auto justify-end', 'group flex w-full max-w-[95%] flex-col gap-2', message.role === 'user' ? 'is-user' : 'is-assistant']}>
+                  <div data-name="message-content" class={["is-user:dark flex w-fit max-w-full min-w-0 flex-col gap-2 overflow-hidden text-sm",
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-blue-100 group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
+      "group-[.is-assistant]:text-foreground"]}>
+                    <div data-name="message-response" class="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                      {part.text}
+                    </div>
+                  </div>
+                </div>
+              {:else if part.type.startsWith('tool-')}
+                <div data-name="tool" class="not-prose mb-6 w-full rounded-lg border border-gray-300 shadow">
+                  <details data-name="tool-header" class="w-full p-3 hover:cursor-pointer">
+                    <summary class="font-medium text-sm">{(part as ToolUIPart).type.split("-").slice(1).join("-")} - {STATE_TO_LABEL_MAP[(part as ToolUIPart).state ?? 'output-available']}</summary>
+                    <div data-name="tool-content" class="">
+                      <div data-name="tool-input" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">Parameters</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).input, null, 2)}</code></pre>
+                      </div>
+                      <div data-name="tool-output" class="space-y-2 overflow-hidden py-4">
+                        <div class="font-medium text-muted-foreground text-xs uppercase tracking-wide">{(part as ToolUIPart).errorText ? 'Error' : 'Result'}</div>
+                        <pre class="w-full overflow-x-auto rounded-md border border-gray-300 bg-gray-50 p-3 text-sm"><code>{JSON.stringify((part as ToolUIPart).output, null, 2)}</code></pre>
+                        {#if (part as ToolUIPart).errorText}
+                          <div data-name="tool-error" class="text-red-600">
+                            {(part as ToolUIPart).errorText}
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
+      </div>
+    </div>
+    <form class="w-full grid grid-cols-[1fr_auto] gap-6 shrink-0 pt-4" onsubmit={handleSubmit} data-name="prompt-input">
+      <input name="chat-input" class="rounded-lg border border-gray-300 shadow h-10" placeholder="City name" bind:value={input} />
+      <button class="bg-blue-600 text-white shadow-lg border border-blue-400 px-4 whitespace-nowrap rounded-lg text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" type="submit">Send</button>
+    </form>
+  </div>
+</main>
+```
+
+This page connects [`Chat`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
+
+It renders the response text using custom message and tool components.
+
+## Test your agent
+
+1. Run your SvelteKit app with `npm run dev`
+2. Open the chat at http://localhost:5173
+3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+
+## Next steps
+
+Congratulations on building your Mastra agent with SvelteKit! 🎉
+
+From here, you can extend the project with your own tools and logic:
+
+- Learn more about [agents](/docs/v1/agents/overview)
+- Give your agent its own [tools](/docs/v1/agents/using-tools)
+- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+
+When you're ready, read more about how Mastra integrates with AI SDK UI and SvelteKit, and how to deploy your agent anywhere:
+
+- Integrate Mastra with [AI SDK UI](/guides/v1/build-your-ui/ai-sdk-ui)
+- Deploy your agent [anywhere](/docs/v1/deployment/overview)
+- Try the [unofficial Svelte AI Elements](https://svelte-ai-elements.vercel.app/)

@@ -45,14 +45,6 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> {
   }
 
   async authorizeUser(user: ClerkUser) {
-    if (!user.sub) {
-      return false;
-    }
-
-    const orgs = await this.clerk.users.getOrganizationMembershipList({
-      userId: user.sub,
-    });
-
-    return orgs.data.length > 0;
+    return !!user.sub;
   }
 }

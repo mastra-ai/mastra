@@ -35,8 +35,8 @@ export const textToSpeechTool = createTool({
     speaker: z.string().describe('Voice speaker that was used for audio generation'),
     speed: z.number().describe('Speaking speed that was used for audio generation'),
   }),
-  execute: async ({ context, mastra }) => {
-    const { extractedText } = context;
+  execute: async (inputData, context) => {
+    const { extractedText, speaker, speed } = inputData;
 
     console.log('🎙️ Generating audio from extracted text...');
 
@@ -54,13 +54,16 @@ export const textToSpeechTool = createTool({
 
     try {
       console.log(`🎵 Converting text to audio...`);
-      const textNaturalizerAgent = mastra!.getAgent('textNaturalizerAgent');
+      const textNaturalizerAgent = context?.mastra?.getAgent('textNaturalizerAgent');
+      if (!textNaturalizerAgent) {
+        throw new Error('Text naturalizer agent not found');
+      }
       console.log('extToAudioAgent.voice', textNaturalizerAgent.voice);
 
       // Generate audio using the agent's voice synthesis
       const audioStream = await textNaturalizerAgent.voice.speak(processedText, {
-        speaker: context.speaker,
-        speed: context.speed,
+        speaker,
+        speed,
       });
 
       // Check if we got a valid audio stream
@@ -79,8 +82,8 @@ export const textToSpeechTool = createTool({
       return {
         audioGenerated: true,
         filePath: path.join(process.cwd(), 'audio', filename),
-        speaker: context.speaker,
-        speed: context.speed,
+        speaker,
+        speed,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -93,8 +96,8 @@ export const textToSpeechTool = createTool({
 
       return {
         audioGenerated: false,
-        speaker: context.speaker,
-        speed: context.speed,
+        speaker,
+        speed,
       };
     }
   },

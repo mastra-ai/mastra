@@ -1,7 +1,8 @@
-import { randomUUID } from 'crypto';
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import type { UIMessageChunk } from 'ai-v5';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { randomUUID } from 'node:crypto';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import type { UIMessageChunk } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
@@ -63,9 +64,6 @@ describe('Stream ID Consistency', () => {
     });
 
     let streamResponseId: string | undefined;
-    for await (const _chunk of streamResult.fullStream) {
-      console.log('DEBUG chunk', _chunk);
-    }
     await streamResult.consumeStream();
 
     const finishedResult = streamResult;
@@ -73,7 +71,7 @@ describe('Stream ID Consistency', () => {
 
     streamResponseId = response?.messages?.[0]?.id;
 
-    console.log('DEBUG streamResponseId', streamResponseId);
+    // console.log('DEBUG streamResponseId', streamResponseId);
     expect(streamResponseId).toBeDefined();
 
     const result = await memory.recall({ threadId });
@@ -162,11 +160,11 @@ describe('Stream ID Consistency', () => {
             modelId: 'mock-model-id',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'I am a ' },
-          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'I am a ' },
+          { type: 'text-delta', id: 'text-1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -240,11 +238,11 @@ describe('Stream ID Consistency', () => {
             modelId: 'mock-model-id',
             timestamp: new Date(0),
           },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'I am a ' },
-          { type: 'text-delta', id: '1', delta: 'helpful assistant.' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'I am a ' },
+          { type: 'text-delta', id: 'text-1', delta: 'helpful assistant.' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -287,14 +285,27 @@ describe('Stream ID Consistency', () => {
   describe('onFinish callback with structured output', () => {
     it('should include object field in onFinish callback when using structured output', async () => {
       const mockModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'text',
+              text: '{"name":"John","age":30}',
+            },
+          ],
+          warnings: [],
+        }),
         doStream: async () => ({
           rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
           stream: convertArrayToReadableStream([
             { type: 'stream-start', warnings: [] },
             { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"name":"John","age":30}' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -356,14 +367,27 @@ describe('Stream ID Consistency', () => {
 
   it('should include object field in onFinish callback when using structuredOutput key', async () => {
     const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: 'The person is John who is 30 years old',
+          },
+        ],
+        warnings: [],
+      }),
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'The person is John who is 30 years old' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'The person is John who is 30 years old' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -374,14 +398,27 @@ describe('Stream ID Consistency', () => {
     });
 
     const structuringModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'text',
+            text: '{"name":"John","age":30}',
+          },
+        ],
+        warnings: [],
+      }),
       doStream: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: '{"name":"John","age":30}' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: '{"name":"John","age":30}' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',
@@ -461,11 +498,11 @@ describe('Stream ID Consistency', () => {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
           { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: '1' },
-          { type: 'text-delta', id: '1', delta: 'Hello! ' },
-          { type: 'text-delta', id: '1', delta: 'How can I ' },
-          { type: 'text-delta', id: '1', delta: 'help you today?' },
-          { type: 'text-end', id: '1' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Hello! ' },
+          { type: 'text-delta', id: 'text-1', delta: 'How can I ' },
+          { type: 'text-delta', id: 'text-1', delta: 'help you today?' },
+          { type: 'text-end', id: 'text-1' },
           {
             type: 'finish',
             finishReason: 'stop',

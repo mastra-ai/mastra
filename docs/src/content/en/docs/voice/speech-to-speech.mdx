@@ -1,6 +1,11 @@
 ---
 title: "Speech-to-Speech Capabilities in Mastra | Voice"
 description: Overview of speech-to-speech capabilities in Mastra, including real-time interactions and event-driven architecture.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-google-gemini-live"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # Speech-to-Speech Capabilities in Mastra
@@ -13,13 +18,13 @@ STS enables continuous bidirectional audio communication through listening to ev
 ## Configuration
 
 - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
-- **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
+- **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-5.1-realtime`).
 - **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
   apiKey: "your-openai-api-key",
-  model: "gpt-4o-mini-realtime",
+  model: "gpt-5.1-realtime",
   speaker: "alloy", // Default voice
 });
 
@@ -38,7 +43,7 @@ const agent = new Agent({
   id: "agent",
   name: "OpenAI Realtime Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -73,7 +78,7 @@ const agent = new Agent({
   instructions:
     "You are a helpful assistant with real-time voice capabilities.",
   // Model used for text generation; voice provider handles realtime audio
-  model: openai("gpt-4o"),
+  model: "openai/gpt-5.1",
   voice: new GeminiLiveVoice({
     apiKey: process.env.GOOGLE_API_KEY,
     model: "gemini-2.0-flash-exp",

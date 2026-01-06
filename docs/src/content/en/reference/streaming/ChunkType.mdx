@@ -1,6 +1,8 @@
 ---
 title: "Reference: ChunkType | Streaming"
 description: "Documentation for the ChunkType type used in Mastra streaming responses, defining all possible chunk types and their payloads."
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -1255,7 +1257,7 @@ Contains monitoring and observability data from agent execution. Can include wor
 
 ### tripwire
 
-Emitted when the stream is forcibly terminated due to content being blocked by output processors. This acts as a safety mechanism to prevent harmful or inappropriate content from being streamed.
+Emitted when the stream is forcibly terminated due to content being blocked by a processor. This acts as a safety mechanism to prevent harmful or inappropriate content from being streamed. The payload includes information about why the content was blocked and whether a retry was requested.
 
 <PropertiesTable
   content={[
@@ -1274,10 +1276,31 @@ Emitted when the stream is forcibly terminated due to content being blocked by o
           type: "TripwirePayload",
           parameters: [
             {
-              name: "tripwireReason",
+              name: "reason",
               type: "string",
               description:
                 "Explanation of why the content was blocked (e.g., 'Output processor blocked content')",
+            },
+            {
+              name: "retry",
+              type: "boolean",
+              isOptional: true,
+              description:
+                "Whether the processor requested a retry of the step",
+            },
+            {
+              name: "metadata",
+              type: "unknown",
+              isOptional: true,
+              description:
+                "Additional metadata from the processor (e.g., scores, categories)",
+            },
+            {
+              name: "processorId",
+              type: "string",
+              isOptional: true,
+              description:
+                "ID of the processor that triggered the tripwire",
             },
           ],
         },
@@ -1325,4 +1348,4 @@ for await (const chunk of stream.fullStream) {
 
 - [.stream()](./agents/stream) - Method that returns streams emitting these chunks
 - [MastraModelOutput](./agents/MastraModelOutput) - The stream object that emits these chunks
-- [workflow.streamVNext()](./workflows/streamVNext) - Method that returns streams emitting these chunks for workflows
+- [workflow.stream()](./workflows/stream) - Method that returns streams emitting these chunks for workflows

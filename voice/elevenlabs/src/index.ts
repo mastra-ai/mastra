@@ -110,12 +110,20 @@ export class ElevenLabsVoice extends MastraVoice {
    * @param {string | NodeJS.ReadableStream} input - The text to be converted to speech or a stream containing audio data.
    * @param {Object} [options] - Optional parameters for the speech generation.
    * @param {string} [options.speaker] - The ID of the speaker to use for the speech. If not provided, the default speaker will be used.
+   * @param {string} [options.outputFormat] - The audio output format (e.g., 'ulaw_8000', 'pcm_16000', 'mp3_44100_128'). If not provided, defaults to ElevenLabs' default format.
    *
    * @returns {Promise<NodeJS.ReadableStream>} A promise that resolves to a readable stream of the generated speech.
    *
    * @throws {Error} If no speaker is specified or if no speech model is set.
    */
-  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream> {
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: {
+      speaker?: string;
+      outputFormat?: string;
+      [key: string]: any;
+    },
+  ): Promise<NodeJS.ReadableStream> {
     const speaker = options?.speaker || this.speaker;
     if (!speaker) {
       throw new Error('No speaker specified');
@@ -131,6 +139,7 @@ export class ElevenLabsVoice extends MastraVoice {
       voice: speaker,
       model_id: this.speechModel?.name as ElevenLabsModel,
       stream: true,
+      ...(options?.outputFormat && { output_format: options.outputFormat as any }),
     });
   }
 

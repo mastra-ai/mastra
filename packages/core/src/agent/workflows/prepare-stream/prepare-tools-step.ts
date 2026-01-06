@@ -6,28 +6,23 @@ import type { RequestContext } from '../../../request-context';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
-interface PrepareToolsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareToolsStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
   requestContext: RequestContext;
   agentSpan: Span<SpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  methodType: AgentMethodType;
   memory?: MastraMemory;
 }
 
-export function createPrepareToolsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareToolsStep<OUTPUT extends OutputSchema | undefined = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -37,7 +32,7 @@ export function createPrepareToolsStep<
   agentSpan,
   methodType,
   memory,
-}: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
+}: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: z.object({}),
@@ -70,8 +65,10 @@ export function createPrepareToolsStep<
         runId,
         requestContext,
         tracingContext: { currentSpan: agentSpan },
-        writableStream: options.writableStream,
+        outputWriter: options.outputWriter,
         methodType,
+        memoryConfig: options.memory?.options,
+        autoResumeSuspendedTools: options.autoResumeSuspendedTools,
       });
 
       return {

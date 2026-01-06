@@ -1,6 +1,8 @@
 ---
 title: "Reference: Context Relevance Scorer | Evals"
 description: Documentation for the Context Relevance Scorer in Mastra. Evaluates the relevance and utility of provided context for generating agent responses using weighted relevance scoring.
+packages:
+  - "@mastra/evals"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -198,7 +200,7 @@ import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 // Stricter penalty configuration
 const strictScorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Einstein won the Nobel Prize for photoelectric effect",
@@ -216,7 +218,7 @@ const strictScorer = createContextRelevanceScorerLLM({
 
 // Lenient penalty configuration
 const lenientScorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Einstein won the Nobel Prize for photoelectric effect",
@@ -263,7 +265,7 @@ console.log("Lenient penalties:", lenientResult.score); // Higher score, less pe
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   options: {
     contextExtractor: (input, output) => {
       // Extract context based on the query
@@ -287,7 +289,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: ["Relevant information...", "Supporting details..."],
     scale: 100, // Scale scores from 0-100 instead of 0-1
@@ -301,7 +303,7 @@ const scorer = createContextRelevanceScorerLLM({
 
 ```typescript
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     contextExtractor: (input, output) => {
       const query = input?.inputMessages?.[0]?.content || "";
@@ -328,7 +330,7 @@ This example shows excellent context relevance where all context directly suppor
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Einstein won the Nobel Prize for his discovery of the photoelectric effect in 1921.",
@@ -375,7 +377,7 @@ This example shows moderate relevance with some context being irrelevant or unus
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Solar eclipses occur when the Moon blocks the Sun.",
@@ -417,7 +419,7 @@ console.log(result);
 
 // With custom penalty configuration
 const customScorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "Solar eclipses occur when the Moon blocks the Sun.",
@@ -466,7 +468,7 @@ This example shows poor context relevance with mostly irrelevant information:
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     context: [
       "The Great Barrier Reef is located in Australia.",
@@ -514,7 +516,7 @@ Extract context dynamically based on the run input:
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     contextExtractor: (input, output) => {
       // Extract query from input
@@ -557,7 +559,7 @@ Integrate with RAG pipelines to evaluate retrieved context:
 import { createContextRelevanceScorerLLM } from "@mastra/evals";
 
 const scorer = createContextRelevanceScorerLLM({
-  model: "openai/gpt-4o-mini",
+  model: "openai/gpt-5.1",
   options: {
     contextExtractor: (input, output) => {
       // Extract from RAG retrieval results

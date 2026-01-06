@@ -1,135 +1,114 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ScoringEntityType, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
 import {
+  createStorageErrorId,
   ScoresStorage,
   TABLE_SCORERS,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
+  transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { StoragePagination } from '@mastra/core/storage';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
+/**
+ * MongoDB-specific score row transformation.
+ * Converts timestamp strings to Date objects.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  let scorerValue: any = null;
-  if (row.scorer) {
-    try {
-      scorerValue = typeof row.scorer === 'string' ? safelyParseJSON(row.scorer) : row.scorer;
-    } catch (e) {
-      console.warn('Failed to parse scorer:', e);
-    }
-  }
-
-  let preprocessStepResultValue: any = null;
-  if (row.preprocessStepResult) {
-    try {
-      preprocessStepResultValue =
-        typeof row.preprocessStepResult === 'string'
-          ? safelyParseJSON(row.preprocessStepResult)
-          : row.preprocessStepResult;
-    } catch (e) {
-      console.warn('Failed to parse preprocessStepResult:', e);
-    }
-  }
-
-  let analyzeStepResultValue: any = null;
-  if (row.analyzeStepResult) {
-    try {
-      analyzeStepResultValue =
-        typeof row.analyzeStepResult === 'string' ? safelyParseJSON(row.analyzeStepResult) : row.analyzeStepResult;
-    } catch (e) {
-      console.warn('Failed to parse analyzeStepResult:', e);
-    }
-  }
-
-  let inputValue: any = null;
-  if (row.input) {
-    try {
-      inputValue = typeof row.input === 'string' ? safelyParseJSON(row.input) : row.input;
-    } catch (e) {
-      console.warn('Failed to parse input:', e);
-    }
-  }
-
-  let outputValue: any = null;
-  if (row.output) {
-    try {
-      outputValue = typeof row.output === 'string' ? safelyParseJSON(row.output) : row.output;
-    } catch (e) {
-      console.warn('Failed to parse output:', e);
-    }
-  }
-
-  let entityValue: any = null;
-  if (row.entity) {
-    try {
-      entityValue = typeof row.entity === 'string' ? safelyParseJSON(row.entity) : row.entity;
-    } catch (e) {
-      console.warn('Failed to parse entity:', e);
-    }
-  }
-
-  let requestContextValue: any = null;
-  if (row.requestContext) {
-    try {
-      requestContextValue =
-        typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext;
-    } catch (e) {
-      console.warn('Failed to parse requestContext:', e);
-    }
-  }
-
-  let metadataValue: any = null;
-  if (row.metadata) {
-    try {
-      metadataValue = typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata;
-    } catch (e) {
-      console.warn('Failed to parse metadata:', e);
-    }
-  }
-
-  return {
-    id: row.id as string,
-    entityId: row.entityId as string,
-    entityType: row.entityType as ScoringEntityType,
-    scorerId: row.scorerId as string,
-    traceId: row.traceId as string,
-    spanId: row.spanId as string,
-    runId: row.runId as string,
-    scorer: scorerValue,
-    preprocessStepResult: preprocessStepResultValue,
-    preprocessPrompt: row.preprocessPrompt as string,
-    analyzeStepResult: analyzeStepResultValue,
-    generateScorePrompt: row.generateScorePrompt as string,
-    score: row.score as number,
-    analyzePrompt: row.analyzePrompt as string,
-    reasonPrompt: row.reasonPrompt as string,
-    metadata: metadataValue,
-    input: inputValue,
-    output: outputValue,
-    additionalContext: row.additionalContext,
-    requestContext: requestContextValue,
-    entity: entityValue,
-    source: row.source as ScoringSource,
-    resourceId: row.resourceId as string,
-    threadId: row.threadId as string,
-    createdAt: new Date(row.createdAt),
-    updatedAt: new Date(row.updatedAt),
-  };
+  return coreTransformScoreRow(row, {
+    convertTimestamps: true,
+  });
 }
 
 export class ScoresStorageMongoDB extends ScoresStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_SCORERS] as const;
+
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (ScoresStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  /**
+   * Returns default index definitions for the scores domain collections.
+   * These indexes optimize common query patterns for score lookups.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_SCORERS, keys: { id: 1 }, options: { unique: true } },
+      { collection: TABLE_SCORERS, keys: { scorerId: 1 } },
+      { collection: TABLE_SCORERS, keys: { runId: 1 } },
+      { collection: TABLE_SCORERS, keys: { entityId: 1, entityType: 1 } },
+      { collection: TABLE_SCORERS, keys: { traceId: 1, spanId: 1 } },
+      { collection: TABLE_SCORERS, keys: { createdAt: -1 } },
+      { collection: TABLE_SCORERS, keys: { source: 1 } },
+    ];
+  }
+
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  async init(): Promise<void> {
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.getCollection(TABLE_SCORERS);
+    await collection.deleteMany({});
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const document = await collection.findOne({ id });
 
       if (!document) {
@@ -140,7 +119,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id },
@@ -150,80 +129,76 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    let validatedScore: ValidatedSaveScorePayload;
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    let validatedScore: SaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
     try {
       const now = new Date();
-      const scoreId = `score-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const scoreId = crypto.randomUUID();
 
-      const scoreData = {
+      const scorer =
+        typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer;
+      const preprocessStepResult =
+        typeof validatedScore.preprocessStepResult === 'string'
+          ? safelyParseJSON(validatedScore.preprocessStepResult)
+          : validatedScore.preprocessStepResult;
+      const analyzeStepResult =
+        typeof validatedScore.analyzeStepResult === 'string'
+          ? safelyParseJSON(validatedScore.analyzeStepResult)
+          : validatedScore.analyzeStepResult;
+      const input =
+        typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input;
+      const output =
+        typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output;
+      const requestContext =
+        typeof validatedScore.requestContext === 'string'
+          ? safelyParseJSON(validatedScore.requestContext)
+          : validatedScore.requestContext;
+      const entity =
+        typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity;
+      const createdAt = now;
+      const updatedAt = now;
+
+      const dataToSave = {
+        ...validatedScore,
         id: scoreId,
-        entityId: validatedScore.entityId,
-        entityType: validatedScore.entityType,
-        scorerId: validatedScore.scorerId,
-        traceId: validatedScore.traceId || '',
-        spanId: validatedScore.spanId || '',
-        runId: validatedScore.runId,
-        scorer:
-          typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer,
-        preprocessStepResult:
-          typeof validatedScore.preprocessStepResult === 'string'
-            ? safelyParseJSON(validatedScore.preprocessStepResult)
-            : validatedScore.preprocessStepResult,
-        analyzeStepResult:
-          typeof validatedScore.analyzeStepResult === 'string'
-            ? safelyParseJSON(validatedScore.analyzeStepResult)
-            : validatedScore.analyzeStepResult,
-        score: validatedScore.score,
-        reason: validatedScore.reason,
-        preprocessPrompt: validatedScore.preprocessPrompt,
-        generateScorePrompt: validatedScore.generateScorePrompt,
-        generateReasonPrompt: validatedScore.generateReasonPrompt,
-        analyzePrompt: validatedScore.analyzePrompt,
-        input: typeof validatedScore.input === 'string' ? safelyParseJSON(validatedScore.input) : validatedScore.input,
-        output:
-          typeof validatedScore.output === 'string' ? safelyParseJSON(validatedScore.output) : validatedScore.output,
-        additionalContext: validatedScore.additionalContext,
-        requestContext:
-          typeof validatedScore.requestContext === 'string'
-            ? safelyParseJSON(validatedScore.requestContext)
-            : validatedScore.requestContext,
-        entity:
-          typeof validatedScore.entity === 'string' ? safelyParseJSON(validatedScore.entity) : validatedScore.entity,
-        source: validatedScore.source,
-        resourceId: validatedScore.resourceId || '',
-        threadId: validatedScore.threadId || '',
-        createdAt: now,
-        updatedAt: now,
+        scorer,
+        preprocessStepResult,
+        analyzeStepResult,
+        input,
+        output,
+        requestContext,
+        entity,
+        createdAt,
+        updatedAt,
       };
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
-      await collection.insertOne(scoreData);
+      const collection = await this.getCollection(TABLE_SCORERS);
+      await collection.insertOne(dataToSave);
 
-      const savedScore: ScoreRowData = {
-        ...score,
-        id: scoreId,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      return { score: savedScore };
+      return { score: dataToSave as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('MONGODB', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId: score.scorerId, runId: score.runId },
@@ -245,7 +220,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -265,7 +240,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
         query.source = source;
       }
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
@@ -304,7 +279,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId, page: pagination.page, perPage: pagination.perPage },
@@ -320,13 +295,13 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ runId });
 
       if (total === 0) {
@@ -365,7 +340,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, page: pagination.page, perPage: pagination.perPage },
@@ -383,13 +358,13 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments({ entityId, entityType });
 
       if (total === 0) {
@@ -428,7 +403,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType, page: pagination.page, perPage: pagination.perPage },
@@ -446,14 +421,14 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       const query = { traceId, spanId };
-      const collection = await this.operations.getCollection(TABLE_SCORERS);
+      const collection = await this.getCollection(TABLE_SCORERS);
       const total = await collection.countDocuments(query);
 
       if (total === 0) {
@@ -492,7 +467,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId, spanId, page: pagination.page, perPage: pagination.perPage },

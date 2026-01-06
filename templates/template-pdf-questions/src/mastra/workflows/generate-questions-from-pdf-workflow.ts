@@ -31,11 +31,17 @@ const downloadAndSummarizePdfStep = createStep({
     console.log('Executing Step: download-and-summarize-pdf');
     const { pdfUrl } = inputData;
 
-    const result = await pdfFetcherTool.execute({
-      context: { pdfUrl },
-      mastra,
-      requestContext: requestContext || new RequestContext(),
-    });
+    const result = await pdfFetcherTool.execute(
+      { pdfUrl },
+      {
+        mastra,
+        requestContext: requestContext || new RequestContext(),
+      },
+    );
+
+    if ('error' in result) {
+      throw new Error('Failed to download and summarize PDF: ' + result.error);
+    }
 
     console.log(
       `Step download-and-summarize-pdf: Succeeded - Downloaded ${result.fileSize} bytes, extracted ${result.characterCount} characters from ${result.pagesCount} pages, generated ${result.summary.length} character summary`,
@@ -62,11 +68,17 @@ const generateQuestionsFromSummaryStep = createStep({
     }
 
     try {
-      const result = await generateQuestionsFromTextTool.execute({
-        context: { extractedText: summary }, // Use summary as the text input
-        mastra,
-        requestContext: requestContext || new RequestContext(),
-      });
+      const result = await generateQuestionsFromTextTool.execute(
+        { extractedText: summary }, // Use summary as the text input
+        {
+          mastra,
+          requestContext: requestContext || new RequestContext(),
+        },
+      );
+
+      if ('error' in result) {
+        return { questions: [], success: false };
+      }
 
       console.log(
         `Step generate-questions-from-summary: Succeeded - Generated ${result.questions.length} questions from summary`,

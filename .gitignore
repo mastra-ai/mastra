@@ -19,6 +19,7 @@ dist/
 openapi-ts-error*
 
 .mastra
+*.db*
 memory.db
 memory.db-*
 
@@ -29,6 +30,7 @@ memory.db-*
 .npmrc
 
 # Test directories
+packages/core/test-outputs/
 voice/**/test-outputs/
 voice/**/test-data/
 
@@ -45,3 +47,4 @@ mastra-cli.json
 
 *storybook.log
 storybook-static
+test-output.log

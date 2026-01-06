@@ -1,17 +1,18 @@
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { createTestServerContext } from './test-utils';
 import {
-  listToolsHandler,
-  getToolByIdHandler,
-  executeToolHandler,
-  executeAgentToolHandler,
-  getAgentToolHandler,
+  LIST_TOOLS_ROUTE,
+  GET_TOOL_BY_ID_ROUTE,
+  EXECUTE_TOOL_ROUTE,
+  EXECUTE_AGENT_TOOL_ROUTE,
+  GET_AGENT_TOOL_ROUTE,
 } from './tools';
 
 describe('Tools Handlers', () => {
@@ -39,12 +40,14 @@ describe('Tools Handlers', () => {
 
   describe('listToolsHandler', () => {
     it('should return empty object when no tools are provided', async () => {
-      const result = await listToolsHandler({ tools: undefined });
+      const mastra = new Mastra({ logger: false });
+      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestServerContext({ mastra }), tools: undefined });
       expect(result).toEqual({});
     });
 
     it('should return serialized tools when tools are provided', async () => {
-      const result = await listToolsHandler({ tools: mockTools });
+      const mastra = new Mastra({ logger: false });
+      const result = await LIST_TOOLS_ROUTE.handler({ ...createTestServerContext({ mastra }), tools: mockTools });
       expect(result).toHaveProperty(mockTool.id);
       // expect(result).toHaveProperty(mockVercelTool.id);
       expect(result[mockTool.id]).toHaveProperty('id', mockTool.id);
@@ -54,36 +57,47 @@ describe('Tools Handlers', () => {
 
   describe('getToolByIdHandler', () => {
     it('should throw 404 when tool is not found', async () => {
-      await expect(getToolByIdHandler({ tools: mockTools, toolId: 'non-existent' })).rejects.toThrow(HTTPException);
+      const mastra = new Mastra({ logger: false });
+      await expect(
+        GET_TOOL_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          tools: mockTools,
+          toolId: 'non-existent',
+        }),
+      ).rejects.toThrow(HTTPException);
     });
 
     it('should return serialized tool when found', async () => {
-      const result = await getToolByIdHandler({ tools: mockTools, toolId: mockTool.id });
+      const mastra = new Mastra({ logger: false });
+      const result = await GET_TOOL_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        tools: mockTools,
+        toolId: mockTool.id,
+      });
       expect(result).toHaveProperty('id', mockTool.id);
       expect(result).toHaveProperty('description', mockTool.description);
     });
   });
 
   describe('executeToolHandler', () => {
-    const executeTool = executeToolHandler(mockTools);
-
     it('should throw error when toolId is not provided', async () => {
       await expect(
-        executeTool({
-          mastra: new Mastra({ logger: false }),
+        EXECUTE_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
+          tools: mockTools,
+          toolId: undefined as any,
           data: {},
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool ID is required');
     });
 
     it('should throw 404 when tool is not found', async () => {
       await expect(
-        executeTool({
-          mastra: new Mastra({ logger: false }),
+        EXECUTE_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
+          tools: mockTools,
           toolId: 'non-existent',
           data: {},
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -91,25 +105,24 @@ describe('Tools Handlers', () => {
     it('should throw error when tool is not executable', async () => {
       const nonExecutableTool = { ...mockTool, execute: undefined };
       const tools = { [nonExecutableTool.id]: nonExecutableTool };
-      const executeTool = executeToolHandler(tools);
 
       await expect(
-        executeTool({
-          mastra: new Mastra(),
+        EXECUTE_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra: new Mastra() }),
+          tools,
           toolId: nonExecutableTool.id,
           data: {},
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool is not executable');
     });
 
     it('should throw error when data is not provided', async () => {
       await expect(
-        executeTool({
-          mastra: new Mastra(),
+        EXECUTE_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra: new Mastra() }),
+          tools: mockTools,
           toolId: mockTool.id,
-          data: null,
-          requestContext: new RequestContext(),
+          data: null as any,
         }),
       ).rejects.toThrow('Argument "data" is required');
     });
@@ -117,23 +130,21 @@ describe('Tools Handlers', () => {
     it('should execute regular tool successfully', async () => {
       const mockResult = { success: true };
       const mockMastra = new Mastra();
-      const executeTool = executeToolHandler(mockTools);
       mockExecute.mockResolvedValue(mockResult);
       const context = { test: 'data' };
 
-      const requestContext = new RequestContext();
-      const result = await executeTool({
-        mastra: mockMastra,
+      const result = await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        tools: mockTools,
         toolId: mockTool.id,
         runId: 'test-run',
-        requestContext: requestContext,
         data: context,
       });
 
       expect(result).toEqual(mockResult);
       expect(mockExecute).toHaveBeenCalledWith(context, {
         mastra: mockMastra,
-        requestContext: requestContext,
+        requestContext: expect.any(RequestContext),
         tracingContext: {
           currentSpan: undefined,
         },
@@ -149,10 +160,10 @@ describe('Tools Handlers', () => {
       const mockResult = { success: true };
       (mockVercelTool.execute as Mock<() => any>).mockResolvedValue(mockResult);
 
-      const result = await executeTool({
-        mastra: mockMastra,
+      const result = await EXECUTE_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        tools: mockTools,
         toolId: `tool`,
-        requestContext: new RequestContext(),
         data: { test: 'data' },
       });
 
@@ -172,27 +183,27 @@ describe('Tools Handlers', () => {
 
     it('should throw 404 when agent is not found', async () => {
       await expect(
-        executeAgentToolHandler({
-          mastra: new Mastra({ logger: false }),
+        EXECUTE_AGENT_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
           agentId: 'non-existent',
           toolId: mockTool.id,
           data: {},
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Agent with id non-existent not found');
     });
 
     it('should throw 404 when tool is not found in agent', async () => {
       await expect(
-        executeAgentToolHandler({
-          mastra: new Mastra({
-            logger: false,
-            agents: { 'test-agent': mockAgent as any },
+        EXECUTE_AGENT_TOOL_ROUTE.handler({
+          ...createTestServerContext({
+            mastra: new Mastra({
+              logger: false,
+              agents: { 'test-agent': mockAgent as any },
+            }),
           }),
           agentId: 'test-agent',
           toolId: 'non-existent',
           data: {},
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -208,15 +219,16 @@ describe('Tools Handlers', () => {
       });
 
       await expect(
-        executeAgentToolHandler({
-          mastra: new Mastra({
-            logger: false,
-            agents: { 'test-agent': agent as any },
+        EXECUTE_AGENT_TOOL_ROUTE.handler({
+          ...createTestServerContext({
+            mastra: new Mastra({
+              logger: false,
+              agents: { 'test-agent': agent as any },
+            }),
           }),
           agentId: 'test-agent',
           toolId: nonExecutableTool.id,
           data: {},
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -234,26 +246,19 @@ describe('Tools Handlers', () => {
       const context = {
         test: 'data',
       };
-      const requestContext = new RequestContext();
-      const result = await executeAgentToolHandler({
-        mastra: mockMastra,
+      const result = await EXECUTE_AGENT_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         toolId: mockTool.id,
         data: context,
-        requestContext: requestContext,
       });
 
       expect(result).toEqual(mockResult);
       expect(mockExecute).toHaveBeenCalledWith(context, {
         mastra: mockMastra,
-        requestContext: requestContext,
+        requestContext: expect.any(RequestContext),
         tracingContext: {
           currentSpan: undefined,
-        },
-        agent: {
-          messages: [],
-          toolCallId: '',
-          suspend: expect.any(Function),
         },
       });
     });
@@ -268,12 +273,11 @@ describe('Tools Handlers', () => {
         },
       });
 
-      const result = await executeAgentToolHandler({
-        mastra: mockMastra,
+      const result = await EXECUTE_AGENT_TOOL_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
         agentId: 'test-agent',
         toolId: `tool`,
         data: {},
-        requestContext: new RequestContext(),
       });
 
       expect(result).toEqual(mockResult);
@@ -292,11 +296,10 @@ describe('Tools Handlers', () => {
 
     it('should throw 404 when agent is not found', async () => {
       await expect(
-        getAgentToolHandler({
-          mastra: new Mastra({ logger: false }),
+        GET_AGENT_TOOL_ROUTE.handler({
+          ...createTestServerContext({ mastra: new Mastra({ logger: false }) }),
           agentId: 'non-existent',
           toolId: mockTool.id,
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(
         new HTTPException(404, {
@@ -307,14 +310,15 @@ describe('Tools Handlers', () => {
 
     it('should throw 404 when tool is not found in agent', async () => {
       await expect(
-        getAgentToolHandler({
-          mastra: new Mastra({
-            logger: false,
-            agents: { 'test-agent': mockAgent as any },
+        GET_AGENT_TOOL_ROUTE.handler({
+          ...createTestServerContext({
+            mastra: new Mastra({
+              logger: false,
+              agents: { 'test-agent': mockAgent as any },
+            }),
           }),
           agentId: 'test-agent',
           toolId: 'non-existent',
-          requestContext: new RequestContext(),
         }),
       ).rejects.toThrow(
         new HTTPException(404, {
@@ -324,14 +328,15 @@ describe('Tools Handlers', () => {
     });
 
     it('should return serialized tool when found', async () => {
-      const result = await getAgentToolHandler({
-        mastra: new Mastra({
-          logger: false,
-          agents: { 'test-agent': mockAgent as any },
+      const result = await GET_AGENT_TOOL_ROUTE.handler({
+        ...createTestServerContext({
+          mastra: new Mastra({
+            logger: false,
+            agents: { 'test-agent': mockAgent as any },
+          }),
         }),
         agentId: 'test-agent',
         toolId: mockTool.id,
-        requestContext: new RequestContext(),
       });
       expect(result).toHaveProperty('id', mockTool.id);
       expect(result).toHaveProperty('description', mockTool.description);

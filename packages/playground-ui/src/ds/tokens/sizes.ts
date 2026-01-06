@@ -10,4 +10,5 @@ export const Sizes = {
   'table-row-small': '32px',
   'badge-default': '20px',
   'avatar-default': '24px',
+  'dropdown-max-height': '300px',
 };

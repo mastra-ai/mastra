@@ -23,8 +23,12 @@ export const useAdapters = (agentId: string) => {
       const agent = baseClient.getAgent(agentId);
 
       try {
-        await agent.voice.getSpeakers(requestContext);
-        setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
+        const speakers = await agent.voice.getSpeakers(requestContext);
+        if (speakers.length > 0) {
+          setSpeechAdapter(new VoiceAttachmentAdapter(agent as unknown as Agent));
+        } else {
+          setSpeechAdapter(new WebSpeechSynthesisAdapter());
+        }
         setIsReady(true);
       } catch {
         setSpeechAdapter(new WebSpeechSynthesisAdapter());

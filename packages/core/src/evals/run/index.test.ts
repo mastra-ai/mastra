@@ -1,8 +1,10 @@
-import { MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
+import { Mastra } from '../../mastra';
+import { NoOpObservability } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
@@ -66,10 +68,10 @@ const createMockAgentV2 = (response: string = 'Dummy response'): Agent => {
       warnings: [],
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
-        { type: 'text-start', id: '1' },
-        { type: 'text-delta', id: '1', delta: response },
-        { type: 'text-delta', id: '1', delta: `sup` },
-        { type: 'text-end', id: '1' },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: response },
+        { type: 'text-delta', id: 'text-1', delta: `sup` },
+        { type: 'text-end', id: 'text-1' },
         { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
       ]),
     }),
@@ -333,6 +335,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -366,6 +369,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -398,6 +402,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -439,6 +444,7 @@ describe('runEvals', () => {
         id: 'test-workflow',
         inputSchema: z.object({ input: z.string() }),
         outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
       })
         .then(mockStep)
         .commit();
@@ -462,6 +468,227 @@ describe('runEvals', () => {
       expect(result.scores.steps?.[`test-step`]?.[`step-scorer`]).toBe(0.8);
       expect(result.scores.workflow?.toxicity).toBe(0.9);
       expect(result.summary.totalItems).toBe(1);
+    });
+  });
+
+  describe('Observability integration', () => {
+    it('should create tracing spans when observability is configured in Mastra', async () => {
+      // Create agent with Mastra instance that has observability
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from agent' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'observableAgent',
+        name: 'Observable Agent',
+        instructions: 'Test agent with observability',
+        model: dummyModel,
+      });
+
+      const observability = new NoOpObservability();
+
+      const selectedInstance = vi.spyOn(observability, 'getSelectedInstance');
+
+      const mastra = new Mastra({
+        agents: {
+          observableAgent: agent,
+        },
+        observability,
+        logger: false,
+      });
+
+      const scorer = createScorer({
+        id: 'testScorer',
+        description: 'Test scorer',
+        name: 'testScorer',
+      }).generateScore(() => 0.9);
+
+      // Run evals
+      await runEvals({
+        data: [{ input: 'test input', groundTruth: 'expected output' }],
+        scorers: [scorer],
+        target: mastra.getAgent('observableAgent'),
+      });
+
+      expect(selectedInstance).toHaveBeenCalled();
+    });
+  });
+
+  describe('Score persistence', () => {
+    it('should save scores to storage when runEvals is called', async () => {
+      // Create agent
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'Response from agent' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'testAgent',
+        name: 'Test Agent',
+        instructions: 'Test agent',
+        model: dummyModel,
+      });
+
+      // Create mock scores storage
+      const saveScoreSpy = vi.fn().mockResolvedValue({ score: {} });
+      const mockScoresStore = {
+        saveScore: saveScoreSpy,
+      };
+
+      const mockStorage = {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn().mockResolvedValue(mockScoresStore),
+        __setLogger: vi.fn(),
+      };
+
+      const mastra = new Mastra({
+        agents: {
+          testAgent: agent,
+        },
+        logger: false,
+      });
+
+      mastra.setStorage(mockStorage as any);
+
+      const scorer = createScorer({
+        id: 'testScorer',
+        description: 'Test scorer',
+        name: 'testScorer',
+      }).generateScore(() => 0.85);
+
+      // Run evals
+      await runEvals({
+        data: [
+          { input: 'test input 1', groundTruth: 'expected output 1' },
+          { input: 'test input 2', groundTruth: 'expected output 2' },
+        ],
+        scorers: [scorer],
+        target: mastra.getAgent('testAgent'),
+      });
+
+      // Verify scores were saved to storage
+      expect(saveScoreSpy).toHaveBeenCalledTimes(2);
+
+      // Verify the saved score structure
+      expect(saveScoreSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'testScorer',
+          entityId: 'testAgent',
+          entityType: 'AGENT',
+          score: 0.85,
+          source: 'TEST',
+          runId: expect.any(String),
+        }),
+      );
+    });
+
+    it('should save workflow scores to storage', async () => {
+      const mockStep = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async ({ inputData }) => {
+          return { output: `Processed: ${inputData.input}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        options: { validateInputs: false },
+      })
+        .then(mockStep)
+        .commit();
+
+      // Create mock scores storage
+      const saveScoreSpy = vi.fn().mockResolvedValue({ score: {} });
+      const mockScoresStore = {
+        saveScore: saveScoreSpy,
+      };
+
+      // Mock workflows store with getWorkflowRunById for createRun
+      const mockWorkflowsStore = {
+        getWorkflowRunById: vi.fn().mockResolvedValue(null),
+        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockStorage = {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn().mockImplementation(async (domain: string) => {
+          if (domain === 'workflows') return mockWorkflowsStore;
+          if (domain === 'scores') return mockScoresStore;
+          return null;
+        }),
+        __setLogger: vi.fn(),
+      };
+
+      const mastra = new Mastra({
+        workflows: {
+          testWorkflow: workflow,
+        },
+        logger: false,
+      });
+
+      mastra.setStorage(mockStorage as any);
+
+      const scorer = createScorer({
+        id: 'workflowScorer',
+        description: 'Workflow scorer',
+        name: 'workflowScorer',
+      }).generateScore(() => 0.75);
+
+      // Run evals with workflow
+      await runEvals({
+        data: [{ input: { input: 'Test input' }, groundTruth: 'Expected' }],
+        scorers: [scorer],
+        target: mastra.getWorkflow('testWorkflow'),
+      });
+
+      // Verify scores were saved
+      expect(saveScoreSpy).toHaveBeenCalledTimes(1);
+      expect(saveScoreSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scorerId: 'workflowScorer',
+          entityId: 'test-workflow',
+          entityType: 'WORKFLOW',
+          score: 0.75,
+          source: 'TEST',
+        }),
+      );
     });
   });
 });

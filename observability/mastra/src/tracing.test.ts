@@ -1272,6 +1272,236 @@ describe('Tracing', () => {
       rootSpan.end();
     });
   });
+  describe('Tags Support', () => {
+    it('should set tags on root spans via tracingOptions', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          tags: ['production', 'experiment-v2', 'user-request'],
+        },
+      });
+
+      expect(span.tags).toEqual(['production', 'experiment-v2', 'user-request']);
+      expect(span.isRootSpan).toBe(true);
+
+      span.end();
+    });
+
+    it('should not set tags on child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'parent-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          tags: ['root-tag'],
+        },
+      });
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+      });
+
+      // Root span should have tags
+      expect(rootSpan.tags).toEqual(['root-tag']);
+
+      // Child span should NOT have tags (even if we tried to set them via tracingOptions)
+      expect(childSpan.tags).toBeUndefined();
+      expect(childSpan.isRootSpan).toBe(false);
+
+      rootSpan.end();
+    });
+
+    it('should include tags in exported root span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'test-workflow',
+        attributes: { workflowId: 'wf-123' },
+        tracingOptions: {
+          tags: ['batch-processing', 'priority-high'],
+        },
+      });
+
+      // Check exported span from started event
+      expect(testExporter.events).toHaveLength(1);
+      const startedEvent = testExporter.events[0];
+      expect(startedEvent.type).toBe(TracingEventType.SPAN_STARTED);
+      expect(startedEvent.exportedSpan.tags).toEqual(['batch-processing', 'priority-high']);
+      expect(startedEvent.exportedSpan.isRootSpan).toBe(true);
+
+      span.end();
+
+      // Check exported span from ended event
+      expect(testExporter.events).toHaveLength(2);
+      const endedEvent = testExporter.events[1];
+      expect(endedEvent.type).toBe(TracingEventType.SPAN_ENDED);
+      expect(endedEvent.exportedSpan.tags).toEqual(['batch-processing', 'priority-high']);
+    });
+
+    it('should not include tags in exported child spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          tags: ['root-only-tag'],
+        },
+      });
+
+      testExporter.events = []; // Clear root span events
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'child-llm',
+        attributes: { model: 'gpt-4' },
+      });
+
+      childSpan.end();
+
+      // Child span exports should NOT have tags
+      for (const event of testExporter.events) {
+        expect(event.exportedSpan.tags).toBeUndefined();
+        expect(event.exportedSpan.isRootSpan).toBe(false);
+      }
+
+      rootSpan.end();
+    });
+
+    it('should handle empty tags array', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          tags: [],
+        },
+      });
+
+      // Empty array should result in undefined tags (not empty array)
+      expect(span.tags).toBeUndefined();
+
+      span.end();
+
+      // Exported span should not have tags property when empty
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.tags).toBeUndefined();
+    });
+
+    it('should handle undefined tags', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          // No tags specified
+        },
+      });
+
+      expect(span.tags).toBeUndefined();
+
+      span.end();
+    });
+
+    it('should handle tags with tracingOptions metadata', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          tags: ['test-tag', 'another-tag'],
+          metadata: { customField: 'custom-value' },
+        },
+      });
+
+      // Both tags and metadata should be set
+      expect(span.tags).toEqual(['test-tag', 'another-tag']);
+      expect(span.metadata).toEqual({ customField: 'custom-value' });
+
+      span.end();
+    });
+
+    it('should preserve tags across span lifecycle', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          tags: ['lifecycle-test'],
+        },
+      });
+
+      // Tags should be present after start
+      expect(span.tags).toEqual(['lifecycle-test']);
+
+      // Update the span
+      span.update({ output: { result: 'updated' } });
+
+      // Tags should still be present
+      expect(span.tags).toEqual(['lifecycle-test']);
+
+      // Check the updated event
+      const updateEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_UPDATED);
+      expect(updateEvent?.exportedSpan.tags).toEqual(['lifecycle-test']);
+
+      span.end();
+
+      // Tags should be in ended event
+      const endEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endEvent?.exportedSpan.tags).toEqual(['lifecycle-test']);
+    });
+  });
+
   describe('TraceState and metadata extraction from RequestContext', () => {
     it('should extract metadata from RequestContext using configured keys', () => {
       // Create tracing with configured metadata keys

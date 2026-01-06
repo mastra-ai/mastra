@@ -1,18 +1,27 @@
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { Button } from '@/components/ui/elements/buttons';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
 import { useEffect, useState } from 'react';
+import { type GetScorerResponse } from '@mastra/client-js';
 
 export interface SpanScoringProps {
   traceId?: string;
   spanId?: string;
   entityType?: string;
+  isTopLevelSpan?: boolean;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 }
 
-export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) => {
-  const { data: scorers = {}, isLoading } = useScorers();
+export const SpanScoring = ({
+  traceId,
+  spanId,
+  entityType,
+  isTopLevelSpan,
+  scorers,
+  isLoadingScorers,
+}: SpanScoringProps) => {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
@@ -23,7 +32,7 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
     }
   }, [isSuccess]);
 
-  let scorerList = Object.entries(scorers)
+  let scorerList = Object.entries(scorers || {})
     .map(([key, scorer]) => ({
       id: key,
       name: scorer.scorer.config.name,
@@ -34,11 +43,11 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
     .filter(scorer => scorer.isRegistered);
 
   // Filter out Scorers with type agent if we are not scoring on a top level agent generated span
-  if (entityType !== 'Agent' || spanId) {
+  if (entityType !== 'Agent' || !isTopLevelSpan) {
     scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
   }
 
-  const isWaiting = isPending || isLoading;
+  const isWaiting = isPending || isLoadingScorers;
 
   const handleStartScoring = () => {
     if (selectedScorer) {
@@ -57,6 +66,22 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
   };
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
+
+  if (scorers === undefined && !isLoadingScorers) {
+    return (
+      <Notification isVisible={true} autoDismiss={false} type="error">
+        <InfoIcon /> Failed to load scorers.
+      </Notification>
+    );
+  }
+
+  if (scorerList.length === 0) {
+    return (
+      <Notification isVisible={true} dismissible={false}>
+        <InfoIcon /> No eligible scorers have been defined to run.
+      </Notification>
+    );
+  }
 
   return (
     <div>

@@ -1,18 +1,13 @@
-import { MastraUIMessage } from '../types';
+import { ExtendedMastraUIMessage, MastraUIMessage } from '../types';
 
 // Type definitions for parsing network execution data
-interface ToolCallPayload {
+
+// Tool call format from messages array (v1 format)
+interface ToolCallContent {
+  type: 'tool-call';
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
-  providerMetadata?: Record<string, unknown>;
-}
-
-interface ToolCall {
-  type: string;
-  runId: string;
-  from: string;
-  payload: ToolCallPayload;
 }
 
 interface NestedMessage {
@@ -20,7 +15,7 @@ interface NestedMessage {
   id: string;
   createdAt: string;
   type: string;
-  content?: string | ToolResultContent[];
+  content?: string | (ToolCallContent | ToolResultContent)[];
 }
 
 interface ToolResultContent {
@@ -34,7 +29,6 @@ interface ToolResultContent {
 
 interface FinalResult {
   text?: string;
-  toolCalls?: ToolCall[];
   messages?: NestedMessage[];
 }
 
@@ -45,7 +39,6 @@ interface NetworkExecutionData {
   primitiveId?: string;
   input?: string;
   finalResult?: FinalResult;
-  toolCalls?: ToolCall[];
   messages?: NestedMessage[];
 }
 
@@ -82,36 +75,42 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           const primitiveType = json.primitiveType || '';
           const primitiveId = json.primitiveId || '';
           const finalResult = json.finalResult;
-          const toolCalls = finalResult?.toolCalls || [];
+          const messages = finalResult?.messages || [];
 
           // Build child messages from nested messages
           const childMessages: ChildMessage[] = [];
 
-          // Process tool calls from the network agent
-          for (const toolCall of toolCalls) {
-            if (toolCall.type === 'tool-call' && toolCall.payload) {
-              const toolCallId = toolCall.payload.toolCallId;
-
-              let toolResult;
-
-              for (const message of finalResult?.messages || []) {
-                for (const part of message.content || []) {
-                  if (typeof part === 'object' && part.type === 'tool-result' && part.toolCallId === toolCallId) {
-                    toolResult = part;
-                    break;
-                  }
+          // Build a map of toolCallId -> toolResult for efficient lookup
+          const toolResultMap = new Map<string, ToolResultContent>();
+          for (const msg of messages) {
+            if (Array.isArray(msg.content)) {
+              for (const part of msg.content) {
+                if (typeof part === 'object' && part.type === 'tool-result') {
+                  toolResultMap.set(part.toolCallId, part as ToolResultContent);
                 }
               }
+            }
+          }
 
-              const isWorkflow = Boolean(toolResult?.result?.result?.steps);
+          // Extract tool calls from messages and match them with their results
+          for (const msg of messages) {
+            if (msg.type === 'tool-call' && Array.isArray(msg.content)) {
+              // Process each tool call in this message
+              for (const part of msg.content) {
+                if (typeof part === 'object' && part.type === 'tool-call') {
+                  const toolCallContent = part as ToolCallContent;
+                  const toolResult = toolResultMap.get(toolCallContent.toolCallId);
+                  const isWorkflow = Boolean(toolResult?.result?.result?.steps);
 
-              childMessages.push({
-                type: 'tool' as const,
-                toolCallId: toolCall.payload.toolCallId,
-                toolName: toolCall.payload.toolName,
-                args: toolCall.payload.args,
-                toolOutput: isWorkflow ? toolResult?.result?.result : toolResult?.result,
-              });
+                  childMessages.push({
+                    type: 'tool' as const,
+                    toolCallId: toolCallContent.toolCallId,
+                    toolName: toolCallContent.toolName,
+                    args: toolCallContent.args,
+                    toolOutput: isWorkflow ? toolResult?.result?.result : toolResult?.result,
+                  });
+                }
+              }
             }
           }
 
@@ -130,9 +129,6 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
           };
 
           // Return the transformed message with dynamic-tool part
-
-          console.log('json', json);
-
           const nextMessage = {
             role: 'assistant' as const,
             parts: [
@@ -161,6 +157,34 @@ export const resolveInitialMessages = (messages: MastraUIMessage[]): MastraUIMes
         // If parsing fails, return the original message
         return message;
       }
+    }
+
+    const extendedMessage = message as ExtendedMastraUIMessage;
+
+    // Convert pendingToolApprovals from DB format to stream format
+    const pendingToolApprovals = extendedMessage.metadata?.pendingToolApprovals as Record<string, any> | undefined;
+    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
+      return {
+        ...message,
+        metadata: {
+          ...message.metadata,
+          mode: 'stream' as const,
+          requireApprovalMetadata: pendingToolApprovals,
+        },
+      };
+    }
+
+    // Convert suspendedTools from DB format to stream format
+    const suspendedTools = extendedMessage.metadata?.suspendedTools as Record<string, any> | undefined;
+    if (suspendedTools && typeof suspendedTools === 'object') {
+      return {
+        ...message,
+        metadata: {
+          ...message.metadata,
+          mode: 'stream' as const,
+          suspendedTools,
+        },
+      };
     }
 
     // Return original message if it's not a network message

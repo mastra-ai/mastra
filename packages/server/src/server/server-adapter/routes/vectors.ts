@@ -1,0 +1,18 @@
+import {
+  UPSERT_VECTORS_ROUTE,
+  CREATE_INDEX_ROUTE,
+  QUERY_VECTORS_ROUTE,
+  LIST_INDEXES_ROUTE,
+  DESCRIBE_INDEX_ROUTE,
+  DELETE_INDEX_ROUTE,
+} from '../../handlers/vector';
+import type { ServerRoute } from '.';
+
+export const VECTORS_ROUTES: ServerRoute<any, any, any>[] = [
+  UPSERT_VECTORS_ROUTE,
+  CREATE_INDEX_ROUTE,
+  QUERY_VECTORS_ROUTE,
+  LIST_INDEXES_ROUTE,
+  DESCRIBE_INDEX_ROUTE,
+  DELETE_INDEX_ROUTE,
+];

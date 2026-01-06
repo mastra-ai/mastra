@@ -1,0 +1,42 @@
+{
+  "name": "@mastra/hono-multi-instrumentation",
+  "version": "0.1.0",
+  "description": "Shared OpenTelemetry instrumentation for hono-multi example",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "prettier --check '**/*.{js,ts}'",
+    "lint:fix": "prettier --write '**/*.{js,ts}'"
+  },
+  "dependencies": {
+    "@arizeai/openinference-genai": "^0.1.0",
+    "@arizeai/openinference-semantic-conventions": "^2.1.2",
+    "@google-cloud/monitoring": "5.3.0",
+    "@google-cloud/opentelemetry-cloud-trace-exporter": "3.0.0",
+    "@hono/otel": "^1.0.1",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/core": "^2.2.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.207.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.207.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.207.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.207.0",
+    "@opentelemetry/instrumentation-http": "^0.208.0",
+    "@opentelemetry/instrumentation-pg": "^0.60.0",
+    "@opentelemetry/instrumentation-undici": "^0.18.0",
+    "@opentelemetry/instrumentation-winston": "^0.52.0",
+    "@opentelemetry/resources": "^2.0.1",
+    "@opentelemetry/sdk-metrics": "^2.0.1",
+    "@opentelemetry/sdk-node": "^0.207.0",
+    "@opentelemetry/sdk-trace-base": "^2.2.0",
+    "@opentelemetry/sdk-trace-node": "^2.2.0",
+    "@opentelemetry/semantic-conventions": "1.38.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  }
+}

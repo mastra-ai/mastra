@@ -1,6 +1,9 @@
 ---
 title: "Reference: OpenAI Realtime Voice | Voice"
 description: "Documentation for the OpenAIRealtimeVoice class, providing real-time text-to-speech and speech-to-text capabilities via WebSockets."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # OpenAI Realtime Voice
@@ -19,7 +22,7 @@ const voice = new OpenAIRealtimeVoice();
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
   apiKey: "your-openai-api-key",
-  model: "gpt-4o-mini-realtime-preview-2024-12-17",
+  model: "gpt-5.1-realtime-preview-2024-12-17",
   speaker: "alloy", // Default voice
 });
 
@@ -69,7 +72,7 @@ voice.connect();
       type: "string",
       description: "The model ID to use for real-time voice interactions.",
       isOptional: true,
-      defaultValue: "'gpt-4o-mini-realtime-preview-2024-12-17'",
+      defaultValue: "'gpt-5.1-realtime-preview-2024-12-17'",
     },
     {
       name: "apiKey",

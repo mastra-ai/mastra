@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ensureDir, writeFile, readFile } from 'fs-extra';
+import { copy } from 'fs-extra/esm';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CloudDeployer } from './index.js';
@@ -15,6 +16,15 @@ vi.mock('./utils/logger.js', () => ({
     debug: vi.fn(),
   },
 }));
+
+// Mock fs-extra/esm copy for studio tests
+vi.mock('fs-extra/esm', async () => {
+  const actual = await vi.importActual('fs-extra/esm');
+  return {
+    ...actual,
+    copy: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 describe('CloudDeployer Integration Tests', () => {
   let deployer: CloudDeployer;
@@ -50,7 +60,7 @@ describe('CloudDeployer Integration Tests', () => {
       await deployer.prepare(outputDir);
 
       // Verify output directories are created
-      const fs = await import('fs');
+      const fs = await import('node:fs');
       expect(fs.existsSync(join(outputDir, '.build'))).toBe(true);
       expect(fs.existsSync(join(outputDir, 'output'))).toBe(true);
     });
@@ -67,10 +77,15 @@ describe('CloudDeployer Integration Tests', () => {
       const packageJsonPath = join(outputDir, 'package.json');
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
+      const versionsJsonPath = join(__dirname, '../versions.json');
+      const versionsJson = JSON.parse(await readFile(versionsJsonPath, 'utf-8'));
+
+      expect(Object.keys(versionsJson).length).toBeGreaterThan(0);
+
       // Verify cloud-specific dependencies
-      expect(packageJson.dependencies['@mastra/loggers']).toBe('0.10.14');
-      expect(packageJson.dependencies['@mastra/libsql']).toBe('0.15.0');
-      expect(packageJson.dependencies['@mastra/cloud']).toBe('0.1.17');
+      for (const [key, value] of Object.entries(versionsJson)) {
+        expect(packageJson.dependencies[key]).toBe(value);
+      }
 
       // Verify original dependencies
       expect(packageJson.dependencies['express']).toBe('^4.18.0');
@@ -127,7 +142,6 @@ describe('CloudDeployer Integration Tests', () => {
         "import { mastra } from '#mastra'",
         "import { MultiLogger } from '@mastra/core/logger'",
         "import { PinoLogger } from '@mastra/loggers'",
-        "import { AvailableHooks, registerHook } from '@mastra/core/hooks'",
         "import { LibSQLStore, LibSQLVector } from '@mastra/libsql'",
       ];
 
@@ -201,6 +215,51 @@ describe('CloudDeployer Integration Tests', () => {
       expect(capturedToolsPaths).toHaveLength(1);
       expect(Array.isArray(capturedToolsPaths[0])).toBe(true);
       expect(capturedToolsPaths[0][0]).toContain('tools');
+    });
+  });
+
+  describe('Studio Bundling', () => {
+    beforeEach(() => {
+      vi.mocked(copy).mockClear();
+    });
+
+    it('should copy playground assets when studio is true', async () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy).toHaveBeenCalledWith(
+        expect.stringContaining('dist/playground'),
+        expect.stringContaining('playground'),
+        { overwrite: true },
+      );
+    });
+
+    it('should not copy playground assets when studio is false', async () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('should not copy playground assets when studio is not provided', async () => {
+      const studioDeployer = new CloudDeployer();
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('should copy playground to correct output path', async () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'playground'), {
+        overwrite: true,
+      });
     });
   });
 });

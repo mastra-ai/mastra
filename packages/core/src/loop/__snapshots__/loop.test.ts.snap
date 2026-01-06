@@ -692,6 +692,23 @@ exports[`Loop Tests > AISDK v5 > generateText > options.stopWhen > 2 steps: init
 ]
 `;
 
+exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain files 1`] = `
+[
+  DefaultGeneratedFileWithType {
+    "base64Data": "Hello World",
+    "mediaType": "text/plain",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+  DefaultGeneratedFileWithType {
+    "base64Data": "QkFVRw==",
+    "mediaType": "image/jpeg",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+]
+`;
+
 exports[`Loop Tests > AISDK v5 > generateText > result.response > should contain response body and headers 1`] = `
 {
   "body": "test body",
@@ -1143,69 +1160,6 @@ exports[`Loop Tests > AISDK v5 > result.files > should contain files 1`] = `
     "mediaType": "image/jpeg",
     "type": "file",
     "uint8ArrayData": undefined,
-  },
-]
-`;
-
-exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchronous tool results 1`] = `
-[
-  {
-    "type": "start",
-  },
-  {
-    "request": {},
-    "type": "start-step",
-    "warnings": [],
-  },
-  {
-    "input": {
-      "value": "value",
-    },
-    "providerExecuted": undefined,
-    "providerMetadata": undefined,
-    "toolCallId": "call-1",
-    "toolName": "tool1",
-    "type": "tool-call",
-  },
-  {
-    "input": {
-      "value": "value",
-    },
-    "output": "value-result",
-    "providerExecuted": undefined,
-    "toolCallId": "call-1",
-    "toolName": "tool1",
-    "type": "tool-result",
-  },
-  {
-    "finishReason": "stop",
-    "providerMetadata": undefined,
-    "response": {
-      "headers": undefined,
-      "id": "id-0",
-      "modelId": "mock-model-id",
-      "modelMetadata": {
-        "modelId": "mock-model-id",
-        "modelProvider": "mock-provider",
-        "modelVersion": "v2",
-      },
-      "timestamp": 1970-01-01T00:00:00.000Z,
-    },
-    "type": "finish-step",
-    "usage": {
-      "inputTokens": 3,
-      "outputTokens": 10,
-      "totalTokens": 13,
-    },
-  },
-  {
-    "finishReason": "stop",
-    "totalUsage": {
-      "inputTokens": 3,
-      "outputTokens": 10,
-      "totalTokens": 13,
-    },
-    "type": "finish",
   },
 ]
 `;
@@ -1714,3 +1668,223 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
   },
 ]
 `;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.files > should contain files 1`] = `
+[
+  DefaultGeneratedFileWithType {
+    "base64Data": "Hello World",
+    "mediaType": "text/plain",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+  DefaultGeneratedFileWithType {
+    "base64Data": "QkFVRw==",
+    "mediaType": "image/jpeg",
+    "type": "file",
+    "uint8ArrayData": undefined,
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tool calls 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "sig",
+      },
+    },
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tool results 1`] = `
+[
+  {
+    "type": "start",
+  },
+  {
+    "request": {},
+    "type": "start-step",
+    "warnings": [],
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "providerExecuted": undefined,
+    "providerMetadata": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-call",
+  },
+  {
+    "input": {
+      "value": "value",
+    },
+    "output": "value-result",
+    "providerExecuted": undefined,
+    "toolCallId": "call-1",
+    "toolName": "tool1",
+    "type": "tool-result",
+  },
+  {
+    "finishReason": "stop",
+    "providerMetadata": undefined,
+    "response": {
+      "headers": undefined,
+      "id": "id-0",
+      "modelId": "mock-model-id",
+      "modelMetadata": {
+        "modelId": "mock-model-id",
+        "modelProvider": "mock-provider",
+        "modelVersion": "v3",
+      },
+      "timestamp": 1970-01-01T00:00:00.000Z,
+    },
+    "type": "finish-step",
+    "usage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+  },
+  {
+    "finishReason": "stop",
+    "totalUsage": {
+      "inputTokens": 3,
+      "outputTokens": 10,
+      "totalTokens": 13,
+    },
+    "type": "finish",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoning > should contain reasoning from model response 1`] = `
+[
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "text": "I will open the conversation with witty banter.",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "redactedData": "redacted-reasoning-data",
+      },
+    },
+    "text": "",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "1234567890",
+      },
+    },
+    "text": " Once the user has relaxed, I will pry for valuable information.",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "text": " I need to think about this problem carefully.",
+    "type": "reasoning",
+  },
+  {
+    "providerMetadata": {
+      "testProvider": {
+        "signature": "0987654321",
+      },
+    },
+    "text": " The best solution requires careful consideration of all factors.",
+    "type": "reasoning",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.reasoningText > should contain reasoning text from model response 1`] = `"I will open the conversation with witty banter. Once the user has relaxed, I will pry for valuable information. I need to think about this problem carefully. The best solution requires careful consideration of all factors."`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.sources > should contain sources 1`] = `
+[
+  {
+    "id": "123",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example",
+    "type": "source",
+    "url": "https://example.com",
+  },
+  {
+    "id": "456",
+    "providerMetadata": {
+      "provider": {
+        "custom": "value2",
+      },
+    },
+    "sourceType": "url",
+    "title": "Example 2",
+    "type": "source",
+    "url": "https://example.com/2",
+  },
+]
+`;
+
+exports[`Loop Tests > AISDK v6 (V3 models) > result.text > should resolve with full text 1`] = `"Hello, world!"`;

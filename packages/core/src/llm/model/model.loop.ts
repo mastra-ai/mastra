@@ -1,3 +1,5 @@
+import { stepCountIs } from '@internal/ai-sdk-v5';
+import type { Schema, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -7,8 +9,6 @@ import {
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
 } from '@mastra/schema-compat';
-import { stepCountIs } from 'ai-v5';
-import type { Schema, ModelMessage, ToolSet } from 'ai-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MastraPrimitives } from '../../action';
@@ -150,15 +150,23 @@ export class MastraLLMVNext extends MastraBase {
     resourceId,
     structuredOutput,
     options,
+    inputProcessors,
     outputProcessors,
     returnScorerData,
     providerOptions,
     tracingContext,
     messageList,
     requireToolApproval,
+    toolCallConcurrency,
     _internal,
     agentId,
+    agentName,
     toolCallId,
+    requestContext,
+    methodType,
+    includeRawChunks,
+    autoResumeSuspendedTools,
+    maxProcessorRetries,
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     let stopWhenToUse;
 
@@ -217,11 +225,19 @@ export class MastraLLMVNext extends MastraBase {
         providerOptions,
         _internal,
         structuredOutput,
+        inputProcessors,
         outputProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
+        toolCallConcurrency,
         agentId,
+        agentName,
+        requestContext,
+        methodType,
+        includeRawChunks,
+        autoResumeSuspendedTools,
+        maxProcessorRetries,
         options: {
           ...options,
           onStepFinish: async props => {
@@ -261,10 +277,8 @@ export class MastraLLMVNext extends MastraBase {
               runId,
             });
 
-            if (
-              props?.response?.headers?.['x-ratelimit-remaining-tokens'] &&
-              parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'], 10) < 2000
-            ) {
+            const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
+            if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
               this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
               await delay(10 * 1000);
             }
@@ -273,6 +287,7 @@ export class MastraLLMVNext extends MastraBase {
           onFinish: async props => {
             // End the model generation span BEFORE calling the user's onFinish callback
             // This ensures the model span ends before the agent span
+            // Pass raw usage and providerMetadata - ModelSpanTracker will convert to UsageStats
             modelSpanTracker?.endGeneration({
               output: {
                 files: props?.files,
@@ -285,14 +300,11 @@ export class MastraLLMVNext extends MastraBase {
               },
               attributes: {
                 finishReason: props?.finishReason,
-                usage: {
-                  inputTokens: props?.totalUsage?.inputTokens,
-                  outputTokens: props?.totalUsage?.outputTokens,
-                  totalTokens: props?.totalUsage?.totalTokens,
-                  reasoningTokens: props?.totalUsage?.reasoningTokens,
-                  cachedInputTokens: props?.totalUsage?.cachedInputTokens,
-                },
+                responseId: props?.response.id,
+                responseModel: props?.response.modelId,
               },
+              usage: props?.totalUsage,
+              providerMetadata: props?.providerMetadata,
             });
 
             try {

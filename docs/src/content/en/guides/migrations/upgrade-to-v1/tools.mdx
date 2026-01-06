@@ -11,11 +11,11 @@ Tool execution signatures have been updated to use separate input and context pa
 
 ### `createTool` execute signature to `(inputData, context)` format
 
-All **`createTool`** execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+All `createTool` execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
 
 **Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and does not need to be changed.
 
-To migrate, update **`createTool`** signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
+To migrate, update `createTool` signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
 
 ```diff
   createTool({
@@ -35,7 +35,7 @@ To migrate, update **`createTool`** signatures to use `inputData` as the first p
 
 ### `createTool` context properties organization
 
-Context properties in **`createTool`** are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
+Context properties in `createTool` are now organized into namespaces. Agent-specific properties are under `context.agent`, workflow-specific properties are under `context.workflow`, and MCP-specific properties are under `context.mcp`. This change provides better organization and clearer API surface.
 
 For tools that are executed inside an agent, access agent-specific properties through `context.agent`.
 
@@ -83,6 +83,11 @@ For tools that are executed inside a workflow, access workflow-specific properti
   });
 ```
 
+The `suspendPayload` gets validated against the `suspendSchema` when the tool is executed. If the suspendPayload doesn't match the `suspendSchema`, a warning is logged and the error is returned as tool output, but suspension continues.
+Also, when the tool is resumed, the `resumeData` gets validated against the `resumeSchema`. If the resumeData doesn't match the `resumeSchema`, the tool will return a `ValidationError`, preventing the tool resumption.
+
+To skip the `suspendSchema` or `resumeSchema` validation, do not define `suspendSchema` or `resumeSchema` in the tool creation.
+
 :::note
 For MCP-specific tool context changes, see the [MCP migration guide](/guides/v1/migrations/upgrade-to-v1/mcp).
 :::
@@ -113,3 +118,63 @@ npx @mastra/codemod@beta v1/runtime-context .
 ```
 
 :::
+
+This applies to all tool executions, whether called directly or through agents and workflows. The type narrowing ensures you handle validation errors appropriately and prevents runtime errors when accessing output properties.
+
+### Tool output validation with `outputSchema`
+
+Tools with an `outputSchema` now validate their return values at runtime. Previously, `outputSchema` was only used for type inference - the output was never validated.
+
+If your tool returns data that doesn't match its `outputSchema`, it will now return a `ValidationError` instead of the invalid data.
+
+To fix validation errors, ensure the tool's output matches the schema definition:
+
+```diff
+  const getUserTool = createTool({
+    id: "get-user",
+    outputSchema: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email(),
+    }),
+    execute: async (inputData) => {
+-     return { id: "123", name: "John" }; // Missing email
++     return { id: "123", name: "John", email: "john@example.com" };
+    },
+  });
+```
+
+When validation fails, the tool returns a `ValidationError`:
+
+```diff
++ // Before v1 - invalid output would silently pass through
+  await getUserTool.execute({});
+- // { id: "123", name: "John" } - missing email
++ // {
++ //   error: true,
++ //   message: "Tool output validation failed for get-user. The tool returned invalid output:\n- email: Required\n\nReturned output: {...}",
++ //   validationErrors: { ... }
++ // }
+```
+
+### `tool.execute` return type includes `ValidationError`
+
+The return type of `tool.execute` now includes `ValidationError` to handle validation failures. You must narrow the result type before accessing output schema properties to satisfy TypeScript's type checking.
+
+When calling `tool.execute`, check if the result contains an error before accessing output properties:
+
+```typescript
+const result = await getUserTool.execute({});
+
+// Type-safe check for validation errors
+if ('error' in result && result.error) {
+  console.error('Validation failed:', result.message);
+  console.error('Details:', result.validationErrors);
+  return;
+}
+
+// TypeScript knows result is valid here
+console.log(result.id, result.name, result.email);
+```
+
+Alternatively, update the `outputSchema` to match your actual output, or remove `outputSchema` entirely if you don't need validation.

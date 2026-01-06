@@ -39,6 +39,7 @@ export interface SensitiveDataFilterOptions {
  * - Sensitive keys are matched case-insensitively, normalized to remove separators.
  * - Sensitive values are redacted using either full or partial redaction.
  * - Partial redaction always keeps 3 chars at the start and end.
+ * - JSON strings containing sensitive fields are parsed and redacted.
  * - If filtering a field fails, the field is replaced with:
  *   `{ error: { processor: "sensitive-data-filter" } }`
  */
@@ -92,9 +93,18 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
   /**
    * Recursively filter objects/arrays for sensitive keys.
    * Handles circular references by replacing with a marker.
+   * Also attempts to parse and redact JSON strings.
    */
   private deepFilter(obj: any, seen = new WeakSet()): any {
     if (obj === null || typeof obj !== 'object') {
+      // Handle string values - check if they contain JSON that needs redacting
+      if (typeof obj === 'string') {
+        // Quick check - JSON objects/arrays start with { or [
+        const trimmed = obj.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          return this.redactJsonString(obj);
+        }
+      }
       return obj;
     }
 
@@ -102,6 +112,12 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       return '[Circular Reference]';
     }
     seen.add(obj);
+
+    // Preserve Date objects - they have no enumerable keys
+    // and Object.keys() returns [], which would incorrectly convert them to {}
+    if (obj instanceof Date) {
+      return obj;
+    }
 
     if (Array.isArray(obj)) {
       return obj.map(item => this.deepFilter(item, seen));
@@ -155,6 +171,29 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       // Simple case-insensitive match after normalization
       return normalizedKey === sensitiveField;
     });
+  }
+
+  /**
+   * Attempt to parse a string as JSON and redact sensitive fields within it.
+   * If parsing fails or no sensitive data is found, returns the original string.
+   */
+  private redactJsonString(str: string): string {
+    try {
+      // Try to parse as JSON
+      const parsed = JSON.parse(str);
+
+      // If it's an object, filter it and serialize back
+      if (parsed && typeof parsed === 'object') {
+        const filtered = this.deepFilter(parsed, new WeakSet());
+        return JSON.stringify(filtered);
+      }
+
+      // If not an object, return original
+      return str;
+    } catch {
+      // Not valid JSON, return original string
+      return str;
+    }
   }
 
   /**

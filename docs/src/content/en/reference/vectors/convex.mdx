@@ -1,0 +1,431 @@
+---
+title: "Reference: Convex Vector Store | Vectors"
+description: Documentation for the ConvexVector class in Mastra, which provides vector search using Convex.
+packages:
+  - "@mastra/convex"
+---
+
+# Convex Vector Store
+
+The ConvexVector class provides vector storage and similarity search using [Convex](https://convex.dev). It stores embeddings inside Convex and performs cosine similarity search.
+
+## Installation
+
+```bash
+npm install @mastra/convex@beta
+```
+
+## Convex Setup
+
+Before using `ConvexVector`, you need to set up the Convex schema and storage handler. See [Convex Storage Setup](../storage/convex#convex-setup) for setup instructions.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "deploymentUrl",
+      type: "string",
+      description: "Convex deployment URL (e.g., https://your-project.convex.cloud)",
+      isOptional: false,
+    },
+    {
+      name: "adminAuthToken",
+      type: "string",
+      description: "Convex admin authentication token",
+      isOptional: false,
+    },
+    {
+      name: "storageFunction",
+      type: "string",
+      description: "Path to the storage mutation function",
+      isOptional: true,
+      defaultValue: "mastra/storage:handle",
+    },
+  ]}
+/>
+
+## Constructor Examples
+
+### Basic Configuration
+
+```ts
+import { ConvexVector } from "@mastra/convex";
+
+const vectorStore = new ConvexVector({
+  id: 'convex-vectors',
+  deploymentUrl: "https://your-project.convex.cloud",
+  adminAuthToken: "your-admin-token",
+});
+```
+
+### Custom Storage Function
+
+```ts
+const vectorStore = new ConvexVector({
+  id: 'convex-vectors',
+  deploymentUrl: "https://your-project.convex.cloud",
+  adminAuthToken: "your-admin-token",
+  storageFunction: "custom/path:handler",
+});
+```
+
+## Methods
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search (only cosine is currently supported)",
+    },
+  ]}
+/>
+
+```typescript
+await vectorStore.createIndex({
+  indexName: "my_vectors",
+  dimension: 1536,
+});
+```
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to upsert vectors into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+```typescript
+await vectorStore.upsert({
+  indexName: "my_vectors",
+  vectors: [[0.1, 0.2, 0.3, ...]],
+  metadata: [{ label: "example" }],
+  ids: ["vec-1"],
+});
+```
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
+    },
+  ]}
+/>
+
+```typescript
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: [0.1, 0.2, 0.3, ...],
+  topK: 5,
+  filter: { category: "documents" },
+});
+```
+
+### listIndexes()
+
+Returns an array of index names as strings.
+
+```typescript
+const indexes = await vectorStore.listIndexes();
+// ["my_vectors", "embeddings", ...]
+```
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+Deletes the index and all its vectors.
+
+```typescript
+await vectorStore.deleteIndex({ indexName: "my_vectors" });
+```
+
+### updateVector()
+
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "ID of the vector to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
+    },
+    {
+      name: "update",
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "Object containing the vector and/or metadata to update",
+    },
+  ]}
+/>
+
+```typescript
+// Update by ID
+await vectorStore.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+    metadata: { label: "updated" },
+  },
+});
+
+// Update by filter
+await vectorStore.updateVector({
+  indexName: "my_vectors",
+  filter: { category: "product" },
+  update: {
+    metadata: { status: "reviewed" },
+  },
+});
+```
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
+```typescript
+await vectorStore.deleteVector({ indexName: "my_vectors", id: "vector123" });
+```
+
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
+```typescript
+// Delete by IDs
+await vectorStore.deleteVectors({
+  indexName: "my_vectors",
+  ids: ["vec1", "vec2", "vec3"],
+});
+
+// Delete by filter
+await vectorStore.deleteVectors({
+  indexName: "my_vectors",
+  filter: { status: "archived" },
+});
+```
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Metadata Filtering
+
+ConvexVector supports metadata filtering with various operators:
+
+```typescript
+// Simple equality
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: embedding,
+  filter: { category: "documents" },
+});
+
+// Comparison operators
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: embedding,
+  filter: {
+    price: { $gt: 100 },
+    status: { $in: ["active", "pending"] },
+  },
+});
+
+// Logical operators
+const results = await vectorStore.query({
+  indexName: "my_vectors",
+  queryVector: embedding,
+  filter: {
+    $and: [
+      { category: "electronics" },
+      { price: { $lte: 500 } },
+    ],
+  },
+});
+```
+
+### Supported Filter Operators
+
+| Operator | Description |
+| -------- | ----------- |
+| `$eq` | Equal to |
+| `$ne` | Not equal to |
+| `$gt` | Greater than |
+| `$gte` | Greater than or equal |
+| `$lt` | Less than |
+| `$lte` | Less than or equal |
+| `$in` | In array |
+| `$nin` | Not in array |
+| `$and` | Logical AND |
+| `$or` | Logical OR |
+
+## Architecture
+
+ConvexVector stores vectors in the `mastra_vectors` table with the following structure:
+
+- `id`: Unique vector identifier
+- `indexName`: Name of the index
+- `embedding`: The vector data (array of floats)
+- `metadata`: Optional JSON metadata
+
+Vector similarity search is performed using cosine similarity, computed in the Convex function.
+
+## Related
+
+- [Convex Storage](../storage/convex)
+- [Metadata Filters](../rag/metadata-filters)
+- [Convex Documentation](https://docs.convex.dev/)
+

@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import 'dotenv/config';
-import childProcess from 'child_process';
+import childProcess from 'node:child_process';
 import { Octokit } from '@octokit/rest';
 import { defineCommand, runMain } from 'citty';
 
@@ -58,6 +58,9 @@ async function github({ pull_number, continue: continueAfterCherryPick }: { pull
 
   try {
     childProcess.execSync(`git switch "${baseBranch}"`, {
+      stdio: `inherit`,
+    });
+    childProcess.execSync(`git pull origin "${baseBranch}"`, {
       stdio: `inherit`,
     });
   } catch {}

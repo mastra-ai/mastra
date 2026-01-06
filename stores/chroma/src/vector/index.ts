@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -10,9 +11,10 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { ChromaClient, CloudClient } from 'chromadb';
-import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata } from 'chromadb';
+import type { ChromaClientArgs, RecordSet, Where, WhereDocument, Collection, Metadata, Search } from 'chromadb';
 import type { ChromaVectorFilter } from './filter';
 import { ChromaFilterTranslator } from './filter';
 
@@ -75,7 +77,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         return collection;
       } catch {
         throw new MastraError({
-          id: 'CHROMA_COLLECTION_GET_FAILED',
+          id: createVectorErrorId('CHROMA', 'GET_COLLECTION', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -115,7 +117,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('CHROMA', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -128,7 +130,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new MastraError({
-        id: 'CHROMA_VECTOR_CREATE_INDEX_INVALID_DIMENSION',
+        id: createVectorErrorId('CHROMA', 'CREATE_INDEX', 'INVALID_DIMENSION'),
         text: 'Dimension must be a positive integer',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
@@ -140,7 +142,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
 
     if (!hnswSpace || !['cosine', 'l2', 'ip'].includes(hnswSpace)) {
       throw new MastraError({
-        id: 'CHROMA_VECTOR_CREATE_INDEX_INVALID_METRIC',
+        id: createVectorErrorId('CHROMA', 'CREATE_INDEX', 'INVALID_METRIC'),
         text: `Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`,
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
@@ -166,7 +168,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       }
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_CREATE_INDEX_FAILED',
+          id: createVectorErrorId('CHROMA', 'CREATE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -215,7 +217,32 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('CHROMA', 'QUERY', 'FAILED'),
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  async hybridSearch({ indexName, search }: { indexName: string; search: Search }): Promise<QueryResult[]> {
+    try {
+      const collection = await this.getCollection({ indexName });
+      const results = await collection.search(search);
+      return (results.rows()[0] ?? []).map(record => ({
+        id: record.id,
+        score: record.score ?? 0,
+        metadata: record.metadata ?? undefined,
+        vector: record.embedding ?? undefined,
+        document: record.document ?? undefined,
+      }));
+    } catch (error: any) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createVectorErrorId('CHROMA', 'SEARCH_API', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -253,7 +280,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_GET_FAILED',
+          id: createVectorErrorId('CHROMA', 'GET', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -270,7 +297,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('CHROMA', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -301,7 +328,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('CHROMA', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -318,7 +345,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('CHROMA', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -337,7 +364,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_INDEX_FORK_FAILED',
+          id: createVectorErrorId('CHROMA', 'FORK_INDEX', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -348,50 +375,128 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
   }
 
   /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
+   * Updates a vector by its ID or multiple vectors matching a filter.
+   * @param indexName - The name of the index containing the vector(s).
+   * @param id - The ID of the vector to update (mutually exclusive with filter).
+   * @param filter - Filter to match multiple vectors to update (mutually exclusive with id).
    * @param update - An object containing the vector and/or metadata to update.
    * @param update.vector - An optional array of numbers representing the new vector.
    * @param update.metadata - An optional record containing the new metadata.
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    if (!update.vector && !update.metadata) {
+  async updateVector({ indexName, id, filter, update }: UpdateVectorParams<ChromaVectorFilter>): Promise<void> {
+    // Validate mutually exclusive parameters
+    if (id && filter) {
       throw new MastraError({
-        id: 'CHROMA_VECTOR_UPDATE_NO_PAYLOAD',
-        text: 'No updates provided for vector',
+        id: createVectorErrorId('CHROMA', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
+        text: 'Cannot specify both id and filter - they are mutually exclusive',
         domain: ErrorDomain.MASTRA_VECTOR,
         category: ErrorCategory.USER,
-        details: { indexName, id },
+        details: { indexName },
+      });
+    }
+
+    if (!id && !filter) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'UPDATE_VECTOR', 'NO_TARGET'),
+        text: 'Either id or filter must be provided',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
+        text: 'No updates provided',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: {
+          indexName,
+          ...(id && { id }),
+        },
+      });
+    }
+
+    // Validate filter is not empty
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
+        text: 'Filter cannot be an empty filter object',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
       });
     }
 
     try {
       const collection: Collection = await this.getCollection({ indexName });
 
-      const updateRecordSet: RecordSet = { ids: [id] };
-
+      // Validate vector dimensions if provided
       if (update?.vector) {
         const stats = await this.describeIndex({ indexName });
         this.validateVectorDimensions([update.vector], stats.dimension);
-        updateRecordSet.embeddings = [update.vector];
       }
 
-      if (update?.metadata) {
-        updateRecordSet.metadatas = [update.metadata];
-      }
+      if (id) {
+        // Update single vector by ID
+        const updateRecordSet: RecordSet = { ids: [id] };
 
-      return await collection.update(updateRecordSet);
+        if (update?.vector) {
+          updateRecordSet.embeddings = [update.vector];
+        }
+
+        if (update?.metadata) {
+          updateRecordSet.metadatas = [update.metadata];
+        }
+
+        return await collection.update(updateRecordSet);
+      } else if (filter) {
+        // Update multiple vectors matching filter
+        // First, get all vectors matching the filter
+        const translatedFilter = this.transformFilter(filter);
+        const matchingVectors = await collection.get({
+          where: translatedFilter ?? undefined,
+          include: ['embeddings', 'metadatas'],
+        });
+
+        const vectorRows = matchingVectors.rows();
+        if (vectorRows.length === 0) {
+          // No vectors to update - this is not an error
+          return;
+        }
+
+        // Prepare update for all matching vectors
+        const updateRecordSet: RecordSet = {
+          ids: vectorRows.map(row => row.id),
+        };
+
+        if (update?.vector) {
+          // Use the same new vector for all matching records
+          updateRecordSet.embeddings = vectorRows.map(() => update.vector!);
+        }
+
+        if (update?.metadata) {
+          // Use the same new metadata for all matching records
+          updateRecordSet.metadatas = vectorRows.map(() => update.metadata!);
+        }
+
+        return await collection.update(updateRecordSet);
+      }
     } catch (error: any) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_UPDATE_FAILED',
+          id: createVectorErrorId('CHROMA', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+            ...(filter && { filter: JSON.stringify(filter) }),
+          },
         },
         error,
       );
@@ -406,10 +511,96 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'CHROMA_VECTOR_DELETE_FAILED',
+          id: createVectorErrorId('CHROMA', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.MASTRA_VECTOR,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName, id },
+          details: {
+            indexName,
+            ...(id && { id }),
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
+   * Deletes multiple vectors by IDs or filter.
+   * @param indexName - The name of the index containing the vectors.
+   * @param ids - Array of vector IDs to delete (mutually exclusive with filter).
+   * @param filter - Filter to match vectors to delete (mutually exclusive with ids).
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if both ids and filter are provided, or if neither is provided.
+   */
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<ChromaVectorFilter>): Promise<void> {
+    // Validate mutually exclusive parameters
+    if (ids && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        text: 'Cannot specify both ids and filter - they are mutually exclusive',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (!ids && !filter) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'DELETE_VECTORS', 'NO_TARGET'),
+        text: 'Either filter or ids must be provided',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    // Validate ids array is not empty
+    if (ids && ids.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'DELETE_VECTORS', 'EMPTY_IDS'),
+        text: 'Cannot delete with empty ids array',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    // Validate filter is not empty
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'DELETE_VECTORS', 'EMPTY_FILTER'),
+        text: 'Cannot delete with empty filter object',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    try {
+      const collection: Collection = await this.getCollection({ indexName });
+
+      if (ids) {
+        // Delete by IDs
+        await collection.delete({ ids });
+      } else if (filter) {
+        // Delete by filter
+        const translatedFilter = this.transformFilter(filter);
+        await collection.delete({
+          where: translatedFilter ?? undefined,
+        });
+      }
+    } catch (error: any) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createVectorErrorId('CHROMA', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
         },
         error,
       );

@@ -1,6 +1,8 @@
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { Agent, AiMessageType, UIMessageWithMetadata } from '../../agent';
+import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
+import { validateAndSaveScore } from '../../mastra/hooks';
 import type { TracingContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { Workflow } from '../../workflows';
@@ -90,6 +92,11 @@ export async function runEvals(config: {
   let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
 
+  // Get storage from target's Mastra instance if available
+  // Agent uses getMastraInstance(), Workflow uses .mastra getter
+  const mastra = (target as any).getMastraInstance?.() || (target as any).mastra;
+  const storage = mastra?.getStorage();
+
   const pMap = (await import('p-map')).default;
   await pMap(
     data,
@@ -97,6 +104,17 @@ export async function runEvals(config: {
       const targetResult = await executeTarget(target, item);
       const scorerResults = await runScorers(scorers, targetResult, item);
       scoreAccumulator.addScores(scorerResults);
+
+      // Save scores to storage if available
+      if (storage) {
+        await saveScoresToStorage({
+          storage,
+          scorerResults,
+          target,
+          item,
+          mastra,
+        });
+      }
 
       if (onItemComplete) {
         await onItemComplete({
@@ -226,7 +244,7 @@ async function executeWorkflow(target: Workflow, item: RunEvalsDataItem<any>) {
 
 async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>) {
   const model = await agent.getModel();
-  if (model.specificationVersion === 'v2') {
+  if (isSupportedLanguageModel(model)) {
     return await agent.generate(item.input as any, {
       scorers: {},
       returnScorerData: true,
@@ -339,4 +357,165 @@ async function runScorers(
   }
 
   return scorerResults;
+}
+
+/**
+ * Saves scorer results to storage when running evaluations.
+ * This makes scores visible in Studio's observability section.
+ */
+async function saveScoresToStorage({
+  storage,
+  scorerResults,
+  target,
+  item,
+  mastra,
+}: {
+  storage: any;
+  scorerResults: Record<string, any>;
+  target: Agent | Workflow;
+  item: RunEvalsDataItem<any>;
+  mastra: any;
+}): Promise<void> {
+  const entityId = target.id;
+  const entityType = isWorkflow(target) ? 'WORKFLOW' : 'AGENT';
+
+  // Handle flat scorer results (for agents or workflow-level scorers)
+  if (Array.isArray(scorerResults) || !('workflow' in scorerResults && 'steps' in scorerResults)) {
+    for (const [scorerId, scoreResult] of Object.entries(scorerResults)) {
+      if (scoreResult && typeof scoreResult === 'object' && 'score' in scoreResult) {
+        await saveSingleScore({
+          storage,
+          scoreResult,
+          scorerId,
+          entityId,
+          entityType,
+          mastra,
+          target,
+          item,
+        });
+      }
+    }
+  } else {
+    // Handle workflow scorer config with workflow and step scorers
+    if (scorerResults.workflow) {
+      for (const [scorerId, scoreResult] of Object.entries(scorerResults.workflow)) {
+        if (scoreResult && typeof scoreResult === 'object' && 'score' in scoreResult) {
+          await saveSingleScore({
+            storage,
+            scoreResult,
+            scorerId,
+            entityId,
+            entityType: 'WORKFLOW',
+            mastra,
+            target,
+            item,
+          });
+        }
+      }
+    }
+
+    if (scorerResults.steps) {
+      for (const [stepId, stepScorers] of Object.entries(scorerResults.steps)) {
+        for (const [scorerId, scoreResult] of Object.entries(stepScorers as Record<string, any>)) {
+          if (scoreResult && typeof scoreResult === 'object' && 'score' in scoreResult) {
+            await saveSingleScore({
+              storage,
+              scoreResult,
+              scorerId,
+              entityId: stepId,
+              entityType: 'STEP',
+              mastra,
+              target,
+              item,
+            });
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Saves a single scorer result to storage
+ */
+async function saveSingleScore({
+  storage,
+  scoreResult,
+  scorerId,
+  entityId,
+  entityType,
+  mastra,
+  target,
+  item,
+}: {
+  storage: any;
+  scoreResult: any;
+  scorerId: string;
+  entityId: string;
+  entityType: string;
+  mastra: any;
+  target: Agent | Workflow;
+  item: RunEvalsDataItem<any>;
+}): Promise<void> {
+  try {
+    // Get scorer information
+    let scorer = mastra?.getScorerById?.(scorerId);
+
+    if (!scorer) {
+      // Try to get from target's scorers
+      const targetScorers = await (target as any).listScorers?.();
+      if (targetScorers) {
+        for (const [_, scorerEntry] of Object.entries(targetScorers)) {
+          if ((scorerEntry as any).scorer?.id === scorerId) {
+            scorer = (scorerEntry as any).scorer;
+            break;
+          }
+        }
+      }
+    }
+
+    // Extract tracing context if available
+    let traceId: string | undefined;
+    let spanId: string | undefined;
+    if (item.tracingContext?.currentSpan && item.tracingContext.currentSpan.isValid) {
+      spanId = item.tracingContext.currentSpan.id;
+      traceId = item.tracingContext.currentSpan.traceId;
+    }
+
+    // Build additional context with groundTruth if available
+    const additionalContext: Record<string, any> = {};
+    if (item.groundTruth !== undefined) {
+      additionalContext.groundTruth = item.groundTruth;
+    }
+
+    const payload = {
+      ...scoreResult,
+      scorerId,
+      entityId,
+      entityType,
+      source: 'TEST' as const,
+      scorer: {
+        id: scorer?.id || scorerId,
+        name: scorer?.name || scorerId,
+        description: scorer?.description || '',
+        type: scorer?.type || 'unknown',
+      },
+      entity: {
+        id: target.id,
+        name: (target as any).name || target.id,
+      },
+      // Include requestContext from item
+      requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
+      // Include additionalContext with groundTruth
+      additionalContext: Object.keys(additionalContext).length > 0 ? additionalContext : undefined,
+      // Include tracing information
+      traceId,
+      spanId,
+    };
+
+    await validateAndSaveScore(storage, payload);
+  } catch (error) {
+    // Log error but don't fail the evaluation
+    mastra?.getLogger?.()?.warn?.(`Failed to save score for scorer ${scorerId}:`, error);
+  }
 }

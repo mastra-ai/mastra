@@ -1,7 +1,7 @@
 import { analyzeEntry } from './analyzeEntry';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFile } from 'fs-extra';
-import { join } from 'path';
+import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import resolveFrom from 'resolve-from';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
@@ -237,6 +237,7 @@ describe('analyzeEntry', () => {
       },
       '',
       {
+        shouldCheckTransitiveDependencies: true,
         logger: noopLogger,
         sourcemapEnabled: false,
         workspaceMap,

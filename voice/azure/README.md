@@ -10,12 +10,21 @@ npm install @mastra/voice-azure
 
 ## Configuration
 
+### Environment Variables
+
 The module requires Azure Speech Services credentials that can be provided through environment variables or directly in the configuration:
 
 ```bash
 AZURE_API_KEY=your_speech_service_key
 AZURE_REGION=your_azure_region
 ```
+
+To get these credentials:
+
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Create a "Speech Services" resource (NOT "OpenAI Services")
+3. Navigate to "Keys and Endpoint" section
+4. Copy your subscription key and region
 
 ## Usage
 
@@ -76,3 +85,45 @@ For a complete list of supported voices, you can:
 
 1. Call the `getSpeakers()` method
 2. View the [Azure Neural TTS documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/speech-service/language-support?tabs=tts)
+
+## Common Mistakes to Avoid
+
+❌ **Don't use generic names:**
+
+```typescript
+voiceName: 'neural'; // WRONG - not a valid voice
+```
+
+✅ **Use specific voice IDs:**
+
+```typescript
+voiceName: 'en-US-AriaNeural'; // CORRECT
+```
+
+❌ **Don't use wrong property names:**
+
+```typescript
+listeningModel: {
+  voiceName: 'whisper'; // WRONG - use 'language' property instead
+}
+```
+
+✅ **Use correct properties:**
+
+```typescript
+listeningModel: {
+  language: 'en-US'; // CORRECT
+}
+```
+
+❌ **Don't use Azure OpenAI credentials:**
+
+```typescript
+apiKey: process.env.AZURE_OPENAI_API_KEY; // WRONG
+```
+
+✅ **Use Azure Speech Services credentials:**
+
+```typescript
+apiKey: process.env.AZURE_API_KEY; // CORRECT
+```

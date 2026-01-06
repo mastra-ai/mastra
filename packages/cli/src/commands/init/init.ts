@@ -3,6 +3,7 @@ import color from 'picocolors';
 
 import { DepsService } from '../../services/service.deps';
 
+import { gitInit } from '../utils';
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 import { createComponentsDir, createMastraDir, getAPIKey, writeAPIKey, writeCodeSample, writeIndexFile } from './utils';
@@ -18,6 +19,7 @@ export const init = async ({
   addExample = false,
   configureEditorWithDocsMCP,
   versionTag,
+  initGit = false,
 }: {
   directory?: string;
   components: Component[];
@@ -26,6 +28,7 @@ export const init = async ({
   addExample?: boolean;
   configureEditorWithDocsMCP?: Editor;
   versionTag?: string;
+  initGit?: boolean;
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -94,10 +97,23 @@ export const init = async ({
       await installMastraDocsMCPServer({
         editor: configureEditorWithDocsMCP,
         directory: process.cwd(),
+        versionTag,
       });
     }
 
     s.stop();
+
+    if (initGit) {
+      const s = p.spinner();
+      try {
+        s.start('Initializing git repository');
+        await gitInit({ cwd: process.cwd() });
+        s.stop('Git repository initialized');
+      } catch {
+        s.stop();
+      }
+    }
+
     if (!llmApiKey) {
       p.note(`
       ${color.green('Mastra initialized successfully!')}

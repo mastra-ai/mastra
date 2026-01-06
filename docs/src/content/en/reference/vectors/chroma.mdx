@@ -1,6 +1,8 @@
 ---
 title: "Reference: Chroma Vector Store | Vectors"
 description: Documentation for the ChromaVector class in Mastra, which provides vector search using ChromaDB.
+packages:
+  - "@mastra/chroma"
 ---
 
 # Chroma Vector Store
@@ -313,7 +315,7 @@ Returns an array of index names as strings.
 
 Returns:
 
-```typescript copy
+```typescript
 interface IndexStats {
   dimension: number;
   count: number;
@@ -335,6 +337,8 @@ interface IndexStats {
 
 ### updateVector()
 
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+
 <PropertiesTable
   content={[
     {
@@ -345,7 +349,14 @@ interface IndexStats {
     {
       name: "id",
       type: "string",
-      description: "ID of the vector to update",
+      isOptional: true,
+      description: "ID of the vector to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
     },
     {
       name: "update",
@@ -374,6 +385,24 @@ The `update` object can contain:
   ]}
 />
 
+Example:
+
+```typescript
+// Update by ID
+await vectorStore.updateVector({
+  indexName: 'docs',
+  id: 'vec_123',
+  update: { metadata: { status: 'reviewed' } }
+});
+
+// Update by filter
+await vectorStore.updateVector({
+  indexName: 'docs',
+  filter: { source_id: 'manual.pdf' },
+  update: { metadata: { version: 2 } }
+});
+```
+
 ### deleteVector()
 
 <PropertiesTable
@@ -391,11 +420,64 @@ The `update` object can contain:
   ]}
 />
 
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. This method enables bulk deletion and source-based vector management. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
+    },
+  ]}
+/>
+
+Example:
+
+```typescript
+// Delete all chunks from a document
+await vectorStore.deleteVectors({
+  indexName: 'docs',
+  filter: { source_id: 'manual.pdf' }
+});
+
+// Delete multiple vectors by ID
+await vectorStore.deleteVectors({
+  indexName: 'docs',
+  ids: ['vec_1', 'vec_2', 'vec_3']
+});
+
+// Delete old temporary documents
+await vectorStore.deleteVectors({
+  indexName: 'docs',
+  filter: {
+    $and: [
+      { bucket: 'temp' },
+      { indexed_at: { $lt: '2025-01-01' } }
+    ]
+  }
+});
+```
+
 ## Response Types
 
 Query results are returned in this format:
 
-```typescript copy
+```typescript
 interface QueryResult {
   id: string;
   score: number;
@@ -409,7 +491,7 @@ interface QueryResult {
 
 The store throws typed errors that can be caught:
 
-```typescript copy
+```typescript
 try {
   await store.query({
     indexName: "index_name",

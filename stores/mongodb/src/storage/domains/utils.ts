@@ -1,4 +1,6 @@
 import type { IMastraLogger } from '@mastra/core/logger';
+import { safelyParseJSON, TABLE_SCHEMAS } from '@mastra/core/storage';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 
 export function formatDateForMongoDB(date: Date | string): Date {
   return typeof date === 'string' ? new Date(date) : date;
@@ -41,3 +43,24 @@ export function createExecuteOperationWithRetry({
     }
   };
 }
+
+export const transformRow = ({ row, tableName }: { row: Record<string, any>; tableName: TABLE_NAMES }) => {
+  const tableSchema = TABLE_SCHEMAS[tableName];
+  const result: Record<string, any> = {};
+
+  Object.entries(tableSchema).forEach(([key, columnSchema]) => {
+    const value = row[key];
+    if (value === undefined || value === null) {
+      return;
+    }
+    if (columnSchema.type === 'jsonb' && typeof value === 'string') {
+      result[key] = safelyParseJSON(value);
+    } else if (columnSchema.type === 'timestamp' && typeof value === 'string') {
+      result[key] = new Date(value);
+    } else {
+      result[key] = value;
+    }
+  });
+
+  return result;
+};

@@ -1,9 +1,9 @@
-import { existsSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { stepCountIs } from 'ai';
 import type { z } from 'zod';
 import { AgentBuilder } from '../../agent';
 import { AgentBuilderDefaults } from '../../defaults';
@@ -168,6 +168,8 @@ const projectDiscoveryStep = createStep({
   },
 });
 
+type WorkflowResearchResult = z.infer<typeof WorkflowResearchResultSchema>;
+
 // Step 3: Research what is needed to be done
 const workflowResearchStep = createStep({
   id: 'workflow-research',
@@ -183,6 +185,7 @@ const workflowResearchStep = createStep({
       const model = await resolveModel({ requestContext });
 
       const researchAgent = new Agent({
+        id: 'workflow-research-agent',
         model,
         instructions: workflowBuilderPrompts.researchAgent.instructions,
         name: 'Workflow Research Agent',
@@ -202,7 +205,7 @@ const workflowResearchStep = createStep({
         // stopWhen: stepCountIs(10),
       });
 
-      const researchResult = await result.object;
+      const researchResult = (await result.object) as unknown as WorkflowResearchResult | null;
       if (!researchResult) {
         return {
           success: false,

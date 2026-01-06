@@ -1,8 +1,8 @@
 // Copied from https://github.com/vercel/ai/blob/main/packages/codemod/src/test/test-utils.test.ts
 // License: Apache-2.0
 
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as testUtils from './test-utils';
 

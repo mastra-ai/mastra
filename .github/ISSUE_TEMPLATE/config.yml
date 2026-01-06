@@ -1,5 +1,8 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
+  - name: Mastra Documentation
+    url: https://mastra.ai/docs/
+    about: Check out our documentation for answers to common questions
   - name: Questions & Discussions
-    url: https://discord.gg/TpapMTnjyB
+    url: https://discord.gg/BTYqqHKUrf
     about: If you have any questions or want to discuss something, join our Discord server

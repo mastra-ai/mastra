@@ -1682,7 +1682,7 @@ const libSQLVectorDB = new LibSQLVector({
 createVectorTestSuite({
   vector: libSQLVectorDB,
   createIndex: async (indexName: string) => {
-    await libSQLVectorDB.createIndex({ indexName, dimension: 4, metric: 'cosine' });
+    await libSQLVectorDB.createIndex({ indexName, dimension: 1536, metric: 'cosine' });
   },
   deleteIndex: async (indexName: string) => {
     try {

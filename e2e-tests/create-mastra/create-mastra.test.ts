@@ -110,7 +110,12 @@ describe('create mastra', () => {
               "defaultStreamOptionsLegacy": {},
               "description": "",
               "id": "weather-agent",
-              "inputProcessors": [],
+              "inputProcessors": [
+                {
+                  "id": "weather-agent-input-processor",
+                  "name": "weather-agent-input-processor",
+                },
+              ],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
 
@@ -125,16 +130,21 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-4o-mini",
+              "modelId": "gpt-4o",
               "modelVersion": "v2",
               "name": "Weather Agent",
-              "outputProcessors": [],
+              "outputProcessors": [
+                {
+                  "id": "weather-agent-output-processor",
+                  "name": "weather-agent-output-processor",
+                },
+              ],
               "provider": "openai",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
                   "id": "get-weather",
-                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"description":"City name","type":"string"}},"required":["location"],"additionalProperties":false}}",
+                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false}}",
                   "outputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false}}",
                   "requireApproval": false,
                 },

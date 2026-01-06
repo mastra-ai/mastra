@@ -77,6 +77,10 @@ export const scoreEntity = new Entity({
         return value;
       },
     },
+    preprocessPrompt: {
+      type: 'string',
+      required: false,
+    },
     preprocessStepResult: {
       type: 'string',
       required: false,

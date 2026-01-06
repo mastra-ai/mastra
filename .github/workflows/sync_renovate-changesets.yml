@@ -14,26 +14,11 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Initial checkout
-        uses: actions/checkout@v5
-        with:
-          # Use default GITHUB_TOKEN for initial checkout
-          # This is needed to access the .github/actions/app-auth action
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Dane App Auth
-        id: app-auth
-        uses: ./.github/actions/app-auth
-        with:
-          app-id: ${{ vars.DANE_APP_ID }}
-          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
-
       - name: Re-checkout with app token
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ steps.app-auth.outputs.token }}
+          token: ${{ secrets.RENOVATE_PAT  }}
           persist-credentials: true
 
       - name: Setup pnpm and Node.js
@@ -51,10 +36,16 @@ jobs:
             echo "examples_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Configure git
+        shell: bash
+        run: |
+          git config --global user.name 'daneatmastra'
+          git config --global user.email 'dane@mastra.ai'
+
       - name: Create/Update Changesets
         uses: 'wardpeet/changesets-dependencies-action@1ac684b9885a8e9bb1d24f09fd2c253b36b3700d'
         env:
-          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.RENOVATE_PAT  }}
           SKIP_CREDENTIALS: '1'
           INCLUDE_DEV_DEPS: '1'
 

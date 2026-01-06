@@ -1,0 +1,36 @@
+name: Server Adapter Tests
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server-adapters/**'
+      - 'packages/server/**'
+      - 'packages/core/**'
+      - '.github/workflows/test-server-adapters.yml'
+
+jobs:
+  test:
+    # Only run on the main repository, not on forks
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [hono, express, fastify, koa]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm turbo build --filter "@mastra/${{ matrix.adapter }}"
+
+      - name: Run ${{ matrix.adapter }} adapter tests
+        run: pnpm test
+        working-directory: server-adapters/${{ matrix.adapter }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=4096'

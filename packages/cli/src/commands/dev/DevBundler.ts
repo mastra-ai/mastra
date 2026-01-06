@@ -2,12 +2,13 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, getBundlerOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
+import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -18,6 +19,11 @@ export class DevBundler extends Bundler {
   }
 
   getEnvFiles(): Promise<string[]> {
+    // Skip loading .env files if MASTRA_SKIP_DOTENV is set
+    if (shouldSkipDotenvLoading()) {
+      return Promise.resolve([]);
+    }
+
     const possibleFiles = ['.env.development', '.env.local', '.env'];
     if (this.customEnvFile) {
       possibleFiles.unshift(this.customEnvFile);
@@ -56,14 +62,8 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const envFiles = await this.getEnvFiles();
-
-    let sourcemapEnabled = false;
-    try {
-      const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
-      sourcemapEnabled = !!bundlerOptions?.sourcemap;
-    } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
-    }
+    const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
+    const sourcemapEnabled = !!bundlerOptions?.sourcemap;
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
@@ -78,8 +78,6 @@ export class DevBundler extends Bundler {
     const outputDir = join(outputDirectory, this.outputDir);
 
     await this.writePackageJson(outputDir, new Map(), {});
-
-    const copyPublic = this.copyPublic.bind(this);
 
     const watcher = await createWatcher(
       {
@@ -103,15 +101,6 @@ export class DevBundler extends Bundler {
               for (const envFile of envFiles) {
                 this.addWatchFile(envFile);
               }
-            },
-          },
-          {
-            name: 'public-dir-watcher',
-            buildStart() {
-              this.addWatchFile(join(dirname(entryFile), 'public'));
-            },
-            buildEnd() {
-              return copyPublic(dirname(entryFile), outputDirectory);
             },
           },
           {

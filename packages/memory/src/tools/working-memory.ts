@@ -5,6 +5,62 @@ import type { Schema } from '@mastra/schema-compat';
 import { z, ZodObject } from 'zod';
 import type { ZodType } from 'zod';
 
+/**
+ * Deep merges two objects, with special handling for null values (delete) and arrays (replace).
+ * - Object properties are recursively merged
+ * - null values in the update will delete the corresponding property
+ * - Arrays are replaced entirely (not merged element-by-element)
+ * - Primitive values are overwritten
+ */
+export function deepMergeWorkingMemory(
+  existing: Record<string, unknown> | null | undefined,
+  update: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  // Handle null/undefined/empty updates - preserve existing or return empty object
+  if (!update || typeof update !== 'object' || Object.keys(update).length === 0) {
+    return existing && typeof existing === 'object' ? { ...existing } : {};
+  }
+
+  if (!existing || typeof existing !== 'object') {
+    return update;
+  }
+
+  const result: Record<string, unknown> = { ...existing };
+
+  for (const key of Object.keys(update)) {
+    const updateValue = update[key];
+    const existingValue = result[key];
+
+    // null means delete the property
+    if (updateValue === null) {
+      delete result[key];
+    }
+    // Arrays are replaced entirely (too complex to diff/merge arrays of objects)
+    else if (Array.isArray(updateValue)) {
+      result[key] = updateValue;
+    }
+    // Recursively merge nested objects
+    else if (
+      typeof updateValue === 'object' &&
+      updateValue !== null &&
+      typeof existingValue === 'object' &&
+      existingValue !== null &&
+      !Array.isArray(existingValue)
+    ) {
+      result[key] = deepMergeWorkingMemory(
+        existingValue as Record<string, unknown>,
+        updateValue as Record<string, unknown>,
+      );
+    }
+    // Primitive values or new properties: just set them
+    else {
+      result[key] = updateValue;
+    }
+  }
+
+  return result;
+}
+
 export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
   const schema = memoryConfig?.workingMemory?.schema;
 
@@ -25,9 +81,17 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
     });
   }
 
+  // For schema-based working memory, we use merge semantics
+  // For template-based (Markdown), we use replace semantics (existing behavior)
+  const usesMergeSemantics = Boolean(schema);
+
+  const description = schema
+    ? `Update the working memory with new information. Data is merged with existing memory - you only need to include fields you want to add or update. Set a field to null to remove it. Arrays are replaced entirely when provided.`
+    : `Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.`;
+
   return createTool({
     id: 'update-working-memory',
-    description: `Update the working memory with new information. Any data not included will be overwritten.${schema ? ' Always pass data as string to the memory field. Never pass an object.' : ''}`,
+    description,
     inputSchema,
     execute: async (inputData, context) => {
       const threadId = context?.agent?.threadId;
@@ -55,9 +119,49 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfig) => {
         throw new Error(`Thread with id ${threadId} resourceId does not match the current resourceId ${resourceId}`);
       }
 
-      const workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+      let workingMemory: string;
 
-      // Use the new updateWorkingMemory method which handles both thread and resource scope
+      if (usesMergeSemantics) {
+        // Schema-based: fetch existing, merge, save
+        const existingRaw = await memory.getWorkingMemory({
+          threadId,
+          resourceId,
+          memoryConfig,
+        });
+
+        let existingData: Record<string, unknown> | null = null;
+        if (existingRaw) {
+          try {
+            existingData = typeof existingRaw === 'string' ? JSON.parse(existingRaw) : existingRaw;
+          } catch {
+            // If existing data is not valid JSON, start fresh
+            existingData = null;
+          }
+        }
+
+        let newData: unknown;
+        if (typeof inputData.memory === 'string') {
+          try {
+            newData = JSON.parse(inputData.memory);
+          } catch (parseError) {
+            const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
+            throw new Error(
+              `Failed to parse working memory input as JSON: ${errorMessage}. ` +
+                `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
+            );
+          }
+        } else {
+          newData = inputData.memory;
+        }
+
+        const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
+        workingMemory = JSON.stringify(mergedData);
+      } else {
+        // Template-based (Markdown): use existing replace semantics
+        workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+      }
+
+      // Use the updateWorkingMemory method which handles both thread and resource scope
       await memory.updateWorkingMemory({
         threadId,
         resourceId,

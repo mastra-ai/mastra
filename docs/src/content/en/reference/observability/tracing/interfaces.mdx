@@ -1,6 +1,8 @@
 ---
 title: "Reference: Interfaces | Observability"
 description: Tracing type definitions and interfaces
+packages:
+  - "@mastra/core"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -89,6 +91,9 @@ interface Span<TType extends SpanType> {
   input?: any;
   output?: any;
   errorInfo?: any;
+
+  /** Tags for categorizing traces (only present on root spans) */
+  tags?: string[];
 
   /** End the span */
   end(options?: EndSpanOptions<TType>): void;
@@ -549,6 +554,32 @@ Options passed when starting a new agent or workflow execution.
 interface TracingOptions {
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
+
+  /**
+   * Additional RequestContext keys to extract as metadata for this trace.
+   * These keys are added to the requestContextKeys config.
+   * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
+   */
+  requestContextKeys?: string[];
+
+  /**
+   * Trace ID to use for this execution (1-32 hexadecimal characters).
+   * If provided, this trace will be part of the specified trace rather than starting a new one.
+   */
+  traceId?: string;
+
+  /**
+   * Parent span ID to use for this execution (1-16 hexadecimal characters).
+   * If provided, the root span will be created as a child of this span.
+   */
+  parentSpanId?: string;
+
+  /**
+   * Tags to apply to this trace.
+   * Tags are string labels that can be used to categorize and filter traces
+   * Note: Tags are only applied to the root span of a trace.
+   */
+  tags?: string[];
 }
 ```
 
@@ -707,7 +738,3 @@ enum InternalSpans {
 - [Configuration](/reference/v1/observability/tracing/configuration) - Registry and configuration
 - [Tracing Classes](/reference/v1/observability/tracing/instances) - Core implementations
 - [Spans Reference](/reference/v1/observability/tracing/spans) - Span lifecycle methods
-
-### Examples
-
-- [Basic Tracing](/examples/v1/observability/basic-tracing) - Implementation example

@@ -215,7 +215,7 @@ describe('AISDKV5InputStream', () => {
       runId: 'test-run-123',
       from: ChunkFrom.AGENT,
       payload: {
-        id: '1',
+        id: 'text-1',
         providerMetadata: undefined,
       },
     });
@@ -226,7 +226,7 @@ describe('AISDKV5InputStream', () => {
       runId: 'test-run-123',
       from: ChunkFrom.AGENT,
       payload: {
-        id: '1',
+        id: 'text-1',
         providerMetadata: undefined,
         text: 'Hello',
       },
@@ -237,7 +237,7 @@ describe('AISDKV5InputStream', () => {
       runId: 'test-run-123',
       from: ChunkFrom.AGENT,
       payload: {
-        id: '1',
+        id: 'text-1',
         providerMetadata: undefined,
         text: ', ',
       },
@@ -248,7 +248,7 @@ describe('AISDKV5InputStream', () => {
       runId: 'test-run-123',
       from: ChunkFrom.AGENT,
       payload: {
-        id: '1',
+        id: 'text-1',
         providerMetadata: undefined,
         text: 'world!',
       },
@@ -261,7 +261,7 @@ describe('AISDKV5InputStream', () => {
       from: ChunkFrom.AGENT,
       payload: {
         type: 'text-end',
-        id: '1',
+        id: 'text-1',
       },
     });
 
@@ -279,6 +279,15 @@ describe('AISDKV5InputStream', () => {
             inputTokens: 3,
             outputTokens: 10,
             totalTokens: 13,
+            reasoningTokens: undefined,
+            cachedInputTokens: undefined,
+            raw: {
+              inputTokens: 3,
+              outputTokens: 10,
+              totalTokens: 13,
+              reasoningTokens: undefined,
+              cachedInputTokens: undefined,
+            },
           },
         },
         metadata: {

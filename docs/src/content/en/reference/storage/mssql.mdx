@@ -1,6 +1,9 @@
 ---
 title: "Reference: MSSQL Storage | Storage"
 description: Documentation for the MSSQL storage implementation in Mastra.
+packages:
+  - "@mastra/core"
+  - "@mastra/mssql"
 ---
 
 # MSSQL Storage
@@ -9,13 +12,13 @@ The MSSQL storage implementation provides a production-ready storage solution us
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/mssql@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { MSSQLStore } from "@mastra/mssql";
 
 const storage = new MSSQLStore({
@@ -100,6 +103,45 @@ The storage implementation handles schema creation and updates automatically. It
 - `mastra_traces`: Stores telemetry and tracing data
 - `mastra_scorers`: Stores scoring and evaluation data
 - `mastra_resources`: Stores resource working memory data
+
+### Initialization
+
+When you pass storage to the Mastra class, `init()` is called automatically before any storage operation:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { MSSQLStore } from "@mastra/mssql";
+
+const storage = new MSSQLStore({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const mastra = new Mastra({
+  storage, // init() is called automatically
+});
+```
+
+If you're using storage directly without Mastra, you must call `init()` explicitly to create the tables:
+
+```typescript
+import { MSSQLStore } from "@mastra/mssql";
+
+const storage = new MSSQLStore({
+  id: 'mssql-storage',
+  connectionString: process.env.DATABASE_URL,
+});
+
+// Required when using storage directly
+await storage.init();
+
+// Access domain-specific stores via getStore()
+const memoryStore = await storage.getStore('memory');
+const thread = await memoryStore?.getThreadById({ threadId: "..." });
+```
+
+:::warning
+If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+:::
 
 ### Direct Database and Pool Access
 

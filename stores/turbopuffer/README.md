@@ -52,6 +52,18 @@ Optional:
 - `compression`: Whether to compress requests and accept compressed responses (default: true)
 - `schemaConfigForIndex`: A function that returns a Turbopuffer schema config for an index (default: undefined).
 
+## Methods
+
+- `createIndex({ indexName, dimension, metric? })`: Create a new namespace
+- `upsert({ indexName, vectors, metadata?, ids? })`: Add or update vectors
+- `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Search for similar vectors
+- `updateVector({ indexName, id?, filter?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter? })`: Delete multiple vectors by IDs or metadata filter
+- `listIndexes()`: List all namespaces
+- `describeIndex({ indexName })`: Get namespace statistics
+- `deleteIndex({ indexName })`: Delete a namespace
+
 ## Related Links
 
 - [Turbopuffer Documentation](https://turbopuffer.com/docs)

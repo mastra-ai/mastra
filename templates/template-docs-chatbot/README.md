@@ -43,7 +43,7 @@ This template includes the following apps and packages:
    cp apps/agent/.env.example apps/agent/.env
    ```
 
-3. Add your OpenAI API key to `apps/agent/.env`:
+3. Add your API key for your chosen provider to `apps/agent/.env`:
 
    ```
    OPENAI_API_KEY=your_openai_api_key_here
@@ -61,6 +61,19 @@ This template includes the following apps and packages:
    pnpm dev:web      # Web app (port 3000)
    pnpm dev:docs     # Docs app (port 3001)
    ```
+
+## Model Configuration
+
+This template supports any AI model provider through Mastra's model router. You can use models from:
+
+- **OpenAI**: `openai/gpt-4o-mini`, `openai/gpt-4o`
+- **Anthropic**: `anthropic/claude-sonnet-4-5-20250929`, `anthropic/claude-haiku-4-5-20250929`
+- **Google**: `google/gemini-2.5-pro`, `google/gemini-2.0-flash-exp`
+- **Groq**: `groq/llama-3.3-70b-versatile`, `groq/llama-3.1-8b-instant`
+- **Cerebras**: `cerebras/llama-3.3-70b`
+- **Mistral**: `mistral/mistral-medium-2508`
+
+Set the `MODEL` environment variable in your `.env` file to your preferred model.
 
 ## Usage
 
@@ -162,6 +175,6 @@ The Agent app should be deployed first, then the deployment URL should be added 
 
 ## Learn More
 
-- [Mastra Documentation](https://docs.mastra.ai)
-- [MCP Protocol](https://docs.mastra.ai/mcp)
+- [Mastra Documentation](https://mastra.ai/docs)
+- [MCP Protocol](https://mastra.ai/docs/mcp/overview)
 - [Turborepo Documentation](https://turborepo.com/docs)

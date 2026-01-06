@@ -40,7 +40,6 @@ class MockRun {
 class MockWorkflow {
   execute = vi.fn();
   createRun = vi.fn();
-  createRun = vi.fn();
   otherMethod = vi.fn().mockReturnValue('workflow-other-result');
 }
 
@@ -81,7 +80,6 @@ describe('Tracing Context Integration', () => {
     mockMastra.getWorkflow.mockReturnValue(mockWorkflow);
     mockMastra.getWorkflowById.mockReturnValue(mockWorkflow);
     mockWorkflow.createRun.mockReturnValue(mockRun);
-    mockWorkflow.createRun.mockResolvedValue(mockRun);
 
     tracingContext = { currentSpan: mockSpan as any };
     noOpContext = { currentSpan: noOpSpan as any };

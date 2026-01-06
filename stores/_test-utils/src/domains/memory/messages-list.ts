@@ -1,10 +1,20 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
-import type { MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList } from '@mastra/core/agent';
 
 export function createMessagesListTest({ storage }: { storage: MastraStorage }) {
+  let memoryStorage: MemoryStorage;
+
+  beforeAll(async () => {
+    const store = await storage.getStore('memory');
+    if (!store) {
+      throw new Error('Memory storage not found');
+    }
+    memoryStorage = store;
+  });
+
   describe('listMessages', () => {
     let thread: StorageThreadType;
     let thread2: StorageThreadType;
@@ -14,8 +24,8 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       // Create test threads
       thread = createSampleThread();
       thread2 = createSampleThread();
-      await storage.saveThread({ thread });
-      await storage.saveThread({ thread: thread2 });
+      await memoryStorage.saveThread({ thread });
+      await memoryStorage.saveThread({ thread: thread2 });
 
       // Create test messages
       const now = Date.now();
@@ -58,11 +68,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages });
+      await memoryStorage.saveMessages({ messages });
     });
 
     it('should list all messages for a thread without pagination', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
       });
 
@@ -72,7 +82,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should list messages with pagination', async () => {
-      const page1 = await storage.listMessages({
+      const page1 = await memoryStorage.listMessages({
         threadId: thread.id,
         perPage: 2,
         page: 0,
@@ -84,7 +94,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(page1.perPage).toBe(2);
       expect(page1.hasMore).toBe(true);
 
-      const page2 = await storage.listMessages({
+      const page2 = await memoryStorage.listMessages({
         threadId: thread.id,
         perPage: 2,
         page: 1,
@@ -95,7 +105,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(page2.page).toBe(1);
       expect(page2.hasMore).toBe(true);
 
-      const page3 = await storage.listMessages({
+      const page3 = await memoryStorage.listMessages({
         threadId: thread.id,
         perPage: 2,
         page: 2,
@@ -114,9 +124,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         content: { content: 'Different Resource' },
         createdAt: new Date(),
       });
-      await storage.saveMessages({ messages: [differentResourceMessage] });
+      await memoryStorage.saveMessages({ messages: [differentResourceMessage] });
 
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         resourceId: thread.resourceId,
       });
@@ -131,7 +141,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
 
       const dateThread = createSampleThread();
-      await storage.saveThread({ thread: dateThread });
+      await memoryStorage.saveThread({ thread: dateThread });
 
       const dateMessages = [
         createSampleMessageV2({
@@ -151,9 +161,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await storage.saveMessages({ messages: dateMessages });
+      await memoryStorage.saveMessages({ messages: dateMessages });
 
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: dateThread.id,
         filter: {
           dateRange: { start: yesterday },
@@ -165,7 +175,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should include specific messages with previous context', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -184,7 +194,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should include specific messages with next context', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -203,7 +213,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should include specific messages with both previous and next context', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -223,7 +233,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should include multiple messages from different threads', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -245,7 +255,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should deduplicate messages when include has overlapping context', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -268,7 +278,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should sort messages by createdAt ASC by default', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
       });
 
@@ -278,7 +288,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should sort messages by createdAt ASC when explicitly specified', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
@@ -289,7 +299,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should sort messages by createdAt DESC when specified', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
@@ -301,9 +311,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
     it('should handle empty thread', async () => {
       const emptyThread = createSampleThread();
-      await storage.saveThread({ thread: emptyThread });
+      await memoryStorage.saveThread({ thread: emptyThread });
 
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: emptyThread.id,
       });
 
@@ -313,7 +323,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should handle non-existent message in include', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -329,15 +339,17 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should throw when threadId is empty or whitespace', async () => {
-      await expect(storage.listMessages({ threadId: '' })).rejects.toThrowError('threadId must be a non-empty string');
+      await expect(memoryStorage.listMessages({ threadId: '' })).rejects.toThrowError(
+        'threadId must be a non-empty string or array of non-empty strings',
+      );
 
-      await expect(storage.listMessages({ threadId: '   ' })).rejects.toThrowError(
-        'threadId must be a non-empty string',
+      await expect(memoryStorage.listMessages({ threadId: '   ' })).rejects.toThrowError(
+        'threadId must be a non-empty string or array of non-empty strings',
       );
     });
 
     it('should respect pagination when using include', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -357,7 +369,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
     });
 
     it('should default to format v2', async () => {
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
       });
 
@@ -366,7 +378,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
     it('should handle include with threadId parameter', async () => {
       // This tests cross-thread message inclusion
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: thread.id,
         include: [
           {
@@ -384,7 +396,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
     it('should handle pagination with date range', async () => {
       const dateThread = createSampleThread();
-      await storage.saveThread({ thread: dateThread });
+      await memoryStorage.saveThread({ thread: dateThread });
 
       const now = new Date();
       const dateMessages = Array.from({ length: 10 }, (_, i) =>
@@ -395,11 +407,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         }),
       );
 
-      await storage.saveMessages({ messages: dateMessages });
+      await memoryStorage.saveMessages({ messages: dateMessages });
 
       // Get messages from the last 5 seconds, paginated
       const cutoffDate = new Date(now.getTime() + 5000);
-      const result = await storage.listMessages({
+      const result = await memoryStorage.listMessages({
         threadId: dateThread.id,
         perPage: 3,
         page: 0,
@@ -415,7 +427,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
     describe('perPage and page parameters', () => {
       it('should use perPage to restrict number of messages returned', async () => {
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           threadId: thread.id,
           perPage: 3,
         });
@@ -437,9 +449,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(Date.now() + 10000 + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: manyMessages });
+        await memoryStorage.saveMessages({ messages: manyMessages });
 
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           threadId: thread.id,
           perPage: false,
         });
@@ -451,7 +463,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
 
       it('should use page to skip messages', async () => {
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           threadId: thread.id,
           perPage: 2,
           page: 1, // Skip first page (first 2 messages)
@@ -464,23 +476,23 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       it('should handle page with perPage for pagination', async () => {
         // Page 0 (messages 0-1)
-        const page0 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 0 });
+        const page0 = await memoryStorage.listMessages({ threadId: thread.id, perPage: 2, page: 0 });
         expect(page0.messages).toHaveLength(2);
         expect(page0.hasMore).toBe(true);
 
         // Page 1 (messages 2-3)
-        const page1 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 1 });
+        const page1 = await memoryStorage.listMessages({ threadId: thread.id, perPage: 2, page: 1 });
         expect(page1.messages).toHaveLength(2);
         expect(page1.hasMore).toBe(true);
 
         // Page 2 (message 4)
-        const page2 = await storage.listMessages({ threadId: thread.id, perPage: 2, page: 2 });
+        const page2 = await memoryStorage.listMessages({ threadId: thread.id, perPage: 2, page: 2 });
         expect(page2.messages).toHaveLength(1);
         expect(page2.hasMore).toBe(false);
       });
 
       it('should work with perPage and include parameter', async () => {
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           threadId: thread.id,
           perPage: 2,
           orderBy: { field: 'createdAt', direction: 'ASC' },
@@ -499,7 +511,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       it('should work with perPage and date range', async () => {
         const dateThread = createSampleThread();
-        await storage.saveThread({ thread: dateThread });
+        await memoryStorage.saveThread({ thread: dateThread });
 
         const now = new Date();
         const dateMessages = Array.from({ length: 10 }, (_, i) =>
@@ -509,10 +521,10 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
             createdAt: new Date(now.getTime() + i * 1000),
           }),
         );
-        await storage.saveMessages({ messages: dateMessages });
+        await memoryStorage.saveMessages({ messages: dateMessages });
 
         const cutoffDate = new Date(now.getTime() + 4000);
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           threadId: dateThread.id,
           perPage: 3,
           filter: {
@@ -537,9 +549,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         );
 
-        await storage.saveMessages({ messages: otherMessages });
+        await memoryStorage.saveMessages({ messages: otherMessages });
 
-        const result = await storage.listMessages({
+        const result = await memoryStorage.listMessages({
           threadId: thread.id,
           resourceId: thread.resourceId,
           perPage: 3,
@@ -551,7 +563,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
       it('should handle invalid perPage values gracefully', async () => {
         // Test perPage: 0 - should return zero results
-        const result0 = await storage.listMessages({
+        const result0 = await memoryStorage.listMessages({
           threadId: thread.id,
           perPage: 0,
         });
@@ -560,13 +572,170 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result0.perPage).toBe(0);
 
         // Test negative perPage - should fall back to default behavior (40)
-        const resultNeg = await storage.listMessages({
+        const resultNeg = await memoryStorage.listMessages({
           threadId: thread.id,
           perPage: -5,
         });
         // Should fall back to default perPage (40) and return all 5 available messages
         expect(resultNeg.messages).toHaveLength(5);
         expect(resultNeg.perPage).toBe(40); // Verify fallback to default value
+      });
+    });
+
+    describe('include parameter with separate batch saves', () => {
+      it('should sort messages by createdAt when include adds messages saved in different batches', async () => {
+        const testThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: testThread });
+
+        const now = Date.now();
+
+        // Save first batch: messages 1, 2, 3 (chronologically oldest)
+        const batch1 = [
+          createSampleMessageV2({
+            threadId: testThread.id,
+            resourceId: testThread.resourceId,
+            role: 'user',
+            content: { content: 'User message 1' },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: testThread.id,
+            resourceId: testThread.resourceId,
+            role: 'assistant',
+            content: { content: 'Assistant message 1' },
+            createdAt: new Date(now + 2000),
+          }),
+          createSampleMessageV2({
+            threadId: testThread.id,
+            resourceId: testThread.resourceId,
+            role: 'user',
+            content: { content: 'User message 2' },
+            createdAt: new Date(now + 3000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: batch1 });
+
+        // Save second batch: messages 4, 5 (chronologically newer)
+        const batch2 = [
+          createSampleMessageV2({
+            threadId: testThread.id,
+            resourceId: testThread.resourceId,
+            role: 'assistant',
+            content: { content: 'Assistant message 2' },
+            createdAt: new Date(now + 4000),
+          }),
+          createSampleMessageV2({
+            threadId: testThread.id,
+            resourceId: testThread.resourceId,
+            role: 'user',
+            content: { content: 'User message 3' },
+            createdAt: new Date(now + 5000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: batch2 });
+
+        // Now retrieve with pagination (only get latest 2) and include an older message
+        // This simulates what semantic recall does
+        const result = await memoryStorage.listMessages({
+          threadId: testThread.id,
+          perPage: 2,
+          page: 0,
+          // Default orderBy (not specified) - should default to createdAt ASC
+          include: [
+            {
+              id: batch1[0]!.id, // Include oldest user message
+              withNextMessages: 1, // Also get the assistant response after it
+            },
+          ],
+        });
+
+        // Should have: paginated (2) + included (2, but 1 might overlap)
+        // The key assertion: messages MUST be sorted by createdAt ASC
+        const contents = result.messages.map((m: any) => m.content.content);
+        const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
+        const sortedTimestamps = [...timestamps].sort((a, b) => a - b);
+
+        // Messages should be in chronological order
+        expect(timestamps).toEqual(sortedTimestamps);
+
+        // Verify we got the expected messages
+        expect(contents).toContain('User message 1');
+        expect(contents).toContain('Assistant message 1');
+      });
+
+      it('should maintain chronological order when include brings in messages from a different thread', async () => {
+        // Create two threads
+        const mainThread = createSampleThread();
+        const otherThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: mainThread });
+        await memoryStorage.saveThread({ thread: otherThread });
+
+        const now = Date.now();
+
+        // Save messages to main thread
+        const mainMessages = [
+          createSampleMessageV2({
+            threadId: mainThread.id,
+            resourceId: mainThread.resourceId,
+            role: 'user',
+            content: { content: 'Main thread user 1' },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: mainThread.id,
+            resourceId: mainThread.resourceId,
+            role: 'assistant',
+            content: { content: 'Main thread assistant 1' },
+            createdAt: new Date(now + 3000),
+          }),
+          createSampleMessageV2({
+            threadId: mainThread.id,
+            resourceId: mainThread.resourceId,
+            role: 'user',
+            content: { content: 'Main thread user 2' },
+            createdAt: new Date(now + 5000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: mainMessages });
+
+        // Save messages to other thread (some with timestamps between main thread messages)
+        const otherMessages = [
+          createSampleMessageV2({
+            threadId: otherThread.id,
+            resourceId: otherThread.resourceId,
+            role: 'user',
+            content: { content: 'Other thread user' },
+            createdAt: new Date(now + 2000), // Between main thread messages 1 and 2
+          }),
+          createSampleMessageV2({
+            threadId: otherThread.id,
+            resourceId: otherThread.resourceId,
+            role: 'assistant',
+            content: { content: 'Other thread assistant' },
+            createdAt: new Date(now + 4000), // Between main thread messages 2 and 3
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: otherMessages });
+
+        // Retrieve from main thread, but include a message from other thread
+        const result = await memoryStorage.listMessages({
+          threadId: mainThread.id,
+          include: [
+            {
+              id: otherMessages[0]!.id,
+              threadId: otherThread.id,
+            },
+          ],
+        });
+
+        // All messages should be sorted by createdAt
+        const timestamps = result.messages.map(m => new Date(m.createdAt).getTime());
+        const sortedTimestamps = [...timestamps].sort((a, b) => a - b);
+        expect(timestamps).toEqual(sortedTimestamps);
+
+        // The other thread message should be interleaved correctly by timestamp
+        const contents = result.messages.map((m: any) => m.content.content);
+        expect(contents).toContain('Other thread user');
       });
     });
   });

@@ -1,4 +1,4 @@
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { StreamInternal } from '../types';
 
 type State = {
@@ -20,7 +20,7 @@ type State = {
 
 export class AgenticRunState {
   #state: State;
-  constructor({ _internal, model }: { _internal: StreamInternal; model: LanguageModelV2 }) {
+  constructor({ _internal, model }: { _internal: StreamInternal; model: MastraLanguageModel }) {
     this.#state = {
       responseMetadata: {
         id: _internal?.generateId?.(),

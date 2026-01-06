@@ -1,0 +1,182 @@
+---
+title: "Reference: OtelBridge | Observability"
+description: OpenTelemetry bridge for Tracing
+packages:
+  - "@mastra/core"
+  - "@mastra/langfuse"
+  - "@mastra/observability"
+  - "@mastra/otel-bridge"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# OtelBridge
+
+:::warning
+
+The OpenTelemetry Bridge is currently **experimental**. APIs and configuration options may change in future releases.
+
+:::
+
+Enables bidirectional integration between Mastra tracing and OpenTelemetry infrastructure. Creates native OTEL spans for Mastra operations and inherits context from active OTEL spans.
+
+## Constructor
+
+```typescript
+new OtelBridge()
+```
+
+## Methods
+
+### executeInContext
+
+```typescript
+executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
+```
+
+Executes an async function within the OTEL context of a Mastra span. OTEL-instrumented code running inside the function will have correct parent relationships.
+
+<PropertiesTable
+  props={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "The ID of the Mastra span to use as context",
+      required: true,
+    },
+    {
+      name: "fn",
+      type: "() => Promise<T>",
+      description: "The async function to execute within the span context",
+      required: true,
+    },
+  ]}
+/>
+
+**Returns:** `Promise<T>` - The result of the function execution.
+
+### executeInContextSync
+
+```typescript
+executeInContextSync<T>(spanId: string, fn: () => T): T
+```
+
+Executes a synchronous function within the OTEL context of a Mastra span.
+
+<PropertiesTable
+  props={[
+    {
+      name: "spanId",
+      type: "string",
+      description: "The ID of the Mastra span to use as context",
+      required: true,
+    },
+    {
+      name: "fn",
+      type: "() => T",
+      description: "The synchronous function to execute within the span context",
+      required: true,
+    },
+  ]}
+/>
+
+**Returns:** `T` - The result of the function execution.
+
+### shutdown
+
+```typescript
+async shutdown(): Promise<void>
+```
+
+Shuts down the bridge and cleans up resources. Ends any spans that were not properly closed.
+
+## Usage Examples
+
+### Basic Usage
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(),
+      },
+    },
+  }),
+  agents: { myAgent },
+});
+```
+
+### Combined with Exporters
+
+The bridge can be used alongside exporters. The bridge handles OTEL context, while exporters send data to additional destinations:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { Observability, DefaultExporter } from "@mastra/observability";
+import { OtelBridge } from "@mastra/otel-bridge";
+import { LangfuseExporter } from "@mastra/langfuse";
+
+const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: "my-service",
+        bridge: new OtelBridge(), // Handles OTEL context
+        exporters: [
+          new DefaultExporter(), // Studio access
+          new LangfuseExporter({
+            // Additional destination
+            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+            secretKey: process.env.LANGFUSE_SECRET_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## OpenTelemetry Setup Requirements
+
+The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
+
+See the [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
+
+## Tags Support
+
+The OtelBridge supports trace tagging for categorization and filtering. Tags are only applied to root spans and are included as the `mastra.tags` attribute on native OTEL spans.
+
+### Usage
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### How Tags Are Stored
+
+Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute:
+
+```json
+{
+  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+}
+```
+
+This format ensures compatibility with all OTEL-compatible backends and collectors.
+
+## Related
+
+- [OtelBridge Guide](/docs/v1/observability/tracing/bridges/otel) - Setup guide with examples
+- [Tracing Overview](/docs/v1/observability/tracing/overview) - General tracing concepts
+- [OtelExporter Reference](/reference/v1/observability/tracing/exporters/otel) - OTEL exporter for sending traces

@@ -1,36 +1,81 @@
-import { exec, execSync } from 'node:child_process';
+import { exec, execSync, spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
-const defaultTimeout = 3 * 60 * 1000;
+// 10 minutes timeout for changeset operations - CI can be slow
+const defaultTimeout = 10 * 60 * 1000;
 
-let maxRetries = 5;
-function retryWithTimeout(fn, timeout, name, retryCount = 0) {
-  let timeoutHandle;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutHandle = setTimeout(
-      () => reject(new Error(`Command "${name}" timed out after ${timeout}ms in ${retryCount} retries`)),
-      timeout,
-    );
-  });
+// Reduced retries since we now properly kill processes on timeout
+let maxRetries = 2;
 
-  const callbackPromise = fn();
-
-  return Promise.race([callbackPromise, timeoutPromise])
-    .then(result => {
-      clearTimeout(timeoutHandle);
-      return result;
-    })
-    .catch(err => {
-      clearTimeout(timeoutHandle);
-      if (retryCount < maxRetries) {
-        return retryWithTimeout(fn, timeout, name, retryCount + 1);
-      }
-      throw err;
+/**
+ * Execute a command with proper timeout handling that kills the child process on timeout.
+ * This prevents race conditions where timed-out processes continue running.
+ */
+function execWithTimeout(command, options, timeout) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const child = spawn(command, {
+      cwd: options.cwd,
+      shell: true,
+      // Use 'ignore' for stdin to prevent interactive prompts from hanging
+      // Use 'inherit' for stdout/stderr so we see the output
+      stdio: ['ignore', 'inherit', 'inherit'],
+      // Create a new process group so we can kill all child processes
+      detached: process.platform !== 'win32',
     });
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      // Kill the entire process group to ensure all child processes are terminated
+      try {
+        if (process.platform !== 'win32') {
+          process.kill(-child.pid, 'SIGKILL');
+        } else {
+          child.kill('SIGKILL');
+        }
+      } catch {
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // Process may have already exited
+        }
+      }
+      reject(new Error(`Command "${command}" timed out after ${timeout}ms`));
+    }, timeout);
+
+    child.on('close', code => {
+      clearTimeout(timeoutHandle);
+      if (settled) return;
+      settled = true;
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`Command "${command}" exited with code ${code}`));
+      }
+    });
+
+    child.on('error', err => {
+      clearTimeout(timeoutHandle);
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+  });
+}
+
+function retryWithTimeout(fn, timeout, name, retryCount = 0) {
+  return fn().catch(err => {
+    console.log(`Command "${name}" failed (attempt ${retryCount + 1}/${maxRetries + 1}): ${err.message}`);
+    if (retryCount < maxRetries) {
+      return retryWithTimeout(fn, timeout, name, retryCount + 1);
+    }
+    throw err;
+  });
 }
 
 function cleanup(monorepoDir, resetChanges = false) {
@@ -126,6 +171,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       writeFileSync(join(monorepoDir, '.changeset/config.json'), JSON.stringify(parsed, null, 2));
     })();
 
+    // Clear existing changesets to speed up version command
+    // We only need our test changeset, not the 400+ existing ones
+    console.log('Clearing existing changeset files for faster versioning');
+    const existingChangesets = await glob('*.md', {
+      cwd: join(monorepoDir, '.changeset'),
+      ignore: ['README.md'],
+    });
+    for (const file of existingChangesets) {
+      const { unlinkSync } = await import('node:fs');
+      unlinkSync(join(monorepoDir, '.changeset', file));
+    }
+
     // update all packages so they are on the snapshot version
     const allPackages = await execAsync('pnpm ls -r --depth -1 --json', {
       cwd: monorepoDir,
@@ -143,10 +200,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     console.log('Running pnpm changeset-cli pre exit');
     await retryWithTimeout(
       async () => {
-        await execAsync('pnpm changeset-cli pre exit', {
-          cwd: monorepoDir,
-          stdio: ['inherit', 'inherit', 'inherit'],
-        });
+        await execWithTimeout('pnpm changeset-cli pre exit', { cwd: monorepoDir }, defaultTimeout);
       },
       defaultTimeout,
       'pnpm changeset-cli pre exit',
@@ -155,10 +209,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
     console.log(`Running pnpm changeset-cli version --snapshot ${tag}`);
     await retryWithTimeout(
       async () => {
-        await execAsync(`pnpm changeset-cli version --snapshot ${tag}`, {
-          cwd: monorepoDir,
-          stdio: ['inherit', 'inherit', 'inherit'],
-        });
+        await execWithTimeout(`pnpm changeset-cli version --snapshot ${tag}`, { cwd: monorepoDir }, defaultTimeout);
       },
       defaultTimeout,
       `pnpm changeset-cli version --snapshot ${tag}`,

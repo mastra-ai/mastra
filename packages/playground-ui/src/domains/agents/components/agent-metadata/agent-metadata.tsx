@@ -83,6 +83,11 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
 
   return (
     <AgentMetadataWrapper>
+      {agent?.description && (
+        <AgentMetadataSection title="Description">
+          <p className="text-sm text-muted-foreground">{agent.description}</p>
+        </AgentMetadataSection>
+      )}
       {agent.modelList ? (
         <AgentMetadataSection title="Models">
           <AgentMetadataModelList
@@ -95,7 +100,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
         <AgentMetadataSection
           title={'Model'}
           hint={
-            agent.modelVersion === 'v2'
+            agent.modelVersion === 'v2' || agent.modelVersion === 'v3'
               ? undefined
               : {
                   link: 'https://mastra.ai/guides/migrations/vnext-to-standard-apis',

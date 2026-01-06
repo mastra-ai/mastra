@@ -1,6 +1,65 @@
-import type { TraceRecord, TracesPaginatedArg } from '@mastra/core/storage';
-import type { ClientOptions, GetTracesResponse, ListScoresBySpanParams, ListScoresResponse } from '../types';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { SpanType } from '@mastra/core/observability';
+import type {
+  TraceRecord,
+  ListTracesArgs,
+  ListTracesResponse,
+  SpanIds,
+  PaginationArgs,
+  SpanRecord,
+  PaginationInfo,
+  ScoreTracesRequest,
+  ScoreTracesResponse,
+} from '@mastra/core/storage';
+import type { ClientOptions } from '../types';
+import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
+
+// ============================================================================
+// Legacy Types (for backward compatibility with main branch API)
+// ============================================================================
+
+/**
+ * Legacy pagination arguments from main branch.
+ * @deprecated Use ListTracesArgs instead with the new listTraces() method.
+ */
+export interface LegacyPaginationArgs {
+  dateRange?: {
+    start?: Date;
+    end?: Date;
+  };
+  page?: number;
+  perPage?: number;
+}
+
+/**
+ * Legacy traces query parameters from main branch.
+ * @deprecated Use ListTracesArgs instead with the new listTraces() method.
+ */
+export interface LegacyTracesPaginatedArg {
+  filters?: {
+    name?: string;
+    spanType?: SpanType;
+    entityId?: string;
+    entityType?: 'agent' | 'workflow';
+  };
+  pagination?: LegacyPaginationArgs;
+}
+
+/**
+ * Legacy response type from main branch.
+ * @deprecated Use ListTracesResponse instead.
+ */
+export interface LegacyGetTracesResponse {
+  spans: SpanRecord[];
+  pagination: PaginationInfo;
+}
+
+export type ListScoresBySpanParams = SpanIds & PaginationArgs;
+
+// ============================================================================
+// Observability Resource
+// ============================================================================
 
 export class Observability extends BaseResource {
   constructor(options: ClientOptions) {
@@ -17,11 +76,14 @@ export class Observability extends BaseResource {
   }
 
   /**
-   * Retrieves paginated list of traces with optional filtering
-   * @param params - Parameters for pagination and filtering
+   * Retrieves paginated list of traces with optional filtering.
+   * This is the legacy API preserved for backward compatibility.
+   *
+   * @param params - Parameters for pagination and filtering (legacy format)
    * @returns Promise containing paginated traces and pagination info
+   * @deprecated Use {@link listTraces} instead for new features like ordering and more filters.
    */
-  getTraces(params: TracesPaginatedArg): Promise<GetTracesResponse> {
+  getTraces(params: LegacyTracesPaginatedArg): Promise<LegacyGetTracesResponse> {
     const { pagination, filters } = params;
     const { page, perPage, dateRange } = pagination || {};
     const { name, spanType, entityId, entityType } = filters || {};
@@ -57,31 +119,36 @@ export class Observability extends BaseResource {
   }
 
   /**
+   * Retrieves paginated list of traces with optional filtering and sorting.
+   * This is the new API with improved filtering options.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated traces and pagination info
+   */
+  listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
    * Retrieves scores by trace ID and span ID
    * @param params - Parameters containing trace ID, span ID, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
-    const { traceId, spanId, page, perPage } = params;
-    const searchParams = new URLSearchParams();
-
-    if (page !== undefined) {
-      searchParams.set('page', String(page));
-    }
-    if (perPage !== undefined) {
-      searchParams.set('perPage', String(perPage));
-    }
-
-    const queryString = searchParams.toString();
+  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
+    const { traceId, spanId, ...pagination } = params;
+    const queryString = toQueryParams(pagination);
     return this.request(
       `/api/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
     );
   }
 
-  score(params: {
-    scorerName: string;
-    targets: Array<{ traceId: string; spanId?: string }>;
-  }): Promise<{ status: string; message: string }> {
+  /**
+   * Scores one or more traces using a specified scorer.
+   * @param params - Scorer name and targets to score
+   * @returns Promise containing the scoring status
+   */
+  score(params: ScoreTracesRequest): Promise<ScoreTracesResponse> {
     return this.request(`/api/observability/traces/score`, {
       method: 'POST',
       body: { ...params },

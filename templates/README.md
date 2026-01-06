@@ -12,9 +12,9 @@ Your template folder **must** include the following files:
 
 ### a. `package.json`
 
-- Use `@ai-sdk/openai` as the LLM provider in your code/config.
-- All `@mastra/*` dependencies should be set to `"latest"` in the `dependencies` section.
-- `mastra` devDependency should be set to `"latest"` in the `devDependencies` section.
+- Use `openai` as the LLM provider in your code/config.
+- All `@mastra/*` dependencies should be set to `"beta"` in the `dependencies` section.
+- `mastra` devDependency should be set to `"beta"` in the `devDependencies` section.
 - The `description` field should clearly describe what the template does.
 
 **Example:**
@@ -33,14 +33,13 @@ Your template folder **must** include the following files:
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@mastra/core": "latest",
+    "@mastra/core": "beta",
     "zod": "^3.25.67",
-    "@mastra/loggers": "latest",
-    "@ai-sdk/openai": "^1.3.23"
+    "@mastra/loggers": "beta"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
-    "mastra": "latest",
+    "@types/node": "^24.0.4",
+    "mastra": "beta",
     "typescript": "^5.8.3"
   }
 }

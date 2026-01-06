@@ -1,6 +1,8 @@
 ---
 title: "Reference: Cloudflare Storage | Storage"
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
+packages:
+  - "@mastra/cloudflare"
 ---
 
 # Cloudflare Storage
@@ -9,13 +11,13 @@ The Cloudflare KV storage implementation provides a globally distributed, server
 
 ## Installation
 
-```bash copy
+```bash
 npm install @mastra/cloudflare@beta
 ```
 
 ## Usage
 
-```typescript copy showLineNumbers
+```typescript
 import { CloudflareStore } from "@mastra/cloudflare";
 
 // --- Example 1: Using Workers Binding ---

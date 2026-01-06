@@ -15,9 +15,10 @@ vi.mock('@ai-sdk/openai', () => ({
 }));
 
 // Mock the DatasetLoader
-vi.mock('../../data/loader', () => ({
-  DatasetLoader: vi.fn().mockImplementation(() => ({
-    loadDataset: vi.fn().mockResolvedValue([
+vi.mock('../../data/loader', () => {
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockDatasetLoader {
+    loadDataset = vi.fn().mockResolvedValue([
       {
         question_id: 'test-q1',
         question_type: 'single-session-user',
@@ -54,9 +55,13 @@ vi.mock('../../data/loader', () => ({
         ],
         answer_session_ids: ['session-3'],
       },
-    ] as LongMemEvalQuestion[]),
-  })),
-}));
+    ] as LongMemEvalQuestion[]);
+  }
+
+  return {
+    DatasetLoader: MockDatasetLoader,
+  };
+});
 
 // Mock chalk and ora to avoid console output in tests
 vi.mock('chalk', () => ({

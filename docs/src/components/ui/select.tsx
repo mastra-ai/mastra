@@ -26,18 +26,20 @@ function SelectTrigger({
   className,
   size = "default",
   children,
+  icon,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default";
+  icon?: React.ReactNode;
 }) {
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-full items-center text-sm justify-between gap-2 rounded-xl border-[0.5px] bg-(--mastra-surface-2) px-4 py-2.5 text-sm whitespace-nowrap transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "border-[var(--border)] text-[var(--mastra-text-secondary)]",
-        "data-[placeholder]:text-[var(--mastra-text-tertiary)]",
+        "flex cursor-pointer w-full items-center text-sm justify-between gap-2 rounded-xl border-[0.5px] bg-(--mastra-surface-2) px-4 py-2.5 whitespace-nowrap transition-[color,box-shadow] outline-none disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "border-(--border) text-(--mastra-text-secondary)",
+        "data-placeholder:text-(--mastra-text-tertiary)",
         "[&_svg:not([class*='text-'])]:text-[var(--mastra-text-tertiary)]",
         "focus-visible:border-[var(--mastra-green-accent-2)] focus-visible:ring-2 focus-visible:ring-[var(--mastra-green-accent-2)]/20",
         "hover:bg-[var(--mastra-surface-2)]",
@@ -48,7 +50,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
+        {icon ? icon : <ChevronDownIcon className="size-4 opacity-50" />}
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );
@@ -66,8 +68,8 @@ function SelectContent({
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          "relative z-200 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border-[0.5px] shadow-md",
-          "bg-[var(--ifm-background-color)] text-[var(--mastra-text-secondary)] border-[var(--border)]",
+          "relative cursor-pointer z-200 max-h-(--radix-select-content-available-height) min-w-32 origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-xl border-[0.5px] shadow-md",
+          "bg-(--ifm-background-color) text-(--mastra-text-secondary) border-(--border)",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className,
@@ -117,7 +119,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex w-full cursor-default items-center gap-2 rounded-lg py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative cursor-pointer flex w-full items-center gap-2 rounded-lg py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         "text-[var(--mastra-text-secondary)] [&_svg:not([class*='text-'])]:text-[var(--mastra-text-tertiary)]",
         "focus:bg-[var(--mastra-surface-3)] focus:text-[var(--mastra-text-primary)]",
         "hover:bg-[var(--mastra-surface-2)]",

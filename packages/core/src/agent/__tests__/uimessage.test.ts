@@ -1,7 +1,8 @@
-import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../../memory';
+import type { MastraDBMessage } from '../../memory';
 import { MockMemory } from '../../memory';
 import { Agent } from '../agent';
 
@@ -38,15 +39,27 @@ function uiMessageTest(version: 'v1' | 'v2') {
         });
       } else {
         dummyModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content: [
+              {
+                type: 'text',
+                text: 'Response acknowledging metadata',
+              },
+            ],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
           doStream: async () => ({
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Response' },
-              { type: 'text-delta', id: '1', delta: ' acknowledging' },
-              { type: 'text-delta', id: '1', delta: ' metadata' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Response' },
+              { type: 'text-delta', id: 'text-1', delta: ' acknowledging' },
+              { type: 'text-delta', id: 'text-1', delta: ' metadata' },
+              { type: 'text-end', id: 'text-1' },
               { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 } },
             ]),
             rawCall: { rawPrompt: null, rawSettings: {} },
@@ -262,7 +275,7 @@ function uiMessageTest(version: 'v1' | 'v2') {
       expect(result.messages.length).toBeGreaterThan(0);
 
       // Find messages and check metadata
-      const messagesAsV2 = result.messages as MastraMessageV2[];
+      const messagesAsV2 = result.messages as MastraDBMessage[];
       const firstUserMessage = messagesAsV2.find(
         m =>
           m.role === 'user' &&
@@ -282,6 +295,83 @@ function uiMessageTest(version: 'v1' | 'v2') {
 
       // Second message should not have metadata
       expect(secondUserMessage?.content.metadata).toBeUndefined();
+    });
+
+    it('should handle content as string', async () => {
+      const agent = new Agent({
+        name: 'simple-content-agent',
+        instructions: 'You are a helpful assistant',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      if (version === 'v2') {
+        await agent.generate(
+          [
+            {
+              role: 'user',
+              content: 'First message with metadata',
+              metadata: {
+                foo: 'bar',
+              },
+            },
+          ],
+          {
+            memory: {
+              resource: 'simple-content-user',
+              thread: {
+                id: 'simple-content-thread',
+              },
+            },
+          },
+        );
+      } else {
+        await agent.generateLegacy(
+          [
+            {
+              role: 'user',
+              content: 'First message with metadata',
+              metadata: {
+                foo: 'bar',
+              },
+            },
+          ],
+          {
+            memory: {
+              resource: 'simple-content-user',
+              thread: {
+                id: 'simple-content-thread',
+              },
+            },
+          },
+        );
+      }
+
+      const result = await mockMemory.recall({
+        threadId: 'simple-content-thread',
+        resourceId: 'simple-content-user',
+        perPage: 10,
+      });
+
+      expect(result?.messages.length).toBeGreaterThan(0);
+
+      // Find the user message
+      const userMessage = result.messages.find(m => m.role === 'user');
+      expect(userMessage).toBeDefined();
+
+      // Verify metadata was preserved in the simple content-only format
+      if (
+        userMessage &&
+        'content' in userMessage &&
+        typeof userMessage.content === 'object' &&
+        'metadata' in userMessage.content
+      ) {
+        expect(userMessage.content.metadata).toEqual({
+          foo: 'bar',
+        });
+      } else {
+        throw new Error('Expected user message to have content.metadata field');
+      }
     });
   });
 }

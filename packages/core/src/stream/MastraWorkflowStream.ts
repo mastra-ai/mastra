@@ -1,4 +1,4 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type z from 'zod';
 import type { Run, Step, WorkflowRunStatus } from '../workflows';
 import type { ChunkType } from './types';

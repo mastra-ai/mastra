@@ -1,8 +1,9 @@
-import { spawn } from 'child_process';
-import fs from 'fs';
-import { join } from 'path';
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import { join } from 'node:path';
 import { config } from 'dotenv';
 import { logger } from '../../utils/logger';
+import { shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
   dir?: string;
   env?: string;
@@ -10,8 +11,9 @@ interface StartOptions {
 
 export async function start(options: StartOptions = {}) {
   // Load environment variables from .env files
-  config({ path: [options.env || '.env.production', '.env'], quiet: true });
-
+  if (!shouldSkipDotenvLoading()) {
+    config({ path: [options.env || '.env.production', '.env'], quiet: true });
+  }
   const outputDir = options.dir || '.mastra/output';
 
   try {
@@ -26,7 +28,7 @@ export async function start(options: StartOptions = {}) {
     commands.push('index.mjs');
 
     // Start the server using node
-    const server = spawn('node', commands, {
+    const server = spawn(process.execPath, commands, {
       cwd: outputPath,
       stdio: ['inherit', 'inherit', 'pipe'],
       env: {

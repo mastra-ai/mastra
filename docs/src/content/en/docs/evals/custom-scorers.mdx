@@ -1,5 +1,7 @@
 ---
 title: "Custom Scorers | Evals"
+packages:
+  - "@mastra/core"
 ---
 
 # Custom scorers
@@ -41,13 +43,12 @@ Every scorer starts with the `createScorer` factory function, which requires a n
 
 ```typescript
 import { createScorer } from '@mastra/core/evals';
-import { openai } from '@ai-sdk/openai';
 
 const glutenCheckerScorer = createScorer({
   name: 'Gluten Checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
-    model: openai('gpt-4o'),
+    model: 'openai/gpt-5.1',
     instructions: 'You are a Chef that identifies if recipes contain gluten.'
   }
 })
@@ -66,7 +67,6 @@ For type safety and compatibility with both live agent scoring and trace scoring
 
 ```typescript
 const myScorer = createScorer({
-  // ...
   type: "agent", // Automatically handles agent input/output types
 }).generateScore(({ run, results }) => {
   // run.output is automatically typed as ScorerRunOutputForAgent
@@ -242,10 +242,13 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 
 Together, these components allow you to define custom evaluation logic using LLMs as judges.
 
-> See [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+:::info
 
-```typescript title="src/mastra/scorers/gluten-checker.ts" showLineNumbers copy
-import { openai } from "@ai-sdk/openai";
+Visit [createScorer](/reference/v1/evals/create-scorer) for the full API and configuration options.
+
+:::
+
+```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from "@mastra/core/evals";
 import { z } from "zod";
 
@@ -303,7 +306,7 @@ export const glutenCheckerScorer = createScorer({
   name: "Gluten Checker",
   description: "Check if the output contains any gluten",
   judge: {
-    model: openai("gpt-4o"),
+    model: "openai/gpt-4.1-nano",
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -338,7 +341,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript
 judge: {
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-4.1-nano',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```
@@ -401,7 +404,7 @@ The reason generation step creates explanations that help users understand why a
 
 ## High gluten-free example
 
-```typescript title="src/example-high-gluten-free.ts" showLineNumbers copy
+```typescript title="src/example-high-gluten-free.ts"
 const result = await glutenCheckerScorer.run({
   input: [{ role: 'user', content: 'Mix rice, beans, and vegetables' }],
   output: { text: 'Mix rice, beans, and vegetables' },
@@ -427,7 +430,7 @@ console.log('Reason:', result.reason);
 
 ## Partial gluten example
 
-```typescript title="src/example-partial-gluten.ts" showLineNumbers copy
+```typescript title="src/example-partial-gluten.ts"
 const result = await glutenCheckerScorer.run({
   input: [{ role: "user", content: "Mix flour and water to make dough" }],
   output: { text: "Mix flour and water to make dough" },
@@ -453,7 +456,7 @@ console.log("Reason:", result.reason);
 
 ## Low gluten-free example
 
-```typescript title="src/example-low-gluten-free.ts" showLineNumbers copy
+```typescript title="src/example-low-gluten-free.ts"
 const result = await glutenCheckerScorer.run({
   input: [{ role: "user", content: "Add soy sauce and noodles" }],
   output: { text: "Add soy sauce and noodles" },

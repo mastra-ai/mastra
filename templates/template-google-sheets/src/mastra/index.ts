@@ -1,11 +1,12 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { financialModelingAgent } from './agents/financial-modeling-agent';
-import { RequestContext } from '@mastra/core/request-context';
 import { HTTPException } from 'hono/http-exception';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Composio } from '@composio/core';
 import { MastraProvider } from '@composio/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 
 export const mastra = new Mastra({
   agents: { financialModelingAgent },
@@ -85,9 +86,9 @@ export const mastra = new Mastra({
       },
     ],
   },
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });

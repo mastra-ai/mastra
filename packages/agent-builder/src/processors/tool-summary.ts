@@ -1,17 +1,19 @@
 import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel } from '@mastra/core/agent';
-import type { CoreMessage } from '@mastra/core/llm';
-import { MemoryProcessor } from '@mastra/core/memory';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import type { MastraModelConfig } from '@mastra/core/llm';
+import type { Processor } from '@mastra/core/processors';
 
 /**
  * Summarizes tool calls and caches results to avoid re-summarizing identical calls
  */
-export class ToolSummaryProcessor extends MemoryProcessor {
+export class ToolSummaryProcessor implements Processor {
+  readonly id = 'tool-summary-processor';
+  readonly name = 'ToolSummaryProcessor';
+
   private summaryAgent: Agent;
   private summaryCache: Map<string, string> = new Map();
 
-  constructor({ summaryModel }: { summaryModel: MastraLanguageModel }) {
-    super({ name: 'ToolSummaryProcessor' });
+  constructor({ summaryModel }: { summaryModel: MastraModelConfig }) {
     this.summaryAgent = new Agent({
       id: 'tool-summary-agent',
       name: 'Tool Summary Agent',
@@ -59,55 +61,55 @@ export class ToolSummaryProcessor extends MemoryProcessor {
     };
   }
 
-  async process(messages: CoreMessage[]): Promise<CoreMessage[]> {
+  async processInput({
+    messages,
+    messageList: _messageList,
+  }: {
+    messages: MastraDBMessage[];
+    messageList: MessageList;
+    abort: (reason?: string) => never;
+  }): Promise<MastraDBMessage[]> {
     // Collect all tool calls that need summarization
     const summaryTasks: Array<{
-      content: any;
+      message: MastraDBMessage;
+      partIndex: number;
       promise: Promise<any>;
       cacheKey: string;
     }> = [];
 
     // First pass: collect all tool results that need summarization
     for (const message of messages) {
-      if (
-        message.role === 'tool' &&
-        Array.isArray(message.content) &&
-        message.content.length > 0 &&
-        message.content?.some(content => content.type === 'tool-result')
-      ) {
-        for (const content of message.content) {
-          if (content.type === 'tool-result') {
-            const assistantMessageWithToolCall = messages.find(
-              message =>
-                message.role === 'assistant' &&
-                Array.isArray(message.content) &&
-                message.content.length > 0 &&
-                message.content?.some(
-                  assistantContent =>
-                    assistantContent.type === 'tool-call' && assistantContent.toolCallId === content.toolCallId,
-                ),
-            );
-            const toolCall = Array.isArray(assistantMessageWithToolCall?.content)
-              ? assistantMessageWithToolCall?.content.find(
-                  assistantContent =>
-                    assistantContent.type === 'tool-call' && assistantContent.toolCallId === content.toolCallId,
-                )
-              : null;
+      if (message.content.format === 2 && message.content.parts) {
+        for (let partIndex = 0; partIndex < message.content.parts.length; partIndex++) {
+          const part = message.content.parts[partIndex];
 
-            const cacheKey = this.createCacheKey(toolCall);
+          // Check if this is a tool invocation with a result
+          if (part && part.type === 'tool-invocation' && part.toolInvocation?.state === 'result') {
+            const cacheKey = this.createCacheKey(part.toolInvocation);
             const cachedSummary = this.summaryCache.get(cacheKey);
 
             if (cachedSummary) {
-              // Use cached summary immediately
-              content.result = `Tool call summary: ${cachedSummary}`;
+              // Use cached summary - update the tool invocation result
+              message.content.parts[partIndex] = {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  step: part.toolInvocation.step,
+                  toolCallId: part.toolInvocation.toolCallId,
+                  toolName: part.toolInvocation.toolName,
+                  args: part.toolInvocation.args,
+                  result: `Tool call summary: ${cachedSummary}`,
+                },
+              };
             } else {
               // Create a promise for this summary (but don't await yet)
               const summaryPromise = this.summaryAgent.generate(
-                `Summarize the following tool call: ${JSON.stringify(toolCall)} and result: ${JSON.stringify(content)}`,
+                `Summarize the following tool call: ${JSON.stringify(part.toolInvocation)}`,
               );
 
               summaryTasks.push({
-                content,
+                message,
+                partIndex,
                 promise: summaryPromise,
                 cacheKey,
               });
@@ -133,12 +135,26 @@ export class ToolSummaryProcessor extends MemoryProcessor {
           // Cache the summary for future use
           this.summaryCache.set(task.cacheKey, summaryText);
 
-          // Apply to content
-          task.content.result = `Tool call summary: ${summaryText}`;
+          // Apply to message content
+          if (task.message.content.format === 2 && task.message.content.parts) {
+            const part = task.message.content.parts[task.partIndex];
+            if (part && part.type === 'tool-invocation' && part.toolInvocation?.state === 'result') {
+              task.message.content.parts[task.partIndex] = {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  step: part.toolInvocation.step,
+                  toolCallId: part.toolInvocation.toolCallId,
+                  toolName: part.toolInvocation.toolName,
+                  args: part.toolInvocation.args,
+                  result: `Tool call summary: ${summaryText}`,
+                },
+              };
+            }
+          }
         } else if (result.status === 'rejected') {
           // Handle failed summary - use fallback or log error
           console.warn(`Failed to generate summary for tool call:`, result.reason);
-          task.content.result = `Tool call summary: [Summary generation failed]`;
         }
       });
     }

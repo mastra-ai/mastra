@@ -1,5 +1,5 @@
-import { join } from 'path';
-import process from 'process';
+import { join } from 'node:path';
+import process from 'node:process';
 import { Deployer } from '@mastra/deployer';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
@@ -40,12 +40,19 @@ export class NetlifyDeployer extends Deployer {
     const result = await this._bundle(
       this.getEntry(),
       entryFile,
-      { outputDirectory, projectRoot, enableEsmShim: false },
+      { outputDirectory, projectRoot, enableEsmShim: true },
       toolsPaths,
       join(outputDirectory, this.outputDir),
     );
 
+    // Use Netlify Frameworks API config.json
+    // https://docs.netlify.com/build/frameworks/frameworks-api/
     await writeJson(join(outputDirectory, '.netlify', 'v1', 'config.json'), {
+      functions: {
+        directory: '.netlify/v1/functions',
+        node_bundler: 'none', // Mastra pre-bundles, don't re-bundle
+        included_files: ['.netlify/v1/functions/**'],
+      },
       redirects: [
         {
           force: true,
@@ -84,6 +91,15 @@ export class NetlifyDeployer extends Deployer {
   async lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
-    // Lint for netlify support
+    // Check for LibSQL dependency which is not supported in Netlify Functions
+    const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
+
+    if (hasLibsql) {
+      this.logger?.error(
+        `Netlify Deployer does not support @libsql/client (which may have been installed by @mastra/libsql) as a dependency.
+        LibSQL with file URLs uses native Node.js bindings that cannot run in serverless environments. Use other Mastra Storage options instead.`,
+      );
+      process.exit(1);
+    }
   }
 }

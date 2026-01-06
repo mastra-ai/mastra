@@ -18,7 +18,7 @@ In this guide, you'll learn how to build a complete MCP (Model Context Protocol)
 
 - Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models/v1)
-- An existing Mastra project (Follow the [installation guide](/docs/v1/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/v1/getting-started/quickstart) to set up a new project)
 
 ## Adding necessary dependencies & files
 
@@ -30,7 +30,7 @@ Before you can create an MCP server you first need to install additional depende
 
 Add `@mastra/mcp` to your project:
 
-```bash copy
+```bash
 npm install @mastra/mcp@beta
 ```
 
@@ -38,15 +38,15 @@ npm install @mastra/mcp@beta
 
 <StepItem>
 
-After following the default [installation guide](/docs/v1/getting-started/installation) your project will include files that are not relevant for this guide. You can safely remove them:
+After following the default [installation guide](/guides/v1/getting-started/quickstart) your project will include files that are not relevant for this guide. You can safely remove them:
 
-```bash copy
+```bash
 rm -rf src/mastra/agents src/mastra/workflows src/mastra/tools/weather-tool.ts
 ```
 
 You should also change the `src/mastra/index.ts` file like so:
 
-```ts copy title="src/mastra/index.ts"
+```ts title="src/mastra/index.ts"
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
@@ -70,13 +70,13 @@ export const mastra = new Mastra({
 
 Create a dedicated directory for your MCP server's logic and a `notes` directory for your notes:
 
-```bash copy
+```bash
 mkdir notes src/mastra/mcp
 ```
 
 Create the following files:
 
-```bash copy
+```bash
 touch src/mastra/mcp/{server,resources,prompts}.ts
 ```
 
@@ -113,7 +113,7 @@ Let's add the MCP server!
 
 In `src/mastra/mcp/server.ts`, define the MCP server instance:
 
-```typescript copy title="src/mastra/mcp/server.ts"
+```typescript title="src/mastra/mcp/server.ts"
 import { MCPServer } from "@mastra/mcp";
 
 export const notes = new MCPServer({
@@ -126,7 +126,7 @@ export const notes = new MCPServer({
 
 Register this MCP server in your Mastra instance at `src/mastra/index.ts`. The key `notes` is the public identifier for your MCP server:
 
-```typescript copy title="src/mastra/index.ts" {4, 15-17}
+```typescript title="src/mastra/index.ts" {4, 15-17}
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
@@ -154,7 +154,7 @@ export const mastra = new Mastra({
 
 Resource handlers allow clients to discover and read the content your server manages. Implement handlers to work with markdown files in the `notes` directory. Add to the `src/mastra/mcp/resources.ts` file:
 
-```typescript copy title="src/mastra/mcp/resources.ts"
+```typescript title="src/mastra/mcp/resources.ts"
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -210,7 +210,7 @@ export const resourceHandlers: MCPServerResources = {
 
 Register these resource handlers in `src/mastra/mcp/server.ts`:
 
-```typescript copy title="src/mastra/mcp/server.ts" {2, 8}
+```typescript title="src/mastra/mcp/server.ts" {2, 8}
 import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 
@@ -230,7 +230,7 @@ export const notes = new MCPServer({
 Tools are the actions your server can perform. Let's create a `write` tool.
 First, define the tool in `src/mastra/tools/write-note.ts`:
 
-```typescript copy title="src/mastra/tools/write-note.ts"
+```typescript title="src/mastra/tools/write-note.ts"
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fileURLToPath } from "url";
@@ -271,7 +271,7 @@ export const writeNoteTool = createTool({
 
 Register this tool in `src/mastra/mcp/server.ts`:
 
-```typescript copy title="src/mastra/mcp/server.ts"
+```typescript title="src/mastra/mcp/server.ts"
 import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 import { writeNoteTool } from "../tools/write-note";
@@ -299,13 +299,13 @@ Prompt handlers provide ready-to-use prompts for clients. You'll add these three
 
 This requires a few markdown-parsing libraries you need to install:
 
-```bash copy
+```bash
 npm install unified remark-parse gray-matter @types/unist
 ```
 
 Implement the prompts in `src/mastra/mcp/prompts.ts`:
 
-```typescript copy title="src/mastra/mcp/prompts.ts"
+```typescript title="src/mastra/mcp/prompts.ts"
 import type { MCPServerPrompts } from "@mastra/mcp";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
@@ -413,7 +413,7 @@ export const promptHandlers: MCPServerPrompts = {
 
 Register these prompt handlers in `src/mastra/mcp/server.ts`:
 
-```typescript copy title="src/mastra/mcp/server.ts"
+```typescript title="src/mastra/mcp/server.ts"
 import { MCPServer } from "@mastra/mcp";
 import { resourceHandlers } from "./resources";
 import { writeNoteTool } from "../tools/write-note";
@@ -439,7 +439,7 @@ export const notes = new MCPServer({
 
 Great, you've authored your first MCP server! Now you can try it out by starting the Mastra dev server and opening [Studio](/docs/v1/getting-started/studio):
 
-```bash copy
+```bash
 npm run dev
 ```
 

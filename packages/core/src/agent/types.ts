@@ -21,11 +21,12 @@ import type {
   StreamObjectOnFinishCallback,
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
-import type { InputProcessor, OutputProcessor } from '../processors/index';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferSchemaOutput } from '../stream/base/schema';
@@ -37,7 +38,6 @@ import type { Workflow } from '../workflows';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { SaveQueueManager } from './save-queue';
 
 export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
@@ -75,6 +75,24 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
    * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
    */
   jsonPromptInjection?: boolean;
+
+  /**
+   * Optional logger instance for structured logging
+   */
+  logger?: IMastraLogger;
+
+  /**
+   * Provider-specific options passed to the internal structuring agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
 export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
@@ -109,13 +127,12 @@ type ModelWithRetries = {
 export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
   /**
    * Identifier for the agent.
-   * @defaultValue Uses `name` if not provided.
    */
-  id?: TAgentId;
+  id: TAgentId;
   /**
    * Unique identifier for the agent.
    */
-  name: TAgentId;
+  name: string;
   /**
    * Description of the agent's purpose and capabilities.
    */
@@ -153,7 +170,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
   /**
    * Reference to the Mastra runtime instance (injected automatically).
    */
@@ -176,13 +193,24 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   voice?: CompositeVoice;
   /**
-   * Input processors that can modify or validate messages before they are processed by the agent. These processors need to implement the `processInput` function.
+   * Input processors that can modify or validate messages before they are processed by the agent.
+   * These can be individual processors (implementing `processInput` or `processInputStep`) or
+   * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  inputProcessors?: DynamicArgument<InputProcessor[]>;
+  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
   /**
-   * Output processors that can modify or validate messages from the agent, before it is sent to the client. These processors need to implement either (or both) of the `processOutputResult` and `processOutputStream` functions.
+   * Output processors that can modify or validate messages from the agent, before it is sent to the client.
+   * These can be individual processors (implementing `processOutputResult`, `processOutputStream`, or `processOutputStep`) or
+   * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
    */
-  outputProcessors?: DynamicArgument<OutputProcessor[]>;
+  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
+  /**
+   * Maximum number of times processors can trigger a retry per generation.
+   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
+   * This limit prevents infinite retry loops.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
   /**
    * Options to pass to the agent upon creation.
    */
@@ -193,7 +221,6 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource: string;
   options?: MemoryConfig;
-  readOnly?: boolean;
 };
 
 /**
@@ -238,9 +265,15 @@ export type AgentGenerateOptions<
    */
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this generation call (overrides agent's default) */
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry for this generation.
+   * Overrides agent's default maxProcessorRetries.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
   /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
   /** tracing options for starting new traces */
@@ -317,7 +350,7 @@ export type AgentStreamOptions<
    */
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?: InputProcessorOrWorkflow[];
   /** tracing context for span hierarchy and metadata */
   tracingContext?: TracingContext;
   /** tracing options for starting new traces */
@@ -366,6 +399,7 @@ export type AgentExecuteOnFinishOptions = {
   messageList: MessageList;
   threadExists: boolean;
   structuredOutput?: boolean;
-  saveQueueManager: SaveQueueManager;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
 };
+
+export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';

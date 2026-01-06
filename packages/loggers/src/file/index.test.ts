@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { LogLevel } from '@mastra/core/logger';
 import { describe, it, expect, beforeEach, vi, afterAll } from 'vitest';
 import { PinoLogger } from '../pino.js';

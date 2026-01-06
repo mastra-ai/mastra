@@ -8,10 +8,11 @@ import {
   SpanScoreList,
   useLinkComponent,
 } from '@/index';
-import { TraceSpanUsage } from './trace-span-usage';
+import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import { ListScoresResponse } from '@mastra/client-js';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { GetScorerResponse } from '@mastra/client-js';
 import { SpanRecord } from '@mastra/core/storage';
 
 type SpanTabsProps = {
@@ -24,6 +25,8 @@ type SpanTabsProps = {
   defaultActiveTab?: string;
   initialScoreId?: string;
   computeTraceLink: (traceId: string, spanId?: string) => string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 };
 
 export function SpanTabs({
@@ -36,6 +39,8 @@ export function SpanTabs({
   defaultActiveTab = 'details',
   initialScoreId,
   computeTraceLink,
+  scorers,
+  isLoadingScorers,
 }: SpanTabsProps) {
   const { Link } = useLinkComponent();
 
@@ -56,7 +61,7 @@ export function SpanTabs({
       </Tabs.List>
       <Tabs.Content value="details">
         <Sections>
-          {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} />}
+          {span?.attributes?.usage ? <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} /> : null}
           <KeyValueList data={spanInfo} LinkComponent={Link} />
           <SpanDetails span={span} />
         </Sections>
@@ -69,7 +74,14 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scoring
               </Section.Heading>
             </Section.Header>
-            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} entityType={entityType} />
+            <SpanScoring
+              traceId={trace?.traceId}
+              isTopLevelSpan={!Boolean(span?.parentSpanId)}
+              spanId={span?.spanId}
+              entityType={entityType}
+              scorers={scorers}
+              isLoadingScorers={isLoadingScorers}
+            />
           </Section>
           <Section>
             <Section.Header>

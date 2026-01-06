@@ -1,5 +1,4 @@
-import { join } from 'path';
-import { copy } from 'fs-extra';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -47,19 +46,28 @@ vi.mock('./utils/constants.js', () => ({
 const mockWritePackageJson = vi.fn();
 const mockBundle = vi.fn();
 
+const mockPrepare = vi.fn();
+
 vi.mock('@mastra/deployer', () => {
   class MockDeployer {
+    outputDir = 'output';
     constructor() {}
     _bundle = mockBundle;
     writePackageJson = mockWritePackageJson;
+    prepare = mockPrepare;
+
+    getAllToolPaths = () => ['/test/project/src/mastra/tools'];
+  }
+
+  // Use a class for FileService constructor (Vitest v4 requirement)
+  class MockFileService {
+    getFirstExistingFile = vi.fn();
+    getFirstExistingFileOrUndefined = vi.fn();
   }
 
   return {
     Deployer: MockDeployer,
-    FileService: vi.fn().mockImplementation(() => ({
-      getFirstExistingFile: vi.fn(),
-      getFirstExistingFileOrUndefined: vi.fn(),
-    })),
+    FileService: MockFileService,
   };
 });
 
@@ -71,6 +79,7 @@ describe('CloudDeployer', () => {
     vi.clearAllMocks();
     mockBundle.mockResolvedValue(undefined);
     mockWritePackageJson.mockResolvedValue(undefined);
+    mockPrepare.mockResolvedValue(undefined);
 
     // Mock process.chdir
     originalChdir = process.chdir;
@@ -81,7 +90,6 @@ describe('CloudDeployer', () => {
     // @ts-ignore - accessing protected method for testing
     deployer._bundle = mockBundle;
 
-    vi.mocked(copy).mockResolvedValue(undefined);
     vi.mocked(installDeps).mockResolvedValue(undefined);
     vi.mocked(getMastraEntryFile).mockReturnValue('/test/src/mastra/index.ts');
     vi.mocked(getAuthEntrypoint).mockReturnValue('// auth entrypoint code');
@@ -99,6 +107,30 @@ describe('CloudDeployer', () => {
   describe('constructor', () => {
     it('should create an instance of CloudDeployer', () => {
       expect(deployer).toBeInstanceOf(CloudDeployer);
+    });
+
+    it('should default studio to false when not provided', () => {
+      const d = new CloudDeployer();
+      // @ts-ignore - accessing private property for testing
+      expect(d.studio).toBe(false);
+    });
+
+    it('should default studio to false when empty options provided', () => {
+      const d = new CloudDeployer({});
+      // @ts-ignore - accessing private property for testing
+      expect(d.studio).toBe(false);
+    });
+
+    it('should set studio to true when provided', () => {
+      const d = new CloudDeployer({ studio: true });
+      // @ts-ignore - accessing private property for testing
+      expect(d.studio).toBe(true);
+    });
+
+    it('should set studio to false when explicitly provided', () => {
+      const d = new CloudDeployer({ studio: false });
+      // @ts-ignore - accessing private property for testing
+      expect(d.studio).toBe(false);
     });
   });
 
@@ -243,15 +275,10 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('mastra.storage.init()');
       expect(entry).toContain('new LibSQLStore');
       expect(entry).toContain('new LibSQLVector');
-
-      // Check for hooks registration
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-
-      // Check for server creation
-      expect(entry).toContain(
-        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
-      );
+      // Check for server creation (default: playground disabled)
+      expect(entry).toContain('playground: false');
+      expect(entry).toContain('swaggerUI: false');
+      expect(entry).toContain('tools: getToolExports(tools)');
 
       // Check for metadata
       expect(entry).toContain(`teamId: "${TEAM_ID}"`);
@@ -270,6 +297,23 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('Server started');
       expect(entry).toContain('Runner Initialized');
       expect(entry).toContain('type: "READINESS"');
+    });
+
+    it('should include playground: true when studio is enabled', () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+      // @ts-ignore - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('playground: true');
+      expect(entry).toContain('swaggerUI: false');
+    });
+
+    it('should include playground: false when studio is disabled', () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+      // @ts-ignore - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('playground: false');
     });
   });
 
@@ -314,7 +358,6 @@ describe('CloudDeployer', () => {
       expect(getMastraEntryFile).toHaveBeenCalled();
       expect(mockBundle).toHaveBeenCalled();
       expect(writePackageJsonSpy).toHaveBeenCalled();
-      expect(copy).toHaveBeenCalled();
     });
 
     it('should handle different process.cwd scenarios', async () => {

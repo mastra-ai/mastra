@@ -1,108 +1,101 @@
-import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
-import type { Mastra } from '@mastra/core/mastra';
+import { runIdSchema } from '../schemas/common';
+import { listLogsQuerySchema, listLogsResponseSchema, listLogTransportsResponseSchema } from '../schemas/logs';
+import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
-import { validateBody } from './utils';
+import { parseFilters, validateBody } from './utils';
 
-type LogsContext = {
-  mastra: Mastra;
-  transportId?: string;
-  runId?: string;
-  params?: {
-    fromDate?: Date;
-    toDate?: Date;
-    logLevel?: LogLevel;
-    filters?: string | string[];
-    page?: number;
-    perPage?: number;
-  };
-};
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
 
-export async function listLogsHandler({
-  mastra,
-  transportId,
-  params,
-}: Pick<LogsContext, 'mastra' | 'transportId' | 'params'>): Promise<{
-  logs: BaseLogMessage[];
-  total: number;
-  page: number;
-  perPage: number;
-  hasMore: boolean;
-}> {
-  try {
-    validateBody({ transportId });
+export const LIST_LOG_TRANSPORTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/logs/transports',
+  responseType: 'json',
+  responseSchema: listLogTransportsResponseSchema,
+  summary: 'List log transports',
+  description: 'Returns a list of all available log transports',
+  tags: ['Logs'],
+  handler: async ({ mastra }) => {
+    try {
+      const logger = mastra.getLogger();
+      const transports = logger.getTransports();
 
-    const { fromDate, toDate, logLevel, filters: _filters, page, perPage } = params || {};
+      return {
+        transports: transports ? [...transports.keys()] : [],
+      };
+    } catch (error) {
+      return handleError(error, 'Error getting log Transports');
+    }
+  },
+});
 
-    // Parse filter query parameter if present
-    const filters = _filters
-      ? Object.fromEntries(
-          (Array.isArray(_filters) ? _filters : [_filters]).map(attr => {
-            const [key, value] = attr.split(':');
-            return [key, value];
-          }),
-        )
-      : undefined;
+export const LIST_LOGS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/logs',
+  responseType: 'json',
+  queryParamSchema: listLogsQuerySchema,
+  responseSchema: listLogsResponseSchema,
+  summary: 'List logs',
+  description:
+    'Returns logs from a specific transport with optional filtering by date range, log level, and custom filters',
+  tags: ['Logs'],
+  handler: async ({ mastra, ...params }) => {
+    try {
+      const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
 
-    const logs = await mastra.listLogs(transportId!, {
-      fromDate,
-      toDate,
-      logLevel,
-      filters,
-      page: page ? Number(page) : undefined,
-      perPage: perPage ? Number(perPage) : undefined,
-    });
-    return logs;
-  } catch (error) {
-    return handleError(error, 'Error getting logs');
-  }
-}
+      validateBody({ transportId });
 
-export async function listLogsByRunIdHandler({
-  mastra,
-  runId,
-  transportId,
-  params,
-}: Pick<LogsContext, 'mastra' | 'runId' | 'transportId' | 'params'>) {
-  try {
-    validateBody({ runId, transportId });
+      // Parse filter query parameter if present
+      const filters = parseFilters(_filters);
 
-    const { fromDate, toDate, logLevel, filters: _filters, page, perPage } = params || {};
+      const logs = await mastra.listLogs(transportId!, {
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
+      });
+      return logs;
+    } catch (error) {
+      return handleError(error, 'Error getting logs');
+    }
+  },
+});
 
-    // Parse filter query parameter if present
-    const filters = _filters
-      ? Object.fromEntries(
-          (Array.isArray(_filters) ? _filters : [_filters]).map(attr => {
-            const [key, value] = attr.split(':');
-            return [key, value];
-          }),
-        )
-      : undefined;
+export const LIST_LOGS_BY_RUN_ID_ROUTE = createRoute({
+  method: 'GET',
+  path: '/api/logs/:runId',
+  responseType: 'json',
+  pathParamSchema: runIdSchema,
+  queryParamSchema: listLogsQuerySchema,
+  responseSchema: listLogsResponseSchema,
+  summary: 'List logs by run ID',
+  description: 'Returns all logs for a specific execution run from a transport',
+  tags: ['Logs'],
+  handler: async ({ mastra, runId, ...params }) => {
+    try {
+      const { transportId, fromDate, toDate, logLevel, filters: _filters, page, perPage } = params;
 
-    const logs = await mastra.listLogsByRunId({
-      runId: runId!,
-      transportId: transportId!,
-      fromDate,
-      toDate,
-      logLevel,
-      filters,
-      page: page ? Number(page) : undefined,
-      perPage: perPage ? Number(perPage) : undefined,
-    });
-    return logs;
-  } catch (error) {
-    return handleError(error, 'Error getting logs by run ID');
-  }
-}
+      validateBody({ runId, transportId });
 
-export async function listLogTransports({ mastra }: Pick<LogsContext, 'mastra'>) {
-  try {
-    const logger = mastra.getLogger();
-    const transports = logger.getTransports();
+      // Parse filter query parameter if present
+      const filters = parseFilters(_filters);
 
-    return {
-      transports: transports ? [...transports.keys()] : [],
-    };
-  } catch (error) {
-    return handleError(error, 'Error getting log Transports');
-  }
-}
+      const logs = await mastra.listLogsByRunId({
+        runId: runId!,
+        transportId: transportId!,
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
+      });
+      return logs;
+    } catch (error) {
+      return handleError(error, 'Error getting logs by run ID');
+    }
+  },
+});

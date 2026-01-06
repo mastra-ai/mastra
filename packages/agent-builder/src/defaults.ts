@@ -1,6 +1,6 @@
-import { spawn as nodeSpawn } from 'child_process';
-import { readFile, writeFile, mkdir, stat, readdir } from 'fs/promises';
-import { join, dirname, relative, isAbsolute, resolve } from 'path';
+import { spawn as nodeSpawn } from 'node:child_process';
+import { readFile, writeFile, mkdir, stat, readdir } from 'node:fs/promises';
+import { join, dirname, relative, isAbsolute, resolve } from 'node:path';
 import { createTool } from '@mastra/core/tools';
 import ignore from 'ignore';
 import { z } from 'zod';
@@ -434,7 +434,7 @@ export const mastra = new Mastra({
               lastModified: z.string(),
             })
             .optional(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.readFile({ ...inputData, projectPath });
@@ -455,7 +455,7 @@ export const mastra = new Mastra({
           filePath: z.string(),
           bytesWritten: z.number().optional(),
           message: z.string(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.writeFile({ ...inputData, projectPath });
@@ -488,7 +488,7 @@ export const mastra = new Mastra({
           totalItems: z.number(),
           path: z.string(),
           message: z.string(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.listDirectory({ ...inputData, projectPath });
@@ -514,7 +514,7 @@ export const mastra = new Mastra({
           command: z.string(),
           workingDirectory: z.string().optional(),
           executionTime: z.number().optional(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.executeCommand({
@@ -632,7 +632,7 @@ export const mastra = new Mastra({
           message: z.string(),
           linesReplaced: z.number().optional(),
           backup: z.string().optional(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.replaceLines({ ...inputData, projectPath });
@@ -669,7 +669,7 @@ export const mastra = new Mastra({
           ),
           totalLines: z.number(),
           message: z.string(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.showFileLines({ ...inputData, projectPath });
@@ -805,7 +805,7 @@ export const mastra = new Mastra({
           totalResults: z.number(),
           searchTime: z.number(),
           suggestions: z.array(z.string()).optional(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           return await AgentBuilderDefaults.webSearch(inputData);
@@ -874,7 +874,7 @@ export const mastra = new Mastra({
           warnings: z.array(z.string()).optional(),
           message: z.string().optional(),
           details: z.string().optional(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           const { action, features, packages } = inputData;
@@ -937,7 +937,7 @@ export const mastra = new Mastra({
           url: z.string().optional(),
           message: z.string().optional(),
           stdout: z.array(z.string()).optional().describe('Server output lines captured during startup'),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
         execute: async inputData => {
           const { action, port } = inputData;
@@ -963,7 +963,7 @@ export const mastra = new Mastra({
                     success: false,
                     status: 'unknown' as const,
                     message: `Failed to restart: could not stop server on port ${port}`,
-                    error: stopResult.error || 'Unknown stop error',
+                    errorMessage: stopResult.errorMessage || 'Unknown stop error',
                   };
                 }
                 await new Promise(resolve => setTimeout(resolve, 500));
@@ -976,7 +976,7 @@ export const mastra = new Mastra({
                     success: false,
                     status: 'stopped' as const,
                     message: `Failed to restart: server stopped successfully but failed to start on port ${port}`,
-                    error: startResult.error || 'Unknown start error',
+                    errorMessage: startResult.errorMessage || 'Unknown start error',
                   };
                 }
                 return {
@@ -1021,7 +1021,7 @@ export const mastra = new Mastra({
           statusText: z.string().optional(),
           headers: z.record(z.string()).optional(),
           data: z.any().optional(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
           url: z.string(),
           method: z.string(),
         }),
@@ -1041,7 +1041,7 @@ export const mastra = new Mastra({
               success: false,
               url: baseUrl ? `${baseUrl}${url}` : url,
               method,
-              error: error instanceof Error ? error.message : String(error),
+              errorMessage: error instanceof Error ? error.message : String(error),
             };
           }
         },
@@ -1116,7 +1116,7 @@ export const mastra = new Mastra({
         projectPath: `./${projectName}`,
         message: `Successfully created Mastra project: ${projectName}.`,
         details: stdout,
-        error: stderr,
+        errorMessage: stderr,
       };
     } catch (error) {
       console.error(error);
@@ -1229,7 +1229,7 @@ export const mastra = new Mastra({
           const lines = output.split('\n').filter((line: string) => line.trim());
           stdoutLines.push(...lines);
 
-          if (output.includes('Mastra API running on port')) {
+          if (output.includes('Mastra API running on ')) {
             clearTimeout(timeout);
             resolve({
               success: true,
@@ -1272,7 +1272,7 @@ export const mastra = new Mastra({
       return {
         success: false,
         status: 'stopped' as const,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -1286,7 +1286,7 @@ export const mastra = new Mastra({
       return {
         success: false,
         status: 'error' as const,
-        error: `Invalid port value: ${String(port)}`,
+        errorMessage: `Invalid port value: ${String(port)}`,
       };
     }
     try {
@@ -1331,7 +1331,7 @@ export const mastra = new Mastra({
           success: false,
           status: 'unknown' as const,
           message: `Failed to stop any processes on port ${port}`,
-          error: `Could not kill PIDs: ${failedPids.join(', ')}`,
+          errorMessage: `Could not kill PIDs: ${failedPids.join(', ')}`,
         };
       }
 
@@ -1374,7 +1374,7 @@ export const mastra = new Mastra({
               success: false,
               status: 'unknown' as const,
               message: `Server processes still running on port ${port} after stop attempts`,
-              error: `Remaining PIDs: ${finalCheck.trim()}`,
+              errorMessage: `Remaining PIDs: ${finalCheck.trim()}`,
             };
           }
         }
@@ -1391,7 +1391,7 @@ export const mastra = new Mastra({
       return {
         success: false,
         status: 'unknown' as const,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2054,7 +2054,7 @@ export const mastra = new Mastra({
         success: false,
         url: baseUrl ? `${baseUrl}${url}` : url,
         method,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2315,7 +2315,7 @@ export const mastra = new Mastra({
         return {
           success: false,
           message: `Line numbers must be 1 or greater. Got startLine: ${startLine}, endLine: ${endLine}`,
-          error: 'Invalid line range',
+          errorMessage: 'Invalid line range',
         };
       }
 
@@ -2323,7 +2323,7 @@ export const mastra = new Mastra({
         return {
           success: false,
           message: `Line range ${startLine}-${endLine} is out of bounds. File has ${lines.length} lines. Remember: lines are 1-indexed, so valid range is 1-${lines.length}.`,
-          error: 'Invalid line range',
+          errorMessage: 'Invalid line range',
         };
       }
 
@@ -2331,7 +2331,7 @@ export const mastra = new Mastra({
         return {
           success: false,
           message: `Start line (${startLine}) cannot be greater than end line (${endLine}).`,
-          error: 'Invalid line range',
+          errorMessage: 'Invalid line range',
         };
       }
 
@@ -2367,7 +2367,7 @@ export const mastra = new Mastra({
       return {
         success: false,
         message: `Failed to replace lines: ${error instanceof Error ? error.message : String(error)}`,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2430,7 +2430,7 @@ export const mastra = new Mastra({
         lines: [],
         totalLines: 0,
         message: `Failed to read file: ${error instanceof Error ? error.message : String(error)}`,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2670,7 +2670,7 @@ export const mastra = new Mastra({
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2711,7 +2711,7 @@ export const mastra = new Mastra({
         success: false,
         filePath: context.filePath,
         message: `Failed to write file: ${error instanceof Error ? error.message : String(error)}`,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2839,7 +2839,7 @@ export const mastra = new Mastra({
         totalItems: 0,
         path: context.path,
         message: `Failed to list directory: ${error instanceof Error ? error.message : String(error)}`,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2895,7 +2895,7 @@ export const mastra = new Mastra({
         command: context.command,
         workingDirectory: context.workingDirectory,
         executionTime,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -2987,7 +2987,7 @@ export const mastra = new Mastra({
         results: [],
         totalResults: 0,
         searchTime: 0,
-        error: error instanceof Error ? error.message : String(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }

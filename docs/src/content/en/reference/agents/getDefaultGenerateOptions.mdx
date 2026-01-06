@@ -1,6 +1,8 @@
 ---
 title: "Reference: Agent.getDefaultGenerateOptionsLegacy() | Agents"
 description: "Documentation for the `Agent.getDefaultGenerateOptionsLegacy()` method in Mastra agents, which retrieves the default options used for generateLegacy calls."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDefaultGenerateOptionsLegacy()
@@ -15,7 +17,7 @@ Agents can be configured with default generation options for controlling model b
 
 ## Usage example
 
-```typescript copy
+```typescript
 await agent.getDefaultGenerateOptionsLegacy();
 ```
 
@@ -48,7 +50,7 @@ await agent.getDefaultGenerateOptionsLegacy();
 
 ## Extended usage example
 
-```typescript copy
+```typescript
 await agent.getDefaultGenerateOptionsLegacy({
   requestContext: new RequestContext(),
 });
@@ -72,4 +74,4 @@ await agent.getDefaultGenerateOptionsLegacy({
 ## Related
 
 - [Agent generation](/docs/v1/agents/overview#generating-responses)
-- [Request Context](/docs/v1/server-db/request-context)
+- [Request Context](/docs/v1/server/request-context)

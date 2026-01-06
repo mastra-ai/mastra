@@ -70,10 +70,10 @@ function AdmonitionContainer({
 
 function AdmonitionIconType({ title, type }: Pick<Props, "title" | "type">) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="shrink-0 size-4">{TypeToEmoji[type]}</span>
+    <div className="flex items-center gap-1.5">
+      <span className="shrink-0 size-3">{TypeToEmoji[type]}</span>
       {title ? (
-        <span className="text-[15px] font-mono font-semibold tracking-tight capitalize">
+        <span className="text-[12px] font-mono font-semibold tracking-tight capitalize">
           {title}
         </span>
       ) : null}
@@ -83,7 +83,7 @@ function AdmonitionIconType({ title, type }: Pick<Props, "title" | "type">) {
 
 function AdmonitionContent({ children }: Pick<Props, "children">) {
   return children ? (
-    <div className="[&>p]:!mb-1 [&>:last-child]:!mb-0 text-sm">{children}</div>
+    <div className="[&>p]:mb-1! [&>:last-child]:mb-0! text-sm">{children}</div>
   ) : null;
 }
 

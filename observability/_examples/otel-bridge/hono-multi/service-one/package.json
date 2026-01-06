@@ -1,0 +1,27 @@
+{
+  "name": "@mastra/hono-multi-service-one",
+  "version": "0.1.0",
+  "description": "Service One - Entry point service for hono-multi example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx --import=./src/instrumentation.ts --import=@opentelemetry/instrumentation/hook.mjs src/index.ts",
+    "lint": "prettier --check '**/*.{js,ts}'",
+    "lint:fix": "prettier --write '**/*.{js,ts}'"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.5",
+    "@hono/otel": "^1.0.1",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/instrumentation": "^0.208.0",
+    "@mastra/hono-multi-instrumentation": "workspace:*",
+    "hono": "^4.11.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3"
+  }
+}

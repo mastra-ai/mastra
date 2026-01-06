@@ -1,4 +1,4 @@
-import EventEmitter from 'events';
+import EventEmitter from 'node:events';
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
@@ -19,6 +19,7 @@ export async function processWorkflowLoop(
     parentWorkflow,
     requestContext,
     retryCount = 0,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -64,6 +65,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           requestContext,
+          perStep,
         },
       });
     } else {
@@ -82,6 +84,7 @@ export async function processWorkflowLoop(
           activeSteps,
           requestContext,
           retryCount,
+          perStep,
         },
       });
     }
@@ -102,6 +105,7 @@ export async function processWorkflowLoop(
           activeSteps,
           requestContext,
           retryCount,
+          perStep,
         },
       });
     } else {
@@ -119,6 +123,7 @@ export async function processWorkflowLoop(
           resumeData,
           activeSteps,
           requestContext,
+          perStep,
         },
       });
     }
@@ -134,9 +139,11 @@ export async function processWorkflowForEach(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     resumeData,
     parentWorkflow,
     requestContext,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -166,10 +173,12 @@ export async function processWorkflowForEach(
         executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
         resumeSteps,
         stepResults,
+        timeTravel,
         prevResult: currentResult,
         resumeData,
         activeSteps,
         requestContext,
+        perStep,
       },
     });
 
@@ -179,17 +188,19 @@ export async function processWorkflowForEach(
     return;
   }
 
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
     const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
-    await mastra.getStorage()?.updateWorkflowResults({
+    await workflowsStore?.updateWorkflowResults({
       workflowName: workflowId,
       runId,
       stepId: step.step.id,
       result: {
-        status: 'succcess',
+        status: 'success',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
@@ -208,10 +219,12 @@ export async function processWorkflowForEach(
           executionPath: [executionPath[0]!, i],
           resumeSteps,
           stepResults,
+          timeTravel,
           prevResult,
           resumeData,
           activeSteps,
           requestContext,
+          perStep,
         },
       });
     }
@@ -220,12 +233,12 @@ export async function processWorkflowForEach(
   }
 
   (currentResult as any).output.push(null);
-  await mastra.getStorage()?.updateWorkflowResults({
+  await workflowsStore?.updateWorkflowResults({
     workflowName: workflowId,
     runId,
     stepId: step.step.id,
     result: {
-      status: 'succcess',
+      status: 'success',
       output: (currentResult as any).output,
       startedAt: Date.now(),
       payload: (prevResult as any)?.output,
@@ -242,11 +255,13 @@ export async function processWorkflowForEach(
       runId,
       executionPath: [executionPath[0]!, idx],
       resumeSteps,
+      timeTravel,
       stepResults,
       prevResult,
       resumeData,
       activeSteps,
       requestContext,
+      perStep,
     },
   });
 }

@@ -1,6 +1,8 @@
 ---
 title: "Reference: OpenSearch Vector Store | Vectors"
 description: Documentation for the OpenSearchVector class in Mastra, which provides vector search using OpenSearch.
+packages:
+  - "@mastra/opensearch"
 ---
 
 # OpenSearch Vector Store
@@ -142,7 +144,7 @@ Gets information about an index.
 
 ### updateVector()
 
-Updates a specific vector entry by its ID with new vector data and/or metadata.
+Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
@@ -154,43 +156,64 @@ Updates a specific vector entry by its ID with new vector data and/or metadata.
     {
       name: "id",
       type: "string",
-      description: "The ID of the vector to update",
+      isOptional: true,
+      description: "The ID of the vector to update (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
     },
     {
       name: "update",
-      type: "object",
-      description: "Update data containing vector and/or metadata",
-    },
-    {
-      name: "update.vector",
-      type: "number[]",
-      description: "The new vector embedding",
-      isOptional: true,
-    },
-    {
-      name: "update.metadata",
-      type: "Record<string, any>",
-      description: "The new metadata",
-      isOptional: true,
+      type: "{ vector?: number[]; metadata?: Record<string, any>; }",
+      description: "Object containing the vector and/or metadata to update",
     },
   ]}
 />
 
 ### deleteVector()
 
-Deletes specific vector entries by their IDs from the index.
+Deletes a single vector by its ID from the index.
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "The name of the index to delete vectors from",
+      description: "The name of the index to delete the vector from",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "The ID of the vector to delete",
+    },
+  ]}
+/>
+
+### deleteVectors()
+
+Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vectors to delete",
     },
     {
       name: "ids",
       type: "string[]",
-      description: "Array of vector IDs to delete",
+      isOptional: true,
+      description: "Array of vector IDs to delete (mutually exclusive with filter)",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
     },
   ]}
 />

@@ -5,44 +5,37 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { join, relative, dirname, extname } from 'node:path/posix';
 import { stat } from 'node:fs/promises';
+import { getPackages, type Package } from '@manypkg/get-packages';
 
-let allPackages = await globby(
-  [
-    '**/package.json',
-    '!./examples/**',
-    '!./docs/**',
-    '!./docs-new/**',
-    '!**/node_modules/**',
-    '!**/integration-tests/**',
-    '!**/integration-tests-v5/**',
-    '!./packages/_config/**',
-    '!./e2e-tests/**',
-    '!**/mcp-docs-server/**',
-    '!**/mcp-registry-registry/**',
-    '!**/stores/_test-utils/**',
-    '!**/explorations/**',
-  ],
-  {
-    cwd: resolve(__dirname, '..', '..'),
-    absolute: true,
-  },
-);
+const { packages: allPackages } = await getPackages(resolve(__dirname, '..', '..'));
 
-// remove workspace root
-allPackages.shift();
+const globalIgnore = [
+  '@mastra/longmemeval',
+  '@mastra/dane',
+  '@mastra/mcp-docs-server',
+  '@mastra/mcp-registry-registry',
+];
 
-describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/'), '..', '..'), dirname(pkg)), pkg]))(
-  '%s',
-  async ([pkgName, packagePath]) => {
-    let pkgJson = JSON.parse(await readFile(packagePath, 'utf-8'));
-    let imports: string[] = Object.keys(pkgJson?.exports ?? {});
+describe.for(
+  allPackages
+    .filter(pkg => !globalIgnore.includes(pkg.packageJson.name))
+    .map(pkg => [pkg.packageJson.name, pkg.packageJson] as const),
+)('%s', async ([pkgName, pkgJson]) => {
+  console.log(pkgName, pkgJson);
+  let imports: string[] = Object.keys(pkgJson?.exports ?? {});
 
-    it('should have type="module"', () => {
-      expect(pkgJson.type).toBe('module');
-    });
+  it('should have type="module"', () => {
+    expect(pkgJson.type).toBe('module');
+  });
 
-    describe.concurrent.for(imports.filter(x => !x.endsWith('.css')).map(x => [x]))('%s', async ([importPath]) => {
-      it.skipIf(pkgJson.name === 'mastra')('should use .js and .d.ts extensions when using import', async () => {
+  it.skipIf(!pkgJson.name.startsWith('@internal/'))('should be marked as private', () => {
+    expect(pkgJson.private).toBe(true);
+  });
+
+  describe.concurrent.for(imports.filter(x => !x.endsWith('.css')).map(x => [x]))('%s', async ([importPath]) => {
+    it.skipIf(pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/'))(
+      'should use .js and .d.ts extensions when using import',
+      async () => {
         if (importPath === './package.json') {
           return;
         }
@@ -60,11 +53,12 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         for (const pathOnDisk of pathsOnDisk) {
           await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
         }
-      });
+      },
+    );
 
-      it.skipIf(
-        pkgName === 'packages/playground-ui' || pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/'),
-      )('should use .cjs and .d.ts extensions when using require', async () => {
+    it.skipIf(pkgName === '@mastra/playground-ui' || pkgName === 'mastra' || pkgName.startsWith('@internal/'))(
+      'should use .cjs and .d.ts extensions when using require',
+      async () => {
         if (importPath === './package.json') {
           return;
         }
@@ -84,18 +78,17 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         for (const pathOnDisk of pathsOnDisk) {
           await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
         }
-      });
-    });
+      },
+    );
+  });
 
-    it.skipIf(
-      pkgJson.name === 'mastra' ||
-        pkgJson.name === 'create-mastra' ||
-        pkgJson.name === '@mastra/client-js' ||
-        !pkgJson.name.startsWith('@mastra/'),
-    )('should have @mastra/core as a peer dependency if used', async () => {
-      console.log(pkgJson.name);
-      const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
-      expect(hasMastraCoreAsDependency).toBe(undefined);
-    });
-  },
-);
+  it.skipIf(
+    pkgJson.name === 'mastra' ||
+      pkgJson.name === 'create-mastra' ||
+      pkgJson.name === '@mastra/client-js' ||
+      !pkgJson.name.startsWith('@mastra/'),
+  )('should have @mastra/core as a peer dependency if used', async () => {
+    const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
+    expect(hasMastraCoreAsDependency).toBe(undefined);
+  });
+});

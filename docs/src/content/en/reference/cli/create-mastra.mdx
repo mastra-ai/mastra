@@ -1,6 +1,8 @@
 ---
 title: "Reference: create-mastra | CLI"
 description: Documentation for the create-mastra command, which creates a new Mastra project with interactive setup options.
+packages:
+  - "@mastra/create-mastra"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -15,28 +17,28 @@ The `create-mastra` command **creates** a new standalone Mastra project. Use thi
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npx create-mastra@beta
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn dlx create-mastra@beta
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm create mastra@beta
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun create mastra@beta
 ```
 
@@ -48,28 +50,28 @@ bun create mastra@beta
 <Tabs>
 <TabItem value="npm" label="npm">
 
-```bash copy
+```bash
 npx create-mastra@beta my-mastra-project -- --template coding-agent
 ```
 
 </TabItem>
 <TabItem value="yarn" label="yarn">
 
-```bash copy
+```bash
 yarn dlx create-mastra@beta --template coding-agent
 ```
 
 </TabItem>
 <TabItem value="pnpm" label="pnpm">
 
-```bash copy
+```bash
 pnpm create mastra@beta --template coding-agent
 ```
 
 </TabItem>
 <TabItem value="bun" label="bun">
 
-```bash copy
+```bash
 bun create mastra@beta --template coding-agent
 ```
 
@@ -183,12 +185,12 @@ By default, Mastra collects anonymous information about your project like your O
 
 You can opt out of the CLI analytics by setting an environment variable:
 
-```bash copy
+```bash
 MASTRA_TELEMETRY_DISABLED=1
 ```
 
 You can also set this while using other `mastra` commands:
 
-```bash copy
+```bash
 MASTRA_TELEMETRY_DISABLED=1 npx create-mastra@beta
 ```

@@ -1,0 +1,91 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`jsonSchemaToZod > Snapshot Tests > should match snapshot for complete feature set 1`] = `
+"z.object({ "id": z.string().describe("ID field").default("default-id").readonly(), "name": z.string().describe("Name field").optional(), "metadata": z.object({ "created": z.string().optional() }).catchall(z.string()).describe("Metadata object").optional() }).catchall(z.union([z.string(), z.number()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "name", "metadata"].includes(key)
+if (key.match(new RegExp("^custom_"))) {
+evaluated = true
+const result = z.string().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [...ctx.path, key],
+          code: 'custom',
+          message: \`Invalid input: Key matching regex /\${key}/ must match schema\`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.number().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [...ctx.path, key],
+          code: 'custom',
+          message: \`Invalid input: must match catchall schema\`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Complete feature test").default({"id":"1","name":"Test"})"
+`;
+
+exports[`jsonSchemaToZod > Snapshot Tests > should match snapshot for complex discriminatedUnion schema 1`] = `"z.discriminatedUnion("type", [z.object({ "type": z.literal("user"), "id": z.string(), "name": z.string().optional(), "email": z.string() }), z.object({ "type": z.literal("admin"), "id": z.string(), "name": z.string().optional(), "permissions": z.array(z.string()) })])"`;
+
+exports[`jsonSchemaToZod > Snapshot Tests > should match snapshot for complex object with patternProperties and additionalProperties 1`] = `
+"z.object({ "id": z.string().describe("Unique identifier").optional(), "name": z.string().default("Unknown") }).catchall(z.union([z.string(), z.number(), z.boolean()])).superRefine((value, ctx) => {
+for (const key in value) {
+let evaluated = ["id", "name"].includes(key)
+if (key.match(new RegExp("^meta_"))) {
+evaluated = true
+const result = z.string().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [...ctx.path, key],
+          code: 'custom',
+          message: \`Invalid input: Key matching regex /\${key}/ must match schema\`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (key.match(new RegExp("^data_"))) {
+evaluated = true
+const result = z.number().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [...ctx.path, key],
+          code: 'custom',
+          message: \`Invalid input: Key matching regex /\${key}/ must match schema\`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+if (!evaluated) {
+const result = z.boolean().safeParse(value[key])
+if (!result.success) {
+ctx.addIssue({
+          path: [...ctx.path, key],
+          code: 'custom',
+          message: \`Invalid input: must match catchall schema\`,
+          params: {
+            issues: result.error.issues
+          }
+        })
+}
+}
+}
+}).describe("Complex object with patterns").readonly()"
+`;
+
+exports[`jsonSchemaToZod > Snapshot Tests > should match snapshot for deeply nested recursive schema 1`] = `"z.object({ "value": z.string().optional(), "children": z.array(z.object({ "value": z.string().optional(), "children": z.array(z.object({ "value": z.number().optional() })).optional() })).optional() })"`;
+
+exports[`jsonSchemaToZod > Snapshot Tests > should match snapshot for object with allOf, oneOf, and anyOf 1`] = `"z.object({ "base": z.string().optional() }).and(z.object({ "type": z.literal("variant"), "variantProp": z.string().optional() })).and(z.object({ "oneOfProp": z.boolean().optional() })).and(z.object({ "allOfProp": z.number().optional() }))"`;

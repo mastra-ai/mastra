@@ -6,9 +6,31 @@ import { Observability } from '@mastra/observability';
 import { agentThatHarassesYou, chefAgent, chefAgentResponses, dynamicAgent, evalAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
 import { lessComplexWorkflow, myWorkflow } from './workflows';
-import { chefModelV2Agent, errorAgent, networkAgent } from './agents/model-v2-agent';
+import {
+  chefModelV2Agent,
+  networkAgent,
+  agentWithAdvancedModeration,
+  agentWithBranchingModeration,
+  agentWithSequentialModeration,
+} from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
-import { myWorkflowX, nestedWorkflow } from './workflows/other';
+import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
+import { moderationProcessor } from './agents/model-v2-agent';
+import {
+  moderatedAssistantAgent,
+  agentWithProcessorWorkflow,
+  contentModerationWorkflow,
+  simpleAssistantAgent,
+  agentWithBranchingWorkflow,
+  advancedModerationWorkflow,
+} from './workflows/content-moderation';
+import {
+  piiDetectionProcessor,
+  toxicityCheckProcessor,
+  responseQualityProcessor,
+  sensitiveTopicBlocker,
+  stepLoggerProcessor,
+} from './processors/index';
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -23,9 +45,8 @@ const testScorer = createScorer({
   return 1;
 });
 
-export const mastra = new Mastra({
+const config = {
   agents: {
-    errorAgent,
     chefAgent,
     chefAgentResponses,
     dynamicAgent,
@@ -33,16 +54,45 @@ export const mastra = new Mastra({
     evalAgent,
     chefModelV2Agent,
     networkAgent,
+    moderatedAssistantAgent,
+    agentWithProcessorWorkflow,
+    simpleAssistantAgent,
+    agentWithBranchingWorkflow,
+    // Agents with processor workflows from model-v2-agent
+    agentWithAdvancedModeration,
+    agentWithBranchingModeration,
+    agentWithSequentialModeration,
   },
-  logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
+  processors: {
+    moderationProcessor,
+    piiDetectionProcessor,
+    toxicityCheckProcessor,
+    responseQualityProcessor,
+    sensitiveTopicBlocker,
+    stepLoggerProcessor,
+  },
+  // logger: new PinoLogger({ name: 'Chef', level: 'debug' }),
   storage,
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,
   },
-  workflows: { myWorkflow, myWorkflowX, lessComplexWorkflow, nestedWorkflow },
+  workflows: {
+    myWorkflow,
+    myWorkflowX,
+    lessComplexWorkflow,
+    nestedWorkflow,
+    contentModerationWorkflow,
+    advancedModerationWorkflow,
+    findUserWorkflow,
+  },
   bundler: {
     sourcemap: true,
+  },
+  server: {
+    build: {
+      swaggerUI: true,
+    },
   },
   scorers: {
     testScorer,
@@ -50,4 +100,8 @@ export const mastra = new Mastra({
   observability: new Observability({
     default: { enabled: true },
   }),
+};
+
+export const mastra = new Mastra({
+  ...config,
 });

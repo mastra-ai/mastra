@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import type { OutputChunk, Plugin } from 'rollup';
 
 export function pino() {

@@ -1,6 +1,6 @@
 import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
-import type { generateText as generateText5 } from 'ai-v5';
-import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
+import type { generateText as generateText5 } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
 import type { loop } from '../loop';
@@ -13,11 +13,13 @@ import {
   modelWithSources,
   testUsage,
 } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
-  const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
+  const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {
     const output = await loopFn({
       runId,
+      methodType: 'generate',
       ...args,
     });
     // @ts-expect-error -- missing `experimental_output` in v5 getFullOutput
@@ -46,9 +48,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+              { type: 'text-end', id: 'text-1' },
               {
                 id: '123',
                 providerMetadata: {
@@ -66,9 +68,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               { type: 'reasoning-delta', id: '1', delta: 'I will open the conversation with witty banter.' },
               { type: 'reasoning-end', id: '1' },
               { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
-              { type: 'text-start', id: '2' },
-              { type: 'text-delta', id: '2', delta: 'More text' },
-              { type: 'text-end', id: '2' },
+              { type: 'text-start', id: 'text-2' },
+              { type: 'text-delta', id: 'text-2', delta: 'More text' },
+              { type: 'text-end', id: 'text-2' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -198,7 +200,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     });
 
     describe('result.files', () => {
-      it.todo('should contain files', async () => {
+      it('should contain files', async () => {
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -247,10 +249,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             },
             { type: 'reasoning-end', id: '2' },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello,' },
-            { type: 'text-delta', id: '1', delta: ' world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello,' },
+            { type: 'text-delta', id: 'text-1', delta: ' world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -263,9 +265,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       const modelWithSources = new MockLanguageModelV2({
         doStream: async () => ({
           stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'source',
               sourceType: 'url',
@@ -573,9 +575,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                 }),
@@ -650,12 +652,19 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               maxRetries: 0,
               id: 'test-model',
               model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [{ type: 'text', text: 'Hello, world!' }],
+                  request: {
+                    body: 'test body',
+                  },
+                }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                   request: {
@@ -668,7 +677,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(await result.request).toStrictEqual({
+        expect(result.request).toStrictEqual({
           body: 'test body',
         });
       });
@@ -683,12 +692,27 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               maxRetries: 0,
               id: 'test-model',
               model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [{ type: 'text', text: 'Hello, world!' }],
+                  response: {
+                    id: 'test-id-from-model',
+                    timestamp: new Date(10000),
+                    modelId: 'test-response-model-id',
+                    modelProvider: 'mock-provider',
+                    modelVersion: 'v2',
+                    headers: {
+                      'custom-response-header': 'response-header-value',
+                    },
+                    body: 'test body',
+                  },
+                }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                   response: {
@@ -719,12 +743,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             "id": "test-id-from-model",
             "messages": [
               {
-                "content": [
-                  {
-                    "text": "Hello, world!",
-                    "type": "text",
-                  },
-                ],
+                "content": "Hello, world!",
                 "role": "assistant",
               },
             ],

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
@@ -56,7 +56,7 @@ export interface SystemPromptDetection {
   redacted_value: string | null;
 }
 
-export class SystemPromptScrubber implements Processor {
+export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'> {
   public readonly id = 'system-prompt-scrubber';
   public readonly name = 'System Prompt Scrubber';
 
@@ -276,7 +276,7 @@ export class SystemPromptScrubber implements Processor {
             })
           : baseSchema;
 
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         result = await this.detectionAgent.generate(text, {
           structuredOutput: {
             schema,

@@ -105,4 +105,121 @@ describe('toAISdkFormat', () => {
       expect(errorChunk.errorText).toContain(errorMessage); // Should contain the actual error message
     });
   });
+
+  describe('toAISdkV5Stream tripwire handling', () => {
+    it('should send finish event with finishReason "other" when tripwire occurs and stream does not exit gracefully', async () => {
+      const tripwireReason = 'Content filter triggered';
+
+      // Create a mock stream with tripwire chunk but no finish event
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tripwire',
+            runId: 'test-run-id',
+            payload: {
+              reason: tripwireReason,
+            },
+          });
+
+          // Stream closes without a finish event (ungraceful exit)
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+        from: 'agent',
+        sendFinish: true,
+      });
+
+      const chunks: any[] = [];
+      let finishChunk: any = null;
+      let tripwireChunk: any = null;
+
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+        if (chunk.type === 'finish') {
+          finishChunk = chunk;
+        }
+        if (chunk.type === 'data-tripwire') {
+          tripwireChunk = chunk;
+        }
+      }
+
+      // Verify tripwire chunk was received
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.type).toBe('data-tripwire');
+      expect(tripwireChunk.data.reason).toBe(tripwireReason);
+
+      // Verify finish event was sent with finishReason 'other'
+      expect(finishChunk).toBeDefined();
+      expect(finishChunk.type).toBe('finish');
+      expect(finishChunk.finishReason).toBe('other');
+    });
+
+    it('should not send additional finish event if finish already occurred after tripwire', async () => {
+      const tripwireReason = 'Content filter triggered';
+
+      // Create a mock stream with tripwire chunk followed by finish event
+      const mockStream = new ReadableStream({
+        async start(controller) {
+          controller.enqueue({
+            type: 'start',
+            runId: 'test-run-id',
+            payload: { id: 'test-id' },
+          });
+
+          controller.enqueue({
+            type: 'tripwire',
+            runId: 'test-run-id',
+            payload: {
+              reason: tripwireReason,
+            },
+          });
+
+          controller.enqueue({
+            type: 'finish',
+            runId: 'test-run-id',
+            payload: {
+              stepResult: {
+                reason: 'stop',
+              },
+              output: {
+                usage: {
+                  inputTokens: 10,
+                  outputTokens: 20,
+                  totalTokens: 30,
+                },
+              },
+            },
+          });
+
+          controller.close();
+        },
+      });
+
+      const aiSdkStream = toAISdkV5Stream(mockStream as unknown as MastraModelOutput, {
+        from: 'agent',
+        sendFinish: true,
+      });
+
+      const chunks: any[] = [];
+      const finishChunks: any[] = [];
+
+      for await (const chunk of aiSdkStream) {
+        chunks.push(chunk);
+        if (chunk.type === 'finish') {
+          finishChunks.push(chunk);
+        }
+      }
+
+      // Should only have one finish event (the original one, not an additional one)
+      expect(finishChunks).toHaveLength(1);
+    });
+  });
 });

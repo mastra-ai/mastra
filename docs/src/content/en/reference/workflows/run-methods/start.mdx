@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run.start() | Workflows"
 description: Documentation for the `Run.start()` method in workflows, which starts a workflow run with input data.
+packages:
+  - "@mastra/core"
 ---
 
 # Run.start()
@@ -9,7 +11,7 @@ The `.start()` method starts a workflow run with input data, allowing you to exe
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({
@@ -36,9 +38,9 @@ const result = await run.start({
       isOptional: true,
     },
     {
-      name: "writableStream",
-      type: "WritableStream<ChunkType>",
-      description: "Optional writable stream for streaming workflow output",
+      name: "outputWriter",
+      type: "(chunk: TOutput) => Promise<void>",
+      description: "Optional asynchronous function to handle output chunks as they are produced",
       isOptional: true,
     },
     {
@@ -75,6 +77,50 @@ const result = await run.start({
               isOptional: true,
               description:
                 "Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
             },
           ],
         },
@@ -124,7 +170,7 @@ const result = await run.start({
 
 ## Extended usage example
 
-```typescript showLineNumbers copy
+```typescript
 import { RequestContext } from "@mastra/core/request-context";
 
 const run = await workflow.createRun();

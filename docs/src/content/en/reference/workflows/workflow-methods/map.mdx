@@ -1,6 +1,8 @@
 ---
 title: "Reference: Workflow.map() | Workflows"
 description: Documentation for the `Workflow.map()` method in workflows, which maps output data from a previous step to the input of a subsequent step.
+packages:
+  - "@mastra/core"
 ---
 
 # Workflow.map()
@@ -9,7 +11,7 @@ The `.map()` method maps output data from a previous step to the input of a subs
 
 ## Usage example
 
-```typescript copy
+```typescript
 workflow.map(async ({ inputData }) => `${inputData.value} - map`
 ```
 
@@ -43,7 +45,7 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`
 
 Use `inputData` to access the full output of the previous step.
 
-```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(({ inputData }) => {
     console.log(inputData);
@@ -54,7 +56,7 @@ Use `inputData` to access the full output of the previous step.
 
 Use `getStepResult()` to access the full output of a specific step by referencing the step's instance.
 
-```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(async ({ getStepResult }) => {
     console.log(getStepResult(step1));
@@ -65,7 +67,7 @@ Use `getStepResult()` to access the full output of a specific step by referencin
 
 Use `getInitData()` to access the initial input data provided to the workflow.
 
-```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map(async ({ getInitData }) => {
       console.log(getInitData());
@@ -77,7 +79,7 @@ Use `getInitData()` to access the initial input data provided to the workflow.
 The object form of `.map()` provides an alternative declarative syntax for mapping fields. Instead of writing a function, you define an object where each key is a new field name and each value uses `mapVariable()` to extract data from previous steps or workflow input.
 Import `mapVariable()` from the workflows module:
 
-```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript filename="src/mastra/workflows/test-workflow.ts"
 import { mapVariable } from "@mastra/core/workflows";
 ```
 
@@ -86,7 +88,7 @@ import { mapVariable } from "@mastra/core/workflows";
 Use `mapVariable()` with `step` to extract a specific field from a step's output and map it to a new field name. The `path` parameter specifies which field to extract.
 In this example, the `value` field from `step1`'s output is extracted and mapped to a new field called `details`:
 
-```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {3-6} filename="src/mastra/workflows/test-workflow.ts"
   .then(step1)
   .map({
     details: mapVariable({
@@ -101,7 +103,7 @@ In this example, the `value` field from `step1`'s output is extracted and mapped
 Use `mapVariable()` with `initData` to extract a specific field from the workflow's initial input data. This is useful when you need to pass the original workflow input to a later step.
 In this example, the `value` field from the workflow's input is extracted and mapped to a field called `details`:
 
-```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6-9} filename="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({...});
 
 testWorkflow

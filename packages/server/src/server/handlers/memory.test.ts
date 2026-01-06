@@ -6,14 +6,16 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
-  getMemoryStatusHandler,
-  listThreadsHandler,
-  getThreadByIdHandler,
-  saveMessagesHandler,
-  createThreadHandler,
-  listMessagesHandler,
-  deleteMessagesHandler,
+  GET_MEMORY_STATUS_ROUTE,
+  LIST_THREADS_ROUTE,
+  GET_THREAD_BY_ID_ROUTE,
+  SAVE_MESSAGES_ROUTE,
+  CREATE_THREAD_ROUTE,
+  LIST_MESSAGES_ROUTE,
+  DELETE_MESSAGES_ROUTE,
+  getTextContent,
 } from './memory';
+import { createTestServerContext } from './test-utils';
 
 function createThread(overrides?: Partial<StorageThreadType>): StorageThreadType {
   const now = new Date();
@@ -25,17 +27,6 @@ function createThread(overrides?: Partial<StorageThreadType>): StorageThreadType
     updatedAt: now,
     ...overrides,
   };
-}
-
-function getTextContent(message: MastraDBMessage): string {
-  if (typeof message.content === 'string') {
-    return message.content;
-  }
-  if (message.content && typeof message.content === 'object' && 'parts' in message.content) {
-    const textPart = message.content.parts.find((p: any) => p.type === 'text');
-    return textPart?.text || '';
-  }
-  return '';
 }
 
 describe('Memory Handlers', () => {
@@ -57,14 +48,30 @@ describe('Memory Handlers', () => {
   });
 
   describe('getMemoryStatusHandler', () => {
-    it('should return false when memory is not initialized', async () => {
+    it('should return false when memory is not initialized and no storage is configured', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        // No storage configured
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: undefined as any,
+      });
+      expect(result).toEqual({ result: false });
+    });
+
+    it('should return true when storage is configured but no agentId provided (storage fallback)', async () => {
       const mastra = new Mastra({
         logger: false,
         storage,
       });
 
-      const result = await getMemoryStatusHandler({ mastra });
-      expect(result).toEqual({ result: false });
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: undefined as any,
+      });
+      expect(result).toEqual({ result: true });
     });
 
     it('should return true when memory is initialized', async () => {
@@ -74,7 +81,10 @@ describe('Memory Handlers', () => {
         agents: { mockAgent },
       });
 
-      const result = await getMemoryStatusHandler({ mastra, agentId: 'mockAgent' });
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'mockAgent',
+      });
       expect(result).toEqual({ result: true });
     });
 
@@ -87,7 +97,10 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      const result = await getMemoryStatusHandler({ mastra, agentId: 'test-agent' });
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+      });
       expect(result).toEqual({ result: true });
     });
 
@@ -95,7 +108,12 @@ describe('Memory Handlers', () => {
       const mastra = new Mastra({
         logger: false,
       });
-      await expect(getMemoryStatusHandler({ mastra, agentId: 'non-existent' })).rejects.toThrow(HTTPException);
+      await expect(
+        GET_MEMORY_STATUS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'non-existent',
+        }),
+      ).rejects.toThrow(HTTPException);
     });
   });
 
@@ -113,8 +131,8 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        listThreadsHandler({
-          mastra,
+        LIST_THREADS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           resourceId: 'test-resource',
           agentId: 'test-agent',
           page: 0,
@@ -129,11 +147,12 @@ describe('Memory Handlers', () => {
         agents: { 'test-agent': mockAgent },
       });
       await expect(
-        listThreadsHandler({
-          mastra,
+        LIST_THREADS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
           page: 0,
           perPage: 10,
+          resourceId: undefined as any,
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
     });
@@ -148,8 +167,8 @@ describe('Memory Handlers', () => {
 
       const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
-      const result = await listThreadsHandler({
-        mastra,
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         resourceId: 'test-resource',
         agentId: 'test-agent',
         page: 0,
@@ -181,8 +200,8 @@ describe('Memory Handlers', () => {
 
       const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
-      const result = await listThreadsHandler({
-        mastra,
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         resourceId: 'test-resource',
         agentId: 'test-agent',
         page: 0,
@@ -212,8 +231,8 @@ describe('Memory Handlers', () => {
       const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
       // Test updatedAt DESC sorting
-      const result = await listThreadsHandler({
-        mastra,
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         resourceId: 'test-resource',
         agentId: 'test-agent',
         page: 0,
@@ -239,8 +258,8 @@ describe('Memory Handlers', () => {
 
       const spy = vi.spyOn(mockMemory, 'listThreadsByResourceId');
 
-      const result = await listThreadsHandler({
-        mastra,
+      const result = await LIST_THREADS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         resourceId: 'non-existent-resource',
         agentId: 'test-agent',
         page: 0,
@@ -259,9 +278,13 @@ describe('Memory Handlers', () => {
       const mastra = new Mastra({
         logger: false,
       });
-      await expect(getThreadByIdHandler({ mastra })).rejects.toThrow(
-        new HTTPException(400, { message: 'Argument "threadId" is required' }),
-      );
+      await expect(
+        GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: undefined as any,
+          agentId: 'test-agent',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
     });
 
     it('should throw error when memory is not initialized', async () => {
@@ -276,9 +299,13 @@ describe('Memory Handlers', () => {
           }),
         },
       });
-      await expect(getThreadByIdHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(400, { message: 'Memory is not initialized' }),
-      );
+      await expect(
+        GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'test-thread',
+          agentId: 'test-agent',
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
     it('should throw 404 when thread is not found', async () => {
@@ -290,9 +317,13 @@ describe('Memory Handlers', () => {
       });
       const spy = vi.spyOn(mockMemory, 'getThreadById');
 
-      await expect(getThreadByIdHandler({ mastra, threadId: 'non-existent', agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(404, { message: 'Thread not found' }),
-      );
+      await expect(
+        GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'non-existent',
+          agentId: 'test-agent',
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
       expect(spy).toHaveBeenCalledWith({ threadId: 'non-existent' });
     });
 
@@ -308,7 +339,11 @@ describe('Memory Handlers', () => {
       });
       const spy = vi.spyOn(mockMemory, 'getThreadById');
 
-      const result = await getThreadByIdHandler({ mastra, threadId: 'test-thread', agentId: 'test-agent' });
+      const result = await GET_THREAD_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        threadId: 'test-thread',
+        agentId: 'test-agent',
+      });
       expect(result).toEqual(createdThread);
       expect(spy).toHaveBeenCalledWith({ threadId: 'test-thread' });
     });
@@ -328,10 +363,10 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        saveMessagesHandler({
-          mastra,
+        SAVE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          body: { messages: [] },
+          messages: [] as MastraDBMessage[],
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
@@ -344,10 +379,10 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        saveMessagesHandler({
-          mastra,
+        SAVE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          body: {} as { messages: MastraDBMessage[] },
+          messages: undefined as unknown as MastraDBMessage[],
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required' }));
     });
@@ -360,10 +395,10 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        saveMessagesHandler({
-          mastra,
+        SAVE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          body: { messages: 'not-an-array' as unknown as MastraDBMessage[] },
+          messages: 'not-an-array' as unknown as MastraDBMessage[],
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array' }));
     });
@@ -392,10 +427,10 @@ describe('Memory Handlers', () => {
       });
       const spy = vi.spyOn(mockMemory, 'saveMessages');
 
-      const result = await saveMessagesHandler({
-        mastra,
+      const result = await SAVE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         agentId: 'test-agent',
-        body: { messages: mockMessages },
+        messages: mockMessages,
       });
       expect(result).toBeDefined();
       expect(spy).toHaveBeenCalled();
@@ -447,10 +482,10 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'recall');
 
       // Save both messages
-      const saveResponse = await saveMessagesHandler({
-        mastra,
+      const saveResponse = await SAVE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         agentId: 'test-agent',
-        body: { messages: [v1Message, v2Message] },
+        messages: [v1Message, v2Message] as MastraDBMessage[],
       });
 
       expect(saveResponse).toBeDefined();
@@ -463,11 +498,13 @@ describe('Memory Handlers', () => {
       });
 
       // Retrieve messages
-      const getResponse = await listMessagesHandler({
-        mastra,
+      const getResponse = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId,
         resourceId,
         agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
       });
 
       // Verify both messages are returned
@@ -569,10 +606,10 @@ describe('Memory Handlers', () => {
       const spy = vi.spyOn(mockMemory, 'saveMessages');
 
       // Save mixed messages
-      const saveResponse = await saveMessagesHandler({
-        mastra,
+      const saveResponse = await SAVE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         agentId: 'test-agent',
-        body: { messages },
+        messages: messages as MastraDBMessage[],
       });
 
       expect(saveResponse).toBeDefined();
@@ -602,9 +639,10 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        createThreadHandler({
-          mastra,
-          body: { resourceId: 'test-resource' },
+        CREATE_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: undefined as any,
+          resourceId: 'test-resource',
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
@@ -617,9 +655,10 @@ describe('Memory Handlers', () => {
         },
       });
       await expect(
-        createThreadHandler({
+        CREATE_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          mastra,
+          resourceId: undefined as any,
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "resourceId" is required' }));
     });
@@ -633,13 +672,11 @@ describe('Memory Handlers', () => {
       });
       const spy = vi.spyOn(mockMemory, 'createThread');
 
-      const result = await createThreadHandler({
-        mastra,
+      const result = await CREATE_THREAD_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         agentId: 'test-agent',
-        body: {
-          resourceId: 'test-resource',
-          title: 'Test Thread',
-        },
+        resourceId: 'test-resource',
+        title: 'Test Thread',
       });
       expect(result).toBeDefined();
       expect(result.resourceId).toBe('test-resource');
@@ -660,9 +697,14 @@ describe('Memory Handlers', () => {
         },
         storage,
       });
-      await expect(listMessagesHandler({ mastra, threadId: undefined as any })).rejects.toThrow(
-        new HTTPException(400, { message: 'Argument "threadId" is required' }),
-      );
+      await expect(
+        LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: undefined as any,
+          agentId: 'test-agent',
+          page: 0,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
     });
 
     it('should throw error when storage is not initialized', async () => {
@@ -677,9 +719,14 @@ describe('Memory Handlers', () => {
           }),
         },
       });
-      await expect(listMessagesHandler({ mastra, threadId: 'test-thread', agentId: 'testAgent' })).rejects.toThrow(
-        new HTTPException(400, { message: 'Memory is not initialized' }),
-      );
+      await expect(
+        LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'test-thread',
+          agentId: 'testAgent',
+          page: 0,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
     it('should throw 404 when thread is not found', async () => {
@@ -690,10 +737,15 @@ describe('Memory Handlers', () => {
         },
         storage,
       });
-      vi.spyOn(storage, 'getThreadById').mockResolvedValue(null);
-      await expect(listMessagesHandler({ mastra, threadId: 'non-existent', agentId: 'test-agent' })).rejects.toThrow(
-        new HTTPException(404, { message: 'Thread not found' }),
-      );
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(null);
+      await expect(
+        LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'non-existent',
+          agentId: 'test-agent',
+          page: 0,
+        }),
+      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
     });
 
     it('should return paginated messages for valid thread', async () => {
@@ -701,13 +753,17 @@ describe('Memory Handlers', () => {
         messages: [
           {
             id: 'msg-1',
-            content: 'Test message',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test message' }],
+              content: 'Test message',
+            },
             role: 'user',
             type: 'text',
             threadId: 'test-thread',
             resourceId: 'test-resource',
             createdAt: new Date(),
-          },
+          } as MastraDBMessage,
         ],
         total: 1,
         page: 0,
@@ -723,11 +779,11 @@ describe('Memory Handlers', () => {
         storage,
       });
 
-      vi.spyOn(storage, 'getThreadById').mockResolvedValue(createThread({}));
-      vi.spyOn(storage, 'listMessages').mockResolvedValue(mockResult);
+      vi.spyOn(mockMemory, 'getThreadById').mockResolvedValue(createThread({}));
+      vi.spyOn(mockMemory, 'recall').mockResolvedValue(mockResult);
 
-      const result = await listMessagesHandler({
-        mastra,
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId: 'test-thread',
         resourceId: 'test-resource',
         agentId: 'test-agent',
@@ -739,8 +795,8 @@ describe('Memory Handlers', () => {
       });
 
       expect(result).toEqual(mockResult);
-      expect(storage.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
-      expect(storage.listMessages).toHaveBeenCalledWith({
+      expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
+      expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
         resourceId: 'test-resource',
         perPage: 10,
@@ -798,11 +854,16 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({
-        mastra,
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId,
         resourceId: 'test-resource',
         agentId: 'test-agent',
+        page: 0,
+        perPage: 10,
+        orderBy: undefined,
+        include: undefined,
+        filter: undefined,
       });
 
       // Verify that messages contains the custom metadata
@@ -879,11 +940,12 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({
-        mastra,
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId,
         resourceId: 'test-resource',
         agentId: 'test-agent',
+        page: 0,
       });
 
       expect(result.messages).toHaveLength(1);
@@ -936,11 +998,12 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({
-        mastra,
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId,
         resourceId: 'test-resource',
         agentId: 'test-agent',
+        page: 0,
       });
 
       expect(result.messages).toHaveLength(1);
@@ -1018,11 +1081,12 @@ describe('Memory Handlers', () => {
       vi.spyOn(mockMemory, 'getThreadById');
       vi.spyOn(mockMemory, 'recall');
 
-      const result = await listMessagesHandler({
-        mastra,
+      const result = await LIST_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         threadId,
         resourceId: 'test-resource',
         agentId: 'test-agent',
+        page: 0,
       });
 
       expect(result.messages).toHaveLength(3);
@@ -1048,19 +1112,43 @@ describe('Memory Handlers', () => {
       });
 
       await expect(
-        deleteMessagesHandler({ mastra, messageIds: undefined as any, agentId: 'test-agent' }),
+        DELETE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          messageIds: undefined as any,
+          agentId: 'test-agent',
+        }),
       ).rejects.toThrow(new HTTPException(400, { message: 'messageIds is required' }));
     });
 
-    it('should throw error when memory is not initialized', async () => {
+    it('should throw error when memory is not initialized and no storage configured', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        // No storage configured
+      });
+
+      await expect(
+        DELETE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          messageIds: ['test-message-id'],
+          agentId: undefined as any,
+        }),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
+    });
+
+    it('should use storage fallback when storage is configured but no agentId provided', async () => {
       const mastra = new Mastra({
         logger: false,
         storage,
       });
 
-      await expect(deleteMessagesHandler({ mastra, messageIds: ['test-message-id'] })).rejects.toThrow(
-        new HTTPException(400, { message: 'Memory is not initialized' }),
-      );
+      // With storage fallback, delete should succeed (even if message doesn't exist)
+      const result = await DELETE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        messageIds: ['test-message-id'],
+        agentId: undefined as any,
+      });
+
+      expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
     });
 
     it('should successfully delete a single message', async () => {
@@ -1073,14 +1161,15 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      const result = await deleteMessagesHandler({
-        mastra,
+      const result = await DELETE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         messageIds: 'test-message-id',
         agentId: 'test-agent',
       });
 
       expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
-      expect(mockMemory.deleteMessages).toHaveBeenCalledWith('test-message-id');
+      // Single string should be normalized to array
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith(['test-message-id']);
     });
 
     it('should delete multiple messages successfully', async () => {
@@ -1093,8 +1182,8 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      const result = await deleteMessagesHandler({
-        mastra,
+      const result = await DELETE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         messageIds: ['msg-1', 'msg-2', 'msg-3'],
         agentId: 'test-agent',
       });
@@ -1113,14 +1202,15 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      const result = await deleteMessagesHandler({
-        mastra,
+      const result = await DELETE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         messageIds: { id: 'test-message-id' },
         agentId: 'test-agent',
       });
 
       expect(result).toEqual({ success: true, message: '1 message deleted successfully' });
-      expect(mockMemory.deleteMessages).toHaveBeenCalledWith({ id: 'test-message-id' });
+      // Single object should be normalized to array
+      expect(mockMemory.deleteMessages).toHaveBeenCalledWith([{ id: 'test-message-id' }]);
     });
 
     it('should accept array of message objects', async () => {
@@ -1133,8 +1223,8 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      const result = await deleteMessagesHandler({
-        mastra,
+      const result = await DELETE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         messageIds: [{ id: 'msg-1' }, { id: 'msg-2' }],
         agentId: 'test-agent',
       });
@@ -1155,8 +1245,8 @@ describe('Memory Handlers', () => {
       mockMemory.deleteMessages = vi.fn().mockRejectedValue(new Error(errorMessage));
 
       await expect(
-        deleteMessagesHandler({
-          mastra,
+        DELETE_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           messageIds: ['msg-1', 'msg-2'],
           agentId: 'test-agent',
         }),
@@ -1173,13 +1263,224 @@ describe('Memory Handlers', () => {
 
       mockMemory.deleteMessages = vi.fn().mockResolvedValue(undefined);
 
-      await deleteMessagesHandler({
-        mastra,
+      await DELETE_MESSAGES_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         messageIds: ['msg-1', 'msg-2', 'msg-3'],
         agentId: 'test-agent',
       });
 
       expect(mockMemory.deleteMessages).toHaveBeenCalledWith(['msg-1', 'msg-2', 'msg-3']);
+    });
+  });
+
+  // Tests for fetching threads/messages without agentId
+  //
+  // Problem: When multiple agents share a thread (same threadId/resourceId),
+  // users cannot retrieve messages without knowing all agentIds involved.
+  // Threads are identified by resourceId, not agentId, so agentId should be optional.
+  describe('Thread/Message retrieval without agentId', () => {
+    describe('getThreadByIdHandler without agentId', () => {
+      it('should return thread when storage is configured and agentId is not provided', async () => {
+        // Setup: Create thread via storage directly (without agent memory)
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) throw new Error('Memory store not initialized');
+        const thread = createThread({ id: 'shared-thread', resourceId: 'user-123' });
+        await memoryStore.saveThread({ thread });
+
+        const mastra = new Mastra({
+          logger: false,
+          storage,
+          // No agents configured - using storage directly
+        });
+
+        // This test should PASS after the fix is implemented
+        // Currently it will FAIL because agentId is required
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'shared-thread',
+          agentId: undefined as any, // Explicitly undefined - no agent
+        });
+
+        expect(result).toBeDefined();
+        expect(result.id).toBe('shared-thread');
+        expect(result.resourceId).toBe('user-123');
+      });
+
+      it('should work when multiple agents share a thread and any agentId (or none) is used', async () => {
+        // Create two agents that share the same thread
+        const agent1 = new Agent({
+          id: 'agent-1',
+          name: 'Agent 1',
+          instructions: 'First agent',
+          model: {} as any,
+          memory: mockMemory,
+        });
+
+        const agent2 = new Agent({
+          id: 'agent-2',
+          name: 'Agent 2',
+          instructions: 'Second agent',
+          model: {} as any,
+          memory: mockMemory, // Same memory instance
+        });
+
+        // Create a shared thread
+        await mockMemory.createThread({ threadId: 'shared-thread', resourceId: 'user-123' });
+
+        const mastra = new Mastra({
+          logger: false,
+          storage,
+          agents: { 'agent-1': agent1, 'agent-2': agent2 },
+        });
+
+        // Should be able to get thread without specifying agentId
+        // This test should PASS after the fix is implemented
+        const result = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'shared-thread',
+          agentId: undefined as any, // No agent specified
+        });
+
+        expect(result).toBeDefined();
+        expect(result.id).toBe('shared-thread');
+      });
+    });
+
+    describe('listMessagesHandler without agentId', () => {
+      it('should return messages when storage is configured and agentId is not provided', async () => {
+        // Setup: Create thread and messages via storage directly
+        const memoryStore = await storage.getStore('memory');
+        if (!memoryStore) throw new Error('Memory store not initialized');
+        const thread = createThread({ id: 'shared-thread', resourceId: 'user-123' });
+        await memoryStore.saveThread({ thread });
+
+        const messages: MastraDBMessage[] = [
+          {
+            id: 'msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            threadId: 'shared-thread',
+            resourceId: 'user-123',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Hello from agent 1' }],
+              content: 'Hello from agent 1',
+            },
+          },
+          {
+            id: 'msg-2',
+            role: 'assistant',
+            createdAt: new Date(),
+            threadId: 'shared-thread',
+            resourceId: 'user-123',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Response from agent 2' }],
+              content: 'Response from agent 2',
+            },
+          },
+        ];
+        if (!memoryStore) throw new Error('Memory store not initialized');
+        await memoryStore.saveMessages({ messages });
+
+        const mastra = new Mastra({
+          logger: false,
+          storage,
+          // No agents configured - using storage directly
+        });
+
+        // This test should PASS after the fix is implemented
+        // Currently it will FAIL because agentId is required
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'shared-thread',
+          resourceId: 'user-123',
+          agentId: undefined as any, // Explicitly undefined - no agent
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result).toBeDefined();
+        expect(result.messages).toHaveLength(2);
+        // Check both messages are present (order may vary based on default sorting)
+        const messageIds = result.messages.map((m: MastraDBMessage) => m.id);
+        expect(messageIds).toContain('msg-1');
+        expect(messageIds).toContain('msg-2');
+      });
+
+      it('should retrieve all messages from a shared thread regardless of which agent created them', async () => {
+        // Create two agents that share the same memory/thread
+        const agent1 = new Agent({
+          id: 'agent-1',
+          name: 'Agent 1',
+          instructions: 'First agent',
+          model: {} as any,
+          memory: mockMemory,
+        });
+
+        const agent2 = new Agent({
+          id: 'agent-2',
+          name: 'Agent 2',
+          instructions: 'Second agent',
+          model: {} as any,
+          memory: mockMemory,
+        });
+
+        // Create shared thread and add messages from "both agents"
+        await mockMemory.createThread({ threadId: 'workflow-thread', resourceId: 'workflow-run-123' });
+        await mockMemory.saveMessages({
+          messages: [
+            {
+              id: 'msg-from-agent-1',
+              role: 'user',
+              createdAt: new Date(),
+              threadId: 'workflow-thread',
+              resourceId: 'workflow-run-123',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Message from workflow step 1 (agent 1)' }],
+                content: 'Message from workflow step 1 (agent 1)',
+              },
+            } as MastraDBMessage,
+            {
+              id: 'msg-from-agent-2',
+              role: 'assistant',
+              createdAt: new Date(),
+              threadId: 'workflow-thread',
+              resourceId: 'workflow-run-123',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: 'Response from workflow step 2 (agent 2)' }],
+                content: 'Response from workflow step 2 (agent 2)',
+              },
+            } as MastraDBMessage,
+          ],
+        });
+
+        const mastra = new Mastra({
+          logger: false,
+          storage,
+          agents: { 'agent-1': agent1, 'agent-2': agent2 },
+        });
+
+        // The user should be able to get ALL messages without knowing which agents were involved
+        // This test should PASS after the fix is implemented
+        const result = await LIST_MESSAGES_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          threadId: 'workflow-thread',
+          resourceId: 'workflow-run-123',
+          agentId: undefined as any, // No agent specified - get all messages
+          page: 0,
+          perPage: 10,
+        });
+
+        expect(result).toBeDefined();
+        expect(result.messages).toHaveLength(2);
+        // Both messages should be returned regardless of which "agent" created them
+        const messageIds = result.messages.map((m: MastraDBMessage) => m.id);
+        expect(messageIds).toContain('msg-from-agent-1');
+        expect(messageIds).toContain('msg-from-agent-2');
+      });
     });
   });
 });

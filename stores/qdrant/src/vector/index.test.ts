@@ -964,7 +964,7 @@ describe('Qdrant Metadata Filtering', () => {
   createVectorTestSuite({
     vector: qdrantVector,
     createIndex: async (indexName: string) => {
-      await qdrantVector.createIndex({ indexName, dimension: 4 });
+      await qdrantVector.createIndex({ indexName, dimension: 1536 });
     },
     deleteIndex: async (indexName: string) => {
       await qdrantVector.deleteIndex({ indexName });

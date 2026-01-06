@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import { getChangedPackagesSinceRef } from '@changesets/git';
 import { rootDir } from '../config.js';
 import { getPublicPackages } from '../pkg/getPublicPackages.js';

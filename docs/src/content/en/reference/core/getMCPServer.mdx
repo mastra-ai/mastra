@@ -1,6 +1,8 @@
 ---
 title: "Reference: Mastra.getMCPServer() | Core"
 description: "Documentation for the `Mastra.getMCPServer()` method in Mastra, which retrieves a specific MCP server instance by ID and optional version."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getMCPServer()
@@ -9,7 +11,7 @@ The `.getMCPServer()` method retrieves an MCP server instance by its registry ke
 
 ## Usage example
 
-```typescript copy
+```typescript
 // Register an MCP server with a registry key
 const myServer = new MCPServer({
   id: 'my-mcp-server',
@@ -64,5 +66,5 @@ const serverById = mastra.getMCPServerById('my-mcp-server');
 
 ## See Also
 
-- [MCP overview](/docs/v1/tools-mcp/mcp-overview)
+- [MCP overview](/docs/v1/mcp/overview)
 - [MCP server reference](/reference/v1/tools/mcp-server)

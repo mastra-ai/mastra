@@ -1,6 +1,8 @@
 ---
 title: "Reference: rerankWithScorer() | RAG"
 description: Documentation for the rerank function in Mastra, which provides advanced reranking capabilities for vector search results.
+packages:
+  - "@mastra/rag"
 ---
 
 # rerankWithScorer()
@@ -19,7 +21,6 @@ function rerankWithScorer({
 ## Usage Example
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
 import { rerankWithScorer as rerank, CohereRelevanceScorer } from "@mastra/rag";
 
 const scorer = new CohereRelevanceScorer("rerank-v3.5");

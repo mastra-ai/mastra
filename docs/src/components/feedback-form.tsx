@@ -1,5 +1,6 @@
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
 import { cn } from "../css/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import React, { useState } from "react";
@@ -13,11 +14,15 @@ import {
   FormMessage,
 } from "./ui/forms";
 import { Label } from "./ui/label";
-import { CancelIcon } from "./copy-page-icons";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import { CancelIcon } from "./copy-page-icons";
 
 const feedbackSchema = z.object({
   feedback: z.string().min(5, "Please enter your feedback"),
+  email: z
+    .email("Please enter a valid email address")
+    .optional()
+    .or(z.literal("")),
   rating: z.number().min(1).max(5).optional(),
   page: z.string(),
   userAgent: z.string().optional(),
@@ -122,6 +127,7 @@ export const FeedbackForm = ({
     resolver: zodResolver(feedbackSchema),
     defaultValues: {
       feedback: "",
+      email: "",
       rating: 5,
       page: currentPage,
       userAgent:
@@ -177,19 +183,25 @@ export const FeedbackForm = ({
   if (!isOpen) return null;
 
   return (
-    <div className="p-4 pt-2 px-0 border max-h-[400px] border-gray-200 dark:border-borders-1 rounded-[10px] bg-white dark:bg-[var(--primary-bg)]">
+    <>
       {submitStatus === "success" ? (
-        <div className="text-center py-4 px-2">
-          <p className="text-sm mb-0! text-black dark:text-white">
+        <div className="text-center py-8">
+          <p className="text-base mb-0! text-black dark:text-white">
             Thank you! Your feedback has been submitted
           </p>
         </div>
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
-            <div className="flex items-center px-4 pb-2 border-b-[0.5px] border-(--border) justify-between ">
-              <Label htmlFor="feedback" className="font-semibold">
-                Was this helpful?
+            <div className="px-6 flex items-start justify-between py-4 border-b-[0.5px] border-(--border)">
+              <Label
+                htmlFor="feedback"
+                className="flex items-start gap-0 flex-col"
+              >
+                <span className="text-lg font-semibold">Share feedback</span>
+                <span className="text-xs text(--mastra-text-secondary)">
+                  Tell us how this can be better.
+                </span>
               </Label>
               <Button
                 type="button"
@@ -202,8 +214,8 @@ export const FeedbackForm = ({
               </Button>
             </div>
 
-            <div className="flex gap-3 py-3 px-4 flex-col items-start">
-              <div className="flex gap-1 items-center justify-center flex-shrink-0">
+            <div className="flex gap-4 py-4 px-6 flex-col items-start">
+              <div className="flex gap-2 items-center justify-center w-full">
                 {ratings.map(({ rating, emoji, label }) => (
                   <Button
                     variant="ghost"
@@ -211,9 +223,9 @@ export const FeedbackForm = ({
                     type="button"
                     onClick={() => form.setValue("rating", rating)}
                     className={cn(
-                      "w-8 h-8 rounded-full flex hover:bg-(--mastra-surface-3)  items-center justify-center text-lg transition-all hover:scale-110",
+                      "w-10 h-10 rounded-full flex hover:bg-(--mastra-surface-3) items-center justify-center text-lg transition-all hover:scale-110",
                       currentRating === rating
-                        ? " ring-2 ring-(--mastra-green-accent)"
+                        ? "ring-2 ring-(--mastra-green-accent)"
                         : "",
                     )}
                     title={label}
@@ -227,11 +239,29 @@ export const FeedbackForm = ({
                 control={form.control}
                 name="feedback"
                 render={({ field }) => (
-                  <FormItem className="flex-1 w-full">
+                  <FormItem className="w-full">
                     <FormControl>
                       <Textarea
                         placeholder="Your feedback..."
-                        className="min-h-[60px] w-full text-black  dark:text-white resize-none text-sm"
+                        className="min-h-[80px] w-full text-black dark:text-white resize-none text-sm"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-red-500" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="Your email (optional)"
+                        className="w-full text-black dark:text-white text-sm"
                         {...field}
                       />
                     </FormControl>
@@ -243,18 +273,18 @@ export const FeedbackForm = ({
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="dark:bg-[#121212] bg-(--mastra-surface-3) w-full rounded-[10px] hover:opacity-90 h-8 justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]"
+                className="dark:bg-[#121212] bg-(--mastra-surface-3) font-medium w-full rounded-[10px] hover:opacity-90 h-10 justify-center flex items-center px-4 text-(--light-color-text-5) dark:text-white text-[14px]"
               >
                 {isSubmitting ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
-                  "Send"
+                  "Send Feedback"
                 )}
               </Button>
             </div>
 
             {errorMessage && (
-              <div className="mt-3 mx-4 p-2 rounded-[10px] bg-red-50 dark:bg-red-900/20">
+              <div className="mx-6 mb-4 p-3 rounded-[10px] bg-red-50 dark:bg-red-900/20">
                 <p className="text-xs mb-0! text-red-500 font-mono dark:text-red-400">
                   Something went wrong. Please try again
                   {errorMessage && (
@@ -268,6 +298,6 @@ export const FeedbackForm = ({
           </form>
         </Form>
       )}
-    </div>
+    </>
   );
 };

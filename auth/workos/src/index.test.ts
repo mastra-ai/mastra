@@ -1,20 +1,30 @@
 import type { JwtPayload } from '@mastra/auth';
 import { verifyJwks } from '@mastra/auth';
-import { WorkOS } from '@workos-inc/node';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthWorkos } from './index';
 
 // Mock the WorkOS class
-vi.mock('@workos-inc/node', () => ({
-  WorkOS: vi.fn().mockImplementation(() => ({
-    userManagement: {
-      getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
-      listOrganizationMemberships: vi.fn().mockResolvedValue({
-        data: [{ role: { slug: 'admin' } }, { role: { slug: 'member' } }],
-      }),
-    },
-  })),
-}));
+const mockListOrganizationMemberships = vi.fn();
+const mockWorkOSConstructor = vi.fn();
+
+vi.mock('@workos-inc/node', () => {
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockWorkOS {
+    userManagement: any;
+
+    constructor(apiKey?: string, options?: any) {
+      mockWorkOSConstructor(apiKey, options);
+      this.userManagement = {
+        getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
+        listOrganizationMemberships: mockListOrganizationMemberships,
+      };
+    }
+  }
+
+  return {
+    WorkOS: MockWorkOS,
+  };
+});
 
 // Mock the verifyJwks function
 vi.mock('@mastra/auth', () => ({
@@ -33,6 +43,10 @@ describe('MastraAuthWorkos', () => {
     // Reset environment variables
     delete process.env.WORKOS_API_KEY;
     delete process.env.WORKOS_CLIENT_ID;
+    // Reset default mock behavior
+    mockListOrganizationMemberships.mockResolvedValue({
+      data: [{ role: { slug: 'admin' } }, { role: { slug: 'member' } }],
+    });
   });
 
   describe('constructor', () => {
@@ -42,7 +56,7 @@ describe('MastraAuthWorkos', () => {
         clientId: mockClientId,
       });
 
-      expect(WorkOS).toHaveBeenCalledWith(mockApiKey, {
+      expect(mockWorkOSConstructor).toHaveBeenCalledWith(mockApiKey, {
         clientId: mockClientId,
       });
     });
@@ -53,7 +67,7 @@ describe('MastraAuthWorkos', () => {
 
       new MastraAuthWorkos();
 
-      expect(WorkOS).toHaveBeenCalledWith(mockApiKey, {
+      expect(mockWorkOSConstructor).toHaveBeenCalledWith(mockApiKey, {
         clientId: mockClientId,
       });
     });
@@ -109,17 +123,10 @@ describe('MastraAuthWorkos', () => {
     });
 
     it('should return false for non-admin users', async () => {
-      vi.mocked(WorkOS).mockImplementationOnce(
-        () =>
-          ({
-            userManagement: {
-              getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
-              listOrganizationMemberships: vi.fn().mockResolvedValue({
-                data: [{ role: { slug: 'member' } }],
-              }),
-            },
-          }) as unknown as WorkOS,
-      );
+      // Override the mock for this test
+      mockListOrganizationMemberships.mockResolvedValueOnce({
+        data: [{ role: { slug: 'member' } }],
+      });
 
       const auth = new MastraAuthWorkos({
         apiKey: mockApiKey,
@@ -135,17 +142,10 @@ describe('MastraAuthWorkos', () => {
     });
 
     it('should return false for falsy user', async () => {
-      vi.mocked(WorkOS).mockImplementationOnce(
-        () =>
-          ({
-            userManagement: {
-              getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
-              listOrganizationMemberships: vi.fn().mockResolvedValue({
-                data: [], // Empty data array means no roles
-              }),
-            },
-          }) as unknown as WorkOS,
-      );
+      // Override the mock for this test
+      mockListOrganizationMemberships.mockResolvedValueOnce({
+        data: [], // Empty data array means no roles
+      });
 
       const auth = new MastraAuthWorkos({
         apiKey: mockApiKey,

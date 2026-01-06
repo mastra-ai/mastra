@@ -1,27 +1,52 @@
 ---
 title: "Reference: Agent.generate() | Agents"
 description: "Documentation for the `Agent.generate()` method in Mastra agents, which enables non-streaming generation of responses with enhanced capabilities."
+packages:
+  - "@mastra/core"
 ---
+
+import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsProperties";
 
 # Agent.generate()
 
-The `.generate()` method enables non-streaming response generation from an agent, with enhanced capabilities and flexible output formats. It accepts messages and optional generation options, supporting both Mastra’s native format and AI SDK v5 compatibility.
+The `.generate()` method enables non-streaming response generation from an agent with enhanced capabilities. It accepts messages and optional generation options.
 
 ## Usage example
 
-```typescript copy
-// Default Mastra format
-const mastraResult = await agent.generate("message for agent");
+```typescript
+// Basic usage
+const result = await agent.generate("message for agent");
 
-// AI SDK v5 compatible format
-const aiSdkResult = await agent.generate("message for agent", {
-  format: "aisdk",
+// With model settings (e.g., limiting output tokens)
+const limitedResult = await agent.generate("Write a short poem about coding", {
+  modelSettings: {
+    maxOutputTokens: 50,
+    temperature: 0.7,
+  },
+});
+
+// With structured output
+const structuredResult = await agent.generate("Extract the user's name and age", {
+  structuredOutput: {
+    schema: z.object({
+      name: z.string(),
+      age: z.number(),
+    }),
+  },
+});
+
+// With memory for conversation persistence
+const memoryResult = await agent.generate("Remember my favorite color is blue", {
+  memory: {
+    thread: "user-123-thread",
+    resource: "user-123",
+  },
 });
 ```
 
 :::info
 
-**Model Compatibility**: This method is designed for V2 models. V1 models should use the [`.generateLegacy()`](./generateLegacy) method. The framework automatically detects your model version and will throw an error if there's a mismatch.
+**Model Compatibility**: This method requires AI SDK v5+ models. If you're using AI SDK v4 models, use the [`.generateLegacy()`](./generateLegacy) method instead. The framework automatically detects your model version and will throw an error if there's a mismatch.
 
 :::
 
@@ -49,18 +74,16 @@ const aiSdkResult = await agent.generate("message for agent", {
 <PropertiesTable
   content={[
     {
-      name: "format",
-      type: "'mastra' | 'aisdk'",
-      isOptional: true,
-      defaultValue: "'mastra'",
-      description:
-        "Determines the output format. Use 'mastra' for Mastra's native format (default) or 'aisdk' for AI SDK v5 compatibility.",
-    },
-    {
       name: "maxSteps",
       type: "number",
       isOptional: true,
       description: "Maximum number of steps to run during execution.",
+    },
+    {
+      name: "stopWhen",
+      type: "LoopOptions['stopWhen']",
+      isOptional: true,
+      description: "Conditions for stopping execution (e.g., step count, token limit).",
     },
     {
       name: "scorers",
@@ -115,12 +138,6 @@ const aiSdkResult = await agent.generate("message for agent", {
       ],
     },
     {
-      name: "tracingContext",
-      type: "TracingContext",
-      isOptional: true,
-      description: "Tracing context for span hierarchy and metadata.",
-    },
-    {
       name: "returnScorerData",
       type: "boolean",
       isOptional: true,
@@ -161,10 +178,28 @@ const aiSdkResult = await agent.generate("message for agent", {
     },
     {
       name: "prepareStep",
-      type: "PrepareStepFunction<any>",
+      type: "PrepareStepFunction",
       isOptional: true,
       description:
         "Callback function called before each step of multi-step execution.",
+    },
+    {
+      name: "requireToolApproval",
+      type: "boolean",
+      isOptional: true,
+      description: "Require approval for all tool calls before execution.",
+    },
+    {
+      name: "autoResumeSuspendedTools",
+      type: "boolean",
+      isOptional: true,
+      description: "Automatically resume suspended tools.",
+    },
+    {
+      name: "toolCallConcurrency",
+      type: "number",
+      isOptional: true,
+      description: "Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.",
     },
     {
       name: "context",
@@ -243,28 +278,57 @@ const aiSdkResult = await agent.generate("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "logger",
+              type: "IMastraLogger",
+              isOptional: true,
+              description:
+                "Optional logger instance for structured logging during output generation.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "providerOptions",
+              type: "ProviderOptions",
+              isOptional: true,
+              description:
+                "Provider-specific options passed to the internal structuring agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`).",
+            },
+          ],
+        },
       ],
     },
     {
       name: "outputProcessors",
-      type: "Processor[]",
+      type: "OutputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Output processors to use for this execution (overrides agent's default).",
     },
     {
+      name: "maxProcessorRetries",
+      type: "number",
+      isOptional: true,
+      description:
+        "Maximum number of times processors can trigger a retry for this generation. Overrides agent's default maxProcessorRetries.",
+    },
+    {
       name: "inputProcessors",
-      type: "Processor[]",
+      type: "InputProcessorOrWorkflow[]",
       isOptional: true,
       description:
         "Input processors to use for this execution (overrides agent's default).",
     },
     {
       name: "instructions",
-      type: "string",
+      type: "string | string[] | CoreSystemMessage | SystemModelMessage | CoreSystemMessage[] | SystemModelMessage[]",
       isOptional: true,
       description:
-        "Custom instructions that override the agent's default instructions for this execution.",
+        "Custom instructions that override the agent's default instructions for this execution. Can be a single string, message object, or array of either.",
     },
     {
       name: "system",
@@ -316,7 +380,7 @@ const aiSdkResult = await agent.generate("message for agent", {
               type: "MemoryConfig",
               isOptional: true,
               description:
-                "Additional memory configuration options for conversation management.",
+                "Additional memory configuration options including lastMessages, readOnly, semanticRecall, and workingMemory.",
             },
           ],
         },
@@ -324,17 +388,17 @@ const aiSdkResult = await agent.generate("message for agent", {
     },
     {
       name: "onFinish",
-      type: "StreamTextOnFinishCallback<any> | StreamObjectOnFinishCallback<OUTPUT>",
+      type: "LoopConfig['onFinish']",
       isOptional: true,
       description:
-        "Callback fired when generation completes. Type varies by format.",
+        "Callback fired when generation completes.",
     },
     {
       name: "onStepFinish",
-      type: "StreamTextOnStepFinishCallback<any> | never",
+      type: "LoopConfig['onStepFinish']",
       isOptional: true,
       description:
-        "Callback fired after each generation step. Type varies by format.",
+        "Callback fired after each generation step.",
     },
     {
       name: "resourceId",
@@ -392,91 +456,7 @@ const aiSdkResult = await agent.generate("message for agent", {
         },
       ],
     },
-    {
-      name: "modelSettings",
-      type: "CallSettings",
-      isOptional: true,
-      description: "Model-specific settings like temperature, topP, etc.",
-      properties: [
-        {
-          parameters: [
-            {
-              name: "temperature",
-              type: "number",
-              isOptional: true,
-              description:
-                "Controls randomness in generation (0-2). Higher values make output more random.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "maxRetries",
-              type: "number",
-              isOptional: true,
-              description:
-                "Maximum number of retry attempts for failed requests.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topP",
-              type: "number",
-              isOptional: true,
-              description:
-                "Nucleus sampling parameter (0-1). Controls diversity of generated text.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "topK",
-              type: "number",
-              isOptional: true,
-              description:
-                "Top-k sampling parameter. Limits vocabulary to k most likely tokens.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "presencePenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Penalty for token presence (-2 to 2). Reduces repetition.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "frequencyPenalty",
-              type: "number",
-              isOptional: true,
-              description:
-                "Penalty for token frequency (-2 to 2). Reduces repetition of frequent tokens.",
-            },
-          ],
-        },
-        {
-          parameters: [
-            {
-              name: "stopSequences",
-              type: "string[]",
-              isOptional: true,
-              description:
-                "Array of strings that will stop generation when encountered.",
-            },
-          ],
-        },
-      ],
-    },
+    MODEL_SETTINGS_OBJECT,
     {
       name: "threadId",
       type: "string",
@@ -650,14 +630,58 @@ const aiSdkResult = await agent.generate("message for agent", {
             },
           ],
         },
+        {
+          parameters: [
+            {
+              name: "requestContextKeys",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Additional RequestContext keys to extract as metadata for this trace. Supports dot notation for nested values (e.g., 'user.id').",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "traceId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "parentSpanId",
+              type: "string",
+              isOptional: true,
+              description:
+                "Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.",
+            },
+          ],
+        },
+        {
+          parameters: [
+            {
+              name: "tags",
+              type: "string[]",
+              isOptional: true,
+              description:
+                "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+            },
+          ],
+        },
       ],
     },
     {
-      name: "maxTokens",
-      type: "number",
+      name: "includeRawChunks",
+      type: "boolean",
       isOptional: true,
       description:
-        "Conditions for stopping execution (e.g., step count, token limit).",
+        "Whether to include raw chunks in the stream output. Not available on all model providers.",
     },
   ]}
 />
@@ -668,9 +692,52 @@ const aiSdkResult = await agent.generate("message for agent", {
   content={[
     {
       name: "result",
-      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>> | Awaited<ReturnType<AISDKV5OutputStream<Output>['getFullOutput']>>",
+      type: "Awaited<ReturnType<MastraModelOutput<Output>['getFullOutput']>>",
       description:
-        "Returns the full output of the generation process. When format is 'mastra' (default), returns MastraModelOutput result. When format is 'aisdk', returns AISDKV5OutputStream result for AI SDK v5 compatibility.",
+        "Returns the full output of the generation process including text, object (if structured output), tool calls, tool results, usage statistics, and step information.",
+    },
+    {
+      name: "text",
+      type: "string",
+      description:
+        "The generated text response from the agent.",
+    },
+    {
+      name: "object",
+      type: "Output | undefined",
+      isOptional: true,
+      description:
+        "The structured output object if structuredOutput was provided, validated against the schema.",
+    },
+    {
+      name: "toolCalls",
+      type: "ToolCall[]",
+      description:
+        "Array of tool calls made during generation.",
+    },
+    {
+      name: "toolResults",
+      type: "ToolResult[]",
+      description:
+        "Array of results from tool executions.",
+    },
+    {
+      name: "usage",
+      type: "TokenUsage",
+      description:
+        "Token usage statistics for the generation.",
+    },
+    {
+      name: "steps",
+      type: "Step[]",
+      description:
+        "Array of execution steps, useful for debugging multi-step generations.",
+    },
+    {
+      name: "finishReason",
+      type: "string",
+      description:
+        "The reason generation finished (e.g., 'stop', 'tool-calls', 'error').",
     },
     {
       name: "traceId",

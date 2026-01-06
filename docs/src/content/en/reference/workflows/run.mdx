@@ -1,6 +1,8 @@
 ---
 title: "Reference: Run Class | Workflows"
 description: Documentation for the Run class in Mastra, which represents a workflow execution instance.
+packages:
+  - "@mastra/core"
 ---
 
 # Run Class
@@ -9,7 +11,7 @@ The `Run` class represents a workflow execution instance, providing methods to s
 
 ## Usage example
 
-```typescript showLineNumbers copy
+```typescript
 const run = await workflow.createRun();
 
 const result = await run.start({
@@ -41,20 +43,38 @@ if (result.status === "suspended") {
     },
     {
       name: "stream",
-      type: "(options?: StreamOptions) => Promise<StreamResult>",
-      description: "Monitors workflow execution as a stream of events",
+      type: "(options?: StreamOptions) => MastraWorkflowStream",
+      description: "Monitors workflow execution as a stream of events with enhanced streaming features",
       required: true,
     },
     {
-      name: "streamVNext",
-      type: "(options?: StreamOptions) => MastraWorkflowStream",
-      description: "Enables real-time streaming with enhanced features",
+      name: "resumeStream",
+      type: "(options?: ResumeStreamOptions) => MastraWorkflowStream",
+      description: "Resumes a suspended workflow with streaming support",
       required: true,
     },
     {
       name: "cancel",
-      type: "() => Promise<void>",
-      description: "Cancels the workflow execution",
+      type: "() => Promise<{ message: string }>",
+      description: "Cancels the workflow execution, stopping any running steps and preventing subsequent steps from executing",
+      required: true,
+    },
+    {
+      name: "restart",
+      type: "(options?: RestartOptions) => Promise<WorkflowResult>",
+      description: "Restarts the workflow execution from last active step",
+      required: true,
+    },
+    {
+      name: "timeTravel",
+      type: "(options?: TimeTravelOptions) => Promise<WorkflowResult>",
+      description: "Re-executes a workflow starting from any specific step, using either stored snapshot data or custom context you provide.",
+      required: true,
+    },
+    {
+      name: "timeTravelStream",
+      type: "(options?: TimeTravelOptions) => MastraWorkflowStream",
+      description: "Time travels a workflow execution with streaming support",
       required: true,
     },
   ]}
@@ -84,6 +104,12 @@ A workflow run's `status` indicates its current execution state. The possible va
       description:
         "Workflow execution is paused waiting for resume, with suspended step information",
     },
+    {
+      name: "canceled",
+      type: "string",
+      description:
+        "Workflow execution was canceled via the cancel() method, stopping any running steps and preventing subsequent steps from executing",
+    },
   ]}
 />
 
@@ -92,3 +118,7 @@ A workflow run's `status` indicates its current execution state. The possible va
 - [Run.start()](./run-methods/start)
 - [Run.resume()](./run-methods/resume)
 - [Run.cancel()](./run-methods/cancel)
+- [Run.restart()](./run-methods/restart)
+- [Run.timeTravel()](./run-methods/timeTravel)
+- [Run.stream()](/docs/v1/streaming/workflow-streaming)
+- [Run.timeTravelStream()](../streaming/workflows/timeTravelStream)

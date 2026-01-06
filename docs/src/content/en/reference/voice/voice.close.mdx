@@ -1,6 +1,9 @@
 ---
 title: "Reference: voice.close() | Voice"
 description: "Documentation for the close() method available in voice providers, which disconnects from real-time voice services."
+packages:
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.close()
@@ -16,7 +19,7 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });

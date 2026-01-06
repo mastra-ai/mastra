@@ -1,6 +1,10 @@
 ---
 title: "RAG (Retrieval-Augmented Generation) in Mastra | RAG"
 description: Overview of Retrieval-Augmented Generation (RAG) in Mastra, detailing its capabilities for enhancing LLM outputs with relevant context.
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+  - "@mastra/rag"
 ---
 
 # RAG (Retrieval-Augmented Generation) in Mastra
@@ -18,9 +22,8 @@ Mastra's RAG system provides:
 
 To implement RAG, you process your documents into chunks, create embeddings, store them in a vector database, and then retrieve relevant context at query time.
 
-```ts showLineNumbers copy
+```ts
 import { embedMany } from "ai";
-import { openai } from "@ai-sdk/openai";
 import { PgVector } from "@mastra/pg";
 import { MDocument } from "@mastra/rag";
 import { z } from "zod";
@@ -36,9 +39,11 @@ const chunks = await doc.chunk({
 });
 
 // 3. Generate embeddings; we need to pass the text of each chunk
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
 const { embeddings } = await embedMany({
   values: chunks.map((chunk) => chunk.text),
-  model: openai.embedding("text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small")
 });
 
 // 4. Store in vector database
@@ -73,5 +78,4 @@ Mastra supports multiple vector stores for embedding persistence and similarity 
 
 ## More resources
 
-- [Chain of Thought RAG Example](/examples/v1/rag/usage/cot-rag)
-- [All RAG Examples](/examples/v1/) (including different chunking strategies, embedding models, and vector stores)
+- [Chain of Thought RAG Example](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag)

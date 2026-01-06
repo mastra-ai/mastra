@@ -1,0 +1,71 @@
+---
+title: "Reference: Agent.getTools() | Agents"
+description: "Documentation for the `Agent.getTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+packages:
+  - "@mastra/core"
+---
+
+# Agent.getTools()
+
+The `.getTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+
+## Usage example
+
+```typescript
+await agent.getTools();
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ requestContext?: RequestContext }",
+      isOptional: true,
+      defaultValue: "{}",
+      description: "Optional configuration object containing runtime context.",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "tools",
+      type: "TTools | Promise<TTools>",
+      description:
+        "The tools configured for the agent, either as a direct object or a promise that resolves to the tools.",
+    },
+  ]}
+/>
+
+## Extended usage example
+
+```typescript
+await agent.getTools({
+  requestContext: new RequestContext(),
+});
+```
+
+### Options parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "requestContext",
+      type: "RequestContext",
+      isOptional: true,
+      defaultValue: "new RequestContext()",
+      description:
+        "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Related
+
+- [Using tools with agents](/docs/v1/agents/using-tools)
+- [MCP Overview](/docs/v1/mcp/overview)

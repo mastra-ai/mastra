@@ -218,11 +218,12 @@ _Note_: Deleting Index does NOT delete the vectors in the associated Couchbase C
 - `createIndex({ indexName, dimension, metric? })`: Creates or updates a Couchbase Search Index configured for vector search on the collection.
 - `upsert({ indexName, vectors, metadata?, ids? })`: Upserts documents containing vectors and metadata into the Couchbase collection. Returns the document IDs used.
 - `query({ indexName, queryVector, topK?, filter?, includeVector? })`: Queries the specified Search Index for similar vectors using Couchbase Vector Search. **Note:** `filter` and `includeVector` options are **not currently supported**.
+- `updateVector({ indexName, id, update })`: Updates a specific vector entry by its ID with new vector data and/or metadata. **Note:** Filter-based updates are not yet implemented.
+- `deleteVector({ indexName, id })`: Deletes a single vector by its ID.
+- `deleteVectors({ indexName, ids })`: Deletes multiple vectors by their IDs. **Note:** Filter-based deletion is not yet implemented.
 - `listIndexes()`: Lists the names of all Search Indexes in the cluster. Returns fully qualified names (e.g., `bucket.scope.index`).
-- `describeIndex(indexName)`: Gets the configured dimension, metric (Mastra name), and document count (currently returns -1) for a specific Search Index (using its short name).
-- `deleteIndex(indexName)`: Deletes a Search Index (using its short name).
-- `deleteVector(indexName, id)`: Deletes a specific vector entry from an index by its ID.
-- `updateVector(indexName, id, update)`: Updates a specific vector entry by its ID with new vector data and/or metadata.
+- `describeIndex({ indexName })`: Gets the configured dimension, metric (Mastra name), and document count for a specific Search Index (using its short name).
+- `deleteIndex({ indexName })`: Deletes a Search Index (using its short name).
 - `disconnect()`: Closes the Couchbase client connection. Should be called when done using the store.
 
 ## Configuration Details

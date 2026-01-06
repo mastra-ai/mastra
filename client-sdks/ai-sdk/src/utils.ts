@@ -1,7 +1,43 @@
-import type { DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType, OutputSchema } from '@mastra/core/stream';
 
 export const isDataChunkType = (chunk: any): chunk is DataChunkType => {
   return chunk && typeof chunk === 'object' && 'type' in chunk && chunk.type?.startsWith('data-');
+};
+
+export const isMastraTextStreamChunk = (chunk: any): chunk is ChunkType<OutputSchema> => {
+  return (
+    chunk &&
+    typeof chunk === 'object' &&
+    'type' in chunk &&
+    typeof chunk.type === 'string' &&
+    [
+      'text-start',
+      'text-delta',
+      'text-end',
+      'reasoning-start',
+      'reasoning-delta',
+      'reasoning-end',
+      'file',
+      'source',
+      'tool-input-start',
+      'tool-input-delta',
+      'tool-call-approval',
+      'tool-call-suspended',
+      'tool-call',
+      'tool-result',
+      'tool-error',
+      'error',
+      'start-step',
+      'finish-step',
+      'start',
+      'finish',
+      'abort',
+      'tool-input-end',
+      'object',
+      'tripwire',
+      'raw',
+    ].includes(chunk.type)
+  );
 };
 
 export function safeParseErrorObject(obj: unknown): string {

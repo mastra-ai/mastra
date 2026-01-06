@@ -1,15 +1,104 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT, safelyParseJSON, normalizePerPage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  WorkflowsStorage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  safelyParseJSON,
+  normalizePerPage,
+} from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { StoreOperationsMongoDB } from '../operations';
+import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
+import { resolveMongoDBConfig } from '../../db';
+import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
-  private operations: StoreOperationsMongoDB;
+  #connector: MongoDBConnector;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: MongoDBIndexConfig[];
 
-  constructor({ operations }: { operations: StoreOperationsMongoDB }) {
+  /** Collections managed by this domain */
+  static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  constructor(config: MongoDBDomainConfig) {
     super();
-    this.operations = operations;
+    this.#connector = resolveMongoDBConfig(config);
+    this.#skipDefaultIndexes = config.skipDefaultIndexes;
+    // Filter indexes to only those for collections managed by this domain
+    this.#indexes = config.indexes?.filter(idx =>
+      (WorkflowsStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
+    );
+  }
+
+  private async getCollection(name: string) {
+    return this.#connector.getCollection(name);
+  }
+
+  async init(): Promise<void> {
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain collections.
+   */
+  getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
+    return [
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { workflow_name: 1, run_id: 1 }, options: { unique: true } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { run_id: 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { workflow_name: 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { resourceId: 1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { createdAt: -1 } },
+      { collection: TABLE_WORKFLOW_SNAPSHOT, keys: { 'snapshot.status': 1 } },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's collections.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        const collection = await this.getCollection(indexDef.collection);
+        await collection.createIndex(indexDef.keys, indexDef.options);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index on ${indexDef.collection}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+    await collection.deleteMany({});
   }
 
   updateWorkflowResults(
@@ -37,13 +126,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     }: {
       workflowName: string;
       runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
+      opts: UpdateWorkflowStateOptions;
     },
   ): Promise<WorkflowRunState | undefined> {
     throw new Error('Method not implemented.');
@@ -54,14 +137,19 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const now = new Date();
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       await collection.updateOne(
         { workflow_name: workflowName, run_id: runId },
         {
@@ -70,8 +158,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             run_id: runId,
             resourceId,
             snapshot,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            updatedAt: updatedAt ?? now,
+          },
+          $setOnInsert: {
+            createdAt: createdAt ?? now,
           },
         },
         { upsert: true },
@@ -79,7 +169,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('MONGODB', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -97,23 +187,21 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<any[]>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          workflow_name: workflowName,
-          run_id: runId,
-        },
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const result = await collection.findOne({
+        workflow_name: workflowName,
+        run_id: runId,
       });
 
-      if (!result?.length) {
+      if (!result) {
         return null;
       }
 
-      return typeof result[0].snapshot === 'string' ? safelyParseJSON(result[0].snapshot) : result[0].snapshot;
+      return typeof result.snapshot === 'string' ? safelyParseJSON(result.snapshot as string) : result.snapshot;
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('MONGODB', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -147,7 +235,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['resourceId'] = options.resourceId;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       let total = 0;
 
       let cursor = collection.find(query).sort({ createdAt: -1 });
@@ -156,7 +244,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         if (options.page < 0) {
           throw new MastraError(
             {
-              id: 'STORAGE_MONGODB_INVALID_PAGE',
+              id: createStorageErrorId('MONGODB', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGE'),
               domain: ErrorDomain.STORAGE,
               category: ErrorCategory.USER,
               details: { page: options.page },
@@ -190,7 +278,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_LIST_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('MONGODB', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: options.workflowName || 'unknown' },
@@ -210,7 +298,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         query['workflow_name'] = args.workflowName;
       }
 
-      const collection = await this.operations.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
       const result = await collection.findOne(query);
       if (!result) {
         return null;
@@ -220,10 +308,27 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('MONGODB', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: args.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      await collection.deleteOne({ workflow_name: workflowName, run_id: runId });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
         },
         error,
       );
@@ -245,8 +350,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       workflowName: row.workflow_name as string,
       runId: row.run_id as string,
       snapshot: parsedSnapshot,
-      createdAt: new Date(row.createdAt as string),
-      updatedAt: new Date(row.updatedAt as string),
+      createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
       resourceId: row.resourceId,
     };
   }

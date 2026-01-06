@@ -1,5 +1,6 @@
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-import jsonSchemaToZod, { JsonSchema } from 'json-schema-to-zod';
+import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';

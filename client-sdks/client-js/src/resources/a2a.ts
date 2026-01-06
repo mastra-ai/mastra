@@ -59,6 +59,7 @@ export class A2A extends BaseResource {
         method: 'message/stream',
         params,
       },
+      stream: true,
     });
 
     return response;

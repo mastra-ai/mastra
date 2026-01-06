@@ -75,6 +75,12 @@ describe('createToolCallStep tool approval workflow', () => {
             model: () => [],
           },
         },
+        response: {
+          db: () => [],
+        },
+        all: {
+          db: () => [],
+        },
       },
     } as unknown as MessageList;
 
@@ -111,6 +117,9 @@ describe('createToolCallStep tool approval workflow', () => {
         args: { param: 'test' },
       },
     });
+
+    // Wait for flushMessagesBeforeSuspension to complete before suspend is called
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(suspend).toHaveBeenCalledWith(
       {

@@ -4,6 +4,7 @@
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 
 export interface ProviderConfig {
   url?: string;
@@ -15,18 +16,31 @@ export interface ProviderConfig {
   gateway: string;
 }
 
+/**
+ * Union type for language models that can be returned by gateways.
+ * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
+ */
+export type GatewayLanguageModel = LanguageModelV2 | LanguageModelV3;
+
 export abstract class MastraModelGateway {
+  /**
+   * Unique identifier for the gateway
+   * This ID is used as the prefix for all providers from this gateway (e.g., "netlify/anthropic")
+   * Exception: models.dev is a provider registry and doesn't use a prefix
+   */
+  abstract readonly id: string;
+
   /**
    * Name of the gateway provider
    */
   abstract readonly name: string;
 
   /**
-   * Optional prefix for provider IDs
-   * If set, all providers from this gateway will be prefixed (e.g., "netlify/openai")
-   * Registry gateways (like models.dev) typically don't have a prefix
+   * Get the gateway ID
    */
-  abstract readonly prefix?: string;
+  getId(): string {
+    return this.id;
+  }
 
   /**
    * Fetch provider configurations from the gateway
@@ -44,9 +58,14 @@ export abstract class MastraModelGateway {
 
   abstract getApiKey(modelId: string): Promise<string>;
 
+  /**
+   * Resolve a language model from the gateway.
+   * Supports returning either LanguageModelV2 (AI SDK v5) or LanguageModelV3 (AI SDK v6).
+   */
   abstract resolveLanguageModel(args: {
     modelId: string;
     providerId: string;
     apiKey: string;
-  }): Promise<LanguageModelV2> | LanguageModelV2;
+    headers?: Record<string, string>;
+  }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
 }

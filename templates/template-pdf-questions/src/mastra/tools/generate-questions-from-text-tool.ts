@@ -15,8 +15,8 @@ export const generateQuestionsFromTextTool = createTool({
     questionCount: z.number().describe('Number of questions generated'),
     success: z.boolean().describe('Whether question generation was successful'),
   }),
-  execute: async ({ context, mastra }) => {
-    const { extractedText, maxQuestions = 10 } = context;
+  execute: async (inputData, context) => {
+    const { extractedText, maxQuestions = 10 } = inputData;
 
     console.log('❓ Generating questions from extracted text...');
 
@@ -36,7 +36,7 @@ export const generateQuestionsFromTextTool = createTool({
     }
 
     try {
-      const agent = mastra?.getAgent('textQuestionAgent');
+      const agent = context?.mastra?.getAgent('textQuestionAgent');
       if (!agent) {
         throw new Error('Question generator agent not found');
       }

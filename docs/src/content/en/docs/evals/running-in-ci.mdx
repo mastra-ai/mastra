@@ -1,6 +1,8 @@
 ---
 title: "Running Scorers in CI | Evals"
 description: "Learn how to run scorer experiments in your CI/CD pipeline using the runEvals function."
+packages:
+  - "@mastra/core"
 ---
 
 # Running Scorers in CI
@@ -15,7 +17,7 @@ You can use any testing framework that supports ESM modules, such as [Vitest](ht
 
 Use `runEvals` to evaluate your agent against multiple test cases. The function accepts an array of data items, each containing an `input` and optional `groundTruth` for scorer validation.
 
-```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
+```typescript title="src/mastra/agents/weather-agent.test.ts"
 import { describe, it, expect } from 'vitest';
 import { createScorer, runEvals } from "@mastra/core/evals";
 import { weatherAgent } from "./weather-agent";
@@ -49,8 +51,6 @@ describe('Weather Agent Tests', () => {
 });
 ```
 
-View the full example [here](/examples/v1/evals/running-in-ci)
-
 ## Understanding Results
 
 The `runEvals` function returns an object with:
@@ -74,7 +74,7 @@ The `runEvals` function returns an object with:
 
 Create separate test cases for different evaluation scenarios:
 
-```typescript copy showLineNumbers title="src/mastra/agents/weather-agent.test.ts"
+```typescript title="src/mastra/agents/weather-agent.test.ts"
 describe('Weather Agent Tests', () => {
   const locationScorer = createScorer({ /* ... */ });
 
@@ -109,5 +109,5 @@ describe('Weather Agent Tests', () => {
 ## Next Steps
 
 - Learn about [creating custom scorers](/docs/v1/evals/custom-scorers)
-- Explore [off-the-shelf scorers](/docs/v1/evals/off-the-shelf-scorers)
+- Explore [built-in scorers](/docs/v1/evals/built-in-scorers)
 - Read the [runEvals API reference](/reference/v1/evals/run-evals)

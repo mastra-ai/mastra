@@ -1,0 +1,131 @@
+---
+title: "PostHog Exporter | Tracing | Observability"
+description: "Send traces to PostHog for AI observability and analytics"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+  - "@mastra/posthog"
+---
+
+# PostHog Exporter
+
+[PostHog](https://posthog.com/) is an analytics platform with AI observability features for monitoring LLM applications. The PostHog exporter sends your traces to PostHog as structured events, providing insights into token usage, costs, latency, and conversation flows.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/posthog@beta
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **PostHog Account**: Sign up at [posthog.com](https://posthog.com/)
+2. **Project API Key**: Get your project API key from PostHog Settings → Project API Key
+3. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+POSTHOG_API_KEY=phc_xxxxxxxxxxxxxxxx
+POSTHOG_HOST=https://us.i.posthog.com  # Optional: EU region or self-hosted URL
+```
+
+### Basic Setup
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { Observability } from "@mastra/observability";
+import { PosthogExporter } from "@mastra/posthog";
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      posthog: {
+        serviceName: "my-service",
+        exporters: [
+          new PosthogExporter({
+            apiKey: process.env.POSTHOG_API_KEY,
+          }),
+        ],
+      },
+    },
+  }),
+});
+```
+
+## Configuration Options
+
+### Complete Configuration
+
+```typescript
+new PosthogExporter({
+  // Required credentials
+  apiKey: process.env.POSTHOG_API_KEY!,
+
+  // Optional settings
+  host: "https://us.i.posthog.com", // Default: US region
+  // or "https://eu.i.posthog.com" for EU region
+  // or your self-hosted URL
+
+  // Batching configuration
+  flushAt: 20, // Batch size (default: 20)
+  flushInterval: 10000, // Flush interval in ms (default: 10000)
+  serverless: false, // Serverless mode: flushAt=10, flushInterval=2000
+
+  // User identification
+  defaultDistinctId: "anonymous", // Fallback if no userId in metadata
+
+  // Privacy settings
+  enablePrivacyMode: false, // Excludes input/output from generation events
+
+  // Diagnostic logging
+  logLevel: "info", // debug | info | warn | error
+});
+```
+
+### Serverless Mode
+
+Optimized batching for serverless environments:
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+  serverless: true, // Configures smaller batches for faster flushing
+});
+```
+
+### Privacy Mode
+
+Exclude input/output data from generation events while preserving token metrics:
+
+```typescript
+new PosthogExporter({
+  apiKey: process.env.POSTHOG_API_KEY!,
+  enablePrivacyMode: true, // Removes $ai_input and $ai_output_choices
+});
+```
+
+## Using Tags
+
+Tags help you categorize and filter traces in PostHog's AI analytics. Add tags when executing agents or workflows:
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+Tags are added as event properties where the tag name is the key and the value is set to `true`. In PostHog's trace view, filter by a tag using the `is set` filter (e.g., "production is set" shows all traces with the production tag). Common use cases include:
+
+- Environment labels: `"production"`, `"staging"`
+- Experiment tracking: `"experiment-v1"`, `"control-group"`
+- Priority levels: `"priority-high"`, `"batch-job"`
+- User segments: `"beta-user"`, `"enterprise"`
+
+## Related
+
+- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [PostHog Documentation](https://posthog.com/docs)

@@ -227,6 +227,11 @@ export interface GeminiLiveServerMessage {
           mimeType?: string;
           data?: string;
         };
+        functionCall?: {
+          name?: string;
+          args?: Record<string, unknown>;
+          id?: string;
+        };
       }>;
     };
     turnComplete?: boolean;
@@ -234,9 +239,16 @@ export interface GeminiLiveServerMessage {
 
   // Tool call requests
   toolCall?: {
+    // Direct format (legacy)
     name?: string;
     args?: Record<string, unknown>;
     id?: string;
+    // Array format (actual Gemini API format)
+    functionCalls?: Array<{
+      name?: string;
+      args?: Record<string, unknown>;
+      id?: string;
+    }>;
   };
 
   // Session end

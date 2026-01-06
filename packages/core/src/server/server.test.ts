@@ -19,6 +19,7 @@ describe('registerApiRoute', () => {
       createHandler: undefined,
       openapi: undefined,
       middleware: undefined,
+      requiresAuth: undefined,
     });
 
     route = registerApiRoute('/test', {
@@ -33,7 +34,18 @@ describe('registerApiRoute', () => {
       handler: undefined,
       openapi: undefined,
       middleware: undefined,
+      requiresAuth: undefined,
     });
+  });
+
+  it('should set requiresAuth when provided', () => {
+    const route = registerApiRoute('/test', {
+      method: 'POST',
+      handler: mockHandler,
+      requiresAuth: false,
+    });
+
+    expect(route.requiresAuth).toBe(false);
   });
 
   it('should throw if path starts with /api', () => {

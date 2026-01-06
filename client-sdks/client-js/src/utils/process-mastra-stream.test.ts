@@ -1,4 +1,4 @@
-import { ReadableStream } from 'stream/web';
+import { ReadableStream } from 'node:stream/web';
 import type { ChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it, vi, beforeEach } from 'vitest';

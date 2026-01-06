@@ -1,14 +1,16 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import z from 'zod';
-import type { Agent } from '../../agent';
+import { Agent } from '../../agent';
 import { RequestContext } from '../../di';
+import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
 import { Tool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
 import { Workflow, Run } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
-import type { ExecuteFunction, Step } from '../../workflows/step';
+import type { Step } from '../../workflows/step';
 import type {
   SerializedStepFlowEntry,
   WorkflowConfig,
@@ -16,8 +18,10 @@ import type {
   StepWithComponent,
   WorkflowStreamEvent,
   WorkflowEngineType,
+  StepParams,
+  ToolStep,
 } from '../../workflows/types';
-import { EMITTER_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL } from '../constants';
 import { EventedExecutionEngine } from './execution-engine';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
@@ -48,6 +52,7 @@ export function cloneWorkflow<
     outputSchema: workflow.outputSchema,
     steps: workflow.stepDefs,
     mastra: workflow.mastra,
+    options: workflow.options,
   });
 
   wf.setStepFlow(workflow.stepGraph);
@@ -64,17 +69,14 @@ export function cloneStep<TStepId extends string>(
     description: step.description,
     inputSchema: step.inputSchema,
     outputSchema: step.outputSchema,
+    suspendSchema: step.suspendSchema,
+    resumeSchema: step.resumeSchema,
+    stateSchema: step.stateSchema,
     execute: step.execute,
+    retries: step.retries,
+    scorers: step.scorers,
     component: step.component,
   };
-}
-
-function isAgent(params: any): params is Agent<any, any> {
-  return params?.component === 'AGENT';
-}
-
-function isTool(params: any): params is Tool<any, any, any> {
-  return params instanceof Tool;
 }
 
 export function createStep<
@@ -84,22 +86,9 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
->(params: {
-  id: TStepId;
-  description?: string;
-  inputSchema: TStepInput;
-  outputSchema: TStepOutput;
-  resumeSchema?: TResumeSchema;
-  suspendSchema?: TSuspendSchema;
-  execute: ExecuteFunction<
-    z.infer<TState>,
-    z.infer<TStepInput>,
-    z.infer<TStepOutput>,
-    z.infer<TResumeSchema>,
-    z.infer<TSuspendSchema>,
-    EventedEngineType
-  >;
-}): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
+>(
+  params: StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>,
+): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -110,6 +99,10 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   agent: Agent<TStepId, any>,
+  agentOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType>;
 
 export function createStep<
@@ -119,11 +112,8 @@ export function createStep<
   TSchemaOut extends z.ZodType<any>,
   TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema>,
 >(
-  tool: Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-    inputSchema: TSchemaIn;
-    outputSchema: TSchemaOut;
-    execute: (input: z.infer<TSchemaIn>, context?: TContext) => Promise<any>;
-  },
+  tool: ToolStep<TSchemaIn, TSuspendSchema, TResumeSchema, TSchemaOut, TContext>,
+  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers> },
 ): Step<string, any, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, EventedEngineType>;
 
 export function createStep<
@@ -135,35 +125,17 @@ export function createStep<
   TSuspendSchema extends z.ZodType<any>,
 >(
   params:
-    | {
-        id: TStepId;
-        description?: string;
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        resumeSchema?: TResumeSchema;
-        suspendSchema?: TSuspendSchema;
-        execute: ExecuteFunction<
-          z.infer<TState>,
-          z.infer<TStepInput>,
-          z.infer<TStepOutput>,
-          z.infer<TResumeSchema>,
-          z.infer<TSuspendSchema>,
-          EventedEngineType
-        >;
-      }
+    | StepParams<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema>
     | Agent<any, any>
-    | (Tool<TStepInput, TStepOutput, TSuspendSchema, TResumeSchema, any> & {
-        inputSchema: TStepInput;
-        outputSchema: TStepOutput;
-        execute: (
-          input: z.infer<TStepInput>,
-          context?: ToolExecutionContext<TSuspendSchema, TResumeSchema>,
-        ) => Promise<any>;
-      }),
+    | ToolStep<TStepInput, TSuspendSchema, TResumeSchema, TStepOutput, any>,
+  agentOrToolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+  },
 ): Step<TStepId, TState, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, EventedEngineType> {
-  if (isAgent(params)) {
+  if (params instanceof Agent) {
     return {
-      id: params.name,
+      id: params.id,
       description: params.getDescription(),
       // @ts-ignore
       inputSchema: z.object({
@@ -175,7 +147,9 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, requestContext, abortSignal, abort }) => {
+      retries: agentOrToolOptions?.retries,
+      scorers: agentOrToolOptions?.scorers,
+      execute: async ({ inputData, runId, [PUBSUB_SYMBOL]: pubsub, requestContext, abortSignal, abort }) => {
         // TODO: support stream
         let streamPromise = {} as {
           promise: Promise<string>;
@@ -207,22 +181,24 @@ export function createStep<
           args: inputData,
         };
 
-        await emitter.emit('watch', {
-          type: 'tool-call-streaming-start',
-          ...(toolData ?? {}),
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-start', ...(toolData ?? {}) },
         });
         for await (const chunk of fullStream) {
           if (chunk.type === 'text-delta') {
-            await emitter.emit('watch', {
-              type: 'tool-call-delta',
-              ...(toolData ?? {}),
-              argsTextDelta: chunk.textDelta,
+            await pubsub.publish(`workflow.events.v2.${runId}`, {
+              type: 'watch',
+              runId,
+              data: { type: 'tool-call-delta', ...(toolData ?? {}), argsTextDelta: chunk.textDelta },
             });
           }
         }
-        await emitter.emit('watch', {
-          type: 'tool-call-streaming-finish',
-          ...(toolData ?? {}),
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: { type: 'tool-call-streaming-finish', ...(toolData ?? {}) },
         });
 
         return {
@@ -233,7 +209,7 @@ export function createStep<
     };
   }
 
-  if (isTool(params)) {
+  if (params instanceof Tool) {
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
@@ -245,6 +221,8 @@ export function createStep<
       outputSchema: params.outputSchema,
       suspendSchema: params.suspendSchema,
       resumeSchema: params.resumeSchema,
+      retries: agentOrToolOptions?.retries,
+      scorers: agentOrToolOptions?.scorers,
       execute: async ({
         inputData,
         mastra,
@@ -291,6 +269,8 @@ export function createStep<
     resumeSchema: params.resumeSchema,
     suspendSchema: params.suspendSchema,
     execute: params.execute,
+    retries: params?.retries,
+    scorers: params.scorers,
   };
 }
 
@@ -314,9 +294,11 @@ export function createWorkflow<
     mastra: params.mastra!,
     eventProcessor,
     options: {
-      validateInputs: params.options?.validateInputs ?? false,
+      validateInputs: params.options?.validateInputs ?? true,
       shouldPersistSnapshot: params.options?.shouldPersistSnapshot ?? (() => true),
       tracingPolicy: params.options?.tracingPolicy,
+      onFinish: params.options?.onFinish,
+      onError: params.options?.onError,
     },
   });
   return new EventedWorkflow<EventedEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput>({
@@ -344,7 +326,11 @@ export class EventedWorkflow<
     this.executionEngine.__registerMastra(mastra);
   }
 
-  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  async createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -353,6 +339,7 @@ export class EventedWorkflow<
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         executionEngine: this.executionEngine,
         executionGraph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
@@ -360,6 +347,7 @@ export class EventedWorkflow<
         retryConfig: this.retryConfig,
         cleanup: () => this.runs.delete(runIdToUse),
         workflowSteps: this.steps,
+        validateInputs: this.options?.validateInputs,
         workflowEngineType: this.engineType,
       });
 
@@ -370,12 +358,19 @@ export class EventedWorkflow<
       stepResults: {},
     });
 
-    const workflowSnapshotInStorage = await this.getWorkflowRunExecutionResult(runIdToUse, false);
+    const existingRun = await this.getWorkflowRunById(runIdToUse, {
+      withNestedWorkflows: false,
+    });
 
-    if (!workflowSnapshotInStorage && shouldPersistSnapshot) {
-      await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    // Check if run exists in persistent storage (not just in-memory)
+    const existsInStorage = existingRun && !existingRun.isFromInMemory;
+
+    if (!existsInStorage && shouldPersistSnapshot) {
+      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
+        resourceId: options?.resourceId,
         snapshot: {
           runId: runIdToUse,
           status: 'pending',
@@ -409,6 +404,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    resourceId?: string;
     executionEngine: ExecutionEngine;
     executionGraph: ExecutionGraph;
     serializedStepGraph: SerializedStepFlowEntry[];
@@ -426,14 +422,38 @@ export class EventedRun<
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
+  /**
+   * Set up abort signal handler to publish workflow.cancel event when abortController.abort() is called.
+   * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
+   */
+  private setupAbortHandler(): void {
+    const abortHandler = () => {
+      this.mastra?.pubsub
+        .publish('workflows', {
+          type: 'workflow.cancel',
+          runId: this.runId,
+          data: {
+            workflowId: this.workflowId,
+            runId: this.runId,
+          },
+        })
+        .catch(err => {
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
+        });
+    };
+    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
+  }
+
   async start({
     inputData,
     initialState,
     requestContext,
+    perStep,
   }: {
     inputData?: z.infer<TInput>;
     requestContext?: RequestContext;
     initialState?: z.infer<TState>;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
@@ -447,9 +467,11 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    await this.mastra?.getStorage()?.persistWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
+      resourceId: this.resourceId,
       snapshot: {
         runId: this.runId,
         serializedStepGraph: this.serializedStepGraph,
@@ -469,6 +491,12 @@ export class EventedRun<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? {});
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    this.setupAbortHandler();
+
     const result = await this.executionEngine.execute<
       z.infer<TState>,
       z.infer<TInput>,
@@ -480,32 +508,94 @@ export class EventedRun<
       serializedStepGraph: this.serializedStepGraph,
       input: inputDataToUse,
       initialState: initialStateToUse,
-      emitter: {
-        emit: async (event: string, data: any) => {
-          this.emitter.emit(event, data);
-        },
-        on: (event: string, callback: (data: any) => void) => {
-          this.emitter.on(event, callback);
-        },
-        off: (event: string, callback: (data: any) => void) => {
-          this.emitter.off(event, callback);
-        },
-        once: (event: string, callback: (data: any) => void) => {
-          this.emitter.once(event, callback);
-        },
-      },
+      pubsub: this.mastra.pubsub,
       retryConfig: this.retryConfig,
       requestContext,
       abortController: this.abortController,
+      perStep,
     });
 
-    console.dir({ startResult: result }, { depth: null });
+    // console.dir({ startResult: result }, { depth: null });
 
     if (result.status !== 'suspended') {
       this.cleanup?.();
     }
 
     return result;
+  }
+
+  /**
+   * Starts the workflow execution without waiting for completion (fire-and-forget).
+   * Returns immediately with the runId. The workflow executes in the background via pubsub.
+   * Use this when you don't need to wait for the result or want to avoid polling failures.
+   */
+  async startAsync({
+    inputData,
+    initialState,
+    requestContext,
+    perStep,
+  }: {
+    inputData?: z.infer<TInput>;
+    requestContext?: RequestContext;
+    initialState?: z.infer<TState>;
+    perStep?: boolean;
+  }): Promise<{ runId: string }> {
+    // Add validation checks
+    if (this.serializedStepGraph.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
+    requestContext = requestContext ?? new RequestContext();
+
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      snapshot: {
+        runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
+        status: 'running',
+        value: {},
+        context: {} as any,
+        requestContext: Object.fromEntries(requestContext.entries()),
+        activePaths: [],
+        activeStepsPath: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
+    const inputDataToUse = await this._validateInput(inputData);
+    const initialStateToUse = await this._validateInitialState(initialState ?? {});
+
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    // Fire-and-forget: publish the workflow start event without subscribing for completion
+    await this.mastra.pubsub.publish('workflows', {
+      type: 'workflow.start',
+      runId: this.runId,
+      data: {
+        workflowId: this.workflowId,
+        runId: this.runId,
+        prevResult: { status: 'success', output: inputDataToUse },
+        requestContext: Object.fromEntries(requestContext.entries()),
+        initialState: initialStateToUse,
+        perStep,
+      },
+    });
+
+    // Return immediately without waiting for completion
+    return { runId: this.runId };
   }
 
   // TODO: stream
@@ -521,33 +611,46 @@ export class EventedRun<
       | string
       | string[];
     requestContext?: RequestContext;
+    perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
-    const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-      typeof step === 'string' ? step : step?.id,
-    );
+    let steps: string[] = [];
+    if (typeof params.step === 'string') {
+      steps = params.step.split('.');
+    } else {
+      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
+        typeof step === 'string' ? step : step?.id,
+      );
+    }
 
     if (steps.length === 0) {
       throw new Error('No steps provided to resume');
     }
 
-    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new Error('Cannot resume workflow: workflows store is required');
+    }
+    const snapshot = await workflowsStore.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+    if (!snapshot) {
+      throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
+    }
 
-    const resumePath = snapshot?.suspendedPaths?.[steps[0]!] as any;
+    const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     if (!resumePath) {
       throw new Error(
-        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot?.suspendedPaths)}`,
+        `No resume path found for step ${JSON.stringify(steps)}, currently suspended paths are ${JSON.stringify(snapshot.suspendedPaths)}`,
       );
     }
 
     console.dir(
-      { resume: { requestContextObj: snapshot?.requestContext, requestContext: params.requestContext } },
+      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
       { depth: null },
     );
     // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot?.requestContext ?? {};
+    const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot
@@ -566,6 +669,12 @@ export class EventedRun<
 
     const resumeDataToUse = await this._validateResumeData(params.resumeData, suspendedStep);
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    this.setupAbortHandler();
+
     const executionResultPromise = this.executionEngine
       .execute<z.infer<TState>, z.infer<TInput>, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
@@ -579,23 +688,10 @@ export class EventedRun<
           resumePayload: resumeDataToUse,
           resumePath,
         },
-        emitter: {
-          emit: (event: string, data: any) => {
-            this.emitter.emit(event, data);
-            return Promise.resolve();
-          },
-          on: (event: string, callback: (data: any) => void) => {
-            this.emitter.on(event, callback);
-          },
-          off: (event: string, callback: (data: any) => void) => {
-            this.emitter.off(event, callback);
-          },
-          once: (event: string, callback: (data: any) => void) => {
-            this.emitter.once(event, callback);
-          },
-        },
+        pubsub: this.mastra.pubsub,
         requestContext,
         abortController: this.abortController,
+        perStep: params.perStep,
       })
       .then(result => {
         if (result.status !== 'suspended') {
@@ -645,13 +741,18 @@ export class EventedRun<
   }
 
   async cancel() {
-    await this.mastra?.pubsub.publish('workflows', {
-      type: 'workflow.cancel',
+    // Update storage directly for immediate status update (same pattern as Inngest)
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    await workflowsStore?.updateWorkflowState({
+      workflowName: this.workflowId,
       runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
+      opts: {
+        status: 'canceled',
       },
     });
+
+    // Trigger abort signal - the abort handler will publish the workflow.cancel event
+    // This ensures consistent behavior whether cancel() or abort() is called
+    this.abortController.abort();
   }
 }

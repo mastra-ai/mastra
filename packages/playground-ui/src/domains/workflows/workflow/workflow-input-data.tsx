@@ -19,6 +19,7 @@ export interface WorkflowInputDataProps {
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
   withoutSubmit?: boolean;
+  children?: React.ReactNode;
 }
 
 export const WorkflowInputData = ({
@@ -28,6 +29,7 @@ export const WorkflowInputData = ({
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
+  children,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<'json' | 'form'>('form');
 
@@ -67,7 +69,9 @@ export const WorkflowInputData = ({
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
             onSubmit={withoutSubmit ? undefined : onSubmit}
-          />
+          >
+            {children}
+          </DynamicForm>
         ) : (
           <JSONInput
             schema={schema}
@@ -76,7 +80,9 @@ export const WorkflowInputData = ({
             submitButtonLabel={submitButtonLabel}
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
-          />
+          >
+            {children}
+          </JSONInput>
         )}
       </div>
     </div>
@@ -90,6 +96,7 @@ const JSONInput = ({
   submitButtonLabel,
   onSubmit,
   withoutSubmit,
+  children,
 }: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
@@ -128,6 +135,8 @@ const JSONInput = ({
       )}
 
       <SyntaxHighlighter data={inputData} onChange={setInputData} />
+
+      {children}
 
       {withoutSubmit ? null : (
         <Button variant="light" onClick={handleSubmit} className="w-full" size="lg">

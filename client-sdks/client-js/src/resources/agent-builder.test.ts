@@ -1,6 +1,6 @@
-import type { Server, IncomingMessage } from 'http';
-import { createServer } from 'http';
-import type { AddressInfo } from 'net';
+import type { Server, IncomingMessage } from 'node:http';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { describe, it, beforeAll, beforeEach, afterAll, expect, vi, afterEach } from 'vitest';
 import type { ClientOptions } from '../types';
 import { AgentBuilder } from './agent-builder';
@@ -153,15 +153,6 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
         return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
       }
 
-      // Mock observeStreamVNext endpoint
-      if (url.includes('/observe-streamVNext?runId=')) {
-        const body = Workflow.createRecordStream([
-          { type: 'cache', payload: { msg: 'cached event 1' } },
-          { type: 'live', payload: { msg: 'live event 1' } },
-        ]);
-        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
-      }
-
       // Mock observeStreamLegacy endpoint
       if (url.includes('/observe-stream-legacy?runId=')) {
         const body = Workflow.createRecordStream([
@@ -212,27 +203,6 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
 
     // Verify correct endpoint was called
     const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe?runId='));
-    expect(call).toBeTruthy();
-  });
-
-  it('observeStreamVNext returns ReadableStream with VNext streaming', async () => {
-    const stream = await agentBuilder.observeStreamVNext({ runId: 'run-456' });
-    const reader = (stream as ReadableStream<any>).getReader();
-    const records: any[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      records.push(value);
-    }
-
-    expect(records).toEqual([
-      { type: 'cache', payload: { msg: 'cached event 1' } },
-      { type: 'live', payload: { msg: 'live event 1' } },
-    ]);
-
-    // Verify correct endpoint was called
-    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/observe-streamVNext?runId='));
     expect(call).toBeTruthy();
   });
 

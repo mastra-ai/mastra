@@ -1,6 +1,9 @@
 ---
 title: "Reference: MCPClient | Tools & MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
+packages:
+  - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # MCPClient
@@ -98,6 +101,13 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       isOptional: true,
       description:
         "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
+    },
+    {
+      name: "fetch",
+      type: "FetchLike",
+      isOptional: true,
+      description:
+        "For HTTP servers: Custom fetch implementation used for all network requests. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers (e.g., refreshing bearer tokens), customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
     },
     {
       name: "logger",
@@ -291,23 +301,6 @@ mcpClient.resources.onListChanged("myWeatherServer", () => {
 });
 ```
 
-### `prompts` Property
-
-The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
-
-```typescript
-const mcpClient = new MCPClient({
-  /* ...servers configuration... */
-});
-
-// Access prompt methods via mcpClient.prompts
-const allPromptsByServer = await mcpClient.prompts.list();
-const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "myWeatherServer",
-  name: "current",
-});
-```
-
 ### `elicitation` Property
 
 The `MCPClient` instance has an `elicitation` property that provides access to elicitation-related operations. Elicitation allows MCP servers to request structured information from users.
@@ -451,6 +444,23 @@ await mcpClient.elicitation.onRequest("interactiveServer", async (request) => {
 });
 ```
 
+### `prompts` Property
+
+The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers configuration... */
+});
+
+// Access prompt methods via mcpClient.prompts
+const allPromptsByServer = await mcpClient.prompts.list();
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "myWeatherServer",
+  name: "current",
+});
+```
+
 #### `prompts.list()`
 
 Retrieves all available prompts from all connected MCP servers, grouped by server name.
@@ -513,6 +523,63 @@ mcpClient.prompts.onListChanged("myWeatherServer", () => {
   console.log("Prompt list changed on myWeatherServer.");
   // You should re-fetch the list of prompts
   // await mcpClient.prompts.list();
+});
+```
+
+### `progress` Property
+
+The `MCPClient` instance has a `progress` property for subscribing to progress notifications emitted by MCP servers while tools execute.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      // Enabled by default; set to false to disable
+      enableProgressTracking: true,
+    },
+  },
+});
+
+// Subscribe to progress updates for a specific server
+await mcpClient.progress.onUpdate('myServer', (params) => {
+  console.log('📊 Progress:', params.progress, '/', params.total);
+  if (params.message) console.log('Message:', params.message);
+  if (params.progressToken) console.log('Token:', params.progressToken);
+});
+```
+
+#### `progress.onUpdate(serverName: string, handler)`
+
+Registers a handler function to receive progress updates from the specified server.
+
+```typescript
+async onUpdate(
+  serverName: string,
+  handler: (params: {
+    progressToken: string;
+    progress: number;
+    total?: number;
+    message?: string;
+  }) => void,
+): Promise<void>
+```
+
+Notes:
+
+- When `enableProgressTracking` is true (default), tool calls include a `progressToken` so you can correlate updates to a specific run.
+- If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
+
+To disable progress tracking for a server:
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    myServer: {
+      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+      enableProgressTracking: false,
+    },
+  },
 });
 ```
 
@@ -632,7 +699,6 @@ For tools where you have a single connection to the MCP server for you entire ap
 ```typescript
 import { MCPClient } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 
 const mcp = new MCPClient({
   servers: {
@@ -657,7 +723,7 @@ const mcp = new MCPClient({
 const agent = new Agent({
   name: "Multi-tool Agent",
   instructions: "You have access to multiple tool servers.",
-  model: openai("gpt-4"),
+  model: "openai/gpt-5.1",
   tools: await mcp.listTools(),
 });
 
@@ -707,13 +773,12 @@ When you need a new MCP connection for each user, use `listToolsets()` and add t
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { MCPClient } from "@mastra/mcp";
-import { openai } from "@ai-sdk/openai";
 
 // Create the agent first, without any tools
 const agent = new Agent({
   name: "Multi-tool Agent",
   instructions: "You help users check stocks and weather.",
-  model: openai("gpt-4"),
+  model: "openai/gpt-5.1",
 });
 
 // Later, configure MCP with user-specific settings
@@ -799,11 +864,40 @@ MCPClient handles server connections gracefully:
 2. Graceful server shutdown to prevent error messages during development
 3. Proper cleanup of resources when disconnecting
 
+## Using Custom Fetch for Dynamic Authentication
+
+For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or customize request behavior.
+
+When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL("https://api.example.com/mcp"),
+      fetch: async (url, init) => {
+        // Refresh token on each request
+        const token = await getAuthToken(); // Your token refresh logic
+        
+        return fetch(url, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      },
+    },
+  },
+});
+```
+
 ## Using SSE Request Headers
 
-When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK:
+When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
 
 ```ts
+// Option 1: Using requestInit and eventSourceInit (required for SSE)
 const sseClient = new MCPClient({
   servers: {
     exampleServer: {
@@ -824,6 +918,23 @@ const sseClient = new MCPClient({
             headers,
           });
         },
+      },
+    },
+  },
+});
+
+// Option 2: Using custom fetch (simpler, works for both Streamable HTTP and SSE)
+const sseClientWithFetch = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      fetch: async (url, init) => {
+        const headers = new Headers(init?.headers || {});
+        headers.set("Authorization", "Bearer your-token");
+        return fetch(url, {
+          ...init,
+          headers,
+        });
       },
     },
   },

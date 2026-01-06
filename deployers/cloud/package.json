@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.19",
   "description": "",
   "type": "module",
   "files": [
@@ -37,20 +37,23 @@
     "@mastra/loggers": "workspace:*",
     "execa": "^9.6.0",
     "fs-extra": "^11.3.2",
-    "pino": "^9.7.0",
+    "pino": "^10.1.0",
     "redis": "^5.8.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@manypkg/get-packages": "^3.1.0",
+    "@mastra/core": "workspace:*",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"

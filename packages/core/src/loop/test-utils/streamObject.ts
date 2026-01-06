@@ -1,16 +1,15 @@
-import { fail } from 'assert';
+import { fail } from 'node:assert';
 import {
   convertArrayToReadableStream,
   convertAsyncIterableToArray,
   convertReadableStreamToArray,
 } from '@ai-sdk/provider-utils-v5/test';
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
-import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from 'ai-v5';
-import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from 'ai-v5';
-import { MockLanguageModelV2 } from 'ai-v5/test';
+import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-sdk-v5';
+import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
 import { createMessageListWithUserMessage, mockDate, testUsage } from './utils';
@@ -28,14 +27,14 @@ function createTestModels({
       modelId: 'mock-model-id',
       timestamp: new Date(0),
     },
-    { type: 'text-start', id: '1' },
-    { type: 'text-delta', id: '1', delta: '{ ' },
-    { type: 'text-delta', id: '1', delta: '"content": ' },
-    { type: 'text-delta', id: '1', delta: `"Hello, ` },
-    { type: 'text-delta', id: '1', delta: `world` },
-    { type: 'text-delta', id: '1', delta: `!"` },
-    { type: 'text-delta', id: '1', delta: ' }' },
-    { type: 'text-end', id: '1' },
+    { type: 'text-start', id: 'text-1' },
+    { type: 'text-delta', id: 'text-1', delta: '{ ' },
+    { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+    { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+    { type: 'text-delta', id: 'text-1', delta: `world` },
+    { type: 'text-delta', id: 'text-1', delta: `!"` },
+    { type: 'text-delta', id: 'text-1', delta: ' }' },
+    { type: 'text-end', id: 'text-1' },
     {
       type: 'finish',
       finishReason: 'stop',
@@ -90,6 +89,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
     describe('result.object auto consume promise', () => {
       it('should resolve object promise without manual stream consumption', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels(),
@@ -108,13 +108,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should work with array schemas too', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream([
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: '{"elements":[{"content":"Hello, world!"}]}' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: '{"elements":[{"content":"Hello, world!"}]}' },
+              { type: 'text-end', id: 'text-1' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -134,6 +135,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
       it('should still work when stream is manually consumed first', async () => {
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: createTestModels(),
@@ -159,6 +161,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockModel = createTestModels();
           const messageList = createMessageListWithUserMessage();
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: mockModel,
@@ -204,6 +207,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should use name and description', async () => {
           const models = createTestModels();
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models,
@@ -261,6 +265,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should suppress error in partialObjectStream', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             runId,
             models: [
@@ -291,6 +296,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const errors: Array<{ error: unknown }> = [];
 
           const output = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -326,6 +332,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.fullStream', () => {
         it.todo('should send full stream data', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels(),
@@ -408,6 +415,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.textStream', () => {
         it('should send text stream', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels(),
@@ -439,6 +447,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.toTextStreamResponse', () => {
         it('should create a Response with a text stream', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels(),
@@ -469,6 +478,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const mockResponse = createMockServerResponse();
 
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels(),
             structuredOutput: { schema: z.object({ content: z.string() }) },
@@ -507,16 +517,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.usage', () => {
         it('should resolve with token usage', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'text-delta',
                   id: '1',
                   delta: '{ "content": "Hello, world!" }',
                 },
-                { type: 'text-end', id: '1' },
+                { type: 'text-end', id: 'text-1' },
                 { type: 'finish', finishReason: 'stop', usage: testUsage },
               ]),
             }),
@@ -541,16 +552,17 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.providerMetadata', () => {
         it('should resolve with provider metadata', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'text-delta',
                   id: '1',
                   delta: '{ "content": "Hello, world!" }',
                 },
-                { type: 'text-end', id: '1' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -580,6 +592,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.response', () => {
         it('should resolve with response information', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
@@ -589,13 +602,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
+                { type: 'text-start', id: 'text-1' },
                 {
                   type: 'text-delta',
                   id: '1',
                   delta: '{"content": "Hello, world!"}',
                 },
-                { type: 'text-end', id: '1' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -669,6 +682,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.request', () => {
         it('should contain request information', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -683,13 +697,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
                       {
                         type: 'text-delta',
                         id: '1',
                         delta: '{"content": "Hello, world!"}',
                       },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -714,6 +728,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.object', () => {
         it('should resolve with typed object', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -723,14 +738,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"content": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -755,6 +770,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -764,14 +780,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -794,6 +810,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -803,14 +820,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -835,6 +852,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('result.finishReason', () => {
         it('should resolve with finish reason', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -843,14 +861,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"content": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -874,6 +892,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it('should be called when a valid object is generated', async () => {
           let result: any;
           const { objectStream } = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -888,13 +907,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
                       {
                         type: 'text-delta',
                         id: '1',
                         delta: '{ "content": "Hello, world!" }',
                       },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -1016,12 +1035,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "content": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "content": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1058,6 +1072,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "content": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1089,6 +1104,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema without destructuring", async () => {
           let result: any;
           const output = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1103,14 +1119,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -1229,12 +1245,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1268,6 +1279,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "invalid": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1299,6 +1311,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         it("should be called when object doesn't match the schema with destructuring", async () => {
           let result: any;
           const { consumeStream, objectStream, object } = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1313,14 +1326,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         modelId: 'mock-model-id',
                         timestamp: new Date(0),
                       },
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ ' },
-                      { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: '1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: '1', delta: `world` },
-                      { type: 'text-delta', id: '1', delta: `!"` },
-                      { type: 'text-delta', id: '1', delta: ' }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
+                      { type: 'text-delta', id: 'text-1', delta: `world` },
+                      { type: 'text-delta', id: 'text-1', delta: `!"` },
+                      { type: 'text-delta', id: 'text-1', delta: ' }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'finish',
                         finishReason: 'stop',
@@ -1439,12 +1452,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "id": "id-0",
                     "messages": [
                       {
-                        "content": [
-                          {
-                            "text": "{ "invalid": "Hello, world!" }",
-                            "type": "text",
-                          },
-                        ],
+                        "content": "{ "invalid": "Hello, world!" }",
                         "role": "assistant",
                       },
                     ],
@@ -1478,6 +1486,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "text": "{ "invalid": "Hello, world!" }",
                   "toolCalls": [],
                   "toolResults": [],
+                  "tripwire": undefined,
                   "usage": {
                     "inputTokens": 3,
                     "outputTokens": 10,
@@ -1508,8 +1517,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       });
 
       describe('options.headers', () => {
-        it('should pass headers to model', async () => {
+        it('should pass headers from modelSettings to model', async () => {
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             models: [
               {
@@ -1523,13 +1533,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
                     return {
                       stream: convertArrayToReadableStream([
-                        { type: 'text-start', id: '1' },
+                        { type: 'text-start', id: 'text-1' },
                         {
                           type: 'text-delta',
                           id: '1',
                           delta: `{ "content": "headers test" }`,
                         },
-                        { type: 'text-end', id: '1' },
+                        { type: 'text-end', id: 'text-1' },
                         {
                           type: 'finish',
                           finishReason: 'stop',
@@ -1544,7 +1554,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             structuredOutput: { schema: z.object({ content: z.string() }) },
             messageList: createMessageListWithUserMessage(),
             modelSettings: { headers: { 'custom-request-header': 'request-header-value' } },
-            headers: { 'custom-request-header': 'request-header-value' },
           });
 
           // mastra
@@ -1555,11 +1564,221 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             { content: 'headers test' },
           ]);
         });
+
+        it('should pass headers from model config to model', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                headers: { 'x-model-header': 'from-config' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'x-model-header': 'from-config',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "config headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'config headers test' },
+          ]);
+        });
+
+        it('should merge headers with modelSettings overriding model config', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                headers: {
+                  'x-model-header': 'from-config',
+                  'x-shared-header': 'from-config',
+                },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toStrictEqual({
+                      'x-model-header': 'from-config',
+                      'x-shared-header': 'from-runtime', // modelSettings overrides config
+                      'x-runtime-header': 'from-runtime',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "merged headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            modelSettings: {
+              headers: {
+                'x-shared-header': 'from-runtime',
+                'x-runtime-header': 'from-runtime',
+              },
+            },
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'merged headers test' },
+          ]);
+        });
+
+        it('should use correct headers for each fallback model', async () => {
+          let attemptCount = 0;
+
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'model-1',
+                maxRetries: 0,
+                headers: { 'x-model': 'model-1', 'x-provider': 'provider-a' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    attemptCount++;
+                    expect(headers).toStrictEqual({
+                      'x-model': 'model-1',
+                      'x-provider': 'provider-a',
+                    });
+
+                    // First model fails
+                    throw new Error('Model 1 failed');
+                  },
+                }),
+              },
+              {
+                id: 'model-2',
+                maxRetries: 0,
+                headers: { 'x-model': 'model-2', 'x-provider': 'provider-b' },
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    attemptCount++;
+                    expect(headers).toStrictEqual({
+                      'x-model': 'model-2',
+                      'x-provider': 'provider-b',
+                    });
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "fallback success" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            modelSettings: { maxRetries: 0 }, // Disable retries at the loop level
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'fallback success' },
+          ]);
+          expect(attemptCount).toBe(2); // Both models should have been tried
+        });
+
+        it('should handle undefined headers gracefully', async () => {
+          const result = loopFn({
+            methodType: 'stream',
+            agentId: 'agent-id',
+            models: [
+              {
+                id: 'test-model',
+                maxRetries: 0,
+                // No headers field
+                model: new MockLanguageModelV2({
+                  doStream: async ({ headers }) => {
+                    expect(headers).toBeUndefined();
+
+                    return {
+                      stream: convertArrayToReadableStream([
+                        { type: 'text-start', id: 'text-1' },
+                        {
+                          type: 'text-delta',
+                          id: '1',
+                          delta: `{ "content": "no headers test" }`,
+                        },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  },
+                }),
+              },
+            ],
+            structuredOutput: { schema: z.object({ content: z.string() }) },
+            messageList: createMessageListWithUserMessage(),
+            // No modelSettings.headers
+          });
+
+          expect(await convertAsyncIterableToArray(result.objectStream)).toStrictEqual([
+            { content: 'no headers test' },
+          ]);
+        });
       });
 
       describe('options.providerOptions', () => {
         it('should pass provider options to model', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -1574,13 +1793,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
                     return {
                       stream: convertArrayToReadableStream([
-                        { type: 'text-start', id: '1' },
+                        { type: 'text-start', id: 'text-1' },
                         {
                           type: 'text-delta',
                           id: '1',
                           delta: `{ "content": "provider metadata test" }`,
                         },
-                        { type: 'text-end', id: '1' },
+                        { type: 'text-end', id: 'text-1' },
                         {
                           type: 'finish',
                           finishReason: 'stop',
@@ -1615,6 +1834,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const models = createTestModels();
 
           const result = loopFn({
+            methodType: 'stream',
             agentId: 'agent-id',
             runId,
             models,
@@ -1668,6 +1888,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('error handling', () => {
         it('should throw zod validation error when zod schema validation fails', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: [
@@ -1677,9 +1898,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 model: new MockLanguageModelV2({
                   doStream: async () => ({
                     stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: '1' },
-                      { type: 'text-delta', id: '1', delta: '{ "content": 123 }' },
-                      { type: 'text-end', id: '1' },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: '{ "content": 123 }' },
+                      { type: 'text-end', id: 'text-1' },
                       {
                         type: 'response-metadata',
                         id: 'id-1',
@@ -1725,18 +1946,19 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('object format with complete code blocks', () => {
         it('should handle complete ```json...``` code blocks', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"content": ' },
-                { type: 'text-delta', id: '1', delta: '"Hello, world!"' },
-                { type: 'text-delta', id: '1', delta: ' }' },
-                { type: 'text-delta', id: '1', delta: '\n```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                { type: 'text-delta', id: 'text-1', delta: '"Hello, world!"' },
+                { type: 'text-delta', id: 'text-1', delta: ' }' },
+                { type: 'text-delta', id: 'text-1', delta: '\n```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1764,13 +1986,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should handle ```json code blocks without newlines', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json{"content": "Hello, world!"}```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json{"content": "Hello, world!"}```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1791,19 +2014,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('object format with partial streaming', () => {
         it('should handle ```json prefix during streaming', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"content": ' },
-                { type: 'text-delta', id: '1', delta: '"Hello, ' },
-                { type: 'text-delta', id: '1', delta: 'world' },
-                { type: 'text-delta', id: '1', delta: '!"' },
-                { type: 'text-delta', id: '1', delta: ' }' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                { type: 'text-delta', id: 'text-1', delta: '"Hello, ' },
+                { type: 'text-delta', id: 'text-1', delta: 'world' },
+                { type: 'text-delta', id: 'text-1', delta: '!"' },
+                { type: 'text-delta', id: 'text-1', delta: ' }' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1834,18 +2058,19 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('array format with JSON code blocks', () => {
         it('should handle array wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 1"},' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 2"}' },
-                { type: 'text-delta', id: '1', delta: ']}' },
-                { type: 'text-delta', id: '1', delta: '\n```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 1"},' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 2"}' },
+                { type: 'text-delta', id: 'text-1', delta: ']}' },
+                { type: 'text-delta', id: 'text-1', delta: '\n```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1862,17 +2087,18 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should handle partial array streaming with ```json prefix', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 1"},' },
-                { type: 'text-delta', id: '1', delta: '{"content":"element 2"}' },
-                { type: 'text-delta', id: '1', delta: ']}' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 1"},' },
+                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 2"}' },
+                { type: 'text-delta', id: 'text-1', delta: ']}' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1898,15 +2124,16 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('enum format with JSON code blocks', () => {
         it('should handle enum wrapped in ```json...``` blocks', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ "result": "sunny" }' },
-                { type: 'text-delta', id: '1', delta: '\n```' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ "result": "sunny" }' },
+                { type: 'text-delta', id: 'text-1', delta: '\n```' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1923,19 +2150,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         it('should handle partial enum streaming with ```json prefix', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '```json\n' },
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"result": ' },
-                { type: 'text-delta', id: '1', delta: '"su' },
-                { type: 'text-delta', id: '1', delta: 'nny' },
-                { type: 'text-delta', id: '1', delta: '"' },
-                { type: 'text-delta', id: '1', delta: ' }' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+                { type: 'text-delta', id: 'text-1', delta: '"su' },
+                { type: 'text-delta', id: 'text-1', delta: 'nny' },
+                { type: 'text-delta', id: 'text-1', delta: '"' },
+                { type: 'text-delta', id: 'text-1', delta: ' }' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -1962,31 +2190,32 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         beforeEach(async () => {
           result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
                 // first element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"content":' },
-                { type: 'text-delta', id: '1', delta: `"element 1"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"content":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 1"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // second element:
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"content": ' },
-                { type: 'text-delta', id: '1', delta: `"element 2"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"content": ' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 2"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // third element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"content":' },
-                { type: 'text-delta', id: '1', delta: `"element 3"` },
-                { type: 'text-delta', id: '1', delta: '}' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"content":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 3"` },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
                 // end of array
-                { type: 'text-delta', id: '1', delta: ']' },
-                { type: 'text-delta', id: '1', delta: '}' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-delta', id: 'text-1', delta: ']' },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
+                { type: 'text-end', id: 'text-1' },
                 // finish
                 {
                   type: 'finish',
@@ -2065,6 +2294,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
         beforeEach(async () => {
           result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
@@ -2138,31 +2368,32 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       describe('error handling', () => {
         it('should reject object promise when the streamed object does not match the schema', async () => {
           const result = loopFn({
+            methodType: 'stream',
             runId,
             agentId: 'agent-id',
             models: createTestModels({
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: '{"elements":[' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
                 // first element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"invalid":' },
-                { type: 'text-delta', id: '1', delta: `"element 1"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"invalid":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 1"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // second element:
-                { type: 'text-delta', id: '1', delta: '{ ' },
-                { type: 'text-delta', id: '1', delta: '"invalid": ' },
-                { type: 'text-delta', id: '1', delta: `"element 2"` },
-                { type: 'text-delta', id: '1', delta: '},' },
+                { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 2"` },
+                { type: 'text-delta', id: 'text-1', delta: '},' },
                 // third element:
-                { type: 'text-delta', id: '1', delta: '{' },
-                { type: 'text-delta', id: '1', delta: '"invalid":' },
-                { type: 'text-delta', id: '1', delta: `"element 3"` },
-                { type: 'text-delta', id: '1', delta: '}' },
+                { type: 'text-delta', id: 'text-1', delta: '{' },
+                { type: 'text-delta', id: 'text-1', delta: '"invalid":' },
+                { type: 'text-delta', id: 'text-1', delta: `"element 3"` },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
                 // end of array
-                { type: 'text-delta', id: '1', delta: ']' },
-                { type: 'text-delta', id: '1', delta: '}' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-delta', id: 'text-1', delta: ']' },
+                { type: 'text-delta', id: 'text-1', delta: '}' },
+                { type: 'text-end', id: 'text-1' },
                 // finish
                 {
                   type: 'finish',
@@ -2192,19 +2423,20 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should stream an enum value', async () => {
         const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"result": ' },
-            { type: 'text-delta', id: '1', delta: `"su` },
-            { type: 'text-delta', id: '1', delta: `nny` },
-            { type: 'text-delta', id: '1', delta: `"` },
-            { type: 'text-delta', id: '1', delta: ' }' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+            { type: 'text-delta', id: 'text-1', delta: `"su` },
+            { type: 'text-delta', id: 'text-1', delta: `nny` },
+            { type: 'text-delta', id: 'text-1', delta: `"` },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
             { type: 'finish', finishReason: 'stop', usage: testUsage },
           ]),
         });
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2252,14 +2484,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             model: new MockLanguageModelV2({
               doStream: {
                 stream: convertArrayToReadableStream([
-                  { type: 'text-start', id: '1' },
-                  { type: 'text-delta', id: '1', delta: '{ ' },
-                  { type: 'text-delta', id: '1', delta: '"result": ' },
-                  { type: 'text-delta', id: '1', delta: `"foo` },
-                  { type: 'text-delta', id: '1', delta: `bar` },
-                  { type: 'text-delta', id: '1', delta: `"` },
-                  { type: 'text-delta', id: '1', delta: ' }' },
-                  { type: 'text-end', id: '1' },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: '{ ' },
+                  { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+                  { type: 'text-delta', id: 'text-1', delta: `"foo` },
+                  { type: 'text-delta', id: 'text-1', delta: `bar` },
+                  { type: 'text-delta', id: 'text-1', delta: `"` },
+                  { type: 'text-delta', id: 'text-1', delta: ' }' },
+                  { type: 'text-end', id: 'text-1' },
                   {
                     type: 'finish',
                     finishReason: 'stop',
@@ -2272,6 +2504,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         ];
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2285,13 +2518,13 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should handle ambiguous values', async () => {
         const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"result": ' },
-            { type: 'text-delta', id: '1', delta: `"foo` },
-            { type: 'text-delta', id: '1', delta: `bar` },
-            { type: 'text-delta', id: '1', delta: `"` },
-            { type: 'text-delta', id: '1', delta: ' }' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+            { type: 'text-delta', id: 'text-1', delta: `"foo` },
+            { type: 'text-delta', id: 'text-1', delta: `bar` },
+            { type: 'text-delta', id: 'text-1', delta: `"` },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -2301,6 +2534,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2319,14 +2553,14 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
       it('should handle non-ambiguous values', async () => {
         const mockModels = createTestModels({
           stream: convertArrayToReadableStream([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: '{ ' },
-            { type: 'text-delta', id: '1', delta: '"result": ' },
-            { type: 'text-delta', id: '1', delta: `"foo` },
-            { type: 'text-delta', id: '1', delta: `bar` },
-            { type: 'text-delta', id: '1', delta: `"` },
-            { type: 'text-delta', id: '1', delta: ' }' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{ ' },
+            { type: 'text-delta', id: 'text-1', delta: '"result": ' },
+            { type: 'text-delta', id: 'text-1', delta: `"foo` },
+            { type: 'text-delta', id: 'text-1', delta: `bar` },
+            { type: 'text-delta', id: 'text-1', delta: `"` },
+            { type: 'text-delta', id: 'text-1', delta: ' }' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -2336,6 +2570,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
         });
 
         const result = loopFn({
+          methodType: 'stream',
           runId,
           agentId: 'agent-id',
           models: mockModels,
@@ -2348,285 +2583,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           "foobar",
         ]
       `);
-      });
-    });
-
-    describe.todo('options.experimental_repairText', () => {
-      it('should be able to repair a JSONParseError', async () => {
-        const result = loopFn({
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: '1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '{ "content": "provider metadata test" ',
-                    },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(JSONParseError);
-          //     expect(text).toStrictEqual('{ "content": "provider metadata test" ');
-          //     return text + '}';
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        expect(await result.object).toStrictEqual({
-          content: 'provider metadata test',
-        });
-      });
-
-      it('should be able to repair a TypeValidationError', async () => {
-        const result = loopFn({
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: '1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '{ "content-a": "provider metadata test" }',
-                    },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(TypeValidationError);
-          //     expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
-          //     return `{ "content": "provider metadata test" }`;
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        expect(await result.aisdk.v5.object).toStrictEqual({
-          content: 'provider metadata test',
-        });
-      });
-
-      it('should be able to handle repair that returns null', async () => {
-        const result = loopFn({
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: '1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '{ "content-a": "provider metadata test" }',
-                    },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-
-          // TODO: experimental_repairText?
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(TypeValidationError);
-          //     expect(text).toStrictEqual('{ "content-a": "provider metadata test" }');
-          //     return null;
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        void convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        await expect(await result.aisdk.v5.object).rejects.toThrow(
-          'No object generated: response did not match schema.',
-        );
-      });
-
-      it('should be able to repair JSON wrapped with markdown code blocks', async () => {
-        const result = loopFn({
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: '1' },
-                    {
-                      type: 'text-delta',
-                      id: '1',
-                      delta: '```json\n{ "content": "test message" }\n```',
-                    },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text, error }) => {
-          //     expect(error).toBeInstanceOf(JSONParseError);
-          //     expect(text).toStrictEqual('```json\n{ "content": "test message" }\n```');
-
-          //     // Remove markdown code block wrapper
-          //     const cleaned = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          //     return cleaned;
-          //   },
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        // consume stream
-        await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-
-        expect(await result.aisdk.v5.object).toStrictEqual({
-          content: 'test message',
-        });
-      });
-
-      it('should throw NoObjectGeneratedError when parsing fails with repairText', async () => {
-        const result = loopFn({
-          runId,
-          agentId: 'agent-id',
-          models: [
-            {
-              id: 'test-model',
-              maxRetries: 0,
-              model: new MockLanguageModelV2({
-                doStream: async () => ({
-                  stream: convertArrayToReadableStream([
-                    {
-                      type: 'response-metadata',
-                      id: 'id-0',
-                      modelId: 'mock-model-id',
-                      timestamp: new Date(0),
-                    },
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: '{ broken json' },
-                    { type: 'text-end', id: '1' },
-                    {
-                      type: 'finish',
-                      finishReason: 'stop',
-                      usage: testUsage,
-                    },
-                  ]),
-                }),
-              }),
-            },
-          ],
-          structuredOutput: { schema: z.object({ content: z.string() }) },
-          // TODO
-          // options: {
-          //   experimental_repairText: async ({ text }) => text + '{',
-          // },
-          messageList: createMessageListWithUserMessage(),
-        });
-
-        try {
-          await convertAsyncIterableToArray(result.aisdk.v5.objectStream);
-          await result.aisdk.v5.object;
-          fail('must throw error');
-        } catch (error) {
-          verifyNoObjectGeneratedError(error, {
-            message: 'No object generated: could not parse the response.',
-            response: {
-              id: 'id-0',
-              timestamp: new Date(0),
-              modelId: 'mock-model-id',
-            },
-            usage: testUsage,
-            finishReason: 'stop',
-          });
-        }
       });
     });
   });

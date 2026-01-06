@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-firebase",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "description": "Mastra Firebase Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -30,13 +30,15 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.13.17",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4",
-    "@internal/types-builder": "workspace:*"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "files": [
     "dist",

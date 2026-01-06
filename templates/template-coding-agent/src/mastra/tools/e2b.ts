@@ -4,7 +4,7 @@ import { FilesystemEventType, FileType, Sandbox } from '@e2b/code-interpreter';
 
 export const createSandbox = createTool({
   id: 'createSandbox',
-  description: 'Create an e2b sandbox',
+  description: 'Create a sandbox',
   inputSchema: z.object({
     metadata: z.record(z.string()).optional().describe('Custom metadata for the sandbox'),
     envs: z.record(z.string()).optional().describe(`
@@ -44,7 +44,7 @@ export const createSandbox = createTool({
 
 export const runCode = createTool({
   id: 'runCode',
-  description: 'Run code in an e2b sandbox',
+  description: 'Run code in a sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to run the code'),
     code: z.string().describe('The code to run in the sandbox'),
@@ -76,11 +76,11 @@ export const runCode = createTool({
         error: z.string().describe('The error from a failed execution'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
 
-      const execution = await sandbox.runCode(input.code, input.runCodeOpts);
+      const execution = await sandbox.runCode(inputData.code, inputData.runCodeOpts);
 
       return {
         execution: JSON.stringify(execution.toJSON()),
@@ -95,7 +95,7 @@ export const runCode = createTool({
 
 export const readFile = createTool({
   id: 'readFile',
-  description: 'Read a file from the e2b sandbox',
+  description: 'Read a file from the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to read the file from'),
     path: z.string().describe('The path to the file to read'),
@@ -110,14 +110,14 @@ export const readFile = createTool({
         error: z.string().describe('The error from a failed file read'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      const fileContent = await sandbox.files.read(input.path);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      const fileContent = await sandbox.files.read(inputData.path);
 
       return {
         content: fileContent,
-        path: input.path,
+        path: inputData.path,
       };
     } catch (e) {
       return {
@@ -129,7 +129,7 @@ export const readFile = createTool({
 
 export const writeFile = createTool({
   id: 'writeFile',
-  description: 'Write a single file to the e2b sandbox',
+  description: 'Write a single file to the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to write the file to'),
     path: z.string().describe('The path where the file should be written'),
@@ -145,14 +145,14 @@ export const writeFile = createTool({
         error: z.string().describe('The error from a failed file write'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      await sandbox.files.write(input.path, context.content);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      await sandbox.files.write(inputData.path, inputData.content);
 
       return {
         success: true,
-        path: input.path,
+        path: inputData.path,
       };
     } catch (e) {
       return {
@@ -164,7 +164,7 @@ export const writeFile = createTool({
 
 export const writeFiles = createTool({
   id: 'writeFiles',
-  description: 'Write multiple files to the e2b sandbox',
+  description: 'Write multiple files to the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to write the files to'),
     files: z
@@ -186,14 +186,14 @@ export const writeFiles = createTool({
         error: z.string().describe('The error from a failed files write'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      await sandbox.files.write(context.files);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      await sandbox.files.write(inputData.files);
 
       return {
         success: true,
-        filesWritten: context.files.map(file => file.path),
+        filesWritten: inputData.files.map(file => file.path),
       };
     } catch (e) {
       return {
@@ -205,7 +205,7 @@ export const writeFiles = createTool({
 
 export const listFiles = createTool({
   id: 'listFiles',
-  description: 'List files and directories in a path within the e2b sandbox',
+  description: 'List files and directories in a path within the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to list files from'),
     path: z.string().default('/').describe('The directory path to list files from'),
@@ -228,10 +228,10 @@ export const listFiles = createTool({
         error: z.string().describe('The error from a failed file listing'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      const fileList = await sandbox.files.list(input.path);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      const fileList = await sandbox.files.list(inputData.path);
 
       fileList.map(f => f.type);
 
@@ -241,7 +241,7 @@ export const listFiles = createTool({
           path: file.path,
           isDirectory: file.type === FileType.DIR,
         })),
-        path: input.path,
+        path: inputData.path,
       };
     } catch (e) {
       return {
@@ -253,7 +253,7 @@ export const listFiles = createTool({
 
 export const deleteFile = createTool({
   id: 'deleteFile',
-  description: 'Delete a file or directory from the e2b sandbox',
+  description: 'Delete a file or directory from the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to delete the file from'),
     path: z.string().describe('The path to the file or directory to delete'),
@@ -268,14 +268,14 @@ export const deleteFile = createTool({
         error: z.string().describe('The error from a failed file deletion'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      await sandbox.files.remove(input.path);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      await sandbox.files.remove(inputData.path);
 
       return {
         success: true,
-        path: input.path,
+        path: inputData.path,
       };
     } catch (e) {
       return {
@@ -287,7 +287,7 @@ export const deleteFile = createTool({
 
 export const createDirectory = createTool({
   id: 'createDirectory',
-  description: 'Create a directory in the e2b sandbox',
+  description: 'Create a directory in the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to create the directory in'),
     path: z.string().describe('The path where the directory should be created'),
@@ -302,14 +302,14 @@ export const createDirectory = createTool({
         error: z.string().describe('The error from a failed directory creation'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      await sandbox.files.makeDir(input.path);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      await sandbox.files.makeDir(inputData.path);
 
       return {
         success: true,
-        path: input.path,
+        path: inputData.path,
       };
     } catch (e) {
       return {
@@ -321,7 +321,7 @@ export const createDirectory = createTool({
 
 export const getFileInfo = createTool({
   id: 'getFileInfo',
-  description: 'Get detailed information about a file or directory in the e2b sandbox',
+  description: 'Get detailed information about a file or directory in the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to get file information from'),
     path: z.string().describe('The path to the file or directory to get information about'),
@@ -344,10 +344,10 @@ export const getFileInfo = createTool({
         error: z.string().describe('The error from a failed file info request'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      const info = await sandbox.files.getInfo(input.path);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      const info = await sandbox.files.getInfo(inputData.path);
 
       return {
         name: info.name,
@@ -371,7 +371,7 @@ export const getFileInfo = createTool({
 
 export const checkFileExists = createTool({
   id: 'checkFileExists',
-  description: 'Check if a file or directory exists in the e2b sandbox',
+  description: 'Check if a file or directory exists in the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to check file existence in'),
     path: z.string().describe('The path to check for existence'),
@@ -387,22 +387,22 @@ export const checkFileExists = createTool({
         error: z.string().describe('The error from a failed existence check'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
 
       try {
-        const info = await sandbox.files.getInfo(input.path);
+        const info = await sandbox.files.getInfo(inputData.path);
         return {
           exists: true,
-          path: input.path,
+          path: inputData.path,
           type: info.type,
         };
       } catch (e) {
         // If getInfo fails, the file doesn't exist
         return {
           exists: false,
-          path: input.path,
+          path: inputData.path,
         };
       }
     } catch (e) {
@@ -415,7 +415,7 @@ export const checkFileExists = createTool({
 
 export const getFileSize = createTool({
   id: 'getFileSize',
-  description: 'Get the size of a file or directory in the e2b sandbox',
+  description: 'Get the size of a file or directory in the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to get file size from'),
     path: z.string().describe('The path to the file or directory'),
@@ -436,14 +436,14 @@ export const getFileSize = createTool({
         error: z.string().describe('The error from a failed size check'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
-      const info = await sandbox.files.getInfo(input.path);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
+      const info = await sandbox.files.getInfo(inputData.path);
 
       let humanReadableSize: string | undefined;
 
-      if (context.humanReadable) {
+      if (inputData.humanReadable) {
         const bytes = info.size;
         const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
         if (bytes === 0) {
@@ -458,7 +458,7 @@ export const getFileSize = createTool({
       return {
         size: info.size,
         humanReadableSize,
-        path: input.path,
+        path: inputData.path,
         type: info.type,
       };
     } catch (e) {
@@ -471,7 +471,7 @@ export const getFileSize = createTool({
 
 export const watchDirectory = createTool({
   id: 'watchDirectory',
-  description: 'Start watching a directory for file system changes in the e2b sandbox',
+  description: 'Start watching a directory for file system changes in the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to watch directory in'),
     path: z.string().describe('The directory path to watch for changes'),
@@ -502,14 +502,14 @@ export const watchDirectory = createTool({
         error: z.string().describe('The error from a failed directory watch'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
       const events: Array<{ type: FilesystemEventType; name: string; timestamp: string }> = [];
 
       // Start watching the directory
       const handle = await sandbox.files.watchDir(
-        input.path,
+        inputData.path,
         async event => {
           events.push({
             type: event.type,
@@ -518,19 +518,19 @@ export const watchDirectory = createTool({
           });
         },
         {
-          recursive: context.recursive,
+          recursive: inputData.recursive,
         },
       );
 
       // Watch for the specified duration
-      await new Promise(resolve => setTimeout(resolve, context.watchDuration));
+      await new Promise(resolve => setTimeout(resolve, inputData.watchDuration));
 
       // Stop watching
       await handle.stop();
 
       return {
         watchStarted: true,
-        path: input.path,
+        path: inputData.path,
         events,
       };
     } catch (e) {
@@ -543,7 +543,7 @@ export const watchDirectory = createTool({
 
 export const runCommand = createTool({
   id: 'runCommand',
-  description: 'Run a shell command in the e2b sandbox',
+  description: 'Run a shell command in the sandbox',
   inputSchema: z.object({
     sandboxId: z.string().describe('The sandboxId for the sandbox to run the command in'),
     command: z.string().describe('The shell command to execute'),
@@ -565,14 +565,14 @@ export const runCommand = createTool({
         error: z.string().describe('The error from a failed command execution'),
       }),
     ),
-  execute: async input => {
+  execute: async (inputData, context) => {
     try {
-      const sandbox = await Sandbox.connect(input.sandboxId);
+      const sandbox = await Sandbox.connect(inputData.sandboxId);
       const startTime = Date.now();
 
-      const result = await sandbox.commands.run(context.command, {
-        cwd: context.workingDirectory,
-        timeoutMs: context.timeoutMs,
+      const result = await sandbox.commands.run(inputData.command, {
+        cwd: inputData.workingDirectory,
+        timeoutMs: inputData.timeoutMs,
       });
 
       const executionTime = Date.now() - startTime;
@@ -582,7 +582,7 @@ export const runCommand = createTool({
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
-        command: context.command,
+        command: inputData.command,
         executionTime,
       };
     } catch (e) {

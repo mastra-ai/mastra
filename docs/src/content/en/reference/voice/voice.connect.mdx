@@ -1,6 +1,10 @@
 ---
 title: "Reference: voice.connect() | Voice"
 description: "Documentation for the connect() method available in real-time voice providers, which establishes a connection for speech-to-speech communication."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.connect()
@@ -22,7 +26,7 @@ const speaker = new Speaker({
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
     options: {
       sessionConfig: {

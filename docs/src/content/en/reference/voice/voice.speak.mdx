@@ -1,36 +1,17 @@
 ---
 title: "Reference: voice.speak() | Voice"
 description: "Documentation for the speak() method available in all Mastra voice providers, which converts text to speech."
+packages:
+  - "@mastra/core"
+  - "@mastra/node-speaker"
+  - "@mastra/voice-openai"
+  - "@mastra/voice-openai-realtime"
+  - "@mastra/voice-playai"
 ---
 
 # voice.speak()
 
 The `speak()` method is a core function available in all Mastra voice providers that converts text to speech. It takes text input and returns an audio stream that can be played or saved.
-
-## Usage Example
-
-```typescript
-import { OpenAIVoice } from "@mastra/voice-openai";
-// Initialize a voice provider
-const voice = new OpenAIVoice({
-  speaker: "alloy", // Default voice
-});
-// Basic usage with default settings
-const audioStream = await voice.speak("Hello, world!");
-// Using a different voice for this specific request
-const audioStreamWithDifferentVoice = await voice.speak("Hello again!", {
-  speaker: "nova",
-});
-// Using provider-specific options
-const audioStreamWithOptions = await voice.speak("Hello with options!", {
-  speaker: "echo",
-  speed: 1.2, // OpenAI-specific option
-});
-// Using a text stream as input
-import { Readable } from "stream";
-const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
-const audioStreamFromTextStream = await voice.speak(textStream);
-```
 
 ## Parameters
 
@@ -153,6 +134,81 @@ Each voice provider may support additional options specific to their implementat
   ]}
 />
 
+## Usage Example
+
+```typescript
+import { OpenAIVoice } from "@mastra/voice-openai";
+// Initialize a voice provider
+const voice = new OpenAIVoice({
+  speaker: "alloy", // Default voice
+});
+// Basic usage with default settings
+const audioStream = await voice.speak("Hello, world!");
+// Using a different voice for this specific request
+const audioStreamWithDifferentVoice = await voice.speak("Hello again!", {
+  speaker: "nova",
+});
+// Using provider-specific options
+const audioStreamWithOptions = await voice.speak("Hello with options!", {
+  speaker: "echo",
+  speed: 1.2, // OpenAI-specific option
+});
+// Using a text stream as input
+import { Readable } from "stream";
+const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
+const audioStreamFromTextStream = await voice.speak(textStream);
+```
+
+## Using with CompositeVoice
+
+When using `CompositeVoice`, the `speak()` method delegates to the configured speaking provider:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { OpenAIVoice } from "@mastra/voice-openai";
+import { PlayAIVoice } from "@mastra/voice-playai";
+
+const voice = new CompositeVoice({
+  output: new PlayAIVoice(),
+  input: new OpenAIVoice(),
+});
+
+// This will use the PlayAIVoice provider
+const audioStream = await voice.speak("Hello, world!");
+```
+
+### Using AI SDK Model Providers
+
+You can also use AI SDK speech models directly with `CompositeVoice`:
+
+```typescript
+import { CompositeVoice } from "@mastra/core/voice";
+import { openai } from "@ai-sdk/openai";
+import { elevenlabs } from "@ai-sdk/elevenlabs";
+
+// Use AI SDK speech models
+const voice = new CompositeVoice({
+  output: elevenlabs.speech('eleven_turbo_v2'),  // AI SDK model
+  input: openai.transcription('whisper-1'),      // AI SDK model
+});
+
+// Works the same way
+const audioStream = await voice.speak("Hello from AI SDK!");
+
+// Provider-specific options can be passed through
+const audioWithOptions = await voice.speak("Hello with options!", {
+  speaker: 'Rachel',  // ElevenLabs voice
+  providerOptions: {
+    elevenlabs: {
+      stability: 0.5,
+      similarity_boost: 0.75,
+    }
+  }
+});
+```
+
+See the [CompositeVoice reference](/reference/v1/voice/composite-voice) for more details on AI SDK integration.
+
 ## Realtime Voice Providers
 
 When using realtime voice providers like `OpenAIRealtimeVoice`, the `speak()` method behaves differently:
@@ -181,21 +237,6 @@ voice.on("speaker", (stream) => {
 await voice.speak("Hello, this is realtime speech!");
 ```
 
-## Using with CompositeVoice
-
-When using `CompositeVoice`, the `speak()` method delegates to the configured speaking provider:
-
-```typescript
-import { CompositeVoice } from "@mastra/core/voice";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { PlayAIVoice } from "@mastra/voice-playai";
-const voice = new CompositeVoice({
-  speakProvider: new PlayAIVoice(),
-  listenProvider: new OpenAIVoice(),
-});
-// This will use the PlayAIVoice provider
-const audioStream = await voice.speak("Hello, world!");
-```
 
 ## Notes
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { Button, ButtonProps } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
@@ -20,8 +20,7 @@ export type ComboboxProps = {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  buttonClassName?: string;
-  contentClassName?: string;
+  variant?: ButtonProps['variant'];
 };
 
 export function Combobox({
@@ -33,8 +32,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  buttonClassName,
-  contentClassName,
+  variant = 'default',
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -122,21 +120,18 @@ export function Combobox({
       <PopoverTrigger asChild>
         <Button
           ref={triggerRef}
-          variant="outline"
+          variant={variant}
           role="combobox"
           aria-expanded={open}
-          className={cn('w-full justify-between', buttonClassName, className)}
+          className={cn('w-full justify-between', className)}
           disabled={disabled}
+          size="sm"
         >
           <span className="truncate text-ui-lg">{selectedOption ? selectedOption.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className={cn('p-0', contentClassName)}
-        align="start"
-        style={{ width: triggerWidth ? `${triggerWidth}px` : undefined }}
-      >
+      <PopoverContent className="p-0 w-fit" align="start">
         <div className="flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground">
           <div className="flex items-center border-b px-3 py-2">
             <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -157,7 +152,7 @@ export function Combobox({
             ref={listRef}
             id="combobox-options"
             role="listbox"
-            className="max-h-[300px] overflow-y-auto overflow-x-hidden p-1"
+            className="max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1"
           >
             {filteredOptions.length === 0 ? (
               <div className="py-6 text-center text-sm">{emptyText}</div>

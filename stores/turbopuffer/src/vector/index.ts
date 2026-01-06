@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { createVectorErrorId } from '@mastra/core/storage';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -9,6 +10,7 @@ import type {
   QueryVectorParams,
   UpdateVectorParams,
   UpsertVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Turbopuffer } from '@turbopuffer/turbopuffer';
@@ -112,7 +114,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName, dimension, metric },
@@ -145,7 +147,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPSERT_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'UPSERT', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -196,7 +198,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -230,7 +232,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_QUERY_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'QUERY', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -261,7 +263,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -278,7 +280,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -311,7 +313,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -329,7 +331,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
@@ -340,20 +342,51 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
   }
 
   /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
+   * Updates a vector by its ID or filter with the provided vector and/or metadata.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to update.
+   * @param filter - The filter to match vectors to update.
    * @param update - An object containing the vector and/or metadata to update.
    * @param update.vector - An optional array of numbers representing the new vector.
    * @param update.metadata - An optional record containing the new metadata.
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector({ indexName, id, filter, update }: UpdateVectorParams<TurbopufferVectorFilter>): Promise<void> {
+    // Validate mutually exclusive parameters
+    if (id && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'id and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!id && !filter) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'NO_TARGET'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either id or filter must be provided',
+        details: { indexName },
+      });
+    }
+
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'NO_PAYLOAD'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'No update data provided',
+        details: { indexName, ...(id && { id }) },
+      });
+    }
+
     let namespace;
     let createIndex;
     let distanceMetric;
-    let record;
     try {
       namespace = this.client.namespace(indexName);
       createIndex = this.createIndexCache.get(indexName);
@@ -361,13 +394,10 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         throw new Error(`createIndex() not called for this index`);
       }
       distanceMetric = createIndex.tpufDistanceMetric;
-      record = { id } as Vector;
-      if (update.vector) record.vector = update.vector;
-      if (update.metadata) record.attributes = update.metadata;
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+          id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { indexName },
@@ -375,18 +405,96 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         error,
       );
     }
+
     try {
-      await namespace.upsert({
-        vectors: [record],
-        distance_metric: distanceMetric,
+      let idsToUpdate: string[] = [];
+
+      if (id) {
+        idsToUpdate = [id];
+      } else if (filter) {
+        // Validate filter is not empty
+        if (Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            text: 'Filter cannot be an empty object',
+            details: { indexName },
+          });
+        }
+
+        // Query for matching vectors to get their IDs
+        const dummyVector = new Array(createIndex.dimension).fill(1 / Math.sqrt(createIndex.dimension));
+        const translatedFilter = this.filterTranslator.translate(filter);
+
+        const results = await namespace.query({
+          vector: dummyVector,
+          top_k: 10000, // Get all matching vectors
+          filters: translatedFilter,
+          include_vectors: update.vector ? true : false, // Only fetch vectors if we're not replacing them
+          include_attributes: ['*'],
+        });
+
+        idsToUpdate = results.map(r => String(r.id));
+
+        // If we're doing a partial update (only metadata or only vector), we need existing data
+        if (!update.vector || !update.metadata) {
+          for (const result of results) {
+            const record: Vector = { id: result.id };
+            if (update.vector) {
+              record.vector = update.vector;
+            } else if (result.vector) {
+              record.vector = result.vector;
+            }
+            if (update.metadata) {
+              record.attributes = update.metadata;
+            } else if (result.attributes) {
+              record.attributes = result.attributes;
+            }
+            await namespace.upsert({
+              vectors: [record],
+              distance_metric: distanceMetric,
+            });
+          }
+          return;
+        }
+      }
+
+      // If no vectors to update, return early
+      if (idsToUpdate.length === 0) {
+        this.logger.info(`No vectors matched the criteria for update in ${indexName}`);
+        return;
+      }
+
+      // Full update - we have both vector and metadata (or just one without needing existing data)
+      const records: Vector[] = idsToUpdate.map(vecId => {
+        const record: Vector = { id: vecId };
+        if (update.vector) record.vector = update.vector;
+        if (update.metadata) record.attributes = update.metadata;
+        return record;
       });
+
+      // Batch updates in chunks of 1000
+      const batchSize = 1000;
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, i + batchSize);
+        await namespace.upsert({
+          vectors: batch,
+          distance_metric: distanceMetric,
+        });
+      }
     } catch (error: any) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { indexName },
+          details: {
+            indexName,
+            ...(id && { id }),
+            ...(filter && { filter: JSON.stringify(filter) }),
+          },
         },
         error,
       );
@@ -407,10 +515,110 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<TurbopufferVectorFilter>): Promise<void> {
+    // Validate mutually exclusive parameters
+    if (ids && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'ids and filter are mutually exclusive',
+        details: { indexName },
+      });
+    }
+
+    if (!ids && !filter) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'NO_TARGET'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either filter or ids must be provided',
+        details: { indexName },
+      });
+    }
+
+    // Validate non-empty arrays and objects
+    if (ids && ids.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'EMPTY_IDS'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'ids array cannot be empty',
+        details: { indexName },
+      });
+    }
+
+    if (filter && Object.keys(filter).length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'EMPTY_FILTER'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Filter cannot be an empty object',
+        details: { indexName },
+      });
+    }
+
+    try {
+      const namespace = this.client.namespace(indexName);
+      let idsToDelete: string[] = [];
+
+      if (ids) {
+        idsToDelete = ids;
+      } else if (filter) {
+        // Query for matching vectors to get their IDs
+        const createIndex = this.createIndexCache.get(indexName);
+        if (!createIndex) {
+          throw new Error(`createIndex() not called for this index`);
+        }
+
+        const dummyVector = new Array(createIndex.dimension).fill(1 / Math.sqrt(createIndex.dimension));
+        const translatedFilter = this.filterTranslator.translate(filter);
+
+        const results = await namespace.query({
+          vector: dummyVector,
+          top_k: 10000, // Get all matching vectors
+          filters: translatedFilter,
+          include_vectors: false,
+          include_attributes: [],
+        });
+
+        idsToDelete = results.map(r => String(r.id));
+      }
+
+      // If no IDs to delete, return early
+      if (idsToDelete.length === 0) {
+        this.logger.info(`No vectors matched the criteria for deletion in ${indexName}`);
+        return;
+      }
+
+      // The turbopuffer SDK has a limit of 1000 IDs per delete request.
+      const batchSize = 1000;
+      for (let i = 0; i < idsToDelete.length; i += batchSize) {
+        const batch = idsToDelete.slice(i, i + batchSize);
+        await namespace.delete({ ids: batch });
+      }
+    } catch (error: any) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createVectorErrorId('TURBOPUFFER', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
+          },
         },
         error,
       );

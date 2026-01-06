@@ -1,3 +1,4 @@
+import { Observability } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { researchWorkflow } from './workflows/researchWorkflow';
@@ -21,9 +22,9 @@ export const mastra = new Mastra({
     webSummarizationAgent,
   },
   workflows: { generateReportWorkflow, researchWorkflow },
-  observability: {
+  observability: new Observability({
     default: {
       enabled: true,
     },
-  },
+  }),
 });

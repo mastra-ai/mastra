@@ -1,4 +1,4 @@
-import type { PaginationArgs, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES, DateRange } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -16,15 +16,28 @@ export function getTableName({ indexName, schemaName }: { indexName: string; sch
 /**
  * Build date range filter for queries
  */
-export function buildDateRangeFilter(dateRange: PaginationArgs['dateRange'], fieldName: string): Record<string, any> {
+export function buildDateRangeFilter(dateRange: DateRange | undefined, fieldName: string): Record<string, any> {
   const filters: Record<string, any> = {};
   if (dateRange?.start) {
-    filters[`${fieldName}_gte`] = dateRange.start;
+    // Use exclusive comparison if startExclusive is true
+    const suffix = dateRange.startExclusive ? '_gt' : '_gte';
+    filters[`${fieldName}${suffix}`] = dateRange.start;
   }
   if (dateRange?.end) {
-    filters[`${fieldName}_lte`] = dateRange.end;
+    // Use exclusive comparison if endExclusive is true
+    const suffix = dateRange.endExclusive ? '_lt' : '_lte';
+    filters[`${fieldName}${suffix}`] = dateRange.end;
   }
   return filters;
+}
+
+/**
+ * Check if a value is an $in operator object
+ */
+function isInOperator(value: unknown): value is { $in: unknown[] } {
+  return (
+    typeof value === 'object' && value !== null && '$in' in value && Array.isArray((value as { $in: unknown[] }).$in)
+  );
 }
 
 /**
@@ -41,20 +54,69 @@ export function prepareWhereClause(
   Object.entries(filters).forEach(([key, value]) => {
     if (value === undefined) return;
 
-    const paramName = `p${paramIndex++}`;
-
     // Handle special operators
     if (key.endsWith('_gte')) {
+      const paramName = `p${paramIndex++}`;
       const fieldName = key.slice(0, -4);
       conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] >= @${paramName}`);
       params[paramName] = value instanceof Date ? value.toISOString() : value;
+    } else if (key.endsWith('_gt')) {
+      const paramName = `p${paramIndex++}`;
+      const fieldName = key.slice(0, -3);
+      conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] > @${paramName}`);
+      params[paramName] = value instanceof Date ? value.toISOString() : value;
     } else if (key.endsWith('_lte')) {
+      const paramName = `p${paramIndex++}`;
       const fieldName = key.slice(0, -4);
       conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] <= @${paramName}`);
       params[paramName] = value instanceof Date ? value.toISOString() : value;
+    } else if (key.endsWith('_lt')) {
+      const paramName = `p${paramIndex++}`;
+      const fieldName = key.slice(0, -3);
+      conditions.push(`[${parseSqlIdentifier(fieldName, 'field name')}] < @${paramName}`);
+      params[paramName] = value instanceof Date ? value.toISOString() : value;
     } else if (value === null) {
       conditions.push(`[${parseSqlIdentifier(key, 'field name')}] IS NULL`);
+    } else if (isInOperator(value)) {
+      // Handle $in operator for multiple values
+      const inValues = value.$in;
+      if (inValues.length === 0) {
+        // Empty $in array means no matches - add a false condition
+        conditions.push('1 = 0');
+      } else if (inValues.length === 1) {
+        // Single value - use equality for efficiency
+        const paramName = `p${paramIndex++}`;
+        conditions.push(`[${parseSqlIdentifier(key, 'field name')}] = @${paramName}`);
+        params[paramName] = inValues[0] instanceof Date ? inValues[0].toISOString() : inValues[0];
+      } else {
+        // Multiple values - use IN clause
+        const inParamNames: string[] = [];
+        for (const item of inValues) {
+          const paramName = `p${paramIndex++}`;
+          inParamNames.push(`@${paramName}`);
+          params[paramName] = item instanceof Date ? item.toISOString() : item;
+        }
+        conditions.push(`[${parseSqlIdentifier(key, 'field name')}] IN (${inParamNames.join(', ')})`);
+      }
+    } else if (Array.isArray(value)) {
+      // Handle array values as implicit $in
+      if (value.length === 0) {
+        conditions.push('1 = 0');
+      } else if (value.length === 1) {
+        const paramName = `p${paramIndex++}`;
+        conditions.push(`[${parseSqlIdentifier(key, 'field name')}] = @${paramName}`);
+        params[paramName] = value[0] instanceof Date ? value[0].toISOString() : value[0];
+      } else {
+        const inParamNames: string[] = [];
+        for (const item of value) {
+          const paramName = `p${paramIndex++}`;
+          inParamNames.push(`@${paramName}`);
+          params[paramName] = item instanceof Date ? item.toISOString() : item;
+        }
+        conditions.push(`[${parseSqlIdentifier(key, 'field name')}] IN (${inParamNames.join(', ')})`);
+      }
     } else {
+      const paramName = `p${paramIndex++}`;
       conditions.push(`[${parseSqlIdentifier(key, 'field name')}] = @${paramName}`);
       params[paramName] = value instanceof Date ? value.toISOString() : value;
     }

@@ -7,18 +7,53 @@ const SOURCE_DIRS = ['packages', 'speech', 'stores', 'voice', 'integrations', 'd
   fromRepoRoot,
 );
 const CHANGELOGS_DEST = fromPackageRoot('.docs/organized/changelogs');
-const MAX_LINES = 300;
+const MAX_LINES = 500;
+const MIN_VERSIONS = 2;
+
+// Regex to match version headers like "## 1.0.0" or "## 1.0.0-beta.5"
+const VERSION_HEADER_REGEX = /^## \d+\.\d+\.\d+/;
 
 /**
- * Truncates content to a maximum number of lines and adds a message about hidden lines
+ * Truncates content to MAX_LINES, but if we don't have MIN_VERSIONS by then,
+ * extends until we hit MIN_VERSIONS.
  */
 function truncateContent(content: string, maxLines: number): string {
   const lines = content.split('\n');
   if (lines.length <= maxLines) return content;
 
-  const visibleLines = lines.slice(0, maxLines);
-  const hiddenCount = lines.length - maxLines;
-  return visibleLines.join('\n') + `\n\n... ${hiddenCount} more lines hidden. See full changelog in package directory.`;
+  // Find all version header line indices
+  const versionIndices: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (VERSION_HEADER_REGEX.test(lines[i])) {
+      versionIndices.push(i);
+    }
+  }
+
+  // Count how many versions are within maxLines
+  const versionsInMaxLines = versionIndices.filter(idx => idx < maxLines).length;
+
+  let cutoffLine: number;
+
+  if (versionsInMaxLines >= MIN_VERSIONS) {
+    // We have enough versions within maxLines, use maxLines
+    cutoffLine = maxLines;
+  } else if (versionIndices.length > MIN_VERSIONS) {
+    // We need to extend to get MIN_VERSIONS - find where the (MIN_VERSIONS + 1)th version starts
+    cutoffLine = versionIndices[MIN_VERSIONS];
+  } else {
+    // Fewer than MIN_VERSIONS exist in the whole file, include everything
+    cutoffLine = lines.length;
+  }
+
+  const visibleLines = lines.slice(0, cutoffLine);
+  const hiddenCount = lines.length - cutoffLine;
+
+  if (hiddenCount > 0) {
+    return (
+      visibleLines.join('\n') + `\n\n... ${hiddenCount} more lines hidden. See full changelog in package directory.`
+    );
+  }
+  return visibleLines.join('\n');
 }
 
 /**

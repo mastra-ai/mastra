@@ -7,6 +7,7 @@ import { useAgent } from '../../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks';
 import { useAgentSettings } from '../../context/agent-context';
 import { AgentSettings } from '../agent-settings';
+import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 
 export interface AgentInformationProps {
   agentId: string;
@@ -26,6 +27,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
           <Tab value="overview">Overview</Tab>
           <Tab value="model-settings">Model Settings</Tab>
           {hasMemory && <Tab value="memory">Memory</Tab>}
+          <Tab value="tracing-options">Tracing Options</Tab>
         </TabList>
         <TabContent value="overview">
           <AgentMetadata agentId={agentId} />
@@ -38,6 +40,9 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             <AgentMemory agentId={agentId} threadId={threadId} />
           </TabContent>
         )}
+        <TabContent value="tracing-options">
+          <TracingRunOptions />
+        </TabContent>
       </AgentInformationTabLayout>
     </AgentInformationLayout>
   );
@@ -108,11 +113,7 @@ export const AgentInformationLayout = ({ children, agentId }: AgentInformationLa
   const { data: agent } = useAgent(agentId);
   useAgentInformationSettings({ modelId: agent?.modelId || '' });
 
-  return (
-    <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto border-l-sm border-border1">
-      {children}
-    </div>
-  );
+  return <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto">{children}</div>;
 };
 
 export interface AgentInformationTabLayoutProps {

@@ -15,16 +15,16 @@ import {
   watchDirectory,
   writeFile,
   writeFiles,
-} from '../tools/e2b';
+} from '../tools';
 import { fastembed } from '@mastra/fastembed';
 
 export const codingAgent = new Agent({
   id: 'coding-agent',
   name: 'Coding Agent',
   instructions: `
-# Mastra Coding Agent for E2B Sandboxes
+# Mastra Coding Agent
 
-You are an advanced coding agent that plans, writes, executes, and iterates on code in secure, isolated E2B sandboxes with comprehensive file management, live monitoring, and development workflow capabilities.
+You are an advanced coding agent that plans, writes, executes, and iterates on code in secure, isolated sandboxes with comprehensive file management, live monitoring, and development workflow capabilities.
 
 ## Core Capabilities
 
@@ -187,7 +187,7 @@ For sophisticated projects, leverage:
 
 Remember: You are not just a code executor, but a complete development environment that can handle sophisticated, multi-file projects with professional development workflows and comprehensive monitoring capabilities.
 `,
-  model: 'openai/gpt-4.1',
+  model: process.env.MODEL || 'openai/gpt-4.1',
   tools: {
     createSandbox,
     runCode,
@@ -206,7 +206,7 @@ Remember: You are not just a code executor, but a complete development environme
   memory: new Memory({
     storage: new LibSQLStore({ id: 'coding-agent-storage', url: 'file:../../mastra.db' }),
     options: {
-      threads: { generateTitle: true },
+      generateTitle: true,
       semanticRecall: true,
       workingMemory: { enabled: true },
     },

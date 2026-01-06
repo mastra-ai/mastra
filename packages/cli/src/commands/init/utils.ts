@@ -1,8 +1,9 @@
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
-import path from 'path';
 import * as p from '@clack/prompts';
+import type { ModelRouterModelId } from '@mastra/core/llm/model';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
@@ -13,8 +14,8 @@ import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import {
   cursorGlobalMCPConfigPath,
-  globalMCPIsAlreadyInstalled,
   windsurfGlobalMCPConfigPath,
+  antigravityGlobalMCPConfigPath,
 } from './mcp-docs-server-install';
 import type { Editor } from './mcp-docs-server-install';
 
@@ -40,20 +41,22 @@ export function areValidComponents(values: string[]): values is Component[] {
   return values.every(value => COMPONENTS.includes(value as Component));
 }
 
-export const getModelIdentifier = (llmProvider: LLMProvider) => {
-  if (llmProvider === 'openai') {
-    return `'openai/gpt-4o-mini'`;
-  } else if (llmProvider === 'anthropic') {
-    return `'anthropic/claude-sonnet-4-5-20250929'`;
+export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
+  let model: ModelRouterModelId = 'openai/gpt-4o';
+
+  if (llmProvider === 'anthropic') {
+    model = 'anthropic/claude-sonnet-4-5';
   } else if (llmProvider === 'groq') {
-    return `'groq/llama-3.3-70b-versatile'`;
+    model = 'groq/llama-3.3-70b-versatile';
   } else if (llmProvider === 'google') {
-    return `'google/gemini-2.5-pro'`;
+    model = 'google/gemini-2.5-pro';
   } else if (llmProvider === 'cerebras') {
-    return `'cerebras/llama-3.3-70b'`;
+    model = 'cerebras/llama-3.3-70b';
   } else if (llmProvider === 'mistral') {
-    return `'mistral/mistral-medium-2508'`;
+    model = 'mistral/mistral-medium-2508';
   }
+
+  return model;
 };
 
 export async function writeAgentSample(
@@ -81,7 +84,6 @@ export async function writeAgentSample(
   const content = `
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 ${addScorers ? `import { scorers } from '../scorers/weather-scorer';` : ''}
 
@@ -89,7 +91,7 @@ export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
-  model: ${modelString},
+  model: '${modelString}',
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   ${
     addScorers
@@ -118,12 +120,7 @@ export const weatherAgent = new Agent({
   },`
       : ''
   }
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: "memory-storage",
-      url: "file:../mastra.db", // path is relative to the .mastra/output directory
-    })
-  })
+  memory: new Memory()
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -358,7 +355,7 @@ export const translationScorer = createScorer({
   description: 'Checks that non-English location names are translated and used correctly',
   type: 'agent',
   judge: {
-    model: ${modelString},
+    model: '${modelString}',
     instructions:
       'You are an expert evaluator of translation quality for geographic locations. ' +
       'Determine whether the user text mentions a non-English location and whether the assistant correctly uses an English translation of that location. ' +
@@ -517,7 +514,7 @@ export const mastra = new Mastra({
   observability: new Observability({
     // Enables DefaultExporter and CloudExporter for tracing
     default: { enabled: true },
-    }),
+  }),
 });
 `,
     );
@@ -535,9 +532,10 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async (addExample: boolean) => {
+export const checkAndInstallCoreDeps = async (addExample: boolean, versionTag?: string) => {
   const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies' });
   let packages: Array<{ name: string; version: string }> = [];
+  const mastraVersionTag = versionTag || 'latest';
 
   try {
     const depService = new DepsService();
@@ -549,11 +547,11 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
     const needsZod = (await depService.checkDependencies(['zod'])) !== `ok`;
 
     if (needsCore) {
-      packages.push({ name: '@mastra/core', version: 'latest' });
+      packages.push({ name: '@mastra/core', version: mastraVersionTag });
     }
 
     if (needsCli) {
-      packages.push({ name: 'mastra', version: 'latest' });
+      packages.push({ name: 'mastra', version: mastraVersionTag });
     }
 
     if (needsZod) {
@@ -564,7 +562,7 @@ export const checkAndInstallCoreDeps = async (addExample: boolean) => {
       const needsLibsql = (await depService.checkDependencies(['@mastra/libsql'])) !== `ok`;
 
       if (needsLibsql) {
-        packages.push({ name: '@mastra/libsql', version: 'latest' });
+        packages.push({ name: '@mastra/libsql', version: mastraVersionTag });
       }
     }
 
@@ -644,7 +642,7 @@ export const writeCodeSample = async (
   }
 };
 
-const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
+export const LLM_PROVIDERS: { value: LLMProvider; label: string; hint?: string }[] = [
   { value: 'openai', label: 'OpenAI', hint: 'recommended' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'groq', label: 'Groq' },
@@ -660,6 +658,7 @@ interface InteractivePromptArgs {
   skip?: {
     llmProvider?: boolean;
     llmApiKey?: boolean;
+    gitInit?: boolean;
   };
 }
 
@@ -709,10 +708,6 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
         return undefined;
       },
       configureEditorWithDocsMCP: async () => {
-        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
-        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
-        const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
-
         const editor = await p.select({
           message: `Make your IDE into a Mastra expert? (Installs Mastra's MCP server)`,
           options: [
@@ -720,35 +715,27 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
             {
               value: 'cursor',
               label: 'Cursor (project only)',
-              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
             },
             {
               value: 'cursor-global',
               label: 'Cursor (global, all projects)',
-              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'windsurf',
               label: 'Windsurf',
-              hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
             },
             {
               value: 'vscode',
               label: 'VSCode',
-              hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
+            },
+            {
+              value: 'antigravity',
+              label: 'Antigravity',
             },
           ] satisfies { value: Editor | 'skip'; label: string; hint?: string }[],
         });
 
         if (editor === `skip`) return undefined;
-        if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
-          p.log.message(`\nWindsurf is already installed, skipping.`);
-          return undefined;
-        }
-        if (editor === `vscode` && vscodeIsAlreadyInstalled) {
-          p.log.message(`\nVSCode is already installed, skipping.`);
-          return undefined;
-        }
 
         if (editor === `cursor`) {
           p.log.message(
@@ -782,7 +769,28 @@ export const interactivePrompt = async (args: InteractivePromptArgs = {}) => {
           }
         }
 
+        if (editor === `antigravity`) {
+          const confirm = await p.select({
+            message: `Antigravity only supports a global MCP config (at ${antigravityGlobalMCPConfigPath}). Is it ok to add/update that global config?\nThis will make the Mastra docs MCP server available in all Antigravity projects.`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+
+          if (confirm !== `yes`) {
+            return undefined;
+          }
+        }
         return editor;
+      },
+      initGit: async () => {
+        if (skip?.gitInit) return false;
+
+        return p.confirm({
+          message: 'Initialize a new git repository?',
+          initialValue: true,
+        });
       },
     },
     {

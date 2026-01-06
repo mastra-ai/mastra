@@ -8,16 +8,18 @@
  * Hierarchy: MODEL_GENERATION -> MODEL_STEP -> MODEL_CHUNK
  */
 
-import { TransformStream } from 'stream/web';
+import { TransformStream } from 'node:stream/web';
 import { SpanType } from '@mastra/core/observability';
 import type {
   Span,
-  EndSpanOptions,
+  EndGenerationOptions,
   ErrorSpanOptions,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
 import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } from '@mastra/core/stream';
+
+import { extractUsageMetrics } from './usage';
 
 /**
  * Manages MODEL_STEP and MODEL_CHUNK span tracking for streaming Model responses.
@@ -25,6 +27,18 @@ import type { OutputSchema, ChunkType, StepStartPayload, StepFinishPayload } fro
  * Should be instantiated once per MODEL_GENERATION span and shared across
  * all streaming steps (including after tool calls).
  */
+/**
+ * Tracks accumulated content for a single tool output stream
+ */
+interface ToolOutputAccumulator {
+  toolName: string;
+  toolCallId: string;
+  text: string;
+  reasoning: string;
+  span?: Span<SpanType.MODEL_CHUNK>;
+  sequenceNumber: number;
+}
+
 export class ModelSpanTracker {
   #modelSpan?: Span<SpanType.MODEL_GENERATION>;
   #currentStepSpan?: Span<SpanType.MODEL_STEP>;
@@ -32,9 +46,24 @@ export class ModelSpanTracker {
   #accumulator: Record<string, any> = {};
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
+  #completionStartTime?: Date;
+  /** Tracks tool output accumulators by toolCallId for consolidating sub-agent streams */
+  #toolOutputAccumulators: Map<string, ToolOutputAccumulator> = new Map();
+  /** Tracks toolCallIds that had streaming output (to skip redundant tool-result spans) */
+  #streamedToolCallIds: Set<string> = new Set();
 
   constructor(modelSpan?: Span<SpanType.MODEL_GENERATION>) {
     this.#modelSpan = modelSpan;
+  }
+
+  /**
+   * Capture the completion start time (time to first token) when the first content chunk arrives.
+   */
+  #captureCompletionStartTime(): void {
+    if (this.#completionStartTime) {
+      return;
+    }
+    this.#completionStartTime = new Date();
   }
 
   /**
@@ -55,10 +84,18 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End the generation span
+   * End the generation span with optional raw usage data.
+   * If usage is provided, it will be converted to UsageStats with cache token details.
    */
-  endGeneration(options?: EndSpanOptions<SpanType.MODEL_GENERATION>): void {
-    this.#modelSpan?.end(options);
+  endGeneration(options?: EndGenerationOptions): void {
+    const { usage, providerMetadata, ...spanOptions } = options ?? {};
+
+    if (spanOptions.attributes) {
+      spanOptions.attributes.completionStartTime = this.#completionStartTime;
+      spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+    }
+
+    this.#modelSpan?.end(spanOptions);
   }
 
   /**
@@ -69,9 +106,16 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Start a new Model execution step
+   * Start a new Model execution step.
+   * This should be called at the beginning of LLM execution to capture accurate startTime.
+   * The step-start chunk payload can be passed later via updateStep() if needed.
    */
-  #startStepSpan(payload?: StepStartPayload) {
+  startStep(payload?: StepStartPayload): void {
+    // Don't create duplicate step spans
+    if (this.#currentStepSpan) {
+      return;
+    }
+
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
@@ -87,6 +131,25 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Update the current step span with additional payload data.
+   * Called when step-start chunk arrives with request/warnings info.
+   */
+  updateStep(payload?: StepStartPayload): void {
+    if (!this.#currentStepSpan || !payload) {
+      return;
+    }
+
+    // Update span with request/warnings from the step-start chunk
+    this.#currentStepSpan.update({
+      input: payload.request,
+      attributes: {
+        ...(payload.messageId ? { messageId: payload.messageId } : {}),
+        ...(payload.warnings?.length ? { warnings: payload.warnings } : {}),
+      },
+    });
+  }
+
+  /**
    * End the current Model execution step with token usage, finish reason, output, and metadata
    */
   #endStepSpan<OUTPUT extends OutputSchema>(payload: StepFinishPayload<any, OUTPUT>) {
@@ -94,9 +157,12 @@ export class ModelSpanTracker {
 
     // Extract all data from step-finish chunk
     const output = payload.output;
-    const { usage, ...otherOutput } = output;
+    const { usage: rawUsage, ...otherOutput } = output;
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
+
+    // Convert raw usage to UsageStats with cache token details
+    const usage = extractUsageMetrics(rawUsage, metadata?.providerMetadata);
 
     // Remove request object from metadata (too verbose)
     const cleanMetadata = metadata ? { ...metadata } : undefined;
@@ -126,7 +192,7 @@ export class ModelSpanTracker {
   #startChunkSpan(chunkType: string, initialData?: Record<string, any>) {
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
-      this.#startStepSpan();
+      this.startStep();
     }
 
     this.#currentChunkSpan = this.#currentStepSpan?.createChildSpan({
@@ -172,7 +238,7 @@ export class ModelSpanTracker {
   #createEventSpan(chunkType: string, output: any) {
     // Auto-create step if we see a chunk before step-start
     if (!this.#currentStepSpan) {
-      this.#startStepSpan();
+      this.startStep();
     }
 
     const span = this.#currentStepSpan?.createEventSpan({
@@ -301,6 +367,118 @@ export class ModelSpanTracker {
   }
 
   /**
+   * Handle tool-output chunks from sub-agents.
+   * Consolidates streaming text/reasoning deltas into a single span per tool call.
+   */
+  #handleToolOutputChunk<OUTPUT extends OutputSchema>(chunk: ChunkType<OUTPUT>) {
+    if (chunk.type !== 'tool-output') return;
+
+    const payload = chunk.payload as {
+      output: any;
+      toolCallId: string;
+      toolName?: string;
+    };
+
+    const { output, toolCallId, toolName } = payload;
+
+    // Get or create accumulator for this tool call
+    let acc = this.#toolOutputAccumulators.get(toolCallId);
+    if (!acc) {
+      // Auto-create step if we see a chunk before step-start
+      if (!this.#currentStepSpan) {
+        this.startStep();
+      }
+
+      acc = {
+        toolName: toolName || 'unknown',
+        toolCallId,
+        text: '',
+        reasoning: '',
+        sequenceNumber: this.#chunkSequence++,
+        // Name the span 'tool-result' for consistency (tool-call → tool-result)
+        span: this.#currentStepSpan?.createChildSpan({
+          name: `chunk: 'tool-result'`,
+          type: SpanType.MODEL_CHUNK,
+          attributes: {
+            chunkType: 'tool-result',
+            sequenceNumber: this.#chunkSequence - 1,
+          },
+        }),
+      };
+      this.#toolOutputAccumulators.set(toolCallId, acc);
+    }
+
+    // Handle the inner chunk based on its type
+    if (output && typeof output === 'object' && 'type' in output) {
+      const innerType = output.type as string;
+
+      switch (innerType) {
+        case 'text-delta':
+          // Accumulate text content
+          if (output.payload?.text) {
+            acc.text += output.payload.text;
+          }
+          break;
+
+        case 'reasoning-delta':
+          // Accumulate reasoning content
+          if (output.payload?.text) {
+            acc.reasoning += output.payload.text;
+          }
+          break;
+
+        case 'finish':
+        case 'workflow-finish':
+          // End the span with accumulated content
+          this.#endToolOutputSpan(toolCallId);
+          break;
+
+        // Ignore start/end markers - we handle accumulation ourselves
+        case 'text-start':
+        case 'text-end':
+        case 'reasoning-start':
+        case 'reasoning-end':
+        case 'start':
+        case 'workflow-start':
+          break;
+
+        default:
+          // For other inner chunk types, we don't accumulate but we also don't
+          // create extra spans - they'll be included in the final output
+          break;
+      }
+    }
+  }
+
+  /**
+   * End a tool output span and clean up the accumulator
+   */
+  #endToolOutputSpan(toolCallId: string) {
+    const acc = this.#toolOutputAccumulators.get(toolCallId);
+    if (!acc) return;
+
+    // Build output with accumulated content
+    const output: Record<string, any> = {
+      toolCallId: acc.toolCallId,
+      toolName: acc.toolName,
+    };
+
+    if (acc.text) {
+      output.text = acc.text;
+    }
+    if (acc.reasoning) {
+      output.reasoning = acc.reasoning;
+    }
+
+    acc.span?.end({ output });
+    this.#toolOutputAccumulators.delete(toolCallId);
+
+    // Mark this toolCallId as having had streaming output
+    // so we can skip redundant tool-result spans
+    this.#streamedToolCallIds.add(toolCallId);
+  }
+
+  /**
    * Wraps a stream with model tracing transform to track MODEL_STEP and MODEL_CHUNK spans.
    *
    * This should be added to the stream pipeline to automatically
@@ -310,6 +488,15 @@ export class ModelSpanTracker {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
+          // Capture completion start time on first actual content (for time-to-first-token)
+          switch (chunk.type) {
+            case 'text-delta':
+            case 'tool-call-delta':
+            case 'reasoning-delta':
+              this.#captureCompletionStartTime();
+              break;
+          }
+
           controller.enqueue(chunk);
 
           // Handle chunk span tracking based on chunk type
@@ -339,7 +526,13 @@ export class ModelSpanTracker {
               break;
 
             case 'step-start':
-              this.#startStepSpan(chunk.payload);
+              // If step already started (via startStep()), just update with payload data
+              // Otherwise start a new step (for backwards compatibility)
+              if (this.#currentStepSpan) {
+                this.updateStep(chunk.payload);
+              } else {
+                this.startStep(chunk.payload);
+              }
               break;
 
             case 'step-finish':
@@ -351,6 +544,28 @@ export class ModelSpanTracker {
             case 'finish':
               // don't output these chunks that don't have helpful output
               break;
+
+            case 'tool-output':
+              // Consolidate streaming tool outputs (e.g., from sub-agents) into single spans
+              this.#handleToolOutputChunk(chunk);
+              break;
+
+            case 'tool-result': {
+              const toolCallId = chunk.payload?.toolCallId;
+
+              // Skip tool-result if we already tracked streaming for this toolCallId
+              // (the tool-output span captures duration and content better)
+              if (toolCallId && this.#streamedToolCallIds.has(toolCallId)) {
+                this.#streamedToolCallIds.delete(toolCallId); // Clean up
+                break;
+              }
+
+              // For non-streaming tools, create the span but remove args from output
+              // (args are redundant - already on the TOOL_CALL span input)
+              const { args, ...cleanPayload } = chunk.payload || {};
+              this.#createEventSpan(chunk.type, cleanPayload);
+              break;
+            }
 
             // Default: auto-create event span for all other chunk types
             default: {

@@ -108,7 +108,7 @@ describe('CloudDeployer Server Runtime', () => {
 
       // Check LibSQL setup
       expect(entry).toContain('const storage = new LibSQLStore({');
-      expect(entry).toContain('id: "mastra-cloud-storage-libsql"');
+      expect(entry).toContain("id: 'mastra-cloud-storage-libsql'");
       expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
@@ -123,9 +123,27 @@ describe('CloudDeployer Server Runtime', () => {
       // @ts-ignore - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain(
-        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
-      );
+      // Default: playground disabled
+      expect(entry).toContain('playground: false');
+      expect(entry).toContain('swaggerUI: false');
+      expect(entry).toContain('tools: getToolExports(tools)');
+    });
+
+    it('should create node server with playground enabled when studio is true', () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+      // @ts-ignore - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('playground: true');
+      expect(entry).toContain('swaggerUI: false');
+    });
+
+    it('should create node server with playground disabled when studio is false', () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+      // @ts-ignore - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('playground: false');
     });
 
     it('should include readiness logging with correct metadata', () => {

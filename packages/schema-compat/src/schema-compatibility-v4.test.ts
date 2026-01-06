@@ -4,9 +4,13 @@ import { z } from 'zod/v4';
 import { SchemaCompatLayer } from './schema-compatibility';
 import type { ModelInformation } from './types';
 
-vi.mock('zod', () => ({
-  z,
-}));
+// Mock zod to use zod/v4 - Vitest 4 requires the mock to be at the top level
+vi.mock('zod', async () => {
+  const zodV4 = await import('zod/v4');
+  return {
+    z: zodV4.z,
+  };
+});
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -130,6 +134,72 @@ describe('SchemaCompatLayer', () => {
       const nonStrictSchema = z.object({ name: z.string() });
       const nonStrictResult = compatibility.defaultZodObjectHandler(nonStrictSchema);
       expect(nonStrictResult._zod.def.catchall).toBeUndefined(); // default
+    });
+
+    it('should preserve .partial() on nested objects - GitHub issue #11457', () => {
+      // This test reproduces the bug reported in https://github.com/mastra-ai/mastra/issues/11457
+      // When a nested object has .partial() applied, all its properties become optional.
+      // After processing through defaultZodObjectHandler, the optionality should be preserved.
+
+      const schemaWithPartialNested = z.object({
+        eventId: z.string(),
+        request: z
+          .object({
+            City: z.string(),
+            Name: z.string(),
+            Slug: z.string(),
+          })
+          .partial()
+          .passthrough(),
+        eventImageFile: z.any().optional(),
+      });
+
+      // Direct validation should work with partial data
+      const testData = {
+        eventId: '123',
+        request: { Name: 'Test' }, // Only providing one field, City and Slug should be optional
+        eventImageFile: null,
+      };
+
+      // Verify original schema validates correctly
+      const originalValidation = schemaWithPartialNested.safeParse(testData);
+      expect(originalValidation.success).toBe(true);
+
+      // Process the schema through the compat layer
+      const processedSchema = compatibility.processZodType(schemaWithPartialNested) as z.ZodObject<any, any>;
+
+      // The processed schema should ALSO validate the same data successfully
+      // This is where the bug manifests - the processed schema fails validation
+      // because .partial() is not preserved on the nested object
+      const processedValidation = processedSchema.safeParse(testData);
+
+      expect(processedValidation.success).toBe(true);
+      if (!processedValidation.success) {
+        // This helps debug the exact error when the test fails
+        console.error('Processed schema validation errors:', processedValidation.error.format());
+      }
+    });
+
+    it('should preserve optional properties in nested partial objects - GitHub issue #11457', () => {
+      // More granular test to verify the nested object properties are actually optional
+      const nestedPartialSchema = z
+        .object({
+          City: z.string(),
+          Name: z.string(),
+        })
+        .partial();
+
+      // Before processing, verify properties are optional
+      expect(nestedPartialSchema.shape.City).toBeInstanceOf(z.ZodOptional);
+      expect(nestedPartialSchema.shape.Name).toBeInstanceOf(z.ZodOptional);
+
+      // Process the nested schema
+      const processedNested = compatibility.defaultZodObjectHandler(nestedPartialSchema) as z.ZodObject<any, any>;
+
+      // After processing, properties should STILL be optional (wrapped in ZodOptional)
+      // This is the core of the bug - the optional wrapper is lost during processing
+      expect(processedNested.shape.City).toBeInstanceOf(z.ZodOptional);
+      expect(processedNested.shape.Name).toBeInstanceOf(z.ZodOptional);
     });
   });
 

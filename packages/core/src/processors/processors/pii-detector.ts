@@ -1,8 +1,10 @@
-import * as crypto from 'crypto';
+import * as crypto from 'node:crypto';
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
-import { Agent } from '../../agent';
+import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { TracingContext } from '../../observability';
 import type { ChunkType } from '../../stream';
@@ -126,6 +128,19 @@ export interface PIIDetectorOptions {
      */
     jsonPromptInjection?: boolean;
   };
+
+  /**
+   * Provider-specific options passed to the internal detection agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -135,7 +150,7 @@ export interface PIIDetectorOptions {
  * Supports multiple redaction strategies and maintains audit trails
  * for compliance with GDPR, CCPA, HIPAA, and other privacy regulations.
  */
-export class PIIDetector implements Processor {
+export class PIIDetector implements Processor<'pii-detector'> {
   readonly id = 'pii-detector';
   readonly name = 'PII Detector';
 
@@ -147,6 +162,7 @@ export class PIIDetector implements Processor {
   private includeDetections: boolean;
   private preserveFormat: boolean;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
+  private providerOptions?: ProviderOptions;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -173,6 +189,7 @@ export class PIIDetector implements Processor {
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
     this.structuredOutputOptions = options.structuredOutputOptions;
+    this.providerOptions = options.providerOptions;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -290,7 +307,7 @@ export class PIIDetector implements Processor {
           : baseSchema;
 
       let response;
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
@@ -299,12 +316,14 @@ export class PIIDetector implements Processor {
           modelSettings: {
             temperature: 0,
           },
+          providerOptions: this.providerOptions,
           tracingContext,
         });
       } else {
         response = await this.detectionAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
           tracingContext,
         });
       }

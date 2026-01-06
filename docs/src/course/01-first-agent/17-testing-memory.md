@@ -1,9 +1,9 @@
 # Testing Your Agent with Memory
 
-Let's test our agent's memory capabilities in the playground:
+Let's test our agent's memory capabilities in Mastra Studio:
 
 1. Make sure your development server is running with `npm run dev`
-2. Open the playground at http://localhost:4111/
+2. Open the studio at http://localhost:4111/
 3. Start a conversation with your agent by asking about transactions
 4. Then, ask a follow-up question that references the previous conversation, like:
    - "What was that largest transaction again?"

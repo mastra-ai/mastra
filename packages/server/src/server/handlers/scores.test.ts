@@ -1,14 +1,20 @@
 import { createSampleScore } from '@internal/storage-test-utils';
 import { Agent } from '@mastra/core/agent';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
-import type { StoragePagination } from '@mastra/core/storage';
+import type { ScoresStorage, StoragePagination } from '@mastra/core/storage';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
-import { listScorersHandler, listScoresByRunIdHandler, listScoresByEntityIdHandler, saveScoreHandler } from './scores';
+import {
+  LIST_SCORERS_ROUTE,
+  LIST_SCORES_BY_RUN_ID_ROUTE,
+  LIST_SCORES_BY_ENTITY_ID_ROUTE,
+  SAVE_SCORE_ROUTE,
+} from './scores';
+import { createTestServerContext } from './test-utils';
 
 function createPagination(args: Partial<StoragePagination>): StoragePagination {
   return {
@@ -20,11 +26,14 @@ function createPagination(args: Partial<StoragePagination>): StoragePagination {
 
 describe('Scores Handlers', () => {
   let mockStorage: InMemoryStore;
+  let scoresStore: ScoresStorage;
   let mastra: Mastra;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockStorage = new InMemoryStore();
+    await mockStorage.init();
+    scoresStore = (await mockStorage.getStore('scores'))!;
 
     mastra = new Mastra({
       logger: false,
@@ -50,8 +59,8 @@ describe('Scores Handlers', () => {
 
   describe('listScorersHandler', () => {
     it('should return empty object', async () => {
-      const result = await listScorersHandler({
-        mastra,
+      const result = await LIST_SCORERS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         requestContext: new RequestContext(),
       });
       expect(result).toEqual({});
@@ -62,14 +71,15 @@ describe('Scores Handlers', () => {
     it('should get scores by run ID successfully', async () => {
       const mockScores = [createSampleScore({ scorerId: 'test-1-scorer' })];
 
-      await mockStorage.saveScore(mockScores[0]);
+      await scoresStore.saveScore(mockScores[0]);
 
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      const result = await listScoresByRunIdHandler({
-        mastra,
+      const result = await LIST_SCORES_BY_RUN_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         runId: mockScores?.[0]?.runId,
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage as number,
       });
 
       expect(result.scores).toHaveLength(1);
@@ -90,10 +100,11 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await listScoresByRunIdHandler({
-        mastra: mastraWithoutStorage,
+      const result = await LIST_SCORES_BY_RUN_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithoutStorage }),
         runId: 'test-run-1',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage as number,
       });
 
       expect(result).toEqual({
@@ -111,13 +122,14 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(error);
+      scoresStore.listScoresByRunId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        listScoresByRunIdHandler({
-          mastra,
+        LIST_SCORES_BY_RUN_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           runId: 'test-run-1',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage as number,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -129,13 +141,14 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
+      scoresStore.listScoresByRunId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        listScoresByRunIdHandler({
-          mastra,
+        LIST_SCORES_BY_RUN_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           runId: 'test-run-1',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage as number,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -146,13 +159,14 @@ describe('Scores Handlers', () => {
       const mockScores = [createSampleScore({ entityType: 'AGENT', entityId: 'test-agent', scorerId: 'foo-scorer' })];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      await mockStorage.saveScore(mockScores[0]);
+      await scoresStore.saveScore(mockScores[0]);
 
-      const result = await listScoresByEntityIdHandler({
-        mastra,
+      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         entityId: 'test-agent',
         entityType: 'AGENT',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage as number,
       });
 
       expect(result.scores).toHaveLength(1);
@@ -173,11 +187,12 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await listScoresByEntityIdHandler({
-        mastra: mastraWithoutStorage,
+      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithoutStorage }),
         entityId: 'test-agent',
         entityType: 'agent',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage as number,
       });
 
       expect(result).toEqual({
@@ -195,14 +210,15 @@ describe('Scores Handlers', () => {
       const pagination = createPagination({ page: 0, perPage: 10 });
       const error = new Error('Storage error');
 
-      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(error);
+      scoresStore.listScoresByEntityId = vi.fn().mockRejectedValue(error);
 
       await expect(
-        listScoresByEntityIdHandler({
-          mastra,
+        LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           entityId: 'test-agent',
           entityType: 'agent',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage as number,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -214,14 +230,15 @@ describe('Scores Handlers', () => {
         status: 404,
       };
 
-      mockStorage.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
+      scoresStore.listScoresByEntityId = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        listScoresByEntityIdHandler({
-          mastra,
+        LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           entityId: 'test-agent',
           entityType: 'agent',
-          pagination,
+          page: pagination.page,
+          perPage: pagination.perPage as number,
         }),
       ).rejects.toThrow(HTTPException);
     });
@@ -232,13 +249,14 @@ describe('Scores Handlers', () => {
       ];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
-      await mockStorage.saveScore(mockScores[0]);
+      await scoresStore.saveScore(mockScores[0]);
 
-      const result = await listScoresByEntityIdHandler({
-        mastra,
+      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         entityId: 'test-workflow',
         entityType: 'WORKFLOW',
-        pagination,
+        page: pagination.page,
+        perPage: pagination.perPage as number,
       });
 
       expect(result.scores).toHaveLength(1);
@@ -256,15 +274,15 @@ describe('Scores Handlers', () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
       const savedScore = { score };
 
-      const result = await saveScoreHandler({
-        mastra,
+      const result = await SAVE_SCORE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         score,
       });
 
       expect(result).toEqual(savedScore);
     });
 
-    it('should return empty array when storage method is not available', async () => {
+    it('should throw error when storage method is not available', async () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
 
       // Create mastra instance without storage
@@ -272,23 +290,23 @@ describe('Scores Handlers', () => {
         logger: false,
       });
 
-      const result = await saveScoreHandler({
-        mastra: mastraWithoutStorage,
-        score,
-      });
-
-      expect(result).toEqual([]);
+      await expect(
+        SAVE_SCORE_ROUTE.handler({
+          ...createTestServerContext({ mastra: mastraWithoutStorage }),
+          score,
+        }),
+      ).rejects.toThrow(HTTPException);
     });
 
     it('should handle storage errors gracefully', async () => {
       const score = createSampleScore({ scorerId: 'new-score-1' });
       const error = new Error('Storage error');
 
-      mockStorage.saveScore = vi.fn().mockRejectedValue(error);
+      scoresStore.saveScore = vi.fn().mockRejectedValue(error);
 
       await expect(
-        saveScoreHandler({
-          mastra,
+        SAVE_SCORE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           score,
         }),
       ).rejects.toThrow(HTTPException);
@@ -301,11 +319,11 @@ describe('Scores Handlers', () => {
         status: 400,
       };
 
-      mockStorage.saveScore = vi.fn().mockRejectedValue(apiError);
+      scoresStore.saveScore = vi.fn().mockRejectedValue(apiError);
 
       await expect(
-        saveScoreHandler({
-          mastra,
+        SAVE_SCORE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
           score,
         }),
       ).rejects.toThrow(HTTPException);
@@ -316,8 +334,8 @@ describe('Scores Handlers', () => {
 
       const savedScore = { score };
 
-      const result = await saveScoreHandler({
-        mastra,
+      const result = await SAVE_SCORE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
         score,
       });
 

@@ -20,6 +20,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -252,7 +253,16 @@ export class MCPServer extends MCPServerBase {
       capabilities.prompts = { listChanged: true };
     }
 
-    this.server = new Server({ name: this.name, version: this.version }, { capabilities });
+    this.server = new Server(
+      {
+        name: this.name,
+        version: this.version,
+      },
+      {
+        capabilities,
+        ...(this.instructions ? { instructions: this.instructions } : {}),
+      },
+    );
 
     this.logger.info(
       `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')} and resources. Capabilities: ${JSON.stringify(capabilities)}`,
@@ -284,8 +294,8 @@ export class MCPServer extends MCPServerBase {
     });
 
     this.elicitation = {
-      sendRequest: async request => {
-        return this.handleElicitationRequest(request);
+      sendRequest: async (request, options) => {
+        return this.handleElicitationRequest(request, undefined, options);
       },
     };
   }
@@ -296,20 +306,66 @@ export class MCPServer extends MCPServerBase {
    *
    * @param request - The elicitation request containing message and schema
    * @param serverInstance - Optional server instance to use; defaults to main server for backward compatibility
+   * @param options - Optional request options (timeout, signal, etc.)
    * @returns Promise that resolves to the client's response
    */
   private async handleElicitationRequest(
     request: ElicitRequest['params'],
     serverInstance?: Server,
+    options?: RequestOptions,
   ): Promise<ElicitResult> {
     this.logger.debug(`Sending elicitation request: ${request.message}`);
 
     const server = serverInstance || this.server;
-    const response = await server.elicitInput(request);
+    const response = await server.elicitInput(request, options);
 
     this.logger.debug(`Received elicitation response: ${JSON.stringify(response)}`);
 
     return response;
+  }
+
+  /**
+   * Reads and parses the JSON body from an HTTP request.
+   * If the request body was already parsed by middleware (e.g., express.json()),
+   * it uses the pre-parsed body from req.body. Otherwise, it reads from the stream.
+   *
+   * This allows the MCP server to work with Express apps that use express.json()
+   * globally without requiring special route exclusions.
+   *
+   * @param req - The incoming HTTP request
+   * @param options - Optional configuration
+   * @param options.preParsedOnly - If true, only return pre-parsed body from middleware,
+   *   returning undefined if not available. This allows the caller to fall back to
+   *   their own body reading logic (e.g., SDK's getRawBody with size limits).
+   */
+  private async readJsonBody(
+    req: http.IncomingMessage,
+    options?: { preParsedOnly?: boolean },
+  ): Promise<unknown | undefined> {
+    // Check if body was already parsed by middleware (e.g., express.json())
+    const reqWithBody = req as http.IncomingMessage & { body?: unknown };
+    if (reqWithBody.body !== undefined) {
+      return reqWithBody.body;
+    }
+
+    // If preParsedOnly is set, return undefined to let caller handle raw stream
+    if (options?.preParsedOnly) {
+      return undefined;
+    }
+
+    // Read and parse body from stream
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', chunk => (data += chunk));
+      req.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(e);
+        }
+      });
+      req.on('error', reject);
+    });
   }
 
   /**
@@ -331,7 +387,16 @@ export class MCPServer extends MCPServerBase {
       capabilities.prompts = { listChanged: true };
     }
 
-    const serverInstance = new Server({ name: this.name, version: this.version }, { capabilities });
+    const serverInstance = new Server(
+      {
+        name: this.name,
+        version: this.version,
+      },
+      {
+        capabilities,
+        ...(this.instructions ? { instructions: this.instructions } : {}),
+      },
+    );
 
     // Register all handlers on the new server instance
     this.registerHandlersOnServer(serverInstance);
@@ -410,9 +475,9 @@ export class MCPServer extends MCPServerBase {
         }
 
         // Create session-aware elicitation for this tool execution
-        const sessionElicitation = {
-          sendRequest: async (request: ElicitRequest['params']) => {
-            return this.handleElicitationRequest(request, serverInstance);
+        const sessionElicitation: ElicitationActions = {
+          sendRequest: async (request: ElicitRequest['params'], options?: RequestOptions) => {
+            return this.handleElicitationRequest(request, serverInstance, options);
           },
         };
 
@@ -766,7 +831,10 @@ export class MCPServer extends MCPServerBase {
           try {
             const proxiedContext = context?.requestContext || new RequestContext();
             if (context?.mcp?.extra) {
-              proxiedContext.set('mcp.extra', context.mcp.extra);
+              // Spread all keys from extra directly onto the RequestContext
+              Object.entries(context.mcp.extra).forEach(([key, value]) => {
+                proxiedContext.set(key, value);
+              });
             }
 
             const response = await agent.generate(inputData.message, {
@@ -846,11 +914,19 @@ export class MCPServer extends MCPServerBase {
             inputData,
           );
           try {
-            const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
+            const proxiedContext = context?.requestContext || new RequestContext();
+            if (context?.mcp?.extra) {
+              // Spread all keys from extra directly onto the RequestContext
+              Object.entries(context.mcp.extra).forEach(([key, value]) => {
+                proxiedContext.set(key, value);
+              });
+            }
+
+            const run = await workflow.createRun({ runId: proxiedContext?.get('runId') });
 
             const response = await run.start({
               inputData: inputData,
-              requestContext: context?.requestContext,
+              requestContext: proxiedContext,
               tracingContext: context?.tracingContext,
             });
             return response;
@@ -1025,7 +1101,7 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * import http from 'http';
+   * import http from 'node:http';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startSSE({
@@ -1056,7 +1132,11 @@ export class MCPServer extends MCPServerBase {
           res.end('SSE connection not established');
           return;
         }
-        await this.sseTransport.handlePostMessage(req, res);
+        // Check for pre-parsed body from middleware like express.json()
+        // If not available, let the SDK's handlePostMessage read from the stream
+        // (which has built-in size limits and charset handling)
+        const parsedBody = await this.readJsonBody(req, { preParsedOnly: true });
+        await this.sseTransport.handlePostMessage(req, res, parsedBody);
       } else {
         this.logger.debug('Unknown path:', { path: url.pathname });
         res.writeHead(404);
@@ -1185,8 +1265,8 @@ export class MCPServer extends MCPServerBase {
    *
    * @example
    * ```typescript
-   * import http from 'http';
-   * import { randomUUID } from 'crypto';
+   * import http from 'node:http';
+   * import { randomUUID } from 'node:crypto';
    *
    * const httpServer = http.createServer(async (req, res) => {
    *   await server.startHTTP({
@@ -1230,13 +1310,13 @@ export class MCPServer extends MCPServerBase {
     httpPath,
     req,
     res,
-    options = { sessionIdGenerator: () => randomUUID() },
+    options,
   }: {
     url: URL;
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: StreamableHTTPServerTransportOptions & { serverless?: boolean };
+    options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
   }) {
     this.logger.debug(`startHTTP: Received ${req.method} request to ${url.pathname}`);
 
@@ -1246,13 +1326,21 @@ export class MCPServer extends MCPServerBase {
       res.end();
       return;
     }
+    // Serverless/stateless mode: single request/response without session management
+    // Triggered by either: serverless: true OR sessionIdGenerator: undefined
+    const isStatelessMode =
+      options?.serverless || (options && 'sessionIdGenerator' in options && options.sessionIdGenerator === undefined);
 
-    // Serverless mode: stateless, single request/response
-    if (options?.serverless) {
-      this.logger.debug('startHTTP: Running in serverless (stateless) mode');
+    if (isStatelessMode) {
+      this.logger.debug('startHTTP: Running in stateless mode (serverless or sessionIdGenerator: undefined)');
       await this.handleServerlessRequest(req, res);
       return;
     }
+
+    const mergedOptions = {
+      sessionIdGenerator: () => randomUUID(), // default: enabled
+      ...options, // user-provided overrides default
+    };
 
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     let transport: StreamableHTTPServerTransport | undefined;
@@ -1275,21 +1363,7 @@ export class MCPServer extends MCPServerBase {
 
         // Handle the request using the existing transport
         // Need to parse body for POST requests before passing to handleRequest
-        const body =
-          req.method === 'POST'
-            ? await new Promise((resolve, reject) => {
-                let data = '';
-                req.on('data', chunk => (data += chunk));
-                req.on('end', () => {
-                  try {
-                    resolve(JSON.parse(data));
-                  } catch (e) {
-                    reject(e);
-                  }
-                });
-                req.on('error', reject);
-              })
-            : undefined;
+        const body = req.method === 'POST' ? await this.readJsonBody(req) : undefined;
 
         await transport.handleRequest(req, res, body);
       } else {
@@ -1298,18 +1372,7 @@ export class MCPServer extends MCPServerBase {
 
         // Only allow new sessions via POST initialize request
         if (req.method === 'POST') {
-          const body = await new Promise((resolve, reject) => {
-            let data = '';
-            req.on('data', chunk => (data += chunk));
-            req.on('end', () => {
-              try {
-                resolve(JSON.parse(data));
-              } catch (e) {
-                reject(e);
-              }
-            });
-            req.on('error', reject);
-          });
+          const body = await this.readJsonBody(req);
 
           // Import isInitializeRequest from the correct path
           const { isInitializeRequest } = await import('@modelcontextprotocol/sdk/types.js');
@@ -1319,8 +1382,8 @@ export class MCPServer extends MCPServerBase {
 
             // Create a new transport for the new session
             transport = new StreamableHTTPServerTransport({
-              ...options,
-              sessionIdGenerator: () => randomUUID(),
+              ...mergedOptions,
+              sessionIdGenerator: mergedOptions.sessionIdGenerator,
               onsessioninitialized: id => {
                 this.streamableHTTPTransports.set(id, transport!);
               },
@@ -1440,20 +1503,7 @@ export class MCPServer extends MCPServerBase {
 
       // Parse the request body (for POST requests)
       const body =
-        req.method === 'POST'
-          ? await new Promise<any>((resolve, reject) => {
-              let data = '';
-              req.on('data', chunk => (data += chunk));
-              req.on('end', () => {
-                try {
-                  resolve(JSON.parse(data));
-                } catch (e) {
-                  reject(new Error(`Invalid JSON in request body: ${e instanceof Error ? e.message : String(e)}`));
-                }
-              });
-              req.on('error', reject);
-            })
-          : undefined;
+        req.method === 'POST' ? ((await this.readJsonBody(req)) as { method?: string; id?: unknown }) : undefined;
 
       this.logger.debug(`handleServerlessRequest: Processing ${req.method} request`, {
         method: body?.method,

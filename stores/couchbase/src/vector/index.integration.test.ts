@@ -2,11 +2,11 @@
 // IMPORTANT: These tests require Docker Engine to be running.
 // The tests will automatically start and configure the required Couchbase container.
 
-import { execSync } from 'child_process';
-import { randomUUID } from 'crypto';
-import axios from 'axios';
+import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
-import { connect } from 'couchbase';
+import { connect, QueryScanConsistency } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { CouchbaseVector, DISTANCE_MAPPING } from './index';
 
@@ -69,15 +69,13 @@ async function checkBucketHealth(
 
   while (attempt < maxAttempts) {
     try {
-      const response = await axios.get(url, {
-        auth: {
-          username,
-          password,
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
         },
-        validateStatus: () => true, // Don't throw on any status code
       });
 
-      const responseData = response.data;
+      const responseData = await response.json();
       if (
         response.status === 200 &&
         responseData.nodes &&
@@ -158,8 +156,20 @@ describe('Integration Testing CouchbaseVector', async () => {
           }
           collection = scope.collection(test_collectionName);
         }
+
+        // Initialize the CouchbaseVector client after cluster setup
+        couchbase_client = new CouchbaseVector({
+          connectionString,
+          username,
+          password,
+          bucketName: test_bucketName,
+          scopeName: test_scopeName,
+          collectionName: test_collectionName,
+          id: 'couchbase-integration-test',
+        });
       } catch (error) {
         console.error('Failed to start Couchbase container:', error);
+        throw error; // Re-throw to fail the tests properly
       }
     },
     5 * 60 * 1000,
@@ -173,15 +183,6 @@ describe('Integration Testing CouchbaseVector', async () => {
 
   describe('Connection', () => {
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector({
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
-        id: 'couchbase-integration-test',
-      });
       expect(couchbase_client).toBeDefined();
       const collection = await couchbase_client.getCollection();
       expect(collection).toBeDefined();
@@ -242,6 +243,23 @@ describe('Integration Testing CouchbaseVector', async () => {
     let testVectorIds: string[] = ['test_id_1', 'test_id_2', 'test_id_3'];
 
     beforeAll(async () => {
+      // Clean up any existing documents in the collection from previous runs
+      try {
+        const queryResult = await cluster.query(
+          `SELECT META().id FROM \`${test_bucketName}\`.\`${test_scopeName}\`.\`${test_collectionName}\``,
+          { scanConsistency: QueryScanConsistency.RequestPlus },
+        );
+        for (const row of queryResult.rows) {
+          try {
+            await collection.remove(row.id);
+          } catch {
+            // Ignore errors for non-existent documents
+          }
+        }
+      } catch {
+        // Ignore if query fails (e.g., if collection is empty)
+      }
+
       await couchbase_client.createIndex({ indexName: test_indexName, dimension, metric: 'euclidean' });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);

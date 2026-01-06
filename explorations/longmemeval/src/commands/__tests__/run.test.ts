@@ -28,11 +28,16 @@ vi.mock('@ai-sdk/openai', () => ({
 }));
 
 // Mock the LongMemEvalMetric
-vi.mock('../../evaluation/longmemeval-metric', () => ({
-  LongMemEvalMetric: vi.fn().mockImplementation(() => ({
-    measure: vi.fn().mockResolvedValue({ score: 1 }), // Always returns correct
-  })),
-}));
+vi.mock('../../evaluation/longmemeval-metric', () => {
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockLongMemEvalMetric {
+    measure = vi.fn().mockResolvedValue({ score: 1 }); // Always returns correct
+  }
+
+  return {
+    LongMemEvalMetric: MockLongMemEvalMetric,
+  };
+});
 
 // Mock chalk and ora
 vi.mock('chalk', () => ({

@@ -1,6 +1,8 @@
 ---
 title: "Reference: voice.off() | Voice"
 description: "Documentation for the off() method available in voice providers, which removes event listeners for voice events."
+packages:
+  - "@mastra/voice-openai-realtime"
 ---
 
 # voice.off()
@@ -16,7 +18,7 @@ import chalk from "chalk";
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
-    model: "gpt-4o-mini-realtime",
+    model: "gpt-5.1-realtime",
     apiKey: process.env.OPENAI_API_KEY,
   },
 });

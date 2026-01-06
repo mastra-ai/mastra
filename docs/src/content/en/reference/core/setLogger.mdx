@@ -1,6 +1,8 @@
 ---
 title: "Reference: Mastra.setLogger() | Core"
 description: "Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.)."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.setLogger()
@@ -9,7 +11,7 @@ The `.setLogger()` method is used to set the logger for all components (agents, 
 
 ## Usage example
 
-```typescript copy
+```typescript
 mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
 ```
 
@@ -45,5 +47,5 @@ This method does not return a value.
 
 ## Related
 
-- [Logging overview](/docs/v1/logging)
+- [Logging overview](/docs/v1/observability/logging)
 - [Logger reference](/reference/v1/logging/pino-logger)

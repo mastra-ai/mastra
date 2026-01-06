@@ -1,0 +1,153 @@
+---
+title: "Reference: Mastra.listStoredAgents() | Core"
+description: "Documentation for the `Mastra.listStoredAgents()` method in Mastra, which retrieves a paginated list of agents from storage."
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.listStoredAgents()
+
+The `.listStoredAgents()` method retrieves a paginated list of agent configurations from storage. By default, it returns executable `Agent` instances, but can also return raw storage data.
+
+## Usage example
+
+```typescript
+// Get Agent instances from storage
+const { agents, total, hasMore } = await mastra.listStoredAgents();
+
+for (const agent of agents) {
+  console.log(agent.id, agent.name);
+  // Each agent is ready to use
+  // const response = await agent.generate({ messages: "Hello!" });
+}
+```
+
+```typescript
+// Get paginated results with raw storage data
+const result = await mastra.listStoredAgents({
+  page: 0,
+  perPage: 10,
+  raw: true,
+});
+
+console.log(`Showing ${result.agents.length} of ${result.total} agents`);
+console.log(`Has more: ${result.hasMore}`);
+
+for (const config of result.agents) {
+  console.log(config.id, config.name, config.createdAt);
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+    {
+      name: "args",
+      type: "object",
+      description:
+        "Optional configuration object for pagination and output format.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### Args Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "page",
+      type: "number",
+      description: "Zero-indexed page number for pagination.",
+      isOptional: true,
+      defaultValue: "0",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description:
+        "Number of items per page. Set to `false` to fetch all records without pagination.",
+      isOptional: true,
+      defaultValue: "100",
+    },
+    {
+      name: "raw",
+      type: "boolean",
+      description:
+        "When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.",
+      isOptional: true,
+      defaultValue: "false",
+    },
+  ]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+    {
+      name: "agents",
+      type: "Agent[] | StorageAgentType[]",
+      description:
+        "Array of `Agent` instances by default, or `StorageAgentType` objects when `raw: true`.",
+    },
+    {
+      name: "total",
+      type: "number",
+      description: "Total number of stored agents across all pages.",
+    },
+    {
+      name: "page",
+      type: "number",
+      description: "Current page number (zero-indexed).",
+    },
+    {
+      name: "perPage",
+      type: "number | false",
+      description: "Number of items per page, or `false` if fetching all.",
+    },
+    {
+      name: "hasMore",
+      type: "boolean",
+      description: "Whether there are more pages available.",
+    },
+  ]}
+/>
+
+## Primitive Resolution
+
+When creating `Agent` instances (default behavior), each stored agent's configuration is resolved against registered primitives:
+
+- **Tools**: Resolved from `tools` registered in Mastra config
+- **Workflows**: Resolved from `workflows` registered in Mastra config
+- **Sub-agents**: Resolved from `agents` registered in Mastra config
+- **Memory**: Resolved from `memory` registered in Mastra config
+- **Scorers**: Resolved from `scorers` registered in Mastra config
+
+If a referenced primitive is not found, a warning is logged but the agent is still created.
+
+## Example: Iterating Through All Stored Agents
+
+```typescript
+async function getAllStoredAgents(mastra: Mastra) {
+  const allAgents: Agent[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const result = await mastra.listStoredAgents({ page, perPage: 50 });
+    allAgents.push(...result.agents);
+    hasMore = result.hasMore;
+    page++;
+  }
+
+  return allAgents;
+}
+```
+
+## Related
+
+- [Mastra.getStoredAgentById()](/reference/v1/core/getStoredAgentById)
+- [Storage overview](/reference/v1/storage/overview)
+- [Agents overview](/docs/v1/agents/overview)

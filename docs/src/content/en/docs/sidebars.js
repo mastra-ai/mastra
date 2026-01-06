@@ -23,8 +23,8 @@ const sidebars = {
       items: [
         {
           type: "doc",
-          id: "getting-started/installation",
-          label: "Installation",
+          id: "getting-started/start",
+          label: "Start",
         },
         {
           type: "doc",
@@ -43,8 +43,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "getting-started/templates",
-          label: "Templates",
+          id: "getting-started/manual-install",
+          label: "Manual Install",
         },
       ],
     },
@@ -69,8 +69,18 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/structured-output",
+          label: "Structured Output",
+        },
+        {
+          type: "doc",
           id: "agents/networks",
           label: "Networks",
+        },
+        {
+          type: "doc",
+          id: "agents/processors",
+          label: "Processors",
         },
         {
           type: "doc",
@@ -79,8 +89,13 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "agents/agent-approval",
+          label: "Agent Approval",
+        },
+        {
+          type: "doc",
           id: "agents/adding-voice",
-          label: "Adding Voice",
+          label: "Voice",
         },
       ],
     },
@@ -95,6 +110,11 @@ const sidebars = {
         },
         {
           type: "doc",
+          id: "workflows/workflow-state",
+          label: "Workflow State",
+        },
+        {
+          type: "doc",
           id: "workflows/control-flow",
           label: "Control Flow",
         },
@@ -102,6 +122,11 @@ const sidebars = {
           type: "doc",
           id: "workflows/agents-and-tools",
           label: "Agents & Tools",
+        },
+        {
+          type: "doc",
+          id: "workflows/snapshots",
+          label: "Snapshots",
         },
         {
           type: "doc",
@@ -115,18 +140,13 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "workflows/snapshots",
-          label: "Snapshots",
+          id: "workflows/time-travel",
+          label: "Time Travel",
         },
         {
           type: "doc",
           id: "workflows/error-handling",
           label: "Error Handling",
-        },
-        {
-          type: "doc",
-          id: "workflows/inngest-workflow",
-          label: "Inngest Workflow",
         },
       ],
     },
@@ -158,23 +178,18 @@ const sidebars = {
     },
     {
       type: "category",
-      label: "Tools & MCP",
+      label: "MCP",
       collapsed: true,
       items: [
         {
           type: "doc",
-          id: "tools-mcp/overview",
+          id: "mcp/overview",
           label: "Overview",
         },
         {
           type: "doc",
-          id: "tools-mcp/mcp-overview",
-          label: "MCP Overview",
-        },
-        {
-          type: "doc",
-          id: "tools-mcp/advanced-usage",
-          label: "Advanced Usage",
+          id: "mcp/publishing-mcp-server",
+          label: "Publishing an MCP Server",
         },
       ],
     },
@@ -190,18 +205,18 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "memory/threads-and-resources",
-          label: "Threads and Resources",
+          id: "memory/storage",
+          label: "Storage",
+        },
+        {
+          type: "doc",
+          id: "memory/message-history",
+          label: "Message History",
         },
         {
           type: "doc",
           id: "memory/working-memory",
           label: "Working Memory",
-        },
-        {
-          type: "doc",
-          id: "memory/conversation-history",
-          label: "Conversation History",
         },
         {
           type: "doc",
@@ -212,32 +227,6 @@ const sidebars = {
           type: "doc",
           id: "memory/memory-processors",
           label: "Memory Processors",
-        },
-        {
-          type: "category",
-          label: "Storage",
-          items: [
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-libsql",
-              label: "Memory with LibSQL",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-mongodb",
-              label: "Memory with MongoDB",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-pg",
-              label: "Memory with PostgreSQL",
-            },
-            {
-              type: "doc",
-              id: "memory/storage/memory-with-upstash",
-              label: "Memory with Upstash",
-            },
-          ],
         },
       ],
     },
@@ -265,41 +254,98 @@ const sidebars = {
           id: "rag/retrieval",
           label: "Retrieval",
         },
+        {
+          type: "doc",
+          id: "rag/graph-rag",
+          label: "GraphRAG",
+        },
       ],
     },
     {
       type: "category",
-      label: "Server & DB",
+      label: "Server",
       items: [
         {
           type: "doc",
-          id: "server-db/mastra-server",
-          label: "Mastra Server",
+          id: "server/mastra-server",
+          label: "Server Configuration",
         },
         {
           type: "doc",
-          id: "server-db/middleware",
+          id: "server/server-adapters",
+          label: "Server Adapters",
+          customProps: {
+            tags: ["new"],
+          },
+        },
+        {
+          type: "doc",
+          id: "server/custom-adapters",
+          label: "Custom Adapters",
+          customProps: {
+            tags: ["new"],
+          },
+        },
+        {
+          type: "doc",
+          id: "server/middleware",
           label: "Middleware",
         },
         {
           type: "doc",
-          id: "server-db/request-context",
+          id: "server/request-context",
           label: "Request Context",
         },
         {
           type: "doc",
-          id: "server-db/custom-api-routes",
+          id: "server/custom-api-routes",
           label: "Custom API Routes",
         },
         {
           type: "doc",
-          id: "server-db/storage",
-          label: "Storage",
+          id: "server/mastra-client",
+          label: "Mastra Client",
         },
         {
-          type: "doc",
-          id: "server-db/mastra-client",
-          label: "Mastra Client",
+          type: "category",
+          label: "Auth",
+          items: [
+            {
+              type: "doc",
+              id: "server/auth/index",
+              label: "Overview",
+            },
+            {
+              type: "doc",
+              id: "server/auth/jwt",
+              label: "JSON Web Token",
+            },
+            {
+              type: "doc",
+              id: "server/auth/clerk",
+              label: "Clerk",
+            },
+            {
+              type: "doc",
+              id: "server/auth/supabase",
+              label: "Supabase",
+            },
+            {
+              type: "doc",
+              id: "server/auth/firebase",
+              label: "Firebase",
+            },
+            {
+              type: "doc",
+              id: "server/auth/workos",
+              label: "WorkOS",
+            },
+            {
+              type: "doc",
+              id: "server/auth/auth0",
+              label: "Auth0",
+            },
+          ],
         },
       ],
     },
@@ -314,97 +360,64 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "deployment/building-mastra",
-          label: "Building Mastra",
+          id: "deployment/mastra-server",
+          label: "Mastra Server",
         },
         {
           type: "doc",
           id: "deployment/monorepo",
-          label: "With a Monorepo",
+          label: "Monorepo",
+        },
+        {
+          type: "doc",
+          id: "deployment/cloud-providers",
+          label: "Cloud Providers",
         },
         {
           type: "doc",
           id: "deployment/web-framework",
-          label: "With a Web Framework",
+          label: "Web Framework",
         },
         {
-          type: "category",
-          label: "Mastra Cloud",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/overview",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/setting-up",
-              label: "Setup & Deploy",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/dashboard",
-              label: "Dashboard",
-            },
-            {
-              type: "doc",
-              id: "deployment/mastra-cloud/observability",
-              label: "Observability",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Cloud Providers",
-          items: [
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/index",
-              label: "Overview",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/amazon-ec2",
-              label: "Amazon EC2",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/aws-lambda",
-              label: "AWS Lambda",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/azure-app-services",
-              label: "Azure App Services",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/cloudflare-deployer",
-              label: "Cloudflare",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/digital-ocean",
-              label: "Digital Ocean",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/netlify-deployer",
-              label: "Netlify",
-            },
-            {
-              type: "doc",
-              id: "deployment/cloud-providers/vercel-deployer",
-              label: "Vercel",
-            },
-          ],
+          type: "doc",
+          id: "deployment/workflow-runners",
+          label: "Workflow Runners",
         },
       ],
     },
     {
-      type: "doc",
-      id: "logging",
-      label: "Logging",
+      type: "category",
+      label: "Mastra Cloud",
+      customProps: {
+        tags: ["beta"],
+      },
+      items: [
+        {
+          type: "doc",
+          id: "mastra-cloud/overview",
+          label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/setup",
+          label: "Setup",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/studio",
+          label: "Studio",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/deployment",
+          label: "Deployment",
+        },
+        {
+          type: "doc",
+          id: "mastra-cloud/observability",
+          label: "Observability",
+        },
+      ],
     },
     {
       type: "category",
@@ -413,7 +426,13 @@ const sidebars = {
         {
           type: "doc",
           id: "observability/overview",
+          key: "observability.overview",
           label: "Overview",
+        },
+        {
+          type: "doc",
+          id: "observability/logging",
+          label: "Logging",
         },
         {
           type: "category",
@@ -422,7 +441,19 @@ const sidebars = {
             {
               type: "doc",
               id: "observability/tracing/overview",
+              key: "observability.tracing.overview",
               label: "Overview",
+            },
+            {
+              type: "category",
+              label: "Bridges",
+              items: [
+                {
+                  type: "doc",
+                  id: "observability/tracing/bridges/otel",
+                  label: "OpenTelemetry",
+                },
+              ],
             },
             {
               type: "category",
@@ -463,6 +494,11 @@ const sidebars = {
                   id: "observability/tracing/exporters/otel",
                   label: "OpenTelemetry",
                 },
+                {
+                  type: "doc",
+                  id: "observability/tracing/exporters/posthog",
+                  label: "PostHog",
+                },
               ],
             },
             {
@@ -491,8 +527,8 @@ const sidebars = {
         },
         {
           type: "doc",
-          id: "evals/off-the-shelf-scorers",
-          label: "Off the Shelf Scorers",
+          id: "evals/built-in-scorers",
+          label: "Built-in Scorers",
         },
         {
           type: "doc",
@@ -503,47 +539,6 @@ const sidebars = {
           type: "doc",
           id: "evals/running-in-ci",
           label: "Running in CI",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Auth",
-      items: [
-        {
-          type: "doc",
-          id: "auth/index",
-          label: "Overview",
-        },
-        {
-          type: "doc",
-          id: "auth/jwt",
-          label: "JSON Web Token",
-        },
-        {
-          type: "doc",
-          id: "auth/clerk",
-          label: "Clerk",
-        },
-        {
-          type: "doc",
-          id: "auth/supabase",
-          label: "Supabase",
-        },
-        {
-          type: "doc",
-          id: "auth/firebase",
-          label: "Firebase",
-        },
-        {
-          type: "doc",
-          id: "auth/workos",
-          label: "WorkOS",
-        },
-        {
-          type: "doc",
-          id: "auth/auth0",
-          label: "Auth0",
         },
       ],
     },
@@ -570,80 +565,6 @@ const sidebars = {
           type: "doc",
           id: "voice/speech-to-speech",
           label: "Speech to Speech",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Frameworks",
-      items: [
-        {
-          type: "category",
-          label: "Agentic UIs",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/ai-sdk",
-              label: "With Vercel AI SDK",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/copilotkit",
-              label: "With CopilotKit",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/assistant-ui",
-              label: "With Assistant UI",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/cedar-os",
-              label: "With Cedar-OS",
-            },
-            {
-              type: "doc",
-              id: "frameworks/agentic-uis/openrouter",
-              label: "With OpenRouter",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Servers",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/servers/express",
-              label: "With Express",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Web Frameworks",
-          items: [
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/vite-react",
-              label: "With Vite/React",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/next-js",
-              label: "With Next.js",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/astro",
-              label: "With Astro",
-            },
-            {
-              type: "doc",
-              id: "frameworks/web-frameworks/sveltekit",
-              label: "With SvelteKit",
-            },
-          ],
         },
       ],
     },

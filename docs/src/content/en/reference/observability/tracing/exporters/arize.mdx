@@ -1,6 +1,8 @@
 ---
 title: "Reference: ArizeExporter | Observability"
 description: Arize exporter for Tracing using OpenInference
+packages:
+  - "@mastra/arize"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -37,6 +39,10 @@ Inherits from `OtelExporterConfig` (excluding `provider`), which includes:
 - `batchSize?: number` - Number of spans per batch (default: 512)
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: WARN)
 - `resourceAttributes?: Record<string, any>` - Custom resource attributes
+
+### Metadata passthrough
+
+Non-reserved span attributes are serialized into the OpenInference `metadata` payload. Add them via `tracingOptions.metadata` (e.g., `companyId`, `tier`). Reserved fields such as `input`, `output`, `sessionId`, thread/user IDs, and OpenInference IDs are excluded automatically.
 
 <PropertiesTable
   props={[
@@ -156,6 +162,31 @@ const exporter = new ArizeExporter({
 ## OpenInference Semantic Conventions
 
 The ArizeExporter implements [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
+
+## Tags Support
+
+The ArizeExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are mapped to the native OpenInference `tag.tags` semantic convention.
+
+### Usage
+
+```typescript
+const result = await agent.generate({
+  messages: [{ role: "user", content: "Hello" }],
+  tracingOptions: {
+    tags: ["production", "experiment-v2", "user-request"],
+  },
+});
+```
+
+### How Tags Are Stored
+
+Tags are stored using the OpenInference `tag.tags` attribute:
+
+```json
+{
+  "tag.tags": ["production", "experiment-v2", "user-request"]
+}
+```
 
 ## Related
 

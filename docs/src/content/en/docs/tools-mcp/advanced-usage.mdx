@@ -1,6 +1,8 @@
 ---
 title: "Advanced Tool Usage | Tools & MCP"
 description: This page covers advanced features for Mastra tools, including abort signals and compatibility with the Vercel AI SDK tool format.
+packages:
+  - "@mastra/core"
 ---
 
 # Advanced Tool Usage
@@ -82,13 +84,13 @@ Mastra maintains compatibility with the tool format used by the Vercel AI SDK (`
 
 First, ensure you have the `ai` package installed:
 
-```bash npm2yarn copy
+```bash npm2yarn
 npm install ai
 ```
 
 Here's an example of a tool defined using the Vercel AI SDK format:
 
-```typescript title="src/mastra/tools/vercelWeatherTool.ts" copy
+```typescript title="src/mastra/tools/vercelWeatherTool.ts"
 import { tool } from "ai";
 import { z } from "zod";
 
@@ -110,7 +112,6 @@ You can then add this tool to your Mastra agent just like any other tool:
 
 ```typescript title="src/mastra/agents/mixedToolsAgent.ts"
 import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
 import { vercelWeatherTool } from "../tools/vercelWeatherTool"; // Vercel AI SDK tool
 import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
 
@@ -118,7 +119,7 @@ export const mixedToolsAgent = new Agent({
   id: "mixed-tools-agent",
   name: "Mixed Tools Agent",
   instructions: "You can use tools defined in different formats.",
-  model: openai("gpt-4o-mini"),
+  model: "openai/gpt-5.1",
   tools: {
     weatherVercel: vercelWeatherTool,
     someMastraTool: mastraTool,
