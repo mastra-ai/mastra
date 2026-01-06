@@ -1107,7 +1107,7 @@ ${comment ? `User feedback: ${comment}` : ''}`,
         },
       );
 
-      return await result.object as unknown as EnhanceInstructionsResponse;
+      return (await result.object) as unknown as EnhanceInstructionsResponse;
     } catch (error) {
       return handleError(error, 'Error enhancing instructions');
     }

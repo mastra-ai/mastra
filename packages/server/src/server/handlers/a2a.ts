@@ -69,10 +69,10 @@ export async function getAgentCardByIdHandler({
     throw new Error(`Agent with ID ${agentId} not found`);
   }
 
-  const [instructions, tools]: [Awaited<ReturnType<typeof agent.getInstructions>>, Awaited<ReturnType<typeof agent.listTools>>] = await Promise.all([
-    agent.getInstructions({ requestContext }),
-    agent.listTools({ requestContext }),
-  ]);
+  const [instructions, tools]: [
+    Awaited<ReturnType<typeof agent.getInstructions>>,
+    Awaited<ReturnType<typeof agent.listTools>>,
+  ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
@@ -460,10 +460,10 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       throw new Error(`Agent with ID ${agentId} not found`);
     }
 
-    const [instructions, tools]: [Awaited<ReturnType<typeof agent.getInstructions>>, Awaited<ReturnType<typeof agent.listTools>>] = await Promise.all([
-      agent.getInstructions({ requestContext }),
-      agent.listTools({ requestContext }),
-    ]);
+    const [instructions, tools]: [
+      Awaited<ReturnType<typeof agent.getInstructions>>,
+      Awaited<ReturnType<typeof agent.listTools>>,
+    ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
     const agentCard: AgentCard = {
       name: agent.id || (agentId as string),

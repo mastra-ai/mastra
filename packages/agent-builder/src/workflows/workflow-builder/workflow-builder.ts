@@ -205,7 +205,7 @@ const workflowResearchStep = createStep({
         // stopWhen: stepCountIs(10),
       });
 
-      const researchResult = await result.object as unknown as WorkflowResearchResult | null;
+      const researchResult = (await result.object) as unknown as WorkflowResearchResult | null;
       if (!researchResult) {
         return {
           success: false,

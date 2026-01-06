@@ -123,7 +123,7 @@ const planningIterationStep = createStep({
         // maxSteps: 15,
       });
 
-      const planResult = await result.object as unknown as PlanningIterationResult | null;
+      const planResult = (await result.object) as unknown as PlanningIterationResult | null;
       if (!planResult) {
         return {
           tasks: [],
