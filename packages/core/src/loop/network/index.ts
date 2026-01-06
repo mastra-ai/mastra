@@ -787,8 +787,9 @@ export async function createNetworkLoop({
       isComplete: z.boolean().optional(),
       iteration: z.number(),
     }),
-    execute: async ({ inputData, getInitData, writer }) => {
+    execute: async ({ inputData, getInitData, writer, resumeData, mastra, suspend }) => {
       const initData = await getInitData();
+      const logger = mastra.getLogger();
 
       const agentTools = await agent.listTools({ requestContext });
       const memory = await agent.getMemory({ requestContext });
@@ -843,6 +844,106 @@ export async function createNetworkLoop({
       }
 
       const toolCallId = generateId();
+
+      // Check if approval is required
+      // requireApproval can be:
+      // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
+      // - undefined (no approval needed)
+      // If needsApprovalFn exists, evaluate it with the tool args
+      let toolRequiresApproval = (tool as any).requireApproval;
+      if ((tool as any).needsApprovalFn) {
+        // Evaluate the function with the parsed args
+        try {
+          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
+          toolRequiresApproval = needsApprovalResult;
+        } catch (error) {
+          // Log error to help developers debug faulty needsApprovalFn implementations
+          logger?.error(`Error evaluating needsApprovalFn for tool ${toolId}:`, error);
+          // On error, default to requiring approval to be safe
+          toolRequiresApproval = true;
+        }
+      }
+
+      if (toolRequiresApproval) {
+        if (!resumeData) {
+          await writer?.write({
+            type: 'tool-execution-approval',
+            payload: {
+              args: {
+                toolName: toolId,
+                args: inputDataToUse,
+                resumeSchema: z.object({
+                  approved: z
+                    .boolean()
+                    .describe(
+                      'Controls if the tool call is approved or not, should be true when approved and false when declined',
+                    ),
+                }),
+              },
+              runId,
+            },
+          });
+
+          return suspend({
+            requireToolApproval: {
+              toolName: toolId,
+              args: inputDataToUse,
+            },
+          });
+        } else {
+          if (!resumeData.approved) {
+            const rejectionResult = 'Tool call was not approved by the user';
+            await memory?.saveMessages({
+              messages: [
+                {
+                  id: generateId(),
+                  type: 'text',
+                  role: 'assistant',
+                  content: {
+                    parts: [
+                      {
+                        type: 'text',
+                        text: JSON.stringify({
+                          isNetwork: true,
+                          selectionReason: inputData.selectionReason,
+                          primitiveType: inputData.primitiveType,
+                          primitiveId: toolId,
+                          finalResult: { result: rejectionResult, toolCallId },
+                          input: inputDataToUse,
+                        }),
+                      },
+                    ],
+                    format: 2,
+                  },
+                  createdAt: new Date(),
+                  threadId: initData.threadId || runId,
+                  resourceId: initData.threadResourceId || networkName,
+                },
+              ] as MastraDBMessage[],
+            });
+
+            const endPayload = {
+              task: inputData.task,
+              primitiveId: toolId,
+              primitiveType: inputData.primitiveType,
+              result: rejectionResult,
+              isComplete: false,
+              iteration: inputData.iteration,
+              toolCallId,
+              toolName: toolId,
+            };
+
+            await writer?.write({
+              type: 'tool-execution-end',
+              payload: endPayload,
+              from: ChunkFrom.NETWORK,
+              runId,
+            });
+
+            return endPayload;
+          }
+        }
+      }
 
       await writer?.write({
         type: 'tool-execution-start',
