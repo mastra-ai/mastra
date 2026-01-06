@@ -1157,8 +1157,13 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
       if (hasConfiguredScorers) {
         completionResult = await runValidation({ ...validation, scorers: configuredScorers }, completionContext);
       } else {
+        const routingAgentToUse = await getRoutingAgent({
+          requestContext,
+          agent: routingAgent,
+          routingConfig: routing,
+        });
         // Use the default LLM completion check
-        const defaultResult = await runDefaultCompletionCheck(routingAgent, completionContext);
+        const defaultResult = await runDefaultCompletionCheck(routingAgentToUse, completionContext);
         completionResult = {
           complete: defaultResult.passed,
           completionReason: defaultResult.reason,
