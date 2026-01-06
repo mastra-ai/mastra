@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  ssri: '>=6.0.2'
+
 importers:
 
   .:
@@ -11,9 +14,6 @@ importers:
       form-data:
         specifier: ^2.5.5
         version: 2.5.5
-      ssri:
-        specifier: ^6.0.2
-        version: 6.0.2
     devDependencies:
       execa:
         specifier: ^9.6.0
@@ -1772,9 +1772,6 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
-  ssri@5.3.0:
-    resolution: {integrity: sha512-XRSIPqLij52MtgoQavH/x/dU1qVKtWUAAZeOHsR9c2Ddi4XerFy3mc1alf+dLJKl9EUIm/Ht+EowFkTUOA6GAQ==}
-
   ssri@6.0.2:
     resolution: {integrity: sha512-cepbSq/neFK7xB6A50KHN0xHDotYzq58wWCa5LeWqnPrHG8GzfEjO/4O8kpmcGW+oaxkvhEJCWgbgNk4/ZV93Q==}
 
@@ -3457,7 +3454,7 @@ snapshots:
       safe-buffer: 5.2.1
       semver: 5.7.2
       slide: 1.1.6
-      ssri: 5.3.0
+      ssri: 6.0.2
     optionalDependencies:
       npmlog: 4.1.2
 
@@ -3883,10 +3880,6 @@ snapshots:
       jsbn: 0.1.1
       safer-buffer: 2.1.2
       tweetnacl: 0.14.5
-
-  ssri@5.3.0:
-    dependencies:
-      safe-buffer: 5.2.1
 
   ssri@6.0.2:
     dependencies:
