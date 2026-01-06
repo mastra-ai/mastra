@@ -6,7 +6,11 @@ import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
-import { MastraServer as MastraServerBase, redactStreamChunk } from '@mastra/server/server-adapter';
+import {
+  MastraServer as MastraServerBase,
+  normalizeQueryParams,
+  redactStreamChunk,
+} from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 
@@ -126,17 +130,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
     const urlParams = request.params;
     // Express's req.query can contain string | string[] | ParsedQs | ParsedQs[]
-    // We normalize it to Record<string, string | string[]>
-    const queryParams: Record<string, string | string[]> = {};
-    for (const [key, value] of Object.entries(request.query)) {
-      if (typeof value === 'string') {
-        queryParams[key] = value;
-      } else if (Array.isArray(value)) {
-        // Filter to only string values and flatten
-        queryParams[key] = value.filter((v): v is string => typeof v === 'string');
-      }
-    }
-
+    const queryParams = normalizeQueryParams(request.query as Record<string, unknown>);
     let body: unknown;
 
     if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {

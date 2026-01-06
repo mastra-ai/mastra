@@ -53,6 +53,29 @@ export interface ParsedRequestParams {
 }
 
 /**
+ * Normalizes query parameters from various HTTP framework formats to a consistent structure.
+ * Handles both single string values and arrays (for repeated query params like ?tag=a&tag=b).
+ * Filters out non-string values that some frameworks may include.
+ *
+ * @param rawQuery - Raw query parameters from the HTTP framework (may contain strings, arrays, or nested objects)
+ * @returns Normalized query parameters as Record<string, string | string[]>
+ */
+export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<string, QueryParamValue> {
+  const queryParams: Record<string, QueryParamValue> = {};
+  for (const [key, value] of Object.entries(rawQuery)) {
+    if (typeof value === 'string') {
+      queryParams[key] = value;
+    } else if (Array.isArray(value)) {
+      // Filter to only string values (some frameworks include nested objects)
+      const stringValues = value.filter((v): v is string => typeof v === 'string');
+      // Convert single-value arrays back to strings for compatibility
+      queryParams[key] = stringValues.length === 1 ? stringValues[0]! : stringValues;
+    }
+  }
+  return queryParams;
+}
+
+/**
  * Abstract base class for server adapters that handle HTTP requests.
  *
  * This class extends `MastraServerBase` to inherit app storage functionality
