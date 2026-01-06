@@ -13,7 +13,13 @@
  */
 
 import tracer from 'dd-trace';
-import type { TracingEvent, AnyExportedSpan, ModelGenerationAttributes } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  ModelGenerationAttributes,
+  ModelStepAttributes,
+} from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
@@ -120,16 +126,6 @@ export interface DatadogExporterConfig extends BaseExporterConfig {
    * Defaults to false to avoid unexpected instrumentation.
    */
   integrationsEnabled?: boolean;
-
-  /**
-   * Default user ID applied to all spans if not specified in metadata.
-   */
-  defaultUserId?: string;
-
-  /**
-   * Default session ID applied to all spans if not specified in metadata.
-   */
-  defaultSessionId?: string;
 }
 
 /**
@@ -235,8 +231,8 @@ export class DatadogExporter extends BaseExporter {
   private captureTraceContext(span: AnyExportedSpan): void {
     if (span.isRootSpan && !this.traceContext.has(span.traceId)) {
       this.traceContext.set(span.traceId, {
-        userId: span.metadata?.userId || this.config.defaultUserId,
-        sessionId: span.metadata?.sessionId || this.config.defaultSessionId,
+        userId: span.metadata?.userId,
+        sessionId: span.metadata?.sessionId,
       });
     }
   }
@@ -271,11 +267,13 @@ export class DatadogExporter extends BaseExporter {
       annotations.outputData = formatOutput(span.output, span.type);
     }
 
-    // Normalize and add token usage metrics
-    const usage = (span.attributes as ModelGenerationAttributes | undefined)?.usage;
-    const metrics = formatUsageMetrics(usage);
-    if (metrics) {
-      annotations.metrics = metrics;
+    // Add token usage metrics (only on MODEL_GENERATION or MODEL_STEP spans)
+    if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_STEP) {
+      const usage = (span.attributes as ModelGenerationAttributes | ModelStepAttributes)?.usage;
+      const metrics = formatUsageMetrics(usage);
+      if (metrics) {
+        annotations.metrics = metrics;
+      }
     }
 
     // Forward span.attributes to metadata (minus known fields handled separately)
@@ -497,18 +495,6 @@ export class DatadogExporter extends BaseExporter {
       // Wait until the root span has ended before emitting any spans
       if (!state.rootEnded) return;
 
-      // Find the root span in the buffer
-      let rootSpan: AnyExportedSpan | undefined;
-      for (const span of state.buffer.values()) {
-        if (span.isRootSpan) {
-          rootSpan = span;
-          break;
-        }
-      }
-
-      // If root span is not in buffer yet, wait
-      if (!rootSpan) return;
-
       // Build tree and emit recursively
       const tree = this.buildSpanTree(state.buffer);
       if (tree) {
@@ -611,15 +597,13 @@ export class DatadogExporter extends BaseExporter {
   }
 
   /**
-   * Recursively emits a span tree using nested llmobs.trace() calls.
-   * This ensures parent-child relationships are properly established in Datadog
-   * because child spans are created while their parent span is active in scope.
+   * Builds LLMObs span options from a Mastra span.
+   * Handles trace context, timestamps, and conditional model information for LLM spans.
    */
-  private emitSpanTree(node: SpanNode, state: TraceState): void {
-    const span = node.span;
+  private buildSpanOptions(span: AnyExportedSpan): LLMObsSpanOptions {
     const traceCtx = this.traceContext.get(span.traceId) || {
-      userId: span.metadata?.userId || this.config.defaultUserId,
-      sessionId: span.metadata?.sessionId || this.config.defaultSessionId,
+      userId: span.metadata?.userId,
+      sessionId: span.metadata?.sessionId,
     };
 
     const kind = kindFor(span.type);
@@ -630,7 +614,7 @@ export class DatadogExporter extends BaseExporter {
     // Regular spans fall back to current time if endTime is not set
     const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? startTime : new Date();
 
-    const options: LLMObsSpanOptions = {
+    return {
       kind,
       name: span.name,
       sessionId: traceCtx.sessionId,
@@ -640,6 +624,16 @@ export class DatadogExporter extends BaseExporter {
       ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
       ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
     };
+  }
+
+  /**
+   * Recursively emits a span tree using nested llmobs.trace() calls.
+   * This ensures parent-child relationships are properly established in Datadog
+   * because child spans are created while their parent span is active in scope.
+   */
+  private emitSpanTree(node: SpanNode, state: TraceState): void {
+    const span = node.span;
+    const options = this.buildSpanOptions(span);
 
     // Use nested llmobs.trace() calls - children are emitted INSIDE the parent's callback
     // This ensures the Datadog SDK automatically establishes parent-child relationships
@@ -672,29 +666,7 @@ export class DatadogExporter extends BaseExporter {
    * Used for late-arriving spans after the main tree has been emitted.
    */
   private emitSingleSpan(span: AnyExportedSpan, state: TraceState, parent?: any) {
-    const traceCtx = this.traceContext.get(span.traceId) || {
-      userId: span.metadata?.userId || this.config.defaultUserId,
-      sessionId: span.metadata?.sessionId || this.config.defaultSessionId,
-    };
-
-    const kind = kindFor(span.type);
-    const attrs = span.attributes as ModelGenerationAttributes | undefined;
-
-    const startTime = toDate(span.startTime);
-    // Event spans are point-in-time markers; use startTime for endTime if not set (zero duration)
-    // Regular spans fall back to current time if endTime is not set
-    const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? startTime : new Date();
-
-    const options: LLMObsSpanOptions = {
-      kind,
-      name: span.name,
-      sessionId: traceCtx.sessionId,
-      userId: traceCtx.userId,
-      startTime,
-      endTime,
-      ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
-      ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
-    };
+    const options = this.buildSpanOptions(span);
 
     let capturedSpan: any;
     const runTrace = () =>
@@ -704,21 +676,20 @@ export class DatadogExporter extends BaseExporter {
         if (Object.keys(annotations).length > 0) {
           tracer.llmobs.annotate(ddSpan, annotations);
         }
+
+        // Set native Datadog error status for proper UI highlighting
+        if (span.errorInfo) {
+          ddSpan.setTag('error', true);
+        }
+
+        const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(ddSpan) : undefined;
+        state.contexts.set(span.id, { ddSpan, exported });
       });
 
     if (parent) {
       tracer.scope().activate(parent, runTrace);
     } else {
       runTrace();
-    }
-
-    if (capturedSpan) {
-      // Set native Datadog error status for proper UI highlighting
-      if (span.errorInfo) {
-        capturedSpan.setTag('error', true);
-      }
-      const exported = tracer.llmobs.exportSpan ? tracer.llmobs.exportSpan(capturedSpan) : undefined;
-      state.contexts.set(span.id, { ddSpan: capturedSpan, exported });
     }
   }
 

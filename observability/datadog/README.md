@@ -61,8 +61,6 @@ const datadog = new DatadogExporter({
 | `service`             | Service name for the application                     | Uses `mlApp` value             |
 | `env`                 | Environment name (e.g., 'production', 'staging')     | `DD_ENV` env var               |
 | `integrationsEnabled` | Enable dd-trace automatic integrations               | `false`                        |
-| `defaultUserId`       | Default user ID for all spans                        | (none)                         |
-| `defaultSessionId`    | Default session ID for all spans                     | (none)                         |
 
 Note that the `site` is also used to specify non-default regions, e.g. `us3.datadoghq.com` instead of `us1.datadoghq.com`.
 
@@ -80,18 +78,17 @@ The exporter reads configuration from environment variables:
 
 Mastra span types are mapped to Datadog LLMObs span kinds:
 
-| Mastra SpanType      | Datadog Kind |
-| -------------------- | ------------ |
-| `AGENT_RUN`          | `agent`      |
-| `MODEL_GENERATION`   | `workflow`   |
-| `MODEL_STEP`         | `llm`        |
-| `MODEL_CHUNK`        | `task`       |
-| `TOOL_CALL`          | `tool`       |
-| `MCP_TOOL_CALL`      | `tool`       |
-| `WORKFLOW_RUN`       | `workflow`   |
-| `WORKFLOW_STEP`      | `task`       |
-| Other workflow types | `task`       |
-| `GENERIC`            | `task`       |
+| Mastra SpanType    | Datadog Kind |
+| ------------------ | ------------ |
+| `AGENT_RUN`        | `agent`      |
+| `MODEL_GENERATION` | `workflow`   |
+| `MODEL_STEP`       | `llm`        |
+| `TOOL_CALL`        | `tool`       |
+| `MCP_TOOL_CALL`    | `tool`       |
+| `WORKFLOW_RUN`     | `workflow`   |
+| All other types    | `task`       |
+
+All unmapped span types (including `MODEL_CHUNK`, `GENERIC`, etc., and future span types) automatically default to `task`.
 
 ## Features
 

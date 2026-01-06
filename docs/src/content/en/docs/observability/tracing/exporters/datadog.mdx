@@ -70,8 +70,6 @@ new DatadogExporter({
 
   // Advanced settings
   integrationsEnabled: false, // Enable dd-trace auto-instrumentation
-  defaultUserId: "anonymous", // Default user ID for all spans
-  defaultSessionId: undefined, // Default session ID for all spans
 
   // Diagnostic logging
   logLevel: "info", // debug | info | warn | error
@@ -91,26 +89,6 @@ new DatadogExporter({
 ```
 
 Note: When using agent mode, the API key is read from the local agent's configuration.
-
-## Using Tags
-
-Tags help you categorize and filter traces in the Datadog LLM Observability dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear in Datadog's trace view and can be used for filtering. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
 
 ## Evaluation Scoring
 
@@ -143,6 +121,8 @@ Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 | `WORKFLOW_RUN`       | `workflow`   |
 | Other workflow types | `task`       |
 | `GENERIC`            | `task`       |
+
+Other/future Mastra span types will default to 'task' when mapped unless specified.
 
 ## Related
 

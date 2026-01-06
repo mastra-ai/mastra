@@ -1,6 +1,5 @@
 ---
 '@mastra/datadog': minor
-'@mastra/server': patch
 ---
 
 New Datadog LLM Observability exporter for Mastra applications.
@@ -51,6 +50,4 @@ const mastra = new Mastra({
 });
 ```
 
-This is an initial beta release. The API is stable but may receive enhancements in future versions.
-
-Also, a bug was patched in the mastra server package to prevent tags from being stripped from exported traces. This fix may be implemented differently in ongoing work implementing Mastra's tagging capabilities.
+This is an initial experimental beta release. Breaking changes may occur in future versions as the API evolves.

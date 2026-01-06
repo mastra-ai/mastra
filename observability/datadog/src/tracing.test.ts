@@ -1154,55 +1154,6 @@ describe('DatadogExporter', () => {
     });
   });
 
-  describe('default user/session IDs', () => {
-    it('uses default userId when not in metadata', async () => {
-      const exporter = new DatadogExporter({
-        mlApp: 'test',
-        apiKey: 'test-key',
-        defaultUserId: 'default-user',
-      });
-      const span = createMockSpan();
-
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
-
-      expect(mockTrace).toHaveBeenCalledWith(expect.objectContaining({ userId: 'default-user' }), expect.any(Function));
-    });
-
-    it('uses default sessionId when not in metadata', async () => {
-      const exporter = new DatadogExporter({
-        mlApp: 'test',
-        apiKey: 'test-key',
-        defaultSessionId: 'default-session',
-      });
-      const span = createMockSpan();
-
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
-
-      expect(mockTrace).toHaveBeenCalledWith(
-        expect.objectContaining({ sessionId: 'default-session' }),
-        expect.any(Function),
-      );
-    });
-
-    it('prefers metadata userId over default', async () => {
-      const exporter = new DatadogExporter({
-        mlApp: 'test',
-        apiKey: 'test-key',
-        defaultUserId: 'default-user',
-      });
-      const span = createMockSpan({
-        metadata: { userId: 'metadata-user' },
-      });
-
-      await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
-
-      expect(mockTrace).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'metadata-user' }),
-        expect.any(Function),
-      );
-    });
-  });
-
   describe('error handling in export', () => {
     it('catches and logs errors from dd-trace during export', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });

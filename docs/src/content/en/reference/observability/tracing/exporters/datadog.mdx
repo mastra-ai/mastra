@@ -26,8 +26,6 @@ interface DatadogExporterConfig extends BaseExporterConfig {
   env?: string;
   agentless?: boolean;
   integrationsEnabled?: boolean;
-  defaultUserId?: string;
-  defaultSessionId?: string;
 }
 ```
 
@@ -77,18 +75,6 @@ Extends `BaseExporterConfig`, which includes:
       name: "integrationsEnabled",
       type: "boolean",
       description: "Enable dd-trace automatic integrations. Default: false.",
-      required: false,
-    },
-    {
-      name: "defaultUserId",
-      type: "string",
-      description: "Default user ID applied to all spans if not specified in metadata.",
-      required: false,
-    },
-    {
-      name: "defaultSessionId",
-      type: "string",
-      description: "Default session ID applied to all spans if not specified in metadata.",
       required: false,
     },
   ]}
@@ -200,13 +186,12 @@ Mastra span types are mapped to Datadog LLMObs span kinds:
 | `AGENT_RUN` | `agent` |
 | `MODEL_GENERATION` | `workflow` |
 | `MODEL_STEP` | `llm` |
-| `MODEL_CHUNK` | `task` |
 | `TOOL_CALL` | `tool` |
 | `MCP_TOOL_CALL` | `tool` |
 | `WORKFLOW_RUN` | `workflow` |
-| `WORKFLOW_STEP` | `task` |
-| Other workflow types | `task` |
-| `GENERIC` | `task` |
+| All other types | `task` |
+
+All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
 
 ## Evaluation Scoring
 

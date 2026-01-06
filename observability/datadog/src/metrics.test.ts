@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { formatUsageMetrics } from './metrics';
 
 describe('formatUsageMetrics', () => {
-  it('transforms AI SDK v5 usage metrics format to Datadog metrics format', () => {
+  it('transforms OpenInference usage metrics format to Datadog metrics format', () => {
     const result = formatUsageMetrics({
       inputTokens: 200,
       outputTokens: 100,

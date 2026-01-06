@@ -82,7 +82,6 @@ export const tracingOptionsSchema = z.object({
   requestContextKeys: z.array(z.string()).optional(),
   traceId: z.string().optional(),
   parentSpanId: z.string().optional(),
-  tags: z.array(z.string()).optional(),
 });
 
 // ============================================================================

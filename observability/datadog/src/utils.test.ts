@@ -34,10 +34,51 @@ describe('kindFor', () => {
 });
 
 describe('SPAN_TYPE_TO_KIND mapping', () => {
-  it('has a mapping for all SpanType values', () => {
+  it('maps all SpanType values to a Datadog kind (explicitly or via task fallback)', () => {
     const spanTypes = Object.values(SpanType);
     for (const spanType of spanTypes) {
-      expect(SPAN_TYPE_TO_KIND[spanType]).toBeDefined();
+      const kind = kindFor(spanType);
+      expect(kind).toBeDefined();
+      expect(['llm', 'agent', 'workflow', 'tool', 'task', 'retrieval', 'embedding']).toContain(kind);
+    }
+  });
+
+  it('only explicitly maps non-task span types', () => {
+    // Verify that only the expected span types have explicit mappings
+    const expectedMappings = {
+      [SpanType.AGENT_RUN]: 'agent',
+      [SpanType.MODEL_GENERATION]: 'workflow',
+      [SpanType.MODEL_STEP]: 'llm',
+      [SpanType.TOOL_CALL]: 'tool',
+      [SpanType.MCP_TOOL_CALL]: 'tool',
+      [SpanType.WORKFLOW_RUN]: 'workflow',
+    };
+
+    expect(Object.keys(SPAN_TYPE_TO_KIND).length).toBe(Object.keys(expectedMappings).length);
+
+    for (const [spanType, expectedKind] of Object.entries(expectedMappings)) {
+      expect(SPAN_TYPE_TO_KIND[spanType as SpanType]).toBe(expectedKind);
+    }
+  });
+
+  it('defaults unmapped types to task', () => {
+    // These should not have explicit mappings and should fall back to 'task'
+    const taskTypes = [
+      SpanType.MODEL_CHUNK,
+      SpanType.WORKFLOW_STEP,
+      SpanType.WORKFLOW_CONDITIONAL,
+      SpanType.WORKFLOW_CONDITIONAL_EVAL,
+      SpanType.WORKFLOW_PARALLEL,
+      SpanType.WORKFLOW_LOOP,
+      SpanType.WORKFLOW_SLEEP,
+      SpanType.WORKFLOW_WAIT_EVENT,
+      SpanType.PROCESSOR_RUN,
+      SpanType.GENERIC,
+    ];
+
+    for (const spanType of taskTypes) {
+      expect(SPAN_TYPE_TO_KIND[spanType]).toBeUndefined();
+      expect(kindFor(spanType)).toBe('task');
     }
   });
 });

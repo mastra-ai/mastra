@@ -12,24 +12,15 @@ export type DatadogSpanKind = 'llm' | 'agent' | 'workflow' | 'tool' | 'task' | '
 
 /**
  * Maps Mastra SpanTypes to Datadog LLMObs span kinds.
+ * Only non-task mappings are defined; unmapped types fall back to 'task'.
  */
-export const SPAN_TYPE_TO_KIND: Record<SpanType, DatadogSpanKind> = {
+export const SPAN_TYPE_TO_KIND: Partial<Record<SpanType, DatadogSpanKind>> = {
   [SpanType.AGENT_RUN]: 'agent',
   [SpanType.MODEL_GENERATION]: 'workflow',
   [SpanType.MODEL_STEP]: 'llm',
-  [SpanType.MODEL_CHUNK]: 'task',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_RUN]: 'workflow',
-  [SpanType.WORKFLOW_STEP]: 'task',
-  [SpanType.WORKFLOW_CONDITIONAL]: 'task',
-  [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'task',
-  [SpanType.WORKFLOW_PARALLEL]: 'task',
-  [SpanType.WORKFLOW_LOOP]: 'task',
-  [SpanType.WORKFLOW_SLEEP]: 'task',
-  [SpanType.WORKFLOW_WAIT_EVENT]: 'task',
-  [SpanType.PROCESSOR_RUN]: 'task',
-  [SpanType.GENERIC]: 'task',
 };
 
 /**
