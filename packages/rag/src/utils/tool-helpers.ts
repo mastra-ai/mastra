@@ -4,6 +4,11 @@ import type { MastraVector } from '@mastra/core/vector';
 
 import type { VectorStoreResolver } from '../tools/types';
 
+interface Logger {
+  error(message: string, data?: Record<string, unknown>): void;
+  warn(message: string, data?: Record<string, unknown>): void;
+}
+
 /**
  * Context for resolving vector stores.
  */
@@ -60,12 +65,14 @@ function buildContextString(context: ResolveVectorStoreContext): string {
  *
  * @param options - Tool options object that may contain a vectorStore property
  * @param context - Context including requestContext, mastra instance, and fallback vectorStoreName
+ * @param logger - Optional logger for warning/error reporting
  * @returns The resolved MastraVector instance, or undefined if not found
  * @throws Error if an explicit vectorStore was provided but is invalid (unless fallbackOnInvalid is true)
  */
 export async function resolveVectorStore(
   options: { vectorStore?: MastraVector | VectorStoreResolver } | Record<string, unknown>,
   context: ResolveVectorStoreContext,
+  logger?: Logger | null,
 ): Promise<MastraVector | undefined> {
   const { requestContext, mastra, vectorStoreName, fallbackOnInvalid = false } = context;
 
@@ -81,8 +88,9 @@ export async function resolveVectorStore(
         const receivedType = resolved === null ? 'null' : resolved === undefined ? 'undefined' : typeof resolved;
 
         if (fallbackOnInvalid) {
-          console.warn(
+          logger?.warn(
             `VectorStoreResolver returned invalid value: expected MastraVector instance, got ${receivedType}${contextStr}. Falling back to mastra.getVector("${vectorStoreName}").`,
+            { contextStr, receivedType },
           );
           // Fall back to mastra.getVector if available
           if (mastra && vectorStoreName) {
@@ -106,8 +114,9 @@ export async function resolveVectorStore(
         vectorStoreOption === null ? 'null' : vectorStoreOption === undefined ? 'undefined' : typeof vectorStoreOption;
 
       if (fallbackOnInvalid) {
-        console.warn(
+        logger?.warn(
           `vectorStore option is not a valid MastraVector instance: got ${receivedType}${contextStr}. Falling back to mastra.getVector("${vectorStoreName}").`,
+          { contextStr, receivedType },
         );
         // Fall back to mastra.getVector if available
         if (mastra && vectorStoreName) {
@@ -151,10 +160,6 @@ export function coerceTopK(topK: number | string | undefined, defaultValue: numb
     return defaultValue;
   }
   return defaultValue;
-}
-
-interface Logger {
-  error(message: string, data?: Record<string, unknown>): void;
 }
 
 /**
