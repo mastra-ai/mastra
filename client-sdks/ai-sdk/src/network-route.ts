@@ -4,7 +4,11 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { OutputSchema } from '@mastra/core/stream';
-import { NetworkOutputAccumulator, type NetworkStructuredOutput, type StructuredNetworkOutputOptions } from '@mastra/core/network';
+import {
+  NetworkOutputAccumulator,
+  type NetworkStructuredOutput,
+  type StructuredNetworkOutputOptions,
+} from '@mastra/core/network';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
@@ -20,9 +24,10 @@ export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined>
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
 };
 
-export type NetworkStructuredHandlerParams<OUTPUT extends OutputSchema = undefined> = NetworkStreamHandlerParams<OUTPUT> & {
-  structuredOutputOptions?: StructuredNetworkOutputOptions;
-};
+export type NetworkStructuredHandlerParams<OUTPUT extends OutputSchema = undefined> =
+  NetworkStreamHandlerParams<OUTPUT> & {
+    structuredOutputOptions?: StructuredNetworkOutputOptions;
+  };
 
 export type NetworkStructuredHandlerOptions<OUTPUT extends OutputSchema = undefined> = {
   mastra: Mastra;
