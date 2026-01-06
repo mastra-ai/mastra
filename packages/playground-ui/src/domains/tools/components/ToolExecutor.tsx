@@ -13,7 +13,6 @@ import { Txt } from '@/ds/components/Txt';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
 import { CopyIcon } from 'lucide-react';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 interface ToolExecutorProps {
   isExecutingTool: boolean;
@@ -49,9 +48,9 @@ const ToolExecutor = ({
   // Use a ref to track the current request context value for the copy button
   const requestContextValueRef = useRef<Record<string, unknown>>(initialRequestContextValues || {});
 
-  const { handleCopy: handleCopyRequestContext } = useCopyToClipboard({
-    text: JSON.stringify(requestContextValueRef.current, null, 2),
-  });
+  const handleCopyRequestContext = () => {
+    navigator.clipboard.writeText(JSON.stringify(requestContextValueRef.current, null, 2));
+  };
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">

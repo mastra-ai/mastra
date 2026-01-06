@@ -36,6 +36,8 @@ export function CustomAutoForm<T extends Record<string, any>>({
       // Return cleanup function if one was provided
       return typeof cleanup === 'function' ? cleanup : undefined;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Intentionally run only once on mount - onFormInit is meant to initialize the form, not re-run on changes
   }, []);
 
   const handleSubmit = async (dataRaw: T) => {

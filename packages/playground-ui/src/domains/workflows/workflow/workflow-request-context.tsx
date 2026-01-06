@@ -10,7 +10,6 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/ds/components/Button/Button';
 import { Icon } from '@/ds/icons/Icon';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export interface WorkflowRequestContextProps {
@@ -24,9 +23,9 @@ export const WorkflowRequestContext = ({ workflowId }: WorkflowRequestContextPro
   // Use a ref to track the current value for the copy button
   const currentValueRef = useRef<Record<string, unknown>>(playgroundRequestContext || {});
 
-  const { handleCopy } = useCopyToClipboard({
-    text: JSON.stringify(currentValueRef.current, null, 2),
-  });
+  const handleCopyRequestContext = () => {
+    navigator.clipboard.writeText(JSON.stringify(currentValueRef.current, null, 2));
+  };
 
   // Parse requestContextSchema if the workflow has one
   const zodRequestContextSchema: ZodType | undefined = useMemo(() => {
@@ -59,7 +58,7 @@ export const WorkflowRequestContext = ({ workflowId }: WorkflowRequestContextPro
         <Txt as="p" variant="ui-sm" className="text-icon3">
           This workflow has a request context schema defined.
         </Txt>
-        <Button variant="light" size="md" onClick={handleCopy}>
+        <Button variant="light" size="md" onClick={handleCopyRequestContext}>
           <Icon>
             <CopyIcon className="h-4 w-4" />
           </Icon>

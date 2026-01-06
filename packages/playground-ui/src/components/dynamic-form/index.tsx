@@ -47,6 +47,12 @@ export function DynamicForm<T extends z.ZodSchema>({
   hideSubmitButton,
   children,
 }: DynamicFormProps<T>) {
+  // Early return must come before hooks to comply with Rules of Hooks
+  if (!schema) {
+    console.error('no form schema found');
+    return null;
+  }
+
   const isNotZodObject = !(schema instanceof ZodObject);
 
   // Use refs to store callbacks so they don't cause re-renders
@@ -54,11 +60,6 @@ export function DynamicForm<T extends z.ZodSchema>({
   const onSubmitRef = useRef(onSubmit);
   onChangeRef.current = onChange;
   onSubmitRef.current = onSubmit;
-
-  if (!schema) {
-    console.error('no form schema found');
-    return null;
-  }
 
   // Memoize the schema provider to prevent form remounting
   const schemaProvider = useMemo(() => {
