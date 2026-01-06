@@ -1783,7 +1783,9 @@ export class Workflow<
       res = await run.timeTravel({
         inputData: timeTravel?.inputData,
         resumeData: timeTravel?.resumeData,
-        initialState: state,
+        // Type assertion: state is output<TState> but initialState expects input<TState>
+        // For schemas without transforms, these are the same at runtime
+        initialState: state as z.input<TState>,
         step: timeTravel?.steps,
         context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
         nestedStepsContext: timeTravel?.nestedStepResults as any,
@@ -1812,7 +1814,8 @@ export class Workflow<
         requestContext,
         tracingContext,
         outputWriter,
-        initialState: state,
+        // Type assertion: state is output<TState> but initialState expects input<TState>
+        initialState: state as z.input<TState>,
         outputOptions: { includeState: true, includeResumeLabels: true },
         perStep,
       });
@@ -1848,7 +1851,9 @@ export class Workflow<
       throw res.error;
     }
 
-    return res.status === 'success' ? res.result : undefined;
+    // Type assertion needed: when status is not 'success' and not 'failed', we return undefined
+    // This matches the runtime behavior even though the type signature doesn't allow it
+    return (res.status === 'success' ? res.result : undefined) as z.infer<TOutput>;
   }
 
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput) {

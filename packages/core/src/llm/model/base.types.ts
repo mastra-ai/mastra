@@ -75,7 +75,7 @@ type GenerateTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONS
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: GenerateTextOnStepFinishCallback<inferOutput<Output>>;
+    onStepFinish?: GenerateTextOnStepFinishCallback<Tools>;
     experimental_output?: Output;
   };
 
@@ -98,8 +98,8 @@ export type GenerateTextResult<
   TracingProperties;
 
 export type OriginalGenerateObjectOptions<Output extends ZodSchema | JSONSchema7 | undefined = undefined> =
-  | Parameters<typeof generateObject<inferOutput<Output>>>[0]
-  | (Parameters<typeof generateObject<inferOutput<Output>>>[0] & { output: 'array' })
+  | Parameters<typeof generateObject<inferOutput<Output> extends string ? inferOutput<Output> : any>>[0]
+  | (Parameters<typeof generateObject<inferOutput<Output> extends string ? inferOutput<Output> : any>>[0] & { output: 'array' })
   | (Parameters<typeof generateObject<string>>[0] & { output: 'enum' })
   | (Parameters<typeof generateObject>[0] & { output: 'no-schema' });
 
@@ -139,8 +139,8 @@ type StreamTextOptions<Tools extends ToolSet, Output extends ZodSchema | JSONSch
   MastraCustomLLMOptionsKeys | 'model' | 'onStepFinish' | 'onFinish'
 > &
   MastraCustomLLMOptions & {
-    onStepFinish?: StreamTextOnStepFinishCallback<inferOutput<Output>>;
-    onFinish?: StreamTextOnFinishCallback<inferOutput<Output>>;
+    onStepFinish?: StreamTextOnStepFinishCallback<Tools>;
+    onFinish?: StreamTextOnFinishCallback<Tools>;
     experimental_output?: Output;
   };
 

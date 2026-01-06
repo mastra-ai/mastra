@@ -569,8 +569,8 @@ export class CoreToolBuilder extends MastraBase {
 
     if (applicableLayer && originalSchema) {
       // Get the transformed Zod schema (with constraints removed/modified)
-      // Type assertion needed due to v3/v4 schema compat layer differences
-      processedZodSchema = applicableLayer.processZodType(originalSchema) as z.ZodTypeAny;
+      // Double assertion needed due to v3/v4 schema compat layer type incompatibility
+      processedZodSchema = applicableLayer.processZodType(originalSchema) as unknown as z.ZodTypeAny;
       // Convert to AI SDK Schema for the LLM
       processedSchema = applyCompatLayer({
         schema: originalSchema,
