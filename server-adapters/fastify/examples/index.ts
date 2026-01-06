@@ -10,6 +10,34 @@ import Fastify from 'fastify';
 import { z } from 'zod';
 import { MastraServer } from '../src/index';
 
+// Type definitions for API responses
+interface GeocodingResponse {
+  results?: { latitude: number; longitude: number; name: string }[];
+}
+
+interface CurrentWeatherResponse {
+  current: {
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    wind_gusts_10m: number;
+    weather_code: number;
+  };
+}
+
+interface ForecastWeatherResponse {
+  current: {
+    time: string;
+    precipitation: number;
+    weathercode: number;
+  };
+  hourly: {
+    precipitation_probability: number[];
+    temperature_2m: number[];
+  };
+}
+
 const storage = new LibSQLStore({
   id: 'fastify-storage',
   url: 'file:./mastra.db',
@@ -35,7 +63,7 @@ export const weatherTool = createTool({
     const location = inputData.location;
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = (await geocodingResponse.json()) as any;
+    const geocodingData = (await geocodingResponse.json()) as GeocodingResponse;
 
     if (!geocodingData.results?.[0]) {
       throw new Error(`Location '${location}' not found`);
@@ -46,7 +74,7 @@ export const weatherTool = createTool({
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
 
     const response = await fetch(weatherUrl);
-    const data = (await response.json()) as any;
+    const data = (await response.json()) as CurrentWeatherResponse;
 
     return {
       temperature: data.current.temperature_2m,
@@ -154,9 +182,7 @@ const fetchWeather = createStep({
   execute: async ({ inputData }) => {
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
+    const geocodingData = (await geocodingResponse.json()) as GeocodingResponse;
 
     if (!geocodingData.results?.[0]) {
       throw new Error(`Location '${inputData.city}' not found`);
@@ -166,17 +192,7 @@ const fetchWeather = createStep({
 
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
     const response = await fetch(weatherUrl);
-    const data = (await response.json()) as {
-      current: {
-        time: string;
-        precipitation: number;
-        weathercode: number;
-      };
-      hourly: {
-        precipitation_probability: number[];
-        temperature_2m: number[];
-      };
-    };
+    const data = (await response.json()) as ForecastWeatherResponse;
 
     const forecast = {
       date: new Date().toISOString(),
