@@ -6,6 +6,7 @@ import { useChat } from '@ai-sdk/react';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
 import { MessageList } from '@mastra/core/agent';
+import { AIV4Adapter } from '@mastra/core/agent/message-list/adapters';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai-v5';
@@ -14,7 +15,6 @@ import { JSDOM } from 'jsdom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { weatherAgent } from '../v4/mastra/agents/weather';
 import { weatherAgent as weatherAgentV5 } from '../v5/mastra/agents/weather';
-import { AIV4Adapter } from '@mastra/core/agent/message-list/adapters';
 
 // Set up JSDOM environment for React testing
 const dom = new JSDOM('<!doctype html><html><body></body></html>', {
