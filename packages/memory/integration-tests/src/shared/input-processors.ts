@@ -523,7 +523,7 @@ export function getInputProcessorsTests(config: InputProcessorsTestConfig) {
 
       expect(allUserContent).toContain('apple');
 
-      // With lastMessages: 0 and topK: 1, only the semantically matched message
+      // With lastMessages: 1 and topK: 1, only the semantically matched message
       // should appear. Other messages should NOT be fetched.
       expect(allUserContent).not.toContain('cat');
       expect(allUserContent).not.toContain('javascript');
