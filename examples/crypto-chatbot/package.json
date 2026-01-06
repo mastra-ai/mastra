@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@ai-sdk/react": "^1.2.12",
+    "@ai-sdk/react": "^3.0.5",
     "@mastra/core": "latest",
     "@mastra/loggers": "latest",
     "@mastra/memory": "latest",

@@ -11,8 +11,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
-    "@ai-sdk/fireworks": "^0.2.16",
+    "@ai-sdk/anthropic": "^3.0.2",
+    "@ai-sdk/fireworks": "^2.0.2",
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",

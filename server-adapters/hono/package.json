@@ -46,7 +46,7 @@
     "hono": "^4.11.3",
     "@hono/node-server": "^1.19.6",
     "@hono/swagger-ui": "^0.5.2",
-    "@ai-sdk/openai": "^2.0.62",
+    "@ai-sdk/openai": "^3.0.2",
     "zod": "^3.25.0"
   },
   "peerDependencies": {
