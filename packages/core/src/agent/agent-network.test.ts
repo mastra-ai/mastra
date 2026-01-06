@@ -1014,3 +1014,151 @@ describe('Agent - network - tool context validation', () => {
     );
   });
 });
+
+describe('Agent - network - completion validation', () => {
+  it('should use custom completion scorers when provided', async () => {
+    const memory = new MockMemory();
+
+    // Mock scorer that always passes
+    const mockScorer = {
+      id: 'test-scorer',
+      name: 'Test Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Test passed' }),
+    };
+
+    // Mock routing agent response - no primitive selected (task handled directly)
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Task complete - no delegation needed',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'validation-test-network',
+      name: 'Validation Test Network',
+      instructions: 'Test network for validation',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something simple', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'validation-test-thread',
+        resource: 'validation-test-resource',
+      },
+    });
+
+    // Consume stream and collect chunks
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify scorer was called
+    expect(mockScorer.run).toHaveBeenCalled();
+
+    // Verify validation events were emitted
+    const validationStartEvents = chunks.filter(c => c.type === 'network-validation-start');
+    const validationEndEvents = chunks.filter(c => c.type === 'network-validation-end');
+
+    expect(validationStartEvents.length).toBeGreaterThan(0);
+    expect(validationEndEvents.length).toBeGreaterThan(0);
+
+    // Verify validation end event has correct payload
+    const validationEnd = validationEndEvents[0];
+    expect(validationEnd.payload.passed).toBe(true);
+  });
+
+  it('should emit validation events with scorer results', async () => {
+    const memory = new MockMemory();
+
+    // Mock scorer that fails
+    const mockScorer = {
+      id: 'failing-scorer',
+      name: 'Failing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failed intentionally' }),
+    };
+
+    // Mock routing agent response
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Attempting completion',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'validation-fail-test-network',
+      name: 'Validation Fail Test Network',
+      instructions: 'Test network for validation failure',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      maxSteps: 1, // Limit to 1 iteration to prevent infinite loop
+      memory: {
+        thread: 'validation-fail-test-thread',
+        resource: 'validation-fail-test-resource',
+      },
+    });
+
+    // Consume stream and collect chunks
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify validation end event shows failure
+    const validationEndEvents = chunks.filter(c => c.type === 'network-validation-end');
+    expect(validationEndEvents.length).toBeGreaterThan(0);
+
+    const validationEnd = validationEndEvents[0];
+    expect(validationEnd.payload.passed).toBe(false);
+    expect(validationEnd.payload.results).toHaveLength(1);
+    expect(validationEnd.payload.results[0].reason).toBe('Test failed intentionally');
+  });
+});

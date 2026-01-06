@@ -26,12 +26,14 @@
  * ```
  */
 
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { z } from 'zod';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { createTool } from '../../tools';
+
 import type { MastraDBMessage, Agent } from '../../agent';
-import { createScorer, MastraScorer } from '../../evals/base';
+import type { MastraScorer } from '../../evals/base';
+import { createTool } from '../../tools';
 
 const execAsync = promisify(exec);
 
@@ -135,7 +137,7 @@ export interface CompletionConfig {
 
 /**
  * Result of running completion checks.
- * 
+ *
  * Completion checks just evaluate "is this done?" - they don't generate the final result.
  * The final result comes from the agent network's primitives.
  */
@@ -168,7 +170,7 @@ export type ValidationRunResult = CompletionRunResult;
 
 /**
  * Run a single scorer and return the result.
- * 
+ *
  * Scorers receive:
  * - `run.input` - CompletionContext with all network state
  * - `run.output` - The primitive's result (what we're evaluating)
@@ -357,13 +359,10 @@ const defaultCompletionSchema = z.object({
 /**
  * Runs the default LLM completion check.
  * Just evaluates "is this done?" - does NOT generate the final result.
- * 
+ *
  * @internal Used by the network loop when no scorers are configured
  */
-export async function runDefaultCompletionCheck(
-  agent: Agent,
-  context: CompletionContext,
-): Promise<ScorerResult> {
+export async function runDefaultCompletionCheck(agent: Agent, context: CompletionContext): Promise<ScorerResult> {
   const start = Date.now();
 
   const completionPrompt = `
@@ -389,7 +388,7 @@ export async function runDefaultCompletionCheck(
     });
 
     const output = result.object;
-    
+
     return {
       score: output.isComplete ? 1 : 0,
       passed: output.isComplete,

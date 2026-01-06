@@ -252,7 +252,6 @@ export async function createNetworkLoop({
   generateId,
   routingAgentOptions,
   routing,
-  completion,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -264,7 +263,6 @@ export async function createNetworkLoop({
     additionalInstructions?: string;
     verboseIntrospection?: boolean;
   };
-  completion?: CompletionConfig;
 }) {
   const routingStep = createStep({
     id: 'routing-agent-step',
@@ -291,12 +289,6 @@ export async function createNetworkLoop({
     }),
     execute: async ({ inputData, getInitData, writer }) => {
       const initData = await getInitData();
-
-      const completionSchema = z.object({
-        isComplete: z.boolean(),
-        finalResult: z.string(),
-        completionReason: z.string(),
-      });
 
       const routingAgent = await getRoutingAgent({ requestContext, agent, routingConfig: routing });
 
@@ -1042,7 +1034,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
   messages,
   validation,
   routing,
-  onIterationComplete,
+  onIterationComplete: _onIterationComplete,
 }: {
   networkName: string;
   requestContext: RequestContext;
@@ -1102,7 +1094,6 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
     routingAgentOptions: routingAgentOptionsWithoutMemory,
     generateId,
     routing,
-    completion: validation,
   });
 
   // Validation step: runs external checks when LLM says task is complete
@@ -1127,9 +1118,7 @@ export async function networkLoop<OUTPUT extends OutputSchema = undefined>({
 
       // Build completion context
       const memory = await routingAgent.getMemory({ requestContext });
-      const recallResult = memory
-        ? await memory.recall({ threadId: inputData.threadId || runId })
-        : { messages: [] };
+      const recallResult = memory ? await memory.recall({ threadId: inputData.threadId || runId }) : { messages: [] };
 
       const completionContext: CompletionContext = {
         iteration: inputData.iteration,

@@ -50,7 +50,12 @@ import { DefaultVoice } from '../voice';
 import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { OutputWriter, Step, Workflow, WorkflowResult } from '../workflows';
 import { AgentLegacyHandler } from './agent-legacy';
-import type { AgentExecutionOptions, InnerAgentExecutionOptions, MultiPrimitiveExecutionOptions } from './agent.types';
+import type {
+  AgentExecutionOptions,
+  InnerAgentExecutionOptions,
+  MultiPrimitiveExecutionOptions,
+  NetworkOptions,
+} from './agent.types';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
@@ -123,7 +128,7 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions>;
   #defaultStreamOptionsLegacy: DynamicArgument<AgentStreamOptions>;
   #defaultOptions: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
-  #defaultNetworkOptions: DynamicArgument<import('./agent.types').NetworkOptions>;
+  #defaultNetworkOptions: DynamicArgument<NetworkOptions>;
   #tools: DynamicArgument<TTools>;
   #scorers: DynamicArgument<MastraScorers>;
   #agents: DynamicArgument<Record<string, Agent>>;
@@ -919,11 +924,9 @@ export class Agent<TAgentId extends string = string, TTools extends ToolsInput =
    * console.log(options.validation?.checks); // [testsCheck, buildCheck]
    * ```
    */
-  public getDefaultNetworkOptions({
-    requestContext = new RequestContext(),
-  }: { requestContext?: RequestContext } = {}):
-    | import('./agent.types').NetworkOptions
-    | Promise<import('./agent.types').NetworkOptions> {
+  public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
+    | NetworkOptions
+    | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
