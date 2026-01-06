@@ -913,28 +913,6 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.12))(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)
 
-  filesystem/local:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-    devDependencies:
-      '@types/node':
-        specifier: 22.13.17
-        version: 22.13.17
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(@microsoft/api-extractor@7.55.2(@types/node@22.13.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.12))(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)
-
   observability/_test-utils:
     devDependencies:
       '@mastra/core':
@@ -3435,28 +3413,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.12(@opentelemetry/api@1.9.0)(@types/debug@4.1.12)(@types/node@22.13.17)(@vitest/ui@4.0.12)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.30.2)(msw@2.12.4(@types/node@22.13.17)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-
-  sandbox/local:
-    dependencies:
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-    devDependencies:
-      '@types/node':
-        specifier: 22.13.17
-        version: 22.13.17
-      rimraf:
-        specifier: ^5.0.0
-        version: 5.0.10
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(@microsoft/api-extractor@7.55.2(@types/node@22.13.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.1)
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-      vitest:
-        specifier: ^1.0.0
-        version: 1.6.1(@types/node@22.13.17)(@vitest/ui@4.0.12(vitest@4.0.12))(jsdom@26.1.0)(lightningcss@1.30.2)(terser@5.44.1)
 
   server-adapters/_test-utils:
     dependencies:
