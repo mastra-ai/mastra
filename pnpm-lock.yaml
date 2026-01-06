@@ -22,6 +22,7 @@ overrides:
   cookie: '>=0.7.2'
   tmp: '>=0.2.5'
   jsondiffpatch: '>=0.7.3'
+  ssri: '>=6.0.2'
 
 patchedDependencies:
   '@changesets/get-dependents-graph':
@@ -2371,9 +2372,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.0.12(vitest@4.0.16)
-      ai:
-        specifier: ^4.3.19
-        version: 4.3.19(react@19.2.3)(zod@3.25.76)
       dotenv:
         specifier: ^17.0.0
         version: 17.2.3
