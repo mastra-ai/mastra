@@ -1237,4 +1237,465 @@ describe('Agent - network - completion validation', () => {
       isComplete: true,
     });
   });
+
+  it('should retry when validation fails and succeed on subsequent iteration', async () => {
+    const memory = new MockMemory();
+    let scorerCallCount = 0;
+
+    // Mock scorer that fails first, then passes
+    const mockScorer = {
+      id: 'retry-scorer',
+      name: 'Retry Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount === 1) {
+          return { score: 0, reason: 'First attempt failed' };
+        }
+        return { score: 1, reason: 'Second attempt passed' };
+      }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Working on task',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'retry-test-network',
+      name: 'Retry Test Network',
+      instructions: 'Test network for retry behavior',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something that needs retry', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      maxSteps: 5,
+      memory: {
+        thread: 'retry-test-thread',
+        resource: 'retry-test-resource',
+      },
+    });
+
+    // Consume the stream
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify scorer was called twice (fail then pass)
+    expect(mockScorer.run).toHaveBeenCalledTimes(2);
+
+    // Verify we had multiple validation events
+    const validationEndEvents = chunks.filter(c => c.type === 'network-validation-end');
+    expect(validationEndEvents.length).toBe(2);
+
+    // First validation failed, second passed
+    expect(validationEndEvents[0].payload.passed).toBe(false);
+    expect(validationEndEvents[1].payload.passed).toBe(true);
+  });
+
+  it('should respect maxSteps even when validation keeps failing', async () => {
+    const memory = new MockMemory();
+
+    // Mock scorer that always fails
+    const mockScorer = {
+      id: 'always-fail-scorer',
+      name: 'Always Fail Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Always fails' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Trying again',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'max-steps-test-network',
+      name: 'Max Steps Test Network',
+      instructions: 'Test network for max steps',
+      model: mockModel,
+      memory,
+    });
+
+    const maxSteps = 3;
+    const anStream = await networkAgent.network('Do something impossible', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      maxSteps,
+      memory: {
+        thread: 'max-steps-test-thread',
+        resource: 'max-steps-test-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Scorer should be called maxSteps+1 times because:
+    // - iterations are 0-indexed (0, 1, 2, 3)
+    // - loop stops when iteration >= maxSteps (after iteration 3)
+    // So with maxSteps=3, we get iterations 0, 1, 2, 3 = 4 calls
+    expect(mockScorer.run).toHaveBeenCalledTimes(maxSteps + 1);
+  });
+
+  it('should require all scorers to pass with "all" strategy', async () => {
+    const memory = new MockMemory();
+
+    // Two scorers - one passes, one fails
+    const passingScorer = {
+      id: 'passing-scorer',
+      name: 'Passing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Passed' }),
+    };
+
+    const failingScorer = {
+      id: 'failing-scorer',
+      name: 'Failing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Failed' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Task done',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'all-strategy-test-network',
+      name: 'All Strategy Test Network',
+      instructions: 'Test network for all strategy',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [passingScorer as any, failingScorer as any],
+        strategy: 'all',
+      },
+      maxSteps: 1,
+      memory: {
+        thread: 'all-strategy-test-thread',
+        resource: 'all-strategy-test-resource',
+      },
+    });
+
+    // Consume the stream
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Both scorers should be called
+    expect(passingScorer.run).toHaveBeenCalled();
+    expect(failingScorer.run).toHaveBeenCalled();
+
+    // Validation should fail because not all scorers passed
+    const validationEndEvents = chunks.filter(c => c.type === 'network-validation-end');
+    expect(validationEndEvents[0].payload.passed).toBe(false);
+    expect(validationEndEvents[0].payload.results).toHaveLength(2);
+  });
+
+  it('should pass with one scorer using "any" strategy', async () => {
+    const memory = new MockMemory();
+
+    // Two scorers - one passes, one fails
+    const passingScorer = {
+      id: 'passing-scorer',
+      name: 'Passing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Passed' }),
+    };
+
+    const failingScorer = {
+      id: 'failing-scorer',
+      name: 'Failing Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Failed' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Task done',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'any-strategy-test-network',
+      name: 'Any Strategy Test Network',
+      instructions: 'Test network for any strategy',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [passingScorer as any, failingScorer as any],
+        strategy: 'any',
+      },
+      memory: {
+        thread: 'any-strategy-test-thread',
+        resource: 'any-strategy-test-resource',
+      },
+    });
+
+    // Consume the stream
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Validation should pass because at least one scorer passed
+    const validationEndEvents = chunks.filter(c => c.type === 'network-validation-end');
+    expect(validationEndEvents[0].payload.passed).toBe(true);
+  });
+
+  it('should save feedback to memory when validation fails', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture feedback
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails
+    const mockScorer = {
+      id: 'feedback-scorer',
+      name: 'Feedback Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Custom failure reason for testing' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Attempting task',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'feedback-test-network',
+      name: 'Feedback Test Network',
+      instructions: 'Test network for feedback injection',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      maxSteps: 1,
+      memory: {
+        thread: 'feedback-test-thread',
+        resource: 'feedback-test-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Find feedback message in saved messages
+    const feedbackMessages = savedMessages.filter(msg => {
+      const text = msg.content?.parts?.[0]?.text || '';
+      return text.includes('[NOT COMPLETE]');
+    });
+
+    expect(feedbackMessages.length).toBeGreaterThan(0);
+
+    // Verify feedback contains scorer reason
+    const feedbackText = feedbackMessages[0].content.parts[0].text;
+    expect(feedbackText).toContain('Custom failure reason for testing');
+    expect(feedbackText).toContain('Feedback Scorer');
+  });
+
+  it('should call onIterationComplete for each iteration in multi-iteration run', async () => {
+    const memory = new MockMemory();
+    const iterationCallbacks: any[] = [];
+    let scorerCallCount = 0;
+
+    // Mock scorer that fails twice, then passes
+    const mockScorer = {
+      id: 'multi-iter-scorer',
+      name: 'Multi Iteration Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount < 3) {
+          return { score: 0, reason: `Attempt ${scorerCallCount} failed` };
+        }
+        return { score: 1, reason: 'Finally passed' };
+      }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Working on it',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'multi-callback-test-network',
+      name: 'Multi Callback Test Network',
+      instructions: 'Test network for multiple callbacks',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something complex', {
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      maxSteps: 5,
+      onIterationComplete: context => {
+        iterationCallbacks.push({ ...context });
+      },
+      memory: {
+        thread: 'multi-callback-test-thread',
+        resource: 'multi-callback-test-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Should have 3 callbacks (2 failures + 1 success)
+    expect(iterationCallbacks).toHaveLength(3);
+
+    // First two should be incomplete
+    expect(iterationCallbacks[0].isComplete).toBe(false);
+    expect(iterationCallbacks[1].isComplete).toBe(false);
+
+    // Last one should be complete
+    expect(iterationCallbacks[2].isComplete).toBe(true);
+
+    // Iterations should be sequential
+    expect(iterationCallbacks[0].iteration).toBe(0);
+    expect(iterationCallbacks[1].iteration).toBe(1);
+    expect(iterationCallbacks[2].iteration).toBe(2);
+  });
 });
