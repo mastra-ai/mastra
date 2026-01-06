@@ -8,7 +8,7 @@ import { z, ZodType } from 'zod';
 import { Txt } from '@/ds/components/Txt';
 import { ToolExecutor } from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
-import { useMemo, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { toast } from '@/lib/toast';
 
 export interface ToolPanelProps {
@@ -17,8 +17,7 @@ export interface ToolPanelProps {
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
   const { data: agents = {} } = useAgents();
-  // Use a ref instead of state to avoid re-renders when request context changes
-  const requestContextFormDataRef = useRef<Record<string, any>>({});
+  const [requestContextFormData, setRequestContextFormData] = useState<Record<string, any>>({});
 
   // Check if tool exists in any agent's tools
   const agentTool = useMemo(() => {
@@ -66,7 +65,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     // Form values take precedence
     const mergedRequestContext = {
       ...playgroundRequestContext,
-      ...requestContextFormDataRef.current,
+      ...requestContextFormData,
     };
 
     return executeTool({
@@ -98,9 +97,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       zodInputSchema={zodInputSchema}
       zodRequestContextSchema={zodRequestContextSchema}
       initialRequestContextValues={playgroundRequestContext}
-      onRequestContextChange={(data: Record<string, any>) => {
-        requestContextFormDataRef.current = data;
-      }}
+      onRequestContextChange={setRequestContextFormData}
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}

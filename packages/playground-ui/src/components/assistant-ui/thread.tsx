@@ -108,7 +108,7 @@ const Composer = ({ hasMemory, agentId }: ComposerProps) => {
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Only auto-focus on initial mount, not on re-renders
-  const shouldAutoFocus = useRef(document.activeElement === document.body);
+  const shouldAutoFocus = useRef(document?.activeElement === document?.body);
   return (
     <div className="mx-4">
       <ComposerPrimitive.Root>

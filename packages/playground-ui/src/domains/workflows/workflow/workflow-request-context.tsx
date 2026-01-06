@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { ZodType } from 'zod';
 import { CopyIcon } from 'lucide-react';
 import { DynamicForm } from '@/components/dynamic-form';
@@ -18,13 +18,10 @@ export interface WorkflowRequestContextProps {
 
 export const WorkflowRequestContext = ({ workflowId }: WorkflowRequestContextProps) => {
   const { data: workflow, isLoading } = useWorkflow(workflowId);
-  const { requestContext: playgroundRequestContext } = usePlaygroundStore();
-
-  // Use a ref to track the current value for the copy button
-  const currentValueRef = useRef<Record<string, unknown>>(playgroundRequestContext || {});
+  const { requestContext: playgroundRequestContext, setRequestContext } = usePlaygroundStore();
 
   const handleCopyRequestContext = () => {
-    navigator.clipboard.writeText(JSON.stringify(currentValueRef.current, null, 2));
+    navigator.clipboard.writeText(JSON.stringify(playgroundRequestContext, null, 2));
   };
 
   // Parse requestContextSchema if the workflow has one
@@ -68,7 +65,7 @@ export const WorkflowRequestContext = ({ workflowId }: WorkflowRequestContextPro
         schema={zodRequestContextSchema}
         defaultValues={playgroundRequestContext}
         onChange={(values: unknown) => {
-          currentValueRef.current = values as Record<string, unknown>;
+          setRequestContext(values as Record<string, any>);
         }}
         hideSubmitButton={true}
         className="h-auto"
