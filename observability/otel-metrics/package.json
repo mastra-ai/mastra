@@ -1,0 +1,63 @@
+{
+  "name": "@mastra/otel-metrics",
+  "version": "1.0.0-beta.1",
+  "description": "OpenTelemetry metrics collector for Mastra observability",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*",
+    "@opentelemetry/sdk-metrics": "^2.0.1",
+    "@types/node": "^22.13.9",
+    "eslint": "^9.22.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^4.0.0"
+  },
+  "keywords": [
+    "mastra",
+    "observability",
+    "metrics",
+    "opentelemetry",
+    "otel",
+    "monitoring",
+    "agentic"
+  ],
+  "author": "Mastra",
+  "license": "Elastic-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastra-ai/mastra",
+    "directory": "observability/otel-metrics"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "homepage": "https://mastra.ai/docs/observability"
+}
