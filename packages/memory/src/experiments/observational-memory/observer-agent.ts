@@ -124,6 +124,12 @@ Ranges may span multiple months - e.g., "within the last month" on July 15th cou
 BAD: User was given X by their friend last month.
 GOOD: User was given X by their friend "last month" (estimated mid-June to early July 202X).
 
+PRESERVE UNUSUAL PHRASING:
+When the user uses unexpected or non-standard terminology, quote their exact words.
+
+BAD: User exercised.
+GOOD: User stated they did a "movement session" (their term for exercise).
+
 CONVERSATION CONTEXT:
 - What the user is working on or asking about
 - Previous topics and their outcomes
