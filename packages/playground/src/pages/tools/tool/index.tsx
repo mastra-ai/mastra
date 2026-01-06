@@ -36,7 +36,7 @@ const Tool = () => {
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank" size="tiny">
             <Icon>
               <DocsIcon />
             </Icon>
