@@ -12,7 +12,16 @@ import { FC, ImgHTMLAttributes, memo, useEffect, useState } from 'react';
 import remarkGfm from 'remark-gfm';
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { cn } from '@/lib/utils';
-import { SyntaxHighlighter } from '@/ds/components/SyntaxHighlighter';
+import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { makePrismAsyncLightSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
+
+const SyntaxHighlighter = makePrismAsyncLightSyntaxHighlighter({
+  style: coldarkDark,
+  customStyle: {
+    margin: 0,
+    backgroundColor: 'black',
+  },
+});
 
 const MarkdownTextImpl = () => {
   return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="aui-md" components={defaultComponents} />;
