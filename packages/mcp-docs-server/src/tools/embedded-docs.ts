@@ -141,15 +141,114 @@ async function readSourceMap(nodeModulesPath: string, packageName: string): Prom
 }
 
 // ============================================================================
-// Tool: listInstalledMastraPackages
+// Tool: getMastraHelp (PRIMARY ENTRY POINT)
+// ============================================================================
+
+export const getMastraHelpTool = {
+  name: 'getMastraHelp',
+  description: `START HERE when working with Mastra code or implementing Mastra features.
+
+    Use this when you need to:
+    - Understand how to use Mastra APIs (agents, tools, workflows, memory, RAG, etc.)
+    - Implement features with Mastra packages
+    - Find documentation for Mastra code
+    - Look up Mastra type definitions and code examples
+    - Learn about Mastra architecture and patterns
+
+    This tool explains the complete embedded documentation system and guides you to the right tools for your needs.`,
+  parameters: z.object({
+    projectPath: z
+      .string()
+      .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)'),
+  }),
+  execute: async (args: { projectPath: string }) => {
+    void logger.debug('Executing getMastraHelp tool', { projectPath: args.projectPath });
+
+    const nodeModulesPath = await findNodeModules(args.projectPath);
+    if (!nodeModulesPath) {
+      return `No node_modules directory found starting from: ${args.projectPath}
+
+Make sure you're running this from within a Node.js project that has Mastra packages installed.`;
+    }
+
+    const packages = await getInstalledMastraPackages(nodeModulesPath);
+    if (packages.length === 0) {
+      return `No Mastra packages with embedded documentation found in your project.
+
+To use these tools, install Mastra packages like:
+- npm install @mastra/core
+- npm install @mastra/memory
+- npm install @mastra/rag
+
+Then rebuild/reinstall to generate embedded docs.`;
+    }
+
+    return `# Mastra Documentation System
+
+Found ${packages.length} Mastra package(s) with embedded documentation:
+${packages.map(pkg => `- ${pkg}`).join('\n')}
+
+## Available Documentation Tools
+
+Use these tools to learn about and implement Mastra features:
+
+### 1. **listMastraPackages** - Discover available packages
+   When to use: Start here to see what Mastra packages are installed
+   Returns: List of packages with documentation
+
+### 2. **getMastraExports** - Explore package APIs
+   When to use: After choosing a package, see what classes/functions/types it exports
+   Example: See all exports from @mastra/core (Agent, Tool, Workflow, etc.)
+   Returns: List of exports with their source file locations
+
+### 3. **getMastraExportDetails** - Get detailed API reference
+   When to use: When you need type definitions or implementation code for a specific export
+   Example: Get full details on the Agent class, createTool function, etc.
+   Returns: TypeScript type definitions and optionally source code
+
+### 4. **readMastraDocs** - Read topic-based guides
+   When to use: Learn about concepts like agents, tools, memory, workflows
+   Example: Read all documentation about implementing agents
+   Returns: Comprehensive guides and examples
+
+### 5. **searchMastraDocs** - Search across all documentation
+   When to use: Find specific information across all packages
+   Example: Search for "memory processors" or "tool composition"
+   Returns: Relevant excerpts from documentation
+
+## Typical Workflow
+
+1. Start with **listMastraPackages** to see what's available
+2. Use **getMastraExports** to explore a package's API surface
+3. Use **getMastraExportDetails** for specific type definitions
+4. Use **readMastraDocs** to learn concepts and patterns
+5. Use **searchMastraDocs** when looking for specific topics
+
+## Next Steps
+
+Run **listMastraPackages** to see your installed packages and start exploring!`;
+  },
+};
+
+// ============================================================================
+// Tool: listMastraPackages
 // ============================================================================
 
 export const listInstalledPackagesTool = {
-  name: 'listInstalledMastraPackages',
-  description: `List all installed @mastra/* packages that have embedded documentation.
-    Use this to discover which Mastra packages are available in the current project.`,
+  name: 'listMastraPackages',
+  description: `Discover which Mastra packages are installed and have documentation available.
+
+    Use this when you need to:
+    - See what Mastra packages you can work with
+    - Start exploring Mastra documentation
+    - Check if a specific package is available
+
+    Returns: List of @mastra/* packages (core, memory, rag, etc.) with embedded docs.
+    Next step: Use getMastraExports to explore a specific package's API.`,
   parameters: z.object({
-    projectPath: z.string().describe('Absolute path to the project directory containing node_modules'),
+    projectPath: z
+      .string()
+      .describe('Absolute path to your project root (we will search upward for node_modules with Mastra packages)'),
   }),
   execute: async (args: { projectPath: string }) => {
     void logger.debug('Executing listInstalledMastraPackages tool', {
@@ -173,31 +272,53 @@ Make sure the projectPath points to a directory that contains (or is within) a N
 
     const packages = await getInstalledMastraPackages(nodeModulesPath);
     if (packages.length === 0) {
-      return 'No @mastra/* packages with embedded docs found.';
+      return `No @mastra/* packages with embedded docs found in your project.
+
+Install Mastra packages to get started:
+- npm install @mastra/core
+- npm install @mastra/memory
+- npm install @mastra/rag`;
     }
 
     return [
-      `Found ${packages.length} Mastra package(s) with embedded documentation:`,
+      `# Installed Mastra Packages`,
+      '',
+      `Found ${packages.length} package(s) with embedded documentation:`,
       '',
       ...packages.map(pkg => `- ${pkg}`),
       '',
-      'Use `readMastraSourceMap` to explore exports for a specific package.',
+      '## Next Steps',
+      '',
+      '1. Use **getMastraExports** with a package name to see all available APIs',
+      '2. Use **readMastraDocs** with a package name to browse topic guides',
+      '3. Use **searchMastraDocs** to find specific information',
     ].join('\n');
   },
 };
 
 // ============================================================================
-// Tool: readMastraSourceMap
+// Tool: getMastraExports
 // ============================================================================
 
 export const readSourceMapTool = {
-  name: 'readMastraSourceMap',
-  description: `Read the SOURCE_MAP.json for a Mastra package to discover all exported symbols.
-    Shows each export with its type definition and implementation file.`,
+  name: 'getMastraExports',
+  description: `Explore the complete API surface of a Mastra package - see all classes, functions, types, and constants.
+
+    Use this when you need to:
+    - Discover what APIs a Mastra package provides (Agent, Tool, Workflow, etc.)
+    - See all available classes and functions before implementing
+    - Find the right export for your use case
+    - Understand package structure and organization
+
+    Returns: List of all exports with their source file locations.
+    Next step: Use getMastraExportDetails to get full type definitions and code for a specific export.`,
   parameters: z.object({
-    package: z.string().describe('Package name (e.g., "@mastra/core")'),
-    projectPath: z.string().describe('Absolute path to the project directory containing node_modules'),
-    filter: z.string().optional().describe('Filter exports by name (case-insensitive)'),
+    package: z.string().describe('Package name to explore (e.g., "@mastra/core", "@mastra/memory", "@mastra/rag")'),
+    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
+    filter: z
+      .string()
+      .optional()
+      .describe('Optional: filter exports by name (case-insensitive, e.g., "Agent", "create", "Tool")'),
   }),
   execute: async (args: { package: string; projectPath: string; filter?: string }) => {
     void logger.debug('Executing readMastraSourceMap tool', { args });
@@ -216,12 +337,14 @@ export const readSourceMapTool = {
 
     if (exports.length === 0) {
       return args.filter
-        ? `No exports matching "${args.filter}" in ${args.package}.`
+        ? `No exports matching "${args.filter}" in ${args.package}.
+
+Try running without a filter to see all available exports.`
         : `No exports found in ${args.package}.`;
     }
 
     return [
-      `# ${sourceMap.package} v${sourceMap.version}`,
+      `# ${sourceMap.package} v${sourceMap.version} - API Exports`,
       '',
       `Found ${exports.length} export(s)${args.filter ? ` matching "${args.filter}"` : ''}:`,
       '',
@@ -229,25 +352,52 @@ export const readSourceMapTool = {
         const line = info.line ? `:${info.line}` : '';
         return `- **${name}**: \`${info.implementation}${line}\``;
       }),
+      '',
+      '## Next Steps',
+      '',
+      '- Use **getMastraExportDetails** with an export name to see full type definitions and code',
+      '- Use **readMastraDocs** to read conceptual guides and examples',
+      '- Use **searchMastraDocs** to find specific topics or patterns',
     ].join('\n');
   },
 };
 
 // ============================================================================
-// Tool: findMastraExport
+// Tool: getMastraExportDetails
 // ============================================================================
 
 export const findExportTool = {
-  name: 'findMastraExport',
-  description: `Find detailed information about a specific export from a Mastra package.
-    Returns type definitions and optionally implementation code.`,
+  name: 'getMastraExportDetails',
+  description: `Get complete API reference for a specific Mastra export - type definitions, interfaces, and optionally source code.
+
+    Use this when you need to:
+    - Understand how to use a specific Mastra class or function (Agent, Tool, Workflow, etc.)
+    - See TypeScript type definitions and interfaces
+    - Look up method signatures and parameters
+    - Read implementation code and examples
+    - Understand constructor options and configuration
+
+    Returns: Full TypeScript type definitions and optionally implementation source code.
+    Example: Get details on the Agent class to see how to create and configure agents.`,
   parameters: z.object({
-    package: z.string().describe('Package name (e.g., "@mastra/core")'),
-    exportName: z.string().describe('Export name (e.g., "Agent")'),
-    includeTypes: z.boolean().optional().default(true).describe('Include type definition'),
-    includeImplementation: z.boolean().optional().default(false).describe('Include implementation code'),
-    implementationLines: z.number().optional().default(50).describe('Lines of implementation to show'),
-    projectPath: z.string().describe('Absolute path to the project directory containing node_modules'),
+    package: z.string().describe('Package name (e.g., "@mastra/core", "@mastra/memory")'),
+    exportName: z.string().describe('Exact export name to look up (e.g., "Agent", "createTool", "Workflow")'),
+    includeTypes: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe('Include TypeScript type definitions (recommended: true)'),
+    includeImplementation: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Include source code implementation (useful for understanding internals)'),
+    implementationLines: z
+      .number()
+      .optional()
+      .default(50)
+      .describe('Number of lines of implementation code to show (default: 50)'),
+    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
   }),
   execute: async (args: {
     package: string;
@@ -270,8 +420,14 @@ export const findExportTool = {
       const match = Object.entries(sourceMap.exports).find(
         ([name]) => name.toLowerCase() === args.exportName.toLowerCase(),
       );
-      if (match) return `Export "${args.exportName}" not found. Did you mean "${match[0]}"?`;
-      return `Export "${args.exportName}" not found in ${args.package}.`;
+      if (match) {
+        return `Export "${args.exportName}" not found. Did you mean "${match[0]}"?
+
+Run getMastraExports with package="${args.package}" to see all available exports.`;
+      }
+      return `Export "${args.exportName}" not found in ${args.package}.
+
+Run getMastraExports with package="${args.package}" to see all available exports.`;
     }
 
     const packagePath = path.join(nodeModulesPath, args.package);
@@ -322,23 +478,48 @@ export const findExportTool = {
       }
     }
 
+    output.push(
+      '## Next Steps',
+      '',
+      '- Use **readMastraDocs** to see practical guides and examples',
+      '- Use **searchMastraDocs** to find usage patterns and best practices',
+      '- Use **getMastraExports** to explore related APIs',
+    );
+
     return output.join('\n');
   },
 };
 
 // ============================================================================
-// Tool: readMastraEmbeddedDocs
+// Tool: readMastraDocs
 // ============================================================================
 
 export const readEmbeddedDocsTool = {
-  name: 'readMastraEmbeddedDocs',
-  description: `Read embedded documentation from a Mastra package.
-    Without a topic, lists available topics. With a topic, reads all docs in that folder.`,
+  name: 'readMastraDocs',
+  description: `Read comprehensive guides and documentation on Mastra concepts, patterns, and implementation examples.
+
+    Use this when you need to:
+    - Learn how to implement Mastra features (agents, tools, workflows, memory, RAG, etc.)
+    - Understand Mastra architecture and design patterns
+    - See practical code examples and tutorials
+    - Read getting started guides and best practices
+    - Understand how different components work together
+
+    Returns: Topic-based documentation with explanations, examples, and usage patterns.
+    Available topics: agents, tools, workflows, memory, rag, integrations, deployment, and more.`,
   parameters: z.object({
-    package: z.string().describe('Package name (e.g., "@mastra/core")'),
-    topic: z.string().optional().describe('Topic folder (e.g., "agents", "tools")'),
-    file: z.string().optional().describe('Specific file within the topic'),
-    projectPath: z.string().describe('Absolute path to the project directory containing node_modules'),
+    package: z.string().describe('Package name to read docs from (e.g., "@mastra/core", "@mastra/memory")'),
+    topic: z
+      .string()
+      .optional()
+      .describe(
+        'Optional: topic folder to read (e.g., "agents", "tools", "workflows"). Omit to list all available topics.',
+      ),
+    file: z
+      .string()
+      .optional()
+      .describe('Optional: specific documentation file within the topic (e.g., "01-overview.md")'),
+    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
   }),
   execute: async (args: { package: string; projectPath: string; topic?: string; file?: string }) => {
     void logger.debug('Executing readMastraEmbeddedDocs tool', { args });
@@ -351,7 +532,9 @@ export const readEmbeddedDocsTool = {
     try {
       await fs.stat(docsPath);
     } catch {
-      return `No embedded docs found for ${args.package}.`;
+      return `No embedded docs found for ${args.package}.
+
+Make sure the package is installed and has documentation generated.`;
     }
 
     // List topics if none specified
@@ -361,13 +544,19 @@ export const readEmbeddedDocsTool = {
       const files = entries.filter(e => e.isFile()).map(e => e.name);
 
       return [
-        `# ${args.package} Embedded Docs`,
+        `# ${args.package} - Available Documentation`,
         '',
-        '## Files',
+        '## Root Files',
         ...files.map(f => `- ${f}`),
         '',
-        '## Topics',
-        ...topics.map(t => `- ${t}/`),
+        '## Documentation Topics',
+        ...topics.map(t => `- **${t}/** - Run readMastraDocs with topic="${t}" to read`),
+        '',
+        '## Next Steps',
+        '',
+        '- Choose a topic and run **readMastraDocs** with the topic parameter',
+        '- Use **searchMastraDocs** to search for specific information',
+        '- Use **getMastraExports** to see available APIs',
       ].join('\n');
     }
 
@@ -377,9 +566,19 @@ export const readEmbeddedDocsTool = {
     if (args.file) {
       try {
         const content = await fs.readFile(path.join(topicPath, args.file), 'utf-8');
-        return `# ${args.package}/${args.topic}/${args.file}\n\n${content}`;
+        return `# ${args.package}/${args.topic}/${args.file}
+
+${content}
+
+## Next Steps
+
+- Use **getMastraExportDetails** to see API references for specific classes/functions mentioned
+- Use **searchMastraDocs** to find related topics
+- Use **getMastraExports** to explore available APIs`;
       } catch {
-        return `File not found: ${args.topic}/${args.file}`;
+        return `File not found: ${args.topic}/${args.file}
+
+Run readMastraDocs with package="${args.package}" and topic="${args.topic}" (without file parameter) to see available files.`;
       }
     }
 
@@ -388,33 +587,67 @@ export const readEmbeddedDocsTool = {
       const entries = await fs.readdir(topicPath, { withFileTypes: true });
       const files = entries.filter(e => e.isFile() && e.name.endsWith('.md')).sort();
 
-      if (files.length === 0) return `No markdown files in ${args.topic}/`;
+      if (files.length === 0) {
+        return `No markdown files in ${args.topic}/
+
+Run readMastraDocs with package="${args.package}" (without topic parameter) to see available topics.`;
+      }
 
       const contents: string[] = [`# ${args.package} - ${args.topic}`, ''];
       for (const file of files) {
         const content = await fs.readFile(path.join(topicPath, file.name), 'utf-8');
         contents.push(`## ${file.name}`, '', content, '', '---', '');
       }
+
+      contents.push(
+        '',
+        '## Next Steps',
+        '',
+        '- Use **getMastraExportDetails** to see API references for specific classes/functions mentioned above',
+        '- Use **searchMastraDocs** to find related information',
+        '- Use **getMastraExports** to explore the complete API surface',
+      );
+
       return contents.join('\n');
     } catch {
-      return `Topic not found: ${args.topic}`;
+      return `Topic not found: ${args.topic}
+
+Run readMastraDocs with package="${args.package}" (without topic parameter) to see available topics.`;
     }
   },
 };
 
 // ============================================================================
-// Tool: searchMastraEmbeddedDocs
+// Tool: searchMastraDocs
 // ============================================================================
 
 export const searchEmbeddedDocsTool = {
-  name: 'searchMastraEmbeddedDocs',
-  description: `Search across all embedded documentation in installed Mastra packages.
-    Returns matching excerpts with file paths.`,
+  name: 'searchMastraDocs',
+  description: `Search across all Mastra documentation to find specific information, patterns, or examples.
+
+    Use this when you need to:
+    - Find specific topics or concepts quickly (e.g., "memory processors", "tool composition")
+    - Locate examples of specific features or patterns
+    - Search for error messages or troubleshooting info
+    - Find mentions of specific APIs or configuration options
+    - Discover where a feature is documented
+
+    Returns: Relevant documentation excerpts with file paths, ranked by relevance.
+    Tip: Use specific terms for better results (e.g., "agent memory" vs "memory").`,
   parameters: z.object({
-    query: z.string().describe('Search query (case-insensitive)'),
-    package: z.string().optional().describe('Limit to a specific package'),
-    maxResults: z.number().optional().default(10).describe('Max results (default 10)'),
-    projectPath: z.string().describe('Absolute path to the project directory containing node_modules'),
+    query: z
+      .string()
+      .describe('What to search for (case-insensitive, e.g., "workflow steps", "vector store", "authentication")'),
+    package: z
+      .string()
+      .optional()
+      .describe('Optional: limit search to a specific package (e.g., "@mastra/core"). Omit to search all packages.'),
+    maxResults: z
+      .number()
+      .optional()
+      .default(10)
+      .describe('Optional: maximum number of results to return (default: 10)'),
+    projectPath: z.string().describe('Absolute path to your project root (we will search upward for node_modules)'),
   }),
   execute: async (args: { query: string; projectPath: string; package?: string; maxResults?: number }) => {
     void logger.debug('Executing searchMastraEmbeddedDocs tool', { args });
@@ -476,23 +709,38 @@ export const searchEmbeddedDocsTool = {
     results.sort((a, b) => b.score - a.score);
     const topResults = results.slice(0, args.maxResults || 10);
 
-    if (topResults.length === 0) return `No results for "${args.query}".`;
+    if (topResults.length === 0) {
+      return `No results found for "${args.query}".
+
+Try:
+- Using different search terms
+- Searching for broader topics
+- Using **listMastraPackages** to see available packages
+- Using **readMastraDocs** to browse documentation by topic`;
+    }
 
     return [
-      `# Search: "${args.query}"`,
+      `# Search Results: "${args.query}"`,
       '',
-      `Found ${results.length} result(s):`,
+      `Found ${results.length} result(s), showing top ${topResults.length}:`,
       '',
       ...topResults.map((r, i) => `## ${i + 1}. ${r.pkg} - ${r.file}\n\n\`\`\`\n${r.excerpt}\n\`\`\`\n`),
+      '',
+      '## Next Steps',
+      '',
+      '- Use **readMastraDocs** with a package and topic to read full documentation',
+      '- Use **getMastraExportDetails** to see API details for mentioned classes/functions',
+      '- Refine your search with more specific terms if needed',
     ].join('\n');
   },
 };
 
 // Export all tools
 export const embeddedDocsTools = {
-  listInstalledMastraPackages: listInstalledPackagesTool,
-  readMastraSourceMap: readSourceMapTool,
-  findMastraExport: findExportTool,
-  readMastraEmbeddedDocs: readEmbeddedDocsTool,
-  searchMastraEmbeddedDocs: searchEmbeddedDocsTool,
+  getMastraHelp: getMastraHelpTool,
+  listMastraPackages: listInstalledPackagesTool,
+  getMastraExports: readSourceMapTool,
+  getMastraExportDetails: findExportTool,
+  readMastraDocs: readEmbeddedDocsTool,
+  searchMastraDocs: searchEmbeddedDocsTool,
 };
