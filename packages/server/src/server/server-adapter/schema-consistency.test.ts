@@ -119,7 +119,7 @@ describe('Schema Consistency Across All Routes', () => {
     });
 
     it('all routes should have valid response types', () => {
-      const validResponseTypes = ['json', 'stream', 'datastream-response', 'mcp-http', 'mcp-sse'];
+      const validResponseTypes = ['json', 'text', 'stream', 'datastream-response', 'mcp-http', 'mcp-sse'];
       SERVER_ROUTES.forEach(route => {
         expect(validResponseTypes).toContain(route.responseType);
       });

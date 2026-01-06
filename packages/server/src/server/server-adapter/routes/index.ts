@@ -48,12 +48,18 @@ export type InferParams<
 /**
  * All supported response types for server routes.
  * - 'json': Standard JSON response
+ * - 'text': Plain text response (e.g., metrics in Prometheus format)
  * - 'stream': Streaming response (SSE or raw stream)
  * - 'datastream-response': Pre-built Response object for data streams
  * - 'mcp-http': MCP Streamable HTTP transport (handled by adapter)
  * - 'mcp-sse': MCP SSE transport (handled by adapter)
  */
-export type ResponseType = 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+export type ResponseType = 'stream' | 'json' | 'text' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
+
+/**
+ * Text response type that supports both plain strings and objects with content and contentType.
+ */
+export type TextResponse = string | { content: string; contentType?: string };
 
 export type ServerRouteHandler<
   TParams = Record<string, unknown>,
@@ -66,7 +72,9 @@ export type ServerRouteHandler<
     ? MastraStreamReturn
     : TResponseType extends 'datastream-response'
       ? Response
-      : TResponse
+      : TResponseType extends 'text'
+        ? TextResponse
+        : TResponse
 >;
 
 export type ServerRoute<

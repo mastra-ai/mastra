@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import { listScoresResponseSchema } from '@mastra/core/evals';
 import { scoreTraces } from '@mastra/core/evals/scoreTraces';
+import { isExposableMetricsCollector } from '@mastra/core/observability';
 import type { MastraStorage, ScoresStorage, ObservabilityStorage } from '@mastra/core/storage';
 import {
   tracesFilterSchema,
@@ -227,6 +228,59 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
       });
     } catch (error) {
       handleError(error, 'Error getting scores by span');
+    }
+  },
+});
+
+// ============================================================================
+// Metrics Endpoint
+// ============================================================================
+
+/**
+ * Response schema for the metrics endpoint.
+ * Returns metrics in text format with optional content type.
+ */
+const metricsResponseSchema = z
+  .object({
+    content: z.string(),
+    contentType: z.string().optional(),
+  })
+  .describe('Metrics in text format (e.g., Prometheus exposition format)');
+
+export const GET_METRICS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/metrics',
+  responseType: 'text',
+  responseSchema: metricsResponseSchema,
+  summary: 'Get metrics',
+  description:
+    'Returns metrics in a format suitable for scraping (e.g., Prometheus). Only available if an exposable metrics collector is configured.',
+  tags: ['Observability'],
+  handler: async ({ mastra }) => {
+    try {
+      const metrics = mastra.getMetrics();
+
+      if (!metrics) {
+        throw new HTTPException(404, {
+          message: 'No metrics collector configured. Configure a metrics collector in Mastra to enable this endpoint.',
+        });
+      }
+
+      if (!isExposableMetricsCollector(metrics)) {
+        throw new HTTPException(404, {
+          message:
+            'Metrics collector does not support exposure. Use a collector that implements IExposableMetricsCollector (e.g., @mastra/prometheus).',
+        });
+      }
+
+      // Return an object with the metrics and content type
+      // The adapter will use this to set the proper Content-Type header
+      return {
+        content: await metrics.getMetrics(),
+        contentType: metrics.getContentType(),
+      };
+    } catch (error) {
+      handleError(error, 'Error getting metrics');
     }
   },
 });

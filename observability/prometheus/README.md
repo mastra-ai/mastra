@@ -12,9 +12,9 @@ pnpm add @mastra/prometheus
 
 ## Usage
 
-### With Mastra Server (Recommended)
+### Automatic Metrics Endpoint
 
-The simplest way to use Prometheus metrics is with the Mastra server adapter, which automatically exposes a `/metrics` endpoint:
+When you use `@mastra/prometheus` with a Mastra server, the `/metrics` endpoint is **automatically exposed** - no additional configuration needed:
 
 ```typescript
 import { Mastra } from '@mastra/core';
@@ -35,22 +35,24 @@ const mastra = new Mastra({
   },
 });
 
-// Create Hono app and server
+// Create and start the server - /metrics is automatically available
 const app = new Hono();
 const server = new MastraServer({ app, mastra });
+await server.start();
 
-// Register routes and metrics endpoint
-server.registerContextMiddleware();
-server.registerHttpInstrumentationMiddleware(); // Auto-instrument HTTP requests
-server.registerMetricsEndpoint(); // Exposes GET /metrics
-await server.registerRoutes();
-
-export default app;
+// GET /metrics is now ready for Prometheus to scrape!
 ```
 
-### Manual Endpoint (Without Server Adapter)
+The `/metrics` endpoint:
 
-If you're not using the Mastra server adapter, you can manually expose the metrics:
+- Automatically registered when `registerRoutes()` is called
+- Returns metrics in Prometheus text exposition format
+- Sets the correct `Content-Type` header
+- Returns 404 if no exposable metrics collector is configured
+
+### Manual Endpoint (Standalone Usage)
+
+If you're not using the Mastra server, you can manually expose metrics:
 
 ```typescript
 import { Hono } from 'hono';
