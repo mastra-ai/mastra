@@ -5,7 +5,7 @@ import path from 'node:path';
 import { useChat } from '@ai-sdk/react';
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { MastraClient } from '@mastra/client-js';
-import { AIV4Adapter, AIV5Adapter } from '@mastra/core/agent/message-list/adapters';
+import { AIV4Adapter, AIV5Adapter } from '@mastra/core/agent/message-list';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { DefaultChatTransport, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from 'ai-v5';
