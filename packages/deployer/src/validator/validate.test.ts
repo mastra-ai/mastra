@@ -1,147 +1,107 @@
-import { pathToFileURL } from 'node:url';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-// Reproducing the pattern from validate.ts
-function slash(path: string) {
-  const isExtendedLengthPath = path.startsWith('\\\\?\\');
-  if (isExtendedLengthPath) {
-    return path;
-  }
-  return path.replaceAll('\\', '/');
-}
+import { validate, ValidationError } from './validate';
 
-describe('File URL format validation for Windows paths', () => {
-  /**
-   * These tests demonstrate the bug in validate.ts line 99:
-   *   `import('file://${slash(file)}')`
-   *
-   * On Windows, this produces invalid URLs like:
-   *   file://C:/Users/path/file.js  (WRONG - C: is interpreted as hostname)
-   *
-   * The correct format should be:
-   *   file:///C:/Users/path/file.js (CORRECT - three slashes, C: is part of path)
-   *
-   * This causes the error:
-   *   ERR_UNSUPPORTED_ESM_URL_SCHEME: Received protocol 'c:'
-   */
+describe('ValidationError', () => {
+  it('should set message, type, and stack properties', () => {
+    const args = {
+      message: 'Test error message',
+      type: 'TestError',
+      stack: 'Error stack trace',
+    };
 
-  describe('Windows path format demonstration', () => {
-    // Simulate a Windows-style path that has been slash-converted
-    const windowsPathSlashed = 'C:/Users/test/project/file.js';
+    const error = new ValidationError(args);
 
-    it('should show the buggy URL format from validate.ts', () => {
-      // This is what validate.ts currently produces:
-      const buggyUrl = `file://${windowsPathSlashed}`;
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe('Test error message');
+    expect(error.type).toBe('TestError');
+    expect(error.stack).toBe('Error stack trace');
+  });
+});
 
-      // file://C:/... has only TWO slashes after file:
-      // This is an invalid file URL format for Windows absolute paths
-      expect(buggyUrl).toBe('file://C:/Users/test/project/file.js');
-      expect(buggyUrl.split('/').length).toBeLessThan('file:///C:/Users/test/project/file.js'.split('/').length);
-    });
+describe('validate', () => {
+  let tempDir: string;
+  let moduleMapPath: string;
 
-    it('should show the correct URL format using pathToFileURL', () => {
-      // When on Windows, pathToFileURL correctly produces three slashes
-      // We simulate this by showing what the correct format looks like
-      const correctUrl = 'file:///C:/Users/test/project/file.js';
+  beforeAll(async () => {
+    tempDir = join(tmpdir(), `validate-test-${Date.now()}`);
+    await mkdir(tempDir, { recursive: true });
 
-      // Correct format has THREE slashes after file:
-      expect(correctUrl).toMatch(/^file:\/\/\//);
-
-      // The pathname includes the drive letter
-      const url = new URL(correctUrl);
-      expect(url.protocol).toBe('file:');
-      expect(url.hostname).toBe(''); // Empty hostname for local files
-      expect(url.pathname).toBe('/C:/Users/test/project/file.js');
-    });
-
-    it('should demonstrate why the buggy URL fails on Windows Node.js', () => {
-      const buggyUrl = `file://${windowsPathSlashed}`;
-
-      // The issue is that when Node.js on Windows receives file://C:/path:
-      // 1. Node tries to resolve this as a URL
-      // 2. It sees "C:" as potentially another protocol/scheme
-      // 3. It throws ERR_UNSUPPORTED_ESM_URL_SCHEME with "Received protocol 'c:'"
-      //
-      // This is a Windows-specific issue because:
-      // - On Unix: file:///path works fine (path starts with /)
-      // - On Windows: file://C:/path is ambiguous (C: looks like a scheme)
-      //
-      // The correct format file:///C:/path works because:
-      // - The three slashes indicate an empty authority
-      // - The path /C:/path is clearly a path, not a scheme
-
-      // Verify the buggy URL doesn't have three slashes
-      expect(buggyUrl).not.toMatch(/^file:\/\/\//);
-
-      // Verify it starts with file:// followed by a drive letter
-      expect(buggyUrl).toMatch(/^file:\/\/[A-Z]:/i);
-    });
+    // Create an empty module resolve map
+    moduleMapPath = join(tempDir, 'module-resolve-map.json');
+    await writeFile(moduleMapPath, JSON.stringify({}));
   });
 
-  describe('Unix path compatibility', () => {
-    const unixPath = '/Users/test/project/file.js';
-
-    it('should work correctly with both methods on Unix paths', () => {
-      const correctUrl = pathToFileURL(unixPath).href;
-      const slashedUrl = `file://${slash(unixPath)}`;
-
-      // On Unix, both approaches produce valid URLs because the path
-      // already starts with /, making the total three slashes: file:// + /path
-      expect(correctUrl).toBe('file:///Users/test/project/file.js');
-      expect(slashedUrl).toBe('file:///Users/test/project/file.js');
-      expect(correctUrl).toBe(slashedUrl);
-    });
-
-    it("should show why Unix paths don't have this bug", () => {
-      // Unix path: /path/to/file
-      // After file:// + /path = file:///path/to/file (correct!)
-      // The leading / in the path creates the third slash automatically
-
-      // Windows path: C:/path/to/file
-      // After file:// + C:/path = file://C:/path/to/file (WRONG!)
-      // There's no leading / to create the third slash
-
-      const unixSlashed = `file://${unixPath}`;
-      const windowsSlashed = `file://${'C:/path/to/file'}`;
-
-      expect(unixSlashed.startsWith('file:///')).toBe(true); // Has 3 slashes
-      expect(windowsSlashed.startsWith('file:///')).toBe(false); // Has only 2 slashes
-    });
+  afterAll(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
-  describe('Proposed fix validation', () => {
-    it('should use pathToFileURL().href for cross-platform compatibility', () => {
-      // On any platform, pathToFileURL handles the conversion correctly
-      const testPath = '/tmp/test/file.js';
-      const url = pathToFileURL(testPath).href;
+  it('should resolve for a valid ESM file', async () => {
+    const filePath = join(tempDir, 'valid.js');
+    await writeFile(filePath, 'export const foo = 42;');
 
-      // Always produces a valid file URL
-      expect(url).toMatch(/^file:\/\/\//);
-    });
+    await expect(validate(filePath, { moduleResolveMapLocation: moduleMapPath })).resolves.toBeUndefined();
+  }, 10000);
 
-    it('should correctly handle Windows-style paths with pathToFileURL', () => {
-      // Simulate how validate.ts now generates the URL
-      const windowsPathSlashed = 'C:/Users/test/project/file.js';
+  it('should reject with ValidationError for syntax errors', async () => {
+    const filePath = join(tempDir, 'syntax-error.js');
+    await writeFile(filePath, 'export const foo = {;'); // Invalid syntax
 
-      // OLD (buggy): file://${slash(file)}
-      const buggyUrl = `file://${windowsPathSlashed}`;
+    await expect(validate(filePath, { moduleResolveMapLocation: moduleMapPath })).rejects.toThrow();
+  }, 10000);
 
-      // NEW (fixed): pathToFileURL(file).href
-      // On a real Windows system, this would produce the correct URL
-      // We simulate by showing what the correct format should be
-      const correctUrl = 'file:///C:/Users/test/project/file.js';
+  it('should reject when importing non-existent module', async () => {
+    const filePath = join(tempDir, 'missing-import.js');
+    await writeFile(filePath, "import { foo } from 'non-existent-module-12345';");
 
-      // Verify the old format was wrong
-      expect(buggyUrl).toBe('file://C:/Users/test/project/file.js');
-      expect(buggyUrl).not.toMatch(/^file:\/\/\//);
+    await expect(validate(filePath, { moduleResolveMapLocation: moduleMapPath })).rejects.toThrow();
+  }, 10000);
 
-      // Verify the new format is correct
-      expect(correctUrl).toMatch(/^file:\/\/\//);
+  it('should reject when file does not exist', async () => {
+    const filePath = join(tempDir, 'does-not-exist.js');
 
-      // The key difference: three slashes vs two slashes
-      expect(correctUrl.split('/').slice(0, 4).join('/')).toBe('file:///C:');
-      expect(buggyUrl.split('/').slice(0, 3).join('/')).toBe('file://C:');
-    });
-  });
+    await expect(validate(filePath, { moduleResolveMapLocation: moduleMapPath })).rejects.toThrow();
+  }, 10000);
+
+  it('should inject ESM shim when injectESMShim is true', async () => {
+    const filePath = join(tempDir, 'esm-shim.js');
+    // This file uses __filename and __dirname which only work with the shim
+    await writeFile(
+      filePath,
+      `
+      if (typeof __filename === 'undefined') {
+        throw new Error('__filename is not defined');
+      }
+      if (typeof __dirname === 'undefined') {
+        throw new Error('__dirname is not defined');
+      }
+      export const filename = __filename;
+      export const dirname = __dirname;
+    `,
+    );
+
+    await expect(
+      validate(filePath, { injectESMShim: true, moduleResolveMapLocation: moduleMapPath }),
+    ).resolves.toBeUndefined();
+  }, 10000);
+
+  it('should fail without ESM shim when using __filename/__dirname', async () => {
+    const filePath = join(tempDir, 'no-esm-shim.js');
+    await writeFile(
+      filePath,
+      `
+      // Access __filename which is not available in ESM without shim
+      console.log(__filename);
+      export const foo = 1;
+    `,
+    );
+
+    await expect(
+      validate(filePath, { injectESMShim: false, moduleResolveMapLocation: moduleMapPath }),
+    ).rejects.toThrow();
+  }, 10000);
 });
