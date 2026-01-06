@@ -132,7 +132,6 @@ export const ComposerAddAttachment = () => {
       <TooltipIconButton
         className="my-2.5 size-8 p-2 transition-opacity ease-in"
         tooltip="Add Attachment"
-        variant="ghost"
       >
         <PaperclipIcon />
       </TooltipIconButton>

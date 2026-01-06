@@ -1,7 +1,8 @@
 import { SelectField } from '@/components/ui/elements';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
+import { Icon } from '@/ds/icons/Icon';
 
 export type ScoreEntityOption = { value: string; label: string; type: 'AGENT' | 'WORKFLOW' | 'ALL' };
 
@@ -32,8 +33,11 @@ export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOpt
         disabled={isLoading}
       />
 
-      <Button variant="primary" onClick={onReset} disabled={isLoading}>
-        Reset <XIcon />
+      <Button variant="light" size="lg" className="min-w-32" onClick={onReset} disabled={isLoading}>
+        Reset
+        <Icon>
+          <XIcon />
+        </Icon>
       </Button>
     </div>
   );

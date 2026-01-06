@@ -20,7 +20,7 @@ import { formatHierarchicalSpans } from '../utils/format-hierarchical-spans';
 import { type UISpan, type UISpanState } from '../types';
 import { TraceTimelineTools } from './trace-timeline-tools';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SpanTabs } from './span-tabs';
 import { type GetScorerResponse } from '@mastra/client-js';

@@ -4,7 +4,8 @@ import { UISpanType } from '../types';
 import { SearchField } from '@/components/ui/elements';
 import { useThrottledCallback } from 'use-debounce';
 import { Fragment, useEffect, useState } from 'react';
-import { Button, CombinedButtons } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
+import { CombinedButtons } from '@/components/ui/elements/buttons';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 
 type TraceTimelineLegendProps = {
@@ -73,7 +74,7 @@ export function TraceTimelineTools({
             <Fragment key={item}>
               <Button
                 onClick={() => handleToggle(item as UISpanType)}
-                isFaded={isFaded}
+                className={isFaded ? 'opacity-40' : ''}
                 style={{ color: !isFaded ? spanUI?.color : undefined, backgroundColor: spanUI?.bgColor }}
               >
                 {spanUI?.icon && spanUI.icon}
@@ -85,7 +86,7 @@ export function TraceTimelineTools({
         {hasOtherSpanTypes && (
           <Button
             onClick={() => handleToggle('other' as UISpanType)}
-            isFaded={fadedTypes?.includes('other')}
+            className={fadedTypes?.includes('other') ? 'opacity-40' : ''}
             style={{ color: !fadedTypes?.includes('other') ? undefined : undefined, backgroundColor: undefined }}
           >
             <CircleDashedIcon />

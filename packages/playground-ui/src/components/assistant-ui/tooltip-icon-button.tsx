@@ -2,7 +2,7 @@
 
 import { forwardRef } from 'react';
 
-import { Button, ButtonProps } from '@/components/ui/button';
+import { ButtonProps } from '@/ds/components/Button/Button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { cn } from '@/lib/utils';
@@ -18,16 +18,14 @@ export const TooltipIconButton = forwardRef<HTMLButtonElement, TooltipIconButton
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
               {...rest}
-              className={cn('size-6 p-1', className)}
+              className={cn('bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6', 'size-6 p-1', className)}
               ref={ref}
               aria-label={tooltip}
             >
               {children}
-            </Button>
+            </button>
           </TooltipTrigger>
           <TooltipContent side={side}>{tooltip}</TooltipContent>
         </Tooltip>

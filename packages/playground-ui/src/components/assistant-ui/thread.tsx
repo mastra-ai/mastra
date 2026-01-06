@@ -9,7 +9,6 @@ import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './messages/assistant-message';
 import { UserMessage } from './messages/user-messages';
@@ -155,7 +154,6 @@ const SpeechInput = ({ agentId }: { agentId?: string }) => {
     <TooltipIconButton
       type="button"
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      variant="ghost"
       className="rounded-full"
       onClick={() => (isListening ? stop() : start())}
     >
@@ -172,7 +170,6 @@ const ComposerAction = () => {
       <TooltipIconButton
         type="button"
         tooltip="Add attachment"
-        variant="ghost"
         className="rounded-full"
         onClick={() => setIsAddAttachmentDialogOpen(true)}
       >
@@ -210,10 +207,10 @@ const EditComposer = () => {
 
       <div>
         <ComposerPrimitive.Cancel asChild>
-          <Button variant="ghost">Cancel</Button>
+          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">Cancel</button>
         </ComposerPrimitive.Cancel>
         <ComposerPrimitive.Send asChild>
-          <Button>Send</Button>
+          <button className="bg-surface2 border-sm border-border1 px-lg text-ui-md inline-flex items-center justify-center rounded-md border h-button-md gap-md hover:bg-surface4 text-icon3 hover:text-icon6">Send</button>
         </ComposerPrimitive.Send>
       </div>
     </ComposerPrimitive.Root>

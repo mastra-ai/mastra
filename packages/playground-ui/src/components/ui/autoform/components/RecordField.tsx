@@ -2,7 +2,7 @@ import { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
-import { Button } from '../../button';
+import { Button } from '@/ds/components/Button/Button';
 import { Input } from '../../input';
 
 interface KeyValuePair {
@@ -75,8 +75,6 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field, e
         <div key={pair.id} className="relative space-y-2 rounded-lg border p-4">
           <Button
             type="button"
-            variant="ghost"
-            size="icon"
             className="absolute right-2 top-2"
             onClick={() => removePair(pair.id)}
           >
@@ -99,7 +97,7 @@ export const RecordField: React.FC<AutoFormFieldProps> = ({ inputProps, field, e
           </div>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" className="w-full" onClick={addPair}>
+      <Button type="button" className="w-full" onClick={addPair}>
         <Plus className="mr-2 h-4 w-4" />
         Add Key-Value Pair
       </Button>
