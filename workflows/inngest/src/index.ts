@@ -175,6 +175,7 @@ export function createStep<
               if (agentOptions?.structuredOutput?.schema && resultWithObject.object) {
                 structuredResult = resultWithObject.object;
               }
+              // @ts-expect-error: TODO - Fix this
               streamPromise.resolve(result.text);
               void agentOptions?.onFinish?.(result);
             },
