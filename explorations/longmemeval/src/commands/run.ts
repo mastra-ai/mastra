@@ -536,7 +536,7 @@ Be specific rather than generic when the user has expressed clear preferences in
     // Retry failed evaluations: always at least 1 retry, up to 5 if requiresRetry is set
     // Only retry vanilla if there's NO improved version (otherwise we retry the improved one)
     let retryCount = 0;
-    const maxRetries = meta.requiresRetry ? 5 : 1;
+    const maxRetries = meta.requiresRetry || hasImprovedVersion ? 2 : 0;
     while (!isCorrect && !hasImprovedVersion && retryCount < maxRetries) {
       retryCount++;
       updateStatus(`Retry ${retryCount}/${maxRetries} for ${meta.questionId}...`);
