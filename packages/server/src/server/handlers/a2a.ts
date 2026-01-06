@@ -69,7 +69,7 @@ export async function getAgentCardByIdHandler({
     throw new Error(`Agent with ID ${agentId} not found`);
   }
 
-  const [instructions, tools] = await Promise.all([
+  const [instructions, tools]: [Awaited<ReturnType<typeof agent.getInstructions>>, Awaited<ReturnType<typeof agent.listTools>>] = await Promise.all([
     agent.getInstructions({ requestContext }),
     agent.listTools({ requestContext }),
   ]);
@@ -460,7 +460,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
       throw new Error(`Agent with ID ${agentId} not found`);
     }
 
-    const [instructions, tools] = await Promise.all([
+    const [instructions, tools]: [Awaited<ReturnType<typeof agent.getInstructions>>, Awaited<ReturnType<typeof agent.listTools>>] = await Promise.all([
       agent.getInstructions({ requestContext }),
       agent.listTools({ requestContext }),
     ]);
