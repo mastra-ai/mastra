@@ -10,6 +10,7 @@ import {
   logHttpRequest,
   setGlobalMetricsCollector,
   getGlobalMetricsCollector,
+  AgenticRunStateTracker,
 } from './instrumentation';
 import { InMemoryMetricsCollector, NoOpMetricsCollector } from './metrics';
 import { ConsoleLogger } from '../logger';
@@ -405,14 +406,19 @@ describe('Instrumentation Helpers', () => {
       const metrics = new InMemoryMetricsCollector();
       const logEventSpy = vi.spyOn(logger, 'logEvent');
 
-      logHttpRequest(logger, metrics, {}, {
-        method: 'PUT',
-        url: 'https://api.example.com/update',
-        statusCode: 200,
-        durationMs: 150,
-        direction: 'outbound',
-        source: 'integration',
-      });
+      logHttpRequest(
+        logger,
+        metrics,
+        {},
+        {
+          method: 'PUT',
+          url: 'https://api.example.com/update',
+          statusCode: 200,
+          durationMs: 150,
+          direction: 'outbound',
+          source: 'integration',
+        },
+      );
 
       expect(logEventSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -429,6 +435,191 @@ describe('Instrumentation Helpers', () => {
       const httpRequests = metrics.getHttpRequests();
       expect(httpRequests).toHaveLength(1);
       expect(httpRequests[0]!.method).toBe('PUT');
+    });
+  });
+
+  describe('AgenticRunStateTracker', () => {
+    it('should initialize with context and start time', () => {
+      const context = {
+        agentId: 'test-agent',
+        runId: 'run-123',
+        threadId: 'thread-456',
+      };
+      const tracker = new AgenticRunStateTracker(context);
+
+      expect(tracker.getContext()).toEqual(context);
+    });
+
+    it('should track guardrail triggers', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      tracker.recordGuardrailTrigger();
+      tracker.recordGuardrailTrigger();
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.guardrailTriggerCount).toBe(2);
+    });
+
+    it('should track human interventions', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      tracker.recordHumanIntervention();
+      tracker.recordHumanIntervention();
+      tracker.recordHumanIntervention();
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.humanInterventionCount).toBe(3);
+    });
+
+    it('should track backtracks', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      tracker.recordBacktrack();
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.backtrackCount).toBe(1);
+    });
+
+    it('should track token usage', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      tracker.recordTokenUsage({ inputTokens: 100, outputTokens: 50 });
+      tracker.recordTokenUsage({ inputTokens: 200, outputTokens: 100 });
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.tokenUsage.inputTokens).toBe(300);
+      expect(completion.tokenUsage.outputTokens).toBe(150);
+    });
+
+    it('should track tool results', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      tracker.recordToolResult(true);
+      tracker.recordToolResult(true);
+      tracker.recordToolResult(false);
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.toolSuccessCount).toBe(2);
+      expect(completion.toolFailureCount).toBe(1);
+    });
+
+    it('should track steps with analysis', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      tracker.recordStep({
+        stepNumber: 1,
+        stepType: 'thinking',
+        toolCallCount: 0,
+        tokenUsage: { inputTokens: 50, outputTokens: 25 },
+      });
+
+      tracker.recordStep({
+        stepNumber: 2,
+        stepType: 'action',
+        toolCallCount: 2,
+        tokenUsage: { inputTokens: 100, outputTokens: 75 },
+      });
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.stepCount).toBe(2);
+      expect(completion.thinkingStepCount).toBe(1);
+      expect(completion.actionStepCount).toBe(1);
+      expect(completion.toolCallCount).toBe(2);
+      expect(completion.tokenUsage.inputTokens).toBe(150);
+      expect(completion.tokenUsage.outputTokens).toBe(100);
+    });
+
+    it('should track time to first action', async () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      // Record a thinking step first
+      tracker.recordStep({
+        stepNumber: 1,
+        stepType: 'thinking',
+        toolCallCount: 0,
+      });
+
+      // Small delay before action
+      await new Promise(r => setTimeout(r, 10));
+
+      // Record an action step
+      tracker.recordStep({
+        stepNumber: 2,
+        stepType: 'action',
+        toolCallCount: 1,
+      });
+
+      const completion = tracker.getCompletion('stop', true);
+      expect(completion.timeToFirstActionMs).toBeGreaterThanOrEqual(10);
+    });
+
+    it('should return complete AgentRunCompletion', () => {
+      const context = {
+        agentId: 'test-agent',
+        runId: 'run-123',
+        threadId: 'thread-456',
+        resourceId: 'user-789',
+      };
+      const tracker = new AgenticRunStateTracker(context);
+
+      tracker.recordStep({ stepNumber: 1, stepType: 'action', toolCallCount: 1 });
+      tracker.recordToolResult(true);
+      tracker.recordGuardrailTrigger();
+      tracker.recordHumanIntervention();
+      tracker.recordTokenUsage({ inputTokens: 100, outputTokens: 50 });
+
+      const completion = tracker.getCompletion('stop', true);
+
+      expect(completion.context).toEqual(context);
+      expect(completion.durationMs).toBeGreaterThanOrEqual(0);
+      expect(completion.stepCount).toBe(1);
+      expect(completion.toolCallCount).toBe(1);
+      expect(completion.toolSuccessCount).toBe(1);
+      expect(completion.toolFailureCount).toBe(0);
+      expect(completion.tokenUsage.inputTokens).toBe(100);
+      expect(completion.tokenUsage.outputTokens).toBe(50);
+      expect(completion.finishReason).toBe('stop');
+      expect(completion.success).toBe(true);
+      expect(completion.goalCompleted).toBe(true);
+      expect(completion.guardrailTriggerCount).toBe(1);
+      expect(completion.humanInterventionCount).toBe(1);
+      expect(completion.backtrackCount).toBe(0);
+      expect(completion.actionStepCount).toBe(1);
+      expect(completion.thinkingStepCount).toBe(0);
+    });
+
+    it('should handle error cases', () => {
+      const tracker = new AgenticRunStateTracker({
+        agentId: 'test-agent',
+        runId: 'run-123',
+      });
+
+      const completion = tracker.getCompletion('error', false, 'AgentError');
+
+      expect(completion.success).toBe(false);
+      expect(completion.errorType).toBe('AgentError');
+      expect(completion.goalCompleted).toBe(false);
     });
   });
 });

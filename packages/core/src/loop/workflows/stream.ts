@@ -6,6 +6,7 @@ import {
   emitGoalState,
   analyzeGoalState,
   recordAgentRunCompletion,
+  AgenticRunStateTracker,
   type AgenticInstrumentationContext,
 } from '../../observability/instrumentation';
 import { RequestContext } from '../../request-context';
@@ -49,8 +50,18 @@ export function workflowLoopStream<
   agentId,
   toolCallId,
   toolCallConcurrency,
+  runStateTracker: existingTracker,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
+  // Create or use existing run state tracker for aggregating agentic metrics
+  const instrumentationContext: AgenticInstrumentationContext = {
+    agentId: agentId || 'unknown',
+    runId,
+    threadId: _internal?.threadId,
+    resourceId: _internal?.resourceId,
+  };
+  const runStateTracker = existingTracker || new AgenticRunStateTracker(instrumentationContext);
+
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
@@ -93,6 +104,7 @@ export function workflowLoopStream<
         agentId,
         requireToolApproval,
         toolCallConcurrency,
+        runStateTracker,
         ...rest,
       });
 
@@ -190,13 +202,6 @@ export function workflowLoopStream<
       const endTimestamp = Date.now();
       const durationMs = endTimestamp - startTimestamp;
 
-      const instrumentationContext: AgenticInstrumentationContext = {
-        agentId: agentId || 'unknown',
-        runId,
-        threadId: _internal?.threadId,
-        resourceId: _internal?.resourceId,
-      };
-
       // Emit goal state event
       const goalState = analyzeGoalState(finishReason, hasError, wasSuspended);
       const stepCount = result.output?.steps?.length || 0;
@@ -213,73 +218,49 @@ export function workflowLoopStream<
         logger: rest.logger,
       });
 
-      // Calculate aggregated metrics from steps
-      let totalInputTokens = 0;
-      let totalOutputTokens = 0;
-      let toolCallCount = 0;
-      let toolSuccessCount = 0;
-      let toolFailureCount = 0;
-      let thinkingStepCount = 0;
-      let actionStepCount = 0;
+      // Get aggregated metrics from the run state tracker
+      const completion = runStateTracker.getCompletion(finishReason, !hasError);
 
+      // Supplement with step-level data from result if tracker didn't capture everything
       if (result.output?.steps) {
         for (const step of result.output.steps) {
           if (step.usage) {
-            totalInputTokens += step.usage.inputTokens || 0;
-            totalOutputTokens += step.usage.outputTokens || 0;
+            runStateTracker.recordTokenUsage({
+              inputTokens: step.usage.inputTokens,
+              outputTokens: step.usage.outputTokens,
+            });
           }
-          // Count tool calls in each step
-          const stepToolCalls = step.toolCalls?.length || 0;
-          toolCallCount += stepToolCalls;
-
-          // Determine step type based on tool calls
-          if (stepToolCalls > 0) {
-            actionStepCount++;
-            // Count tool results for success/failure
-            if (step.toolResults) {
-              for (const toolResult of step.toolResults) {
-                if (toolResult.result !== undefined && !('error' in toolResult)) {
-                  toolSuccessCount++;
-                } else {
-                  toolFailureCount++;
-                }
+          // Count tool results for success/failure
+          if (step.toolResults) {
+            for (const toolResult of step.toolResults) {
+              if (toolResult.result !== undefined && !('error' in toolResult)) {
+                runStateTracker.recordToolResult(true);
+              } else {
+                runStateTracker.recordToolResult(false);
               }
             }
-          } else {
-            thinkingStepCount++;
           }
         }
       }
 
       // Use final usage if available (more accurate)
       if (result.output?.usage) {
-        totalInputTokens = result.output.usage.inputTokens || totalInputTokens;
-        totalOutputTokens = result.output.usage.outputTokens || totalOutputTokens;
+        runStateTracker.recordTokenUsage({
+          inputTokens: result.output.usage.inputTokens,
+          outputTokens: result.output.usage.outputTokens,
+        });
       }
 
-      // Record comprehensive run completion
+      // Get final completion with all accumulated data
+      const finalCompletion = runStateTracker.getCompletion(finishReason, !hasError);
+
+      // Record comprehensive run completion using tracker data
       recordAgentRunCompletion({
         completion: {
-          context: instrumentationContext,
-          durationMs,
-          stepCount,
-          toolCallCount,
-          toolSuccessCount,
-          toolFailureCount,
-          tokenUsage: {
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-          },
-          finishReason,
-          success: !hasError && goalState === 'completed',
-          errorType: hasError ? 'AgentError' : undefined,
+          ...finalCompletion,
+          // Override with more accurate values if available
+          stepCount: stepCount || finalCompletion.stepCount,
           goalCompleted: goalState === 'completed',
-          guardrailTriggerCount: 0, // Would need to track through state
-          humanInterventionCount: 0, // Would need to track through state
-          backtrackCount: 0, // Would need to track through state
-          thinkingStepCount,
-          actionStepCount,
-          timeToFirstActionMs: undefined, // Would need to track through state
         },
         logger: rest.logger,
       });

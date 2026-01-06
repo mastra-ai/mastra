@@ -9,7 +9,11 @@ import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
 import { EntityType, SpanType } from '../observability';
 import type { Span, TracingContext } from '../observability';
-import { emitGuardrailTriggered, type AgenticInstrumentationContext } from '../observability/instrumentation';
+import {
+  emitGuardrailTriggered,
+  type AgenticInstrumentationContext,
+  type AgenticRunStateTracker,
+} from '../observability/instrumentation';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, OutputSchema } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -88,6 +92,7 @@ export class ProcessorRunner {
   private readonly agentName: string;
   private readonly agentId?: string;
   private readonly runId?: string;
+  private readonly runStateTracker?: AgenticRunStateTracker;
 
   constructor({
     inputProcessors,
@@ -96,6 +101,7 @@ export class ProcessorRunner {
     agentName,
     agentId,
     runId,
+    runStateTracker,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
     outputProcessors?: ProcessorOrWorkflow[];
@@ -103,6 +109,7 @@ export class ProcessorRunner {
     agentName: string;
     agentId?: string;
     runId?: string;
+    runStateTracker?: AgenticRunStateTracker;
   }) {
     this.inputProcessors = inputProcessors ?? [];
     this.outputProcessors = outputProcessors ?? [];
@@ -110,6 +117,7 @@ export class ProcessorRunner {
     this.agentName = agentName;
     this.agentId = agentId;
     this.runId = runId;
+    this.runStateTracker = runStateTracker;
   }
 
   /**
@@ -137,6 +145,9 @@ export class ProcessorRunner {
       metadata: error.options?.metadata as Record<string, unknown> | undefined,
       logger: this.logger,
     });
+
+    // Record to run state tracker for aggregation
+    this.runStateTracker?.recordGuardrailTrigger();
   }
 
   /**

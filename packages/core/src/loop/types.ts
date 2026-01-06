@@ -17,7 +17,7 @@ import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptio
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory, MemoryConfig } from '../memory';
-import type { IModelSpanTracker } from '../observability';
+import type { IModelSpanTracker, AgenticRunStateTracker } from '../observability';
 import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -138,6 +138,8 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema
   };
   methodType: ModelMethodType;
   processorStates?: Map<string, ProcessorState<OUTPUT>>;
+  /** Tracker for aggregating agentic metrics during the run */
+  runStateTracker?: AgenticRunStateTracker;
 };
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {

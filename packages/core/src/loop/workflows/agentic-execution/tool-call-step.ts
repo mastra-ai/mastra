@@ -5,6 +5,7 @@ import {
   emitHumanApprovalRequested,
   emitHumanApprovalResponse,
   type AgenticInstrumentationContext,
+  type AgenticRunStateTracker,
 } from '../../../observability/instrumentation';
 import type { OutputSchema } from '../../../stream/base/schema';
 import { ChunkFrom } from '../../../stream/types';
@@ -45,6 +46,7 @@ export function createToolCallStep<
   _internal,
   logger,
   agentId,
+  runStateTracker,
 }: OuterLLMRun<Tools, OUTPUT>) {
   // Create instrumentation context for human intervention events
   const instrumentationContext: AgenticInstrumentationContext = {
@@ -299,6 +301,8 @@ export function createToolCallStep<
               reason: 'Tool requires approval before execution',
               logger,
             });
+            // Record to run state tracker for aggregation
+            runStateTracker?.recordHumanIntervention();
 
             controller.enqueue({
               type: 'tool-call-approval',

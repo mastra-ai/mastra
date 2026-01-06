@@ -492,6 +492,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
+  runStateTracker,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
@@ -562,6 +563,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             agentName: agentId || 'unknown',
             agentId,
             runId,
+            runStateTracker,
           });
 
           try {
@@ -931,6 +933,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           agentName: agentId || 'unknown',
           agentId,
           runId,
+          runStateTracker,
         });
 
         try {
