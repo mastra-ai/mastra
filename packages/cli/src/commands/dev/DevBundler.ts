@@ -79,8 +79,6 @@ export class DevBundler extends Bundler {
 
     await this.writePackageJson(outputDir, new Map(), {});
 
-    const copyPublic = this.copyPublic.bind(this);
-
     const watcher = await createWatcher(
       {
         ...inputOptions,
@@ -103,15 +101,6 @@ export class DevBundler extends Bundler {
               for (const envFile of envFiles) {
                 this.addWatchFile(envFile);
               }
-            },
-          },
-          {
-            name: 'public-dir-watcher',
-            buildStart() {
-              this.addWatchFile(join(dirname(entryFile), 'public'));
-            },
-            buildEnd() {
-              return copyPublic(dirname(entryFile), outputDirectory);
             },
           },
           {
